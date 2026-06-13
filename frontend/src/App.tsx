@@ -79,7 +79,13 @@ export default function App() {
   const kanbanColumns: MainStatus[] = showRejected ? [...MAIN_PIPELINE, 'rejected'] : MAIN_PIPELINE
   const kanbanByStatus = kanbanColumns.map(s => ({
     status: s,
-    items: apps.filter(a => a.main_status === s),
+    items: apps
+      .filter(a => a.main_status === s)
+      .sort((a, b) => {
+        const da = a.letztes_update ?? a.datum_bewerbung ?? ''
+        const db2 = b.letztes_update ?? b.datum_bewerbung ?? ''
+        return db2.localeCompare(da)
+      }),
   })).filter(col => col.items.length > 0 || filterStatus === col.status)
 
   return (
