@@ -23,9 +23,6 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 from xml.etree import ElementTree as ET
 
-# In-memory session cache: apple_id -> {'api': ICloudPyService, 'sms_device': dict|None}
-_ICLOUD_SESSIONS: dict[str, Any] = {}
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -39,6 +36,9 @@ from app.routers.sync_common import (
     init_progress, update_progress, finish_progress,
     set_batch_result,
 )
+
+# In-memory session cache: apple_id -> {'api': ICloudPyService, 'sms_device': dict|None}
+_ICLOUD_SESSIONS: dict[str, Any] = {}
 
 router = APIRouter(prefix="/api/sync/icloud", tags=["icloud"])
 
@@ -1111,7 +1111,6 @@ async def fetch_all_vcards(cfg: models.ICloudSync) -> list[str]:
     """CardDAV discovery + fetch: returns all raw vCard strings from iCloud."""
     import httpx
     import base64
-    from xml.etree import ElementTree as ET
 
     auth = base64.b64encode(
         f"{cfg.apple_id}:{decrypt_api_key(cfg.app_password_enc)}".encode()

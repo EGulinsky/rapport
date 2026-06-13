@@ -31,7 +31,7 @@ def list_applications(
         q = q.filter(models.Application.main_status == main_status)
 
     if not show_rejected:
-        q = q.filter(models.Application.abgesagt == False)
+        q = q.filter(models.Application.abgesagt.is_(False))
 
     if search:
         term = f"%{search}%"

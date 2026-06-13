@@ -9,10 +9,18 @@ from __future__ import annotations
 import base64
 import html
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
+from email.utils import parseaddr
 from typing import Optional
 from zoneinfo import ZoneInfo
+
+from sqlalchemy import func, text
+from sqlalchemy.orm import Session
+
+from app import models
+from app.ai.provider import AINotConfigured, AIRateLimited
+from app.ai.tasks import match_and_classify
 
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
@@ -25,10 +33,6 @@ def _time_prefix(date_hint: Optional[datetime]) -> str:
     if local.hour == 0 and local.minute == 0:
         return ""
     return f"{local.hour}:{local.minute:02d} Uhr\n"
-
-from email.utils import parseaddr
-from sqlalchemy import func, text
-from sqlalchemy.orm import Session
 
 
 # ── Contact auto-creation ─────────────────────────────────────────────────────
@@ -258,10 +262,6 @@ def get_all_progress() -> dict:
         }
         for src, p in _progress.items()
     }
-
-from app import models
-from app.ai.provider import AINotConfigured, AIRateLimited
-from app.ai.tasks import match_and_classify
 
 # ── Confidence thresholds ─────────────────────────────────────────────────────
 

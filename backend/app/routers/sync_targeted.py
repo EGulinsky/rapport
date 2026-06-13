@@ -9,12 +9,12 @@ the global sync which must choose among all active applications.
 """
 from __future__ import annotations
 
+import asyncio
 import email as email_lib
 import hashlib
+import re as _re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
-
-import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import text
@@ -24,10 +24,10 @@ from app.database import get_db, SessionLocal
 from app import models, schemas
 from app.ai.provider import AINotConfigured, AIRateLimited, decrypt_api_key
 from app.routers.sync_common import (
-    is_synced, mark_synced, strip_html, decode_b64,
+    is_synced, mark_synced, strip_html,
     term_variants, process_item_for_app, save_classified_event,
     init_progress, update_progress, finish_progress,
-    upsert_contact_from_sender, _upsert_contact,
+    upsert_contact_from_sender,
 )
 from app.ai.tasks import classify_batch_for_app, BATCH_SIZE
 
@@ -59,8 +59,6 @@ def _text_matches(text: str, terms: list[str]) -> bool:
     tl = text.lower()
     return any(t.lower() in tl for t in terms)
 
-
-import re as _re
 
 def _query_safe(term: str) -> str:
     """Return a search-safe version of a term: replace + and other operators with space,
@@ -930,7 +928,9 @@ async def _do_sync(app_id: int) -> dict:
         init_progress("targeted_contacts", "iCloud Kontakte", "Starte…")
         try:
             c, p, errs = await _sync_contacts_for_app(app, terms, db)
-            total_created += c; total_processed += p; all_errors.extend(errs)
+            total_created += c
+            total_processed += p
+            all_errors.extend(errs)
         except Exception as e:
             all_errors.append(f"Kontakte: {e}")
         finish_progress("targeted_contacts")
@@ -966,13 +966,17 @@ async def _do_sync(app_id: int) -> dict:
                 all_errors.append(str(r))
             else:
                 c, p, errs = r
-                total_created += c; total_processed += p; all_errors.extend(errs)
+                total_created += c
+                total_processed += p
+                all_errors.extend(errs)
 
         # 3. Calls (no AI)
         init_progress("targeted_calls", "Anrufliste", "Starte…")
         try:
             c, p, errs = await _sync_calls_for_app(app, app_dict, db)
-            total_created += c; total_processed += p; all_errors.extend(errs)
+            total_created += c
+            total_processed += p
+            all_errors.extend(errs)
         except Exception as e:
             all_errors.append(f"Anrufliste: {e}")
         finish_progress("targeted_calls")

@@ -4,7 +4,7 @@ All tasks return typed dicts; the caller decides what to persist.
 """
 from __future__ import annotations
 from sqlalchemy.orm import Session
-from app.ai.provider import complete
+from app.ai.provider import complete, AINotConfigured, AIRateLimited
 
 _SYSTEM = """\
 Du bist ein KI-Assistent für einen aktiven Bewerber.
