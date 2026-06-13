@@ -8,6 +8,34 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '1.0.4',
+    date: '2026-06-13',
+    changes: [
+      'Kanban: Reihenfolge innerhalb einer Spalte nach letztem Update (neu → alt)',
+    ],
+  },
+  {
+    version: '1.0.3',
+    date: '2026-06-13',
+    changes: [
+      'Kalender-Wochenansicht: feste Spaltenhöhe, jede Tagesspalte scrollt unabhängig',
+    ],
+  },
+  {
+    version: '1.0.2',
+    date: '2026-06-13',
+    changes: [
+      'Kalender zeigt nur echte Termine (Gespräch, gcal, iCloud Cal) – keine Mails, Notizen oder Statuswechsel',
+    ],
+  },
+  {
+    version: '1.0.1',
+    date: '2026-06-13',
+    changes: [
+      'Fix: Sync-Fortschritt zeigte Daten anderer Bewerbungen (z.B. Hahn-Schickard statt Moog)',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-06-13',
     changes: [
