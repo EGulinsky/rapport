@@ -98,6 +98,9 @@ jobs:
     needs: [backend, frontend]
     if: github.ref == 'refs/heads/main'
 
+    env:
+      GIT_SSH_COMMAND: ssh -i /Users/eugengulinsky/.ssh/id_ed25519_github_runner -o StrictHostKeyChecking=no
+
     steps:
       - name: Pull latest code
         run: git -C /Users/eugengulinsky/code/jobtracker pull
