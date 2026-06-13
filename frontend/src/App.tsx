@@ -13,6 +13,7 @@ import { ContactsView } from './components/ContactsView'
 import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
+import { ChangelogModal, CURRENT_VERSION } from './components/ChangelogModal'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
   type Application, type Stats, type MainStatus,
@@ -36,6 +37,7 @@ export default function App() {
   const [showAiSettings, setShowAiSettings] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
+  const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
 
   useEffect(() => {
@@ -87,7 +89,15 @@ export default function App() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2.5">
                 <Briefcase className="h-5 w-5 text-indigo-600" />
-                <span className="font-semibold text-gray-900">JobTracker</span>
+                <div className="flex flex-col leading-tight">
+                  <span className="font-semibold text-gray-900 leading-none">JobTracker</span>
+                  <button
+                    onClick={() => setShowChangelog(true)}
+                    className="text-[10px] text-indigo-400 hover:text-indigo-600 font-mono leading-none mt-0.5 text-left transition-colors"
+                  >
+                    v{CURRENT_VERSION}
+                  </button>
+                </div>
               </div>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden bg-white">
                 <button
@@ -257,6 +267,8 @@ export default function App() {
           onApproved={() => { load(); loadReviewCount() }}
         />
       )}
+
+      <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
 
       {/* New application modal */}
       {selectedId === -1 && (
