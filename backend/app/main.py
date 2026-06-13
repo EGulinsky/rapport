@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.database import init_db
-from app.routers import applications, import_excel, contacts, export_excel, settings, sync_google, sync_icloud, sync_targeted, sync_linkedin, review, cleanup
+from app.routers import applications, import_excel, contacts, export_excel, settings, sync_google, sync_icloud, sync_targeted, sync_linkedin, review, cleanup, calendar
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.include_router(sync_targeted.router)
 app.include_router(sync_linkedin.router)
 app.include_router(review.router)
 app.include_router(cleanup.router)
+app.include_router(calendar.router)
 
 
 @app.get("/health")

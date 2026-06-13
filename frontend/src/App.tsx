@@ -10,6 +10,7 @@ import { ExportButton } from './components/ExportButton'
 import { SyncButton } from './components/SyncButton'
 import { LinkedInSyncButton } from './components/LinkedInSyncButton'
 import { ContactsView } from './components/ContactsView'
+import { CalendarView } from './components/CalendarView'
 import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
@@ -18,10 +19,11 @@ import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
   type Application, type Stats, type MainStatus,
 } from './types'
+import { Calendar } from 'lucide-react'
 import clsx from 'clsx'
 
 type ViewMode = 'table' | 'kanban'
-type MainView = 'applications' | 'contacts'
+type MainView = 'applications' | 'contacts' | 'calendar'
 
 export default function App() {
   const [apps, setApps] = useState<Application[]>([])
@@ -112,6 +114,12 @@ export default function App() {
                 >
                   <Users className="h-3.5 w-3.5" /> Kontakte
                 </button>
+                <button
+                  onClick={() => setMainView('calendar')}
+                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'calendar' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                >
+                  <Calendar className="h-3.5 w-3.5" /> Kalender
+                </button>
               </div>
             </div>
 
@@ -174,6 +182,9 @@ export default function App() {
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-5">
         {mainView === 'contacts' && (
           <ContactsView onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }} />
+        )}
+        {mainView === 'calendar' && (
+          <CalendarView onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }} />
         )}
         {mainView === 'applications' && (<>
         {/* Stats */}

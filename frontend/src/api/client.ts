@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent } from '../types'
 
 const BASE = '/api'
 
@@ -189,6 +189,15 @@ export const api = {
     run: () => request('/sync/linkedin/run', { method: 'POST' }),
     status: () => request<LinkedInSyncStatus>('/sync/linkedin/status'),
     clearSession: () => request('/sync/linkedin/clear-session', { method: 'POST' }),
+  },
+
+  calendar: {
+    events: (from?: string, to?: string) => {
+      const qs = new URLSearchParams()
+      if (from) qs.set('from_date', from)
+      if (to) qs.set('to_date', to)
+      return request<CalendarEvent[]>(`/calendar/events?${qs}`)
+    },
   },
 
   import: {

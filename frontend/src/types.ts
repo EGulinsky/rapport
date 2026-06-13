@@ -253,6 +253,20 @@ export interface CleanupResult {
   merged_event_groups: number
 }
 
+export interface CalendarEvent {
+  id: number
+  application_id: number
+  firma: string
+  rolle: string
+  main_status: string
+  typ: string
+  datum: string
+  titel?: string
+  notiz?: string
+  autor?: string
+  source?: string
+}
+
 export interface LinkedInSyncStatus {
   status: 'idle' | 'running' | 'done' | 'error' | 'needs_login'
   step: string
