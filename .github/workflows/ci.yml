@@ -65,7 +65,7 @@ jobs:
         run: npm run build
 
   docker:
-    name: Docker build
+    name: Docker build check
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     if: github.ref == 'refs/heads/main'
@@ -91,3 +91,16 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy (local)
+    runs-on: self-hosted
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Pull latest code
+        run: git -C /Users/eugengulinsky/code/jobtracker pull
+
+      - name: Rebuild and restart containers
+        run: docker compose -f /Users/eugengulinsky/code/jobtracker/docker-compose.yml up -d --build
