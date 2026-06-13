@@ -195,6 +195,7 @@ class GoogleSync(Base):
     refresh_token_enc   = Column(Text, nullable=True)
     token_expiry        = Column(DateTime(timezone=True), nullable=True)
     oauth_state         = Column(String, nullable=True)   # CSRF token during flow
+    gmail_email         = Column(String, nullable=True)   # authenticated Google account email
     gmail_last_sync     = Column(DateTime(timezone=True), nullable=True)
     gcal_last_sync      = Column(DateTime(timezone=True), nullable=True)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())

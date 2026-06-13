@@ -337,11 +337,34 @@ def _migrate_gespraeche_to_events():
     conn.close()
 
 
+def _migrate_google_email():
+    """Add gmail_email column to google_sync table if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='google_sync'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(google_sync)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "gmail_email" not in cols:
+        cur.execute("ALTER TABLE google_sync ADD COLUMN gmail_email TEXT")
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
     _migrate_icloud()
     _migrate_calls()
+    _migrate_google_email()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
     Base.metadata.create_all(bind=engine)

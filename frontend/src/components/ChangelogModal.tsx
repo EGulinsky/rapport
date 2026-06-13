@@ -11,8 +11,9 @@ const CHANGELOG: Release[] = [
     version: '1.0.5',
     date: '2026-06-13',
     changes: [
-      'Eigener Kontakt (Eugen Gulinsky) wird beim Sync nicht mehr automatisch angelegt',
-      'Owner-Erkennung via konfigurierter iCloud- und LinkedIn-Accounts (inkl. googlemail↔gmail)',
+      'Eigener Kontakt wird beim Sync übersprungen (Google-, iCloud- und LinkedIn-Account)',
+      'Google-E-Mail wird nach OAuth gespeichert (Userinfo-API) und als Owner-Adresse erkannt',
+      'googlemail.com ↔ gmail.com werden als gleiche Adresse behandelt',
     ],
   },
   {

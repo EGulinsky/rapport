@@ -48,6 +48,10 @@ def _get_owner_emails(db: Session) -> frozenset[str]:
     """Return all email addresses that belong to the app owner (from configured accounts)."""
     own: set[str] = set()
 
+    google = db.query(models.GoogleSync).first()
+    if google and getattr(google, "gmail_email", None):
+        own.add(google.gmail_email.lower().strip())
+
     icloud = db.query(models.ICloudSync).first()
     if icloud:
         for addr in (icloud.apple_id, icloud.icloud_email):

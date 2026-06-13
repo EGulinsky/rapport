@@ -192,6 +192,20 @@ def google_callback(code: str, state: str = "", db: Session = Depends(get_db)):
     cfg.refresh_token_enc = encrypt_api_key(creds.refresh_token) if creds.refresh_token else None
     cfg.token_expiry      = creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry else None
     cfg.oauth_state       = None
+
+    # Fetch the authenticated user's email from Google Userinfo and store it
+    try:
+        import requests as _req
+        ui = _req.get(
+            "https://www.googleapis.com/oauth2/v1/userinfo",
+            headers={"Authorization": f"Bearer {creds.token}"},
+            timeout=5,
+        ).json()
+        if ui.get("email"):
+            cfg.gmail_email = ui["email"].lower().strip()
+    except Exception:
+        pass
+
     db.commit()
 
     return HTMLResponse("""
