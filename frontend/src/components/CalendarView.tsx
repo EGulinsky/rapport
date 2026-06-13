@@ -200,18 +200,16 @@ function WeekView({ days, today, byDate, onSelect }: {
           )
         })}
       </div>
-      {/* Event columns */}
-      <div className="grid divide-x divide-gray-100" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, minHeight: 420 }}>
+      {/* Event columns — fixed height, each column scrolls independently */}
+      <div className="grid divide-x divide-gray-100" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, height: cols === 1 ? 'auto' : 360 }}>
         {days.map(day => {
           const iso = dateStr(day)
           const isToday = iso === today
           const evs = byDate[iso] ?? []
-          const visible = evs.slice(0, cols === 1 ? 20 : 8)
-          const overflow = evs.length - visible.length
           return (
-            <div key={iso} className={clsx('p-2 space-y-1.5', isToday && 'bg-indigo-50/20')}>
+            <div key={iso} className={clsx('p-2 space-y-1.5 overflow-y-auto h-full', isToday && 'bg-indigo-50/20')}>
               {evs.length === 0 && <p className="text-[11px] text-gray-300 text-center mt-6">–</p>}
-              {visible.map(e => (
+              {evs.map(e => (
                 <div key={e.id} className="space-y-0.5">
                   <EventChip e={e} onClick={onSelect} />
                   {cols === 1 && e.notiz && (
@@ -219,7 +217,6 @@ function WeekView({ days, today, byDate, onSelect }: {
                   )}
                 </div>
               ))}
-              {overflow > 0 && <p className="text-[10px] text-gray-400 pl-1">+{overflow} weitere</p>}
             </div>
           )
         })}
