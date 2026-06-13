@@ -46,7 +46,12 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     pollRef.current = setInterval(async () => {
       try {
         const data = await api.sync.progress()
-        const targeted = Object.fromEntries(Object.entries(data).filter(([k]) => k.startsWith('targeted_')))
+        // Only show: the main key for this app (targeted_{appId}) and generic sub-task keys.
+        // Exclude targeted_{otherId} keys from previous/other app syncs.
+        const isSubTask = (k: string) => k.startsWith('targeted_') && !/^targeted_\d+$/.test(k)
+        const targeted = Object.fromEntries(
+          Object.entries(data).filter(([k]) => k === `targeted_${appId}` || isSubTask(k))
+        )
         setSyncProgress(targeted)
       } catch { /* ignore */ }
     }, 1000)
