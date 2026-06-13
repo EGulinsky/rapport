@@ -1,5 +1,7 @@
 # JobTracker – Technische Architektur
 
+> Dieses Dokument beschreibt die **aktuelle Implementierung**. Das ursprüngliche Planungsdokument mit Vision, Roadmap und noch offenen Features: [JobTracker_Konzept_Architektur.md](JobTracker_Konzept_Architektur.md)
+
 ## Inhaltsverzeichnis
 
 1. [System- und SW-Architektur](#1-system--und-sw-architektur)
