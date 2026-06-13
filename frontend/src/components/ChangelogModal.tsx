@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '1.0.5',
+    date: '2026-06-13',
+    changes: [
+      'Eigener Kontakt (Eugen Gulinsky) wird beim Sync nicht mehr automatisch angelegt',
+      'Owner-Erkennung via konfigurierter iCloud- und LinkedIn-Accounts (inkl. googlemail↔gmail)',
+    ],
+  },
+  {
     version: '1.0.4',
     date: '2026-06-13',
     changes: [

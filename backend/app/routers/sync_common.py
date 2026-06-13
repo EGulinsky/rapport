@@ -43,6 +43,33 @@ _SKIP_CONTACT_LOCALS = frozenset({
     "newsletter", "automatisch", "automated", "reply", "bounce",
 })
 
+
+def _get_owner_emails(db: Session) -> frozenset[str]:
+    """Return all email addresses that belong to the app owner (from configured accounts)."""
+    own: set[str] = set()
+
+    icloud = db.query(models.ICloudSync).first()
+    if icloud:
+        for addr in (icloud.apple_id, icloud.icloud_email):
+            if addr:
+                own.add(addr.lower().strip())
+
+    linkedin = db.query(models.LinkedInSync).first()
+    if linkedin and getattr(linkedin, "email", None):
+        own.add(linkedin.email.lower().strip())
+
+    # googlemail.com and gmail.com are the same account — add both variants
+    extra: set[str] = set()
+    for addr in own:
+        local, _, domain = addr.partition("@")
+        if domain == "googlemail.com":
+            extra.add(f"{local}@gmail.com")
+        elif domain == "gmail.com":
+            extra.add(f"{local}@googlemail.com")
+    own |= extra
+
+    return frozenset(own)
+
 # Phone: matches "Tel.: +49 89 123", "Mobile: 0171 123456", "T +49..." etc.
 _PHONE_RE = re.compile(
     r'(?:Tel\.?(?:efon)?|Phone|Fon|Mob(?:ile)?|Handy|M\.?|T\.?)\s*[:\-]?\s*'
@@ -144,6 +171,8 @@ def _upsert_contact(
         return
     local = email_addr.split("@")[0].lower().strip(".-_+")
     if local in _SKIP_CONTACT_LOCALS or any(s in local for s in ("noreply", "no-reply", "donotreply")):
+        return
+    if email_addr in _get_owner_emails(db):
         return
 
     extra = extra or {}
