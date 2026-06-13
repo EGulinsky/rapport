@@ -8,6 +8,17 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '1.0.0',
+    date: '2026-06-13',
+    changes: [
+      'Kalender-View: Tag / Arbeitswoche / Woche / Monat (Outlook-Stil)',
+      'Events farbkodiert nach Bewerbungs-Status',
+      'Klick auf Termin öffnet Detail-Modal mit Bewerbungslink',
+      'Backend: GET /api/calendar/events mit Datumsfilter',
+      'Auto-Deploy via GitHub Actions + self-hosted Runner (SSH-Auth)',
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-06-13',
     changes: [
