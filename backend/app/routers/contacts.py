@@ -1,0 +1,44 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
+from typing import List, Optional
+from pydantic import BaseModel
+
+from app.database import get_db
+from app import models, schemas
+
+router = APIRouter(prefix="/api/contacts", tags=["contacts"])
+
+
+@router.get("/", response_model=List[schemas.ContactWithApp])
+def list_all_contacts(
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(models.Contact).options(joinedload(models.Contact.applications))
+    if search:
+        term = f"%{search}%"
+        q = q.filter(
+            or_(
+                models.Contact.name.ilike(term),
+                models.Contact.email.ilike(term),
+                models.Contact.firma.ilike(term),
+                models.Contact.rolle.ilike(term),
+            )
+        )
+    return q.order_by(models.Contact.name).all()
+
+
+class BulkDeleteBody(BaseModel):
+    ids: List[int]
+    all: bool = False
+
+
+@router.delete("/bulk", status_code=200)
+def bulk_delete_contacts(body: BulkDeleteBody, db: Session = Depends(get_db)):
+    if body.all:
+        deleted = db.query(models.Contact).delete()
+    else:
+        deleted = db.query(models.Contact).filter(models.Contact.id.in_(body.ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
