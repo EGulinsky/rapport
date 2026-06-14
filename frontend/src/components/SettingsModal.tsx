@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff } from 'lucide-react'
 import { api } from '../api/client'
-import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus } from '../types'
+import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void }
@@ -759,7 +759,109 @@ function CallsPanel() {
 }
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
-type Tab = 'ai' | 'google' | 'icloud' | 'calls'
+// ── Sync Control Panel ────────────────────────────────────────────────────────
+
+const DEFAULT_SYNC: SyncSettings = {
+  google_enabled: true, gmail_enabled: true, gcal_enabled: true,
+  icloud_enabled: true, icloud_mail_enabled: true, icloud_cal_enabled: true,
+  icloud_notes_enabled: true, icloud_reminders_enabled: true,
+  icloud_contacts_enabled: true, icloud_calls_enabled: true,
+  linkedin_enabled: true,
+}
+
+function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!on)}
+      className={clsx(
+        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none',
+        on && !disabled ? 'bg-indigo-600' : disabled ? 'bg-gray-200 cursor-not-allowed' : 'bg-gray-300',
+      )}
+    >
+      <span className={clsx('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform',
+        on ? 'translate-x-[18px]' : 'translate-x-0.5')} />
+    </button>
+  )
+}
+
+function SyncGroup({ label, enabled, onToggle, children }: {
+  label: string; enabled: boolean; onToggle: (v: boolean) => void; children: React.ReactNode
+}) {
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+        <span className="text-sm font-semibold text-gray-800">{label}</span>
+        <Toggle on={enabled} onChange={onToggle} />
+      </div>
+      <div className={clsx('divide-y divide-gray-100 transition-opacity', !enabled && 'opacity-40 pointer-events-none')}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SyncRow({ label, enabled, onToggle }: { label: string; enabled: boolean; onToggle: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5">
+      <span className="text-sm text-gray-700">{label}</span>
+      <Toggle on={enabled} onChange={onToggle} />
+    </div>
+  )
+}
+
+function SyncControlPanel() {
+  const [settings, setSettings] = useState<SyncSettings>(DEFAULT_SYNC)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { api.settings.getSync().then(setSettings).catch(() => {}) }, [])
+
+  async function toggle(key: keyof SyncSettings, val: boolean) {
+    const next = { ...settings, [key]: val }
+    setSettings(next)
+    setSaving(true)
+    try {
+      await api.settings.saveSync({ [key]: val })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">
+        Deaktivierte Quellen werden beim nächsten globalen Sync übersprungen. Einzelne Quellen können weiterhin manuell in den jeweiligen Panels ausgelöst werden.
+      </p>
+
+      <SyncGroup label="Google" enabled={settings.google_enabled} onToggle={v => toggle('google_enabled', v)}>
+        <SyncRow label="Gmail" enabled={settings.gmail_enabled} onToggle={v => toggle('gmail_enabled', v)} />
+        <SyncRow label="Google Kalender" enabled={settings.gcal_enabled} onToggle={v => toggle('gcal_enabled', v)} />
+      </SyncGroup>
+
+      <SyncGroup label="Apple / iCloud" enabled={settings.icloud_enabled} onToggle={v => toggle('icloud_enabled', v)}>
+        <SyncRow label="iCloud Mail" enabled={settings.icloud_mail_enabled} onToggle={v => toggle('icloud_mail_enabled', v)} />
+        <SyncRow label="iCloud Kalender" enabled={settings.icloud_cal_enabled} onToggle={v => toggle('icloud_cal_enabled', v)} />
+        <SyncRow label="Apple Notizen" enabled={settings.icloud_notes_enabled} onToggle={v => toggle('icloud_notes_enabled', v)} />
+        <SyncRow label="Erinnerungen" enabled={settings.icloud_reminders_enabled} onToggle={v => toggle('icloud_reminders_enabled', v)} />
+        <SyncRow label="Kontakte" enabled={settings.icloud_contacts_enabled} onToggle={v => toggle('icloud_contacts_enabled', v)} />
+        <SyncRow label="Anrufliste" enabled={settings.icloud_calls_enabled} onToggle={v => toggle('icloud_calls_enabled', v)} />
+      </SyncGroup>
+
+      <SyncGroup label="LinkedIn" enabled={settings.linkedin_enabled} onToggle={v => toggle('linkedin_enabled', v)}>
+        <div className="px-4 py-2.5 text-xs text-gray-400">LinkedIn Scraper (konfiguriert in Tab „LinkedIn")</div>
+      </SyncGroup>
+
+      {(saving || saved) && (
+        <p className="text-xs text-center text-indigo-500">{saving ? 'Speichert…' : '✓ Gespeichert'}</p>
+      )}
+    </div>
+  )
+}
+
+type Tab = 'ai' | 'google' | 'icloud' | 'calls' | 'sync'
 
 export function SettingsModal({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>('ai')
@@ -771,7 +873,7 @@ export function SettingsModal({ onClose }: Props) {
 
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex gap-1 rounded-lg border border-gray-200 overflow-hidden bg-white">
-            {([['ai', 'KI-Anbindung'], ['google', 'Google Sync'], ['icloud', 'iCloud Sync'], ['calls', 'Anrufliste']] as [Tab, string][]).map(([t, label]) => (
+            {([['sync', 'Sync-Steuerung'], ['ai', 'KI-Anbindung'], ['google', 'Google Sync'], ['icloud', 'iCloud Sync'], ['calls', 'Anrufliste']] as [Tab, string][]).map(([t, label]) => (
               <button key={t} onClick={() => setTab(t)}
                 className={clsx('px-4 py-1.5 text-xs font-medium transition-colors',
                   tab === t ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
@@ -785,6 +887,7 @@ export function SettingsModal({ onClose }: Props) {
         </div>
 
         <div className="overflow-y-auto flex-1 p-6">
+          {tab === 'sync' && <SyncControlPanel />}
           {tab === 'ai' && <AiPanel />}
           {tab === 'google' && <GoogleSyncPanel />}
           {tab === 'icloud' && <ICloudSyncPanel />}

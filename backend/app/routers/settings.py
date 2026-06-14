@@ -68,6 +68,43 @@ def clear_api_key(db: Session = Depends(get_db)):
     raise HTTPException(404, "Keine Einstellungen vorhanden")
 
 
+@router.get("/sync")
+def get_sync_settings(db: Session = Depends(get_db)):
+    cfg = db.query(models.SyncSettings).first()
+    if not cfg:
+        cfg = models.SyncSettings()
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+    return {
+        "google_enabled": cfg.google_enabled,
+        "gmail_enabled": cfg.gmail_enabled,
+        "gcal_enabled": cfg.gcal_enabled,
+        "icloud_enabled": cfg.icloud_enabled,
+        "icloud_mail_enabled": cfg.icloud_mail_enabled,
+        "icloud_cal_enabled": cfg.icloud_cal_enabled,
+        "icloud_notes_enabled": cfg.icloud_notes_enabled,
+        "icloud_reminders_enabled": cfg.icloud_reminders_enabled,
+        "icloud_contacts_enabled": cfg.icloud_contacts_enabled,
+        "icloud_calls_enabled": cfg.icloud_calls_enabled,
+        "linkedin_enabled": cfg.linkedin_enabled,
+    }
+
+
+@router.post("/sync")
+def save_sync_settings(payload: dict, db: Session = Depends(get_db)):
+    cfg = db.query(models.SyncSettings).first()
+    if not cfg:
+        cfg = models.SyncSettings()
+        db.add(cfg)
+    for key, val in payload.items():
+        if hasattr(cfg, key) and isinstance(val, bool):
+            setattr(cfg, key, val)
+    db.commit()
+    db.refresh(cfg)
+    return get_sync_settings(db)
+
+
 @router.post("/ai/test")
 async def test_ai(payload: Optional[schemas.AiSettingsWrite] = None, db: Session = Depends(get_db)):
     # If form values are passed, test against them directly (without saving)

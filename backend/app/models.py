@@ -285,3 +285,20 @@ class AiSettings(Base):
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class SyncSettings(Base):
+    __tablename__ = "sync_settings"
+
+    id                       = Column(Integer, primary_key=True)
+    google_enabled           = Column(Boolean, default=True, nullable=False)
+    gmail_enabled            = Column(Boolean, default=True, nullable=False)
+    gcal_enabled             = Column(Boolean, default=True, nullable=False)
+    icloud_enabled           = Column(Boolean, default=True, nullable=False)
+    icloud_mail_enabled      = Column(Boolean, default=True, nullable=False)
+    icloud_cal_enabled       = Column(Boolean, default=True, nullable=False)
+    icloud_notes_enabled     = Column(Boolean, default=True, nullable=False)
+    icloud_reminders_enabled = Column(Boolean, default=True, nullable=False)
+    icloud_contacts_enabled  = Column(Boolean, default=True, nullable=False)
+    icloud_calls_enabled     = Column(Boolean, default=True, nullable=False)
+    linkedin_enabled         = Column(Boolean, default=True, nullable=False)

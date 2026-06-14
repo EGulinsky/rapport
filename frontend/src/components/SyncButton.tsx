@@ -101,19 +101,26 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
 
       const pendingBefore = await api.review.count().then(r => r.count).catch(() => 0)
 
+      // Load sync settings to skip disabled sources
+      const syncCfg = await api.settings.getSync().catch(() => null)
+      const googleOn  = syncCfg?.google_enabled  ?? true
+      const icloudOn  = syncCfg?.icloud_enabled  ?? true
+
       // Contacts first (fast, no AI) — calls matching depends on them being present
-      await api.icloud.syncContacts().catch(() => null)
+      if (icloudOn && (syncCfg?.icloud_contacts_enabled ?? true)) {
+        await api.icloud.syncContacts().catch(() => null)
+      }
 
       // Fire all AI-based syncs as background tasks — they return immediately
       const FIRE_SOURCES = [
-        { key: 'gmail',              fn: () => api.sync.syncGmail() },
-        { key: 'gcal',               fn: () => api.sync.syncCalendar() },
-        { key: 'icloud_mail',        fn: () => api.icloud.syncMail() },
-        { key: 'icloud_cal',         fn: () => api.icloud.syncCalendar() },
-        { key: 'icloud_notes',       fn: () => api.icloud.syncNotes() },
-        { key: 'icloud_reminders',   fn: () => api.icloud.syncReminders() },
-        { key: 'icloud_calls',       fn: () => api.icloud.syncCalls() },
-      ]
+        { key: 'gmail',            enabled: googleOn && (syncCfg?.gmail_enabled            ?? true), fn: () => api.sync.syncGmail() },
+        { key: 'gcal',             enabled: googleOn && (syncCfg?.gcal_enabled             ?? true), fn: () => api.sync.syncCalendar() },
+        { key: 'icloud_mail',      enabled: icloudOn && (syncCfg?.icloud_mail_enabled      ?? true), fn: () => api.icloud.syncMail() },
+        { key: 'icloud_cal',       enabled: icloudOn && (syncCfg?.icloud_cal_enabled       ?? true), fn: () => api.icloud.syncCalendar() },
+        { key: 'icloud_notes',     enabled: icloudOn && (syncCfg?.icloud_notes_enabled     ?? true), fn: () => api.icloud.syncNotes() },
+        { key: 'icloud_reminders', enabled: icloudOn && (syncCfg?.icloud_reminders_enabled ?? true), fn: () => api.icloud.syncReminders() },
+        { key: 'icloud_calls',     enabled: icloudOn && (syncCfg?.icloud_calls_enabled     ?? true), fn: () => api.icloud.syncCalls() },
+      ].filter(s => s.enabled)
 
       const startedSources = new Set<string>()
       await Promise.all(FIRE_SOURCES.map(async ({ key, fn }) => {

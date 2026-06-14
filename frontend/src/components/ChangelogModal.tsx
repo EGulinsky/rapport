@@ -8,6 +8,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '1.0.7',
+    date: '2026-06-14',
+    changes: [
+      'Sync-Steuerung: Google / Apple / LinkedIn gesamt und einzelne Quellen ein-/ausschaltbar',
+      'Neuer Tab „Sync-Steuerung" in den Einstellungen mit Master-Toggles und Unterquellen',
+      'SyncButton überspringt deaktivierte Quellen beim globalen Sync',
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-06-14',
     changes: [

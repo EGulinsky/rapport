@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings } from '../types'
 
 const BASE = '/api'
 
@@ -115,6 +115,11 @@ export const api = {
     testAi: (data?: AiSettingsWrite) => request<{ status: string; message: string }>('/settings/ai/test', {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
+    }),
+    getSync: () => request<SyncSettings>('/settings/sync'),
+    saveSync: (data: Partial<SyncSettings>) => request<SyncSettings>('/settings/sync', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
   },
 

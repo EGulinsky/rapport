@@ -253,6 +253,20 @@ export interface CleanupResult {
   merged_event_groups: number
 }
 
+export interface SyncSettings {
+  google_enabled: boolean
+  gmail_enabled: boolean
+  gcal_enabled: boolean
+  icloud_enabled: boolean
+  icloud_mail_enabled: boolean
+  icloud_cal_enabled: boolean
+  icloud_notes_enabled: boolean
+  icloud_reminders_enabled: boolean
+  icloud_contacts_enabled: boolean
+  icloud_calls_enabled: boolean
+  linkedin_enabled: boolean
+}
+
 export interface CalendarEvent {
   id: number
   application_id: number
