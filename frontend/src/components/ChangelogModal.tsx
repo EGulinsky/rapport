@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '1.0.6',
+    date: '2026-06-14',
+    changes: [
+      'Apple Notes Sync: Pre-Filter überspringt Notizen ohne Firmennamen-Treffer (kein KI-Call)',
+      'Apple Notes Sync: parallele KI-Calls in Batches à 5 statt sequenziell',
+    ],
+  },
+  {
     version: '1.0.5',
     date: '2026-06-13',
     changes: [

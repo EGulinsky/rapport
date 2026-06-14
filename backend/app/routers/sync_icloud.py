@@ -492,17 +492,25 @@ async def _do_icloud_notes() -> dict:
         total = len(notes)
         update_progress("icloud_notes", 0, total, f"{total} Notizen gefunden")
 
-        for i, note in enumerate(notes):
-            update_progress("icloud_notes", i, total, f"Notiz {i + 1}/{total}")
+        # ── Phase 1: pre-filter (no AI) ────────────────────────────────────
+        pending = []   # (note_key, raw, date_hint, hint_apps)
+        for note in notes:
             title = (note.get('name') or '').strip()
-            body = (note.get('body') or '').strip()
-            uid = note.get('id') or title
+            body  = (note.get('body') or '').strip()
+            uid   = note.get('id') or title
             if not body:
                 skipped += 1
                 continue
 
             note_key = hashlib.md5(uid.encode()).hexdigest()[:16]
             if is_synced(db, "icloud_notes", note_key):
+                skipped += 1
+                continue
+
+            raw = f"Titel: {title}\n\n{body[:2000]}"
+            hint_apps = find_hint_apps(raw, term_to_apps)
+            if not hint_apps:
+                # No known firm mentioned → can never match an application; skip AI
                 skipped += 1
                 continue
 
@@ -516,24 +524,43 @@ async def _do_icloud_notes() -> dict:
                     except Exception:
                         pass
 
-            raw = f"Titel: {title}\n\n{body[:2000]}"
-            hint_apps = find_hint_apps(raw, term_to_apps)
+            pending.append((note_key, raw, date_hint, hint_apps))
 
+        # ── Phase 2: parallel AI calls in batches of 5 ────────────────────
+        import asyncio as _asyncio
+
+        BATCH = 5
+        n_pending = len(pending)
+        update_progress("icloud_notes", 0, n_pending, f"{n_pending} Notizen mit Firmenbezug werden klassifiziert…")
+
+        async def _process_one(idx: int, note_key: str, raw: str, date_hint, hint_apps):
+            update_progress("icloud_notes", idx, n_pending, f"Notiz {idx + 1}/{n_pending}")
+            return await process_item(db, "icloud_notes", note_key, raw, date_hint, hint_apps=hint_apps)
+
+        for batch_start in range(0, n_pending, BATCH):
+            batch = pending[batch_start:batch_start + BATCH]
             try:
-                ok = await process_item(db, "icloud_notes", note_key, raw, date_hint, hint_apps=hint_apps or None)
+                results = await _asyncio.gather(
+                    *[_process_one(batch_start + j, nk, raw, dh, ha) for j, (nk, raw, dh, ha) in enumerate(batch)],
+                    return_exceptions=True,
+                )
             except AINotConfigured as e:
                 finish_progress("icloud_notes")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
-            except AIRateLimited as e:
-                finish_progress("icloud_notes")
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
-            except Exception as e:
-                errors.append(f"{title or uid}: {e}")
-                continue
 
-            processed += 1
-            if ok:
-                created += 1
+            for (note_key, raw, _, _), result in zip(batch, results):
+                if isinstance(result, AINotConfigured):
+                    finish_progress("icloud_notes")
+                    return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(result)]}
+                if isinstance(result, AIRateLimited):
+                    finish_progress("icloud_notes")
+                    return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {result}"]}
+                if isinstance(result, Exception):
+                    errors.append(str(result))
+                    continue
+                processed += 1
+                if result:
+                    created += 1
 
         db.commit()
         cfg.notes_last_sync = datetime.now(timezone.utc)
