@@ -196,30 +196,52 @@ def _parse_date(text: str) -> Optional[str]:
     return None
 
 
+# LinkedIn uses these selectors depending on version/locale
+_EMAIL_SELECTORS = ["#username", "input[name='session_key']", "input[autocomplete='username']", "input[type='email']"]
+_PASS_SELECTORS  = ["#password", "input[name='session_password']", "input[autocomplete='current-password']", "input[type='password']"]
+
+
+async def _find_input(page, selectors: list[str], timeout_each: int = 3000):
+    """Try multiple selectors, return the first visible one."""
+    for sel in selectors:
+        try:
+            await page.wait_for_selector(sel, state="visible", timeout=timeout_each)
+            return sel
+        except Exception:
+            continue
+    return None
+
+
 async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
         _state["step"] = "Anmelden: Login-Seite laden…"
-        # domcontentloaded fires quickly; wait_for_selector below waits for React to mount the form
         await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+        # Give JS a moment to hydrate before checking selectors
+        await asyncio.sleep(2)
 
         _state["step"] = "Anmelden: warte auf Login-Formular…"
-        # Wait up to 10 s for the username field; catch gracefully if bot-detection hides it
-        try:
-            await page.wait_for_selector("#username", state="visible", timeout=10000)
-        except Exception:
+        email_sel = await _find_input(page, _EMAIL_SELECTORS, timeout_each=5000)
+        if not email_sel:
             current_url = page.url
             title = await page.title()
+            # Log page source snippet for debugging
+            try:
+                snippet = await page.evaluate("document.body.innerText.slice(0, 300)")
+            except Exception:
+                snippet = "(kein Text)"
             _state["errors"].append(
-                f"Login-Seite nicht geladen — URL: {current_url} | Titel: {title}"
+                f"Login-Formular nicht gefunden — URL: {current_url} | Titel: {title} | Inhalt: {snippet}"
             )
             _state["status"] = "needs_login"
-            _state["step"] = "LinkedIn zeigt keine Login-Maske (Bot-Detection?) — Session-Cookies zurücksetzen und erneut versuchen"
+            _state["step"] = "LinkedIn zeigt keine Login-Maske — Session zurücksetzen und erneut versuchen"
             return False
 
+        pass_sel = await _find_input(page, _PASS_SELECTORS, timeout_each=3000) or "#password"
+
         _state["step"] = "Anmelden: Zugangsdaten eingeben…"
-        await page.fill("#username", email)
-        await page.fill("#password", password)
+        await page.fill(email_sel, email)
+        await page.fill(pass_sel, password)
         submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').first
         _state["step"] = "Anmelden: Submit…"
         await submit.click()
