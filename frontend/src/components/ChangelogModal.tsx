@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.12',
+    date: '2026-06-16',
+    changes: [
+      'Fix: LinkedIn Archived → Abgesagt jetzt für alle Stages (nicht nur Früh-Phase) — unabhängig vom bisherigen Status',
+    ],
+  },
+  {
     version: '2.0.11',
     date: '2026-06-16',
     changes: [
