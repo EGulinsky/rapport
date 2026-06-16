@@ -24,7 +24,7 @@ from app.routers.sync_common import (
     is_synced, mark_synced, load_synced_ids, purge_source,
     strip_html, decode_b64,
     build_firm_index, build_contact_domain_index, find_hint_apps,
-    process_item,
+    process_item, earliest_bewerbung_date,
     init_progress, update_progress, finish_progress, get_all_progress,
     set_batch_result, get_batch_results,
 )
@@ -267,14 +267,18 @@ async def _do_gmail() -> dict:
         firm_clause, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
 
+        # When firm names are known, use only those — broad keywords fetch too many irrelevant mails
         fallback = (
             "Bewerbung OR Interview OR Gespräch OR Absage OR Einladung OR Angebot "
             "OR recruiting OR Headhunter OR Kandidat "
             "OR application OR position OR candidate OR hiring OR shortlisted "
             "OR \"not moving forward\" OR \"next steps\""
         )
-        search_clause = f"({firm_clause} OR {fallback})" if firm_clause else f"({fallback})"
+        search_clause = firm_clause if firm_clause else f"({fallback})"
         query = f"after:{after_ts} {search_clause}"
+
+        # Global cutoff: skip mails older than the earliest application submission date
+        global_cutoff = earliest_bewerbung_date(db)
 
         update_progress("gmail", 0, 0, "Nachrichten werden geladen…")
         messages = []
@@ -297,6 +301,8 @@ async def _do_gmail() -> dict:
         update_progress("gmail", 0, total, f"{total} Nachrichten gefunden")
         synced_ids = load_synced_ids(db, "gmail")
 
+        from email.utils import parsedate_to_datetime as _parse_date_hdr
+
         for i, msg_ref in enumerate(messages):
             if i % 10 == 0:
                 update_progress("gmail", i, total, f"E-Mail {i + 1}/{total}")
@@ -304,27 +310,54 @@ async def _do_gmail() -> dict:
             if msg_id in synced_ids:
                 skipped += 1
                 continue
+
+            # ── Phase 1: metadata only (headers, no body) ──────────────────
             try:
-                msg = service.users().messages().get(
+                msg_meta = service.users().messages().get(
+                    userId="me", id=msg_id, format="metadata",
+                    metadataHeaders=["From", "Subject", "Date"]
+                ).execute()
+            except Exception as e:
+                errors.append(f"Nachricht {msg_id}: {e}")
+                continue
+
+            meta_hdrs = {h["name"].lower(): h["value"] for h in msg_meta["payload"].get("headers", [])}
+            subject   = meta_hdrs.get("subject", "(kein Betreff)")
+            sender    = meta_hdrs.get("from", "")
+            date_str  = meta_hdrs.get("date", "")
+
+            date_hint = None
+            try:
+                date_hint = _parse_date_hdr(date_str).astimezone(timezone.utc)
+            except Exception:
+                pass
+
+            # Skip mails before the earliest application date
+            if global_cutoff and date_hint and date_hint.date() < global_cutoff:
+                mark_synced(db, "gmail", msg_id)
+                synced_ids.add(msg_id)
+                skipped += 1
+                continue
+
+            # Quick firm check on subject + sender — skip full-body fetch if no match
+            quick_raw = f"Von: {sender}\nBetreff: {subject}"
+            quick_hints = find_hint_apps(quick_raw, term_to_apps, contact_domain_index)
+            if not quick_hints:
+                mark_synced(db, "gmail", msg_id)
+                synced_ids.add(msg_id)
+                skipped += 1
+                continue
+
+            # ── Phase 2: full body (only for promising mails) ──────────────
+            try:
+                msg_full = service.users().messages().get(
                     userId="me", id=msg_id, format="full"
                 ).execute()
             except Exception as e:
                 errors.append(f"Nachricht {msg_id}: {e}")
                 continue
 
-            headers  = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
-            subject  = headers.get("subject", "(kein Betreff)")
-            sender   = headers.get("from", "")
-            date_str = headers.get("date", "")
-            body     = _gmail_body(msg["payload"])[:1500]
-
-            date_hint = None
-            try:
-                from email.utils import parsedate_to_datetime
-                date_hint = parsedate_to_datetime(date_str).astimezone(timezone.utc)
-            except Exception:
-                pass
-
+            body = _gmail_body(msg_full["payload"])[:1500]
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 

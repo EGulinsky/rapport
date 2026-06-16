@@ -25,11 +25,17 @@ from app.ai.tasks import match_and_classify
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 
-def _floor_to_bewerbung(datum: Optional[date], app: models.Application) -> Optional[date]:
-    """Clamp an auto-created event date so it can't precede datum_bewerbung."""
+def _predates_bewerbung(datum: Optional[date], app: models.Application) -> bool:
+    """True if datum is set and lies strictly before the application submission date."""
     if datum is None or app.datum_bewerbung is None:
-        return datum
-    return max(datum, app.datum_bewerbung)
+        return False
+    return datum < app.datum_bewerbung
+
+
+def earliest_bewerbung_date(db: Session) -> Optional[date]:
+    """Return the oldest datum_bewerbung across all applications (used as global sync cutoff)."""
+    from sqlalchemy import func as _func
+    return db.query(_func.min(models.Application.datum_bewerbung)).scalar()
 
 
 def _time_prefix(date_hint: Optional[datetime]) -> str:
@@ -613,7 +619,10 @@ def _save_deterministic_event(
         mark_synced(db, source, external_id)
         return False
 
-    datum = _floor_to_bewerbung(date_hint.date() if date_hint else None, app)
+    datum = date_hint.date() if date_hint else None
+    if _predates_bewerbung(datum, app):
+        mark_synced(db, source, external_id)
+        return False
 
     # Time prefix only for mail/note events, not calendar or files
     time_pfx = ""
@@ -779,10 +788,13 @@ async def process_item(
         return False
 
     app = db.query(models.Application).get(app_id)
+    if app and _predates_bewerbung(datum, app):
+        mark_synced(db, source, external_id)
+        return False
     db.add(models.Event(
         application_id=app_id,
         typ=_map_event_type(result.get("event_type", "note")),
-        datum=_floor_to_bewerbung(datum, app) if app else datum,
+        datum=datum,
         titel=result.get("titel") or source,
         notiz=result.get("extract"),
         autor=autor,
@@ -861,10 +873,13 @@ def save_classified_event(
     notiz = f"{time_pfx}{body}" if time_pfx else (body or None)
 
     app_obj = db.query(models.Application).get(target_app["id"])
+    if app_obj and _predates_bewerbung(datum, app_obj):
+        mark_synced(db, source, external_id)
+        return False
     db.add(models.Event(
         application_id=target_app["id"],
         typ=_map_event_type(result.get("event_type", "note")),
-        datum=_floor_to_bewerbung(datum, app_obj) if app_obj else datum,
+        datum=datum,
         titel=result.get("titel") or source,
         notiz=notiz,
         autor=autor,
