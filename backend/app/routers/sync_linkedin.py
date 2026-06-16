@@ -400,6 +400,54 @@ async def _login(page, email: str, password: str) -> bool:
         return False
 
 
+_CONSENT_SELECTORS = [
+    "button[action-type=ACCEPT]",
+    "button[data-test-modal-close-btn]",
+]
+
+_EXTRACT_JOBS_JS = """
+() => {
+    // Find all title links (non-logo: have visible text > 5 chars)
+    const titleLinks = Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'))
+        .filter(a => (a.innerText || '').trim().length > 5);
+
+    return titleLinks.map(link => {
+        const href = link.href || '';
+        const m = href.match(/\\/jobs\\/view\\/(\\d+)/);
+        const jobId = m ? m[1] : '';
+        const title = (link.innerText || '').trim();
+
+        // Walk up to find a container that has more context (company, date)
+        let el = link;
+        let contextText = '';
+        for (let i = 0; i < 10; i++) {
+            el = el.parentElement;
+            if (!el) break;
+            const t = (el.innerText || '').trim();
+            if (t.length > title.length + 5 && t.includes('\\n')) {
+                contextText = t;
+                break;
+            }
+        }
+        return {id: jobId, title, context: contextText.slice(0, 500)};
+    });
+}
+"""
+
+
+async def _accept_consent(page) -> None:
+    """Dismiss LinkedIn cookie consent banner if present."""
+    for sel in _CONSENT_SELECTORS:
+        loc = page.locator(sel)
+        try:
+            if await loc.count() > 0:
+                await loc.first.click()
+                await asyncio.sleep(2)
+                return
+        except Exception:
+            continue
+
+
 async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str]) -> list[dict]:
     """Scroll through one LinkedIn job category and collect all job cards."""
     url = f"{BASE_JOBS_URL}{card_type}"
@@ -409,54 +457,51 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
     except Exception:
         return []
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
 
     if "login" in page.url or "authwall" in page.url:
-        return []  # session expired mid-scrape
+        return []
+
+    await _accept_consent(page)
+    await asyncio.sleep(1)
 
     prev_count = -1
     stale_rounds = 0
     while True:
-        cards = await page.query_selector_all(
-            "div.job-card-container, li.reusable-search__result-container, "
-            "div[data-view-name='job-card'], li.occludable-update"
-        )
+        raw_items: list[dict] = await page.evaluate(_EXTRACT_JOBS_JS)
 
-        for card in cards:
-            job_id = (
-                await card.get_attribute("data-job-id")
-                or await card.get_attribute("data-entity-urn")
-                or ""
-            )
-            if not job_id:
-                link = await card.query_selector("a[href*='/jobs/view/']")
-                if link:
-                    href = await link.get_attribute("href") or ""
-                    m = re.search(r"/jobs/view/(\d+)", href)
-                    if m:
-                        job_id = m.group(1)
+        for item in raw_items:
+            job_id = item.get("id", "")
             if not job_id or job_id in seen_ids:
                 continue
             seen_ids.add(job_id)
 
-            title_el = await card.query_selector(
-                ".job-card-list__title, .job-card-container__link, a[data-control-name='jobcard_title']"
-            )
-            title = (await title_el.inner_text()).strip() if title_el else ""
+            title = item.get("title", "").strip()
+            context = item.get("context", "")
 
-            company_el = await card.query_selector(
-                ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle span"
-            )
-            company = (await company_el.inner_text()).strip() if company_el else ""
+            # Parse company + date from context lines
+            lines = [ln.strip() for ln in context.split("\n")
+                     if ln.strip() and ln.strip() != title]
+            company = ""
+            date_text = ""
+            for line in lines:
+                low = line.lower()
+                if re.search(r"\d+\s*(day|week|month|hour)", low) or re.search(r"\d{1,2}/\d{1,2}/\d{4}", low):
+                    if not date_text:
+                        date_text = line
+                elif not company and len(line) < 120:
+                    # Skip location-only lines (contain "(", "hybrid", "remote", "on-site")
+                    if not re.search(r"\(|\bhybrid\b|\bremote\b|\bon.site\b", low):
+                        company = line
+                    elif not company:
+                        company = line  # fallback: take first line even if location
 
-            date_el = await card.query_selector(
-                ".job-card-container__footer-item, .job-card-list__footer-wrapper span"
-            )
-            date_text = (await date_el.inner_text()).strip() if date_el else ""
-            applied_date = _parse_date(date_text)
+            if not company and lines:
+                company = lines[0]
 
-            # Footer text may override the default status
-            status_text = date_text.lower()
+            applied_date = _parse_date(date_text) if date_text else None
+
+            status_text = (date_text + " " + context).lower()
             mapped_status: Optional[tuple] = None
             for keyword, mapping in _STATUS_MAP.items():
                 if keyword in status_text:
