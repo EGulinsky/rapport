@@ -255,7 +255,7 @@ async def _login(page, email: str, password: str) -> bool:
         else:
             await page.keyboard.press("Tab")
             await page.keyboard.type(password)
-        submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').filter(visible=True).first
+        submit = page.locator('[data-litms-control-urn="login-submit"]:visible, button[type="submit"]:visible').first
         _state["step"] = "Anmelden: Submit…"
         await submit.click()
         _state["step"] = "Anmelden: warte auf Weiterleitung…"
