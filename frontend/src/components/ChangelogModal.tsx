@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.7',
+    date: '2026-06-16',
+    changes: [
+      'Fix: LinkedIn Login — networkidle durch domcontentloaded ersetzt (LinkedIn erreicht nie networkidle wegen Background-Requests)',
+    ],
+  },
+  {
     version: '2.0.6',
     date: '2026-06-16',
     changes: [
