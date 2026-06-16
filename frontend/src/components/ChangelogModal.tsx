@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.16',
+    date: '2026-06-16',
+    changes: [
+      'Fix: LinkedIn Scraper — Firma/Rolle-Verwechslung durch ", Verified"-Badge behoben; Datum-Parsing für Kurzformat (6d/2w/1mo) ergänzt',
+    ],
+  },
+  {
     version: '2.0.15',
     date: '2026-06-16',
     changes: [

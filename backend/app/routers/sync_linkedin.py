@@ -187,28 +187,31 @@ _STATUS_MAP = {
 
 
 def _parse_date(text: str) -> Optional[str]:
-    """Parse 'Applied X days ago' or 'Applied on MM/DD/YYYY' → YYYY-MM-DD."""
-    text = text.lower().strip()
-    # "applied 3 days ago"
-    m = re.search(r"(\d+)\s+day", text)
+    """Parse LinkedIn date strings → YYYY-MM-DD."""
+    from datetime import timedelta
+    t = text.lower().strip()
+    # short form: "6d ago", "2w ago", "3mo ago"
+    m = re.search(r"(\d+)\s*d\b", t)
     if m:
-        from datetime import timedelta
-        d = datetime.now() - timedelta(days=int(m.group(1)))
-        return d.strftime("%Y-%m-%d")
-    # "applied 2 weeks ago"
-    m = re.search(r"(\d+)\s+week", text)
+        return (datetime.now() - timedelta(days=int(m.group(1)))).strftime("%Y-%m-%d")
+    m = re.search(r"(\d+)\s*w\b", t)
     if m:
-        from datetime import timedelta
-        d = datetime.now() - timedelta(weeks=int(m.group(1)))
-        return d.strftime("%Y-%m-%d")
-    # "applied 1 month ago"
-    m = re.search(r"(\d+)\s+month", text)
+        return (datetime.now() - timedelta(weeks=int(m.group(1)))).strftime("%Y-%m-%d")
+    m = re.search(r"(\d+)\s*mo\b", t)
     if m:
-        from datetime import timedelta
-        d = datetime.now() - timedelta(days=int(m.group(1)) * 30)
-        return d.strftime("%Y-%m-%d")
-    # "applied on 1/15/2025" or "01/15/2025"
-    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{4})", text)
+        return (datetime.now() - timedelta(days=int(m.group(1)) * 30)).strftime("%Y-%m-%d")
+    # long form: "3 days ago", "2 weeks ago", "1 month ago"
+    m = re.search(r"(\d+)\s+day", t)
+    if m:
+        return (datetime.now() - timedelta(days=int(m.group(1)))).strftime("%Y-%m-%d")
+    m = re.search(r"(\d+)\s+week", t)
+    if m:
+        return (datetime.now() - timedelta(weeks=int(m.group(1)))).strftime("%Y-%m-%d")
+    m = re.search(r"(\d+)\s+month", t)
+    if m:
+        return (datetime.now() - timedelta(days=int(m.group(1)) * 30)).strftime("%Y-%m-%d")
+    # absolute: "1/15/2025"
+    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{4})", t)
     if m:
         return f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
     return None
@@ -476,25 +479,38 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 continue
             seen_ids.add(job_id)
 
-            title = item.get("title", "").strip()
+            raw_title = item.get("title", "").strip()
+            # Normalize: collapse whitespace, strip LinkedIn's ", Verified" badge artifact
+            title = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', raw_title)).strip()
             context = item.get("context", "")
 
-            # Parse company + date from context lines
-            lines = [ln.strip() for ln in context.split("\n")
-                     if ln.strip() and ln.strip() != title]
+            # Build filtered lines: skip blanks, title (normalized), and ", Verified" artifacts
+            title_norm = title.lower()
+            lines = []
+            for ln in context.split("\n"):
+                ln = ln.strip()
+                if not ln:
+                    continue
+                ln_norm = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', ln)).strip().lower()
+                if ln_norm == title_norm or ln_norm in (',', '· verified', ', verified', 'verified'):
+                    continue
+                lines.append(ln)
+
             company = ""
             date_text = ""
             for line in lines:
                 low = line.lower()
-                if re.search(r"\d+\s*(day|week|month|hour)", low) or re.search(r"\d{1,2}/\d{1,2}/\d{4}", low):
+                # Date: short ("6d ago") or long ("6 days ago") or "Applied on..."
+                if (re.search(r"\d+\s*(?:d|w|mo)\b", low)
+                        or re.search(r"\d+\s+(?:day|week|month|hour)", low)
+                        or re.search(r"\d{1,2}/\d{1,2}/\d{4}", low)
+                        or low.startswith("applied")):
                     if not date_text:
                         date_text = line
                 elif not company and len(line) < 120:
-                    # Skip location-only lines (contain "(", "hybrid", "remote", "on-site")
-                    if not re.search(r"\(|\bhybrid\b|\bremote\b|\bon.site\b", low):
+                    # Skip location-only lines
+                    if not re.search(r"\(|\bhybrid\b|\bremote\b|\bon.?site\b", low):
                         company = line
-                    elif not company:
-                        company = line  # fallback: take first line even if location
 
             if not company and lines:
                 company = lines[0]
