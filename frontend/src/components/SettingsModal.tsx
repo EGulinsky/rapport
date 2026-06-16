@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen } from 'lucide-react'
+import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2 } from 'lucide-react'
 import { api } from '../api/client'
-import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig } from '../types'
+import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void }
@@ -1040,38 +1040,288 @@ function SyncControlPanel() {
   )
 }
 
-type Tab = 'ai' | 'google' | 'icloud' | 'calls' | 'sync' | 'files'
+function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
+  const [liConfig, setLiConfig] = useState<{ configured: boolean; email?: string; has_session: boolean; last_sync?: string } | null>(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [syncState, setSyncState] = useState<LinkedInSyncStatus | null>(null)
+  const [liError, setLiError] = useState<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  async function loadConfig() {
+    try {
+      const c = await api.linkedin.getConfig() as typeof liConfig
+      setLiConfig(c)
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { loadConfig(); return () => stopPolling() }, [])
+
+  async function handleSave() {
+    if (!email.trim() || !password.trim()) return
+    setSaving(true); setLiError(null)
+    try {
+      await api.linkedin.saveConfig(email.trim(), password.trim())
+      await loadConfig(); setPassword('')
+    } catch (e: unknown) { setLiError(e instanceof Error ? e.message : String(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleDelete() {
+    await api.linkedin.deleteConfig(); setLiConfig(null); setEmail(''); setPassword('')
+  }
+
+  async function handleClearSession() {
+    await api.linkedin.clearSession(); await loadConfig()
+  }
+
+  async function handleSync() {
+    setLiError(null)
+    try {
+      const s = await api.linkedin.run() as LinkedInSyncStatus
+      setSyncState(s); stopPolling()
+      pollRef.current = setInterval(async () => {
+        try {
+          const s2 = await api.linkedin.status() as LinkedInSyncStatus
+          setSyncState(s2)
+          if (s2.status === 'done') { stopPolling(); onSynced() }
+          else if (s2.status === 'error' || s2.status === 'needs_login') { stopPolling() }
+        } catch { /* ignore */ }
+      }, 2000)
+    } catch (e: unknown) { setLiError(e instanceof Error ? e.message : String(e)) }
+  }
+
+  function logLabel(e: LinkedInSyncLogEntry) {
+    if (e.aktion === 'neu') return { text: 'Neu', cls: 'bg-indigo-50 text-indigo-700' }
+    if (e.aktion === 'abgesagt') return { text: 'Abgesagt', cls: 'bg-red-50 text-red-700' }
+    if (e.aktion === 'aktualisiert') return { text: 'Aktualisiert', cls: 'bg-blue-50 text-blue-700' }
+    return { text: 'Unverändert', cls: 'bg-gray-50 text-gray-500' }
+  }
+
+  const isRunning = syncState?.status === 'running'
+  const isDone = syncState?.status === 'done'
+  const isError = syncState?.status === 'error'
+  const needsLogin = syncState?.status === 'needs_login'
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+        <Linkedin className="h-4 w-4 text-[#0077B5]" /> LinkedIn Sync
+      </h3>
+
+      {/* Config */}
+      {liConfig?.configured ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+            <div>
+              <p className="text-xs font-medium text-green-800">{liConfig.email}</p>
+              <p className="text-[10px] text-green-600">
+                {liConfig.has_session ? 'Session aktiv' : 'Kein gespeichertes Login'}
+                {liConfig.last_sync ? ` · Letzter Sync: ${new Date(liConfig.last_sync).toLocaleDateString('de-DE')}` : ''}
+              </p>
+            </div>
+            <button onClick={handleDelete} className="p-1 text-green-400 hover:text-red-500">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {liConfig.has_session && (
+            <button onClick={handleClearSession} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+              <RefreshCw className="h-3 w-3" /> Session zurücksetzen
+            </button>
+          )}
+          <p className="text-xs text-gray-500">
+            Synchronisiert eingereichte Bewerbungen von LinkedIn. Neue werden angelegt,
+            Archivierte (in früher Phase) als Absage markiert.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            LinkedIn-Zugangsdaten eingeben. Das Passwort wird verschlüsselt gespeichert.
+          </p>
+          <div className="space-y-2">
+            <input type="email" placeholder="E-Mail" value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0077B5]/30" />
+            <div className="relative">
+              <input type={showPw ? 'text' : 'password'} placeholder="Passwort" value={password}
+                onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-[#0077B5]/30" />
+              <button type="button" onClick={() => setShowPw(v => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <button onClick={handleSave} disabled={saving || !email.trim() || !password.trim()}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#0077B5] text-white hover:bg-[#005f91] disabled:opacity-50">
+            {saving ? 'Speichern…' : 'Speichern'}
+          </button>
+        </div>
+      )}
+
+      {liError && <p className="text-xs text-red-600">{liError}</p>}
+
+      {/* Sync button */}
+      {liConfig?.configured && (
+        <button onClick={handleSync} disabled={isRunning}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#0077B5] text-white hover:bg-[#005f91] disabled:opacity-50">
+          {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Linkedin className="h-3.5 w-3.5" />}
+          {isRunning ? 'Läuft…' : 'Jetzt synchronisieren'}
+        </button>
+      )}
+
+      {/* Sync status */}
+      {syncState && (
+        <div className="space-y-3 border border-gray-100 rounded-lg p-3">
+          {isRunning && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0077B5]" />
+              <span>{syncState.step || 'Läuft…'}</span>
+            </div>
+          )}
+          {isDone && (
+            <div className="flex items-center gap-2 text-xs text-green-700">
+              <CheckCircle className="h-3.5 w-3.5" /> Sync abgeschlossen
+            </div>
+          )}
+          {(isError || needsLogin) && (
+            <div className="flex items-start gap-2 text-xs text-red-700">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>{syncState.step || 'Fehler'}</span>
+            </div>
+          )}
+          {needsLogin && (
+            <p className="text-xs text-gray-400">
+              Tipp: Einmal manuell auf linkedin.com einloggen, dann erneut versuchen.
+            </p>
+          )}
+
+          {(isDone || isError) && syncState.processed > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { n: syncState.processed, label: 'Gefunden', cls: 'bg-gray-50 text-gray-600' },
+                { n: syncState.created, label: 'Neu', cls: 'bg-indigo-50 text-indigo-700' },
+                { n: syncState.updated, label: 'Aktualisiert', cls: 'bg-blue-50 text-blue-700' },
+                { n: syncState.skipped, label: 'Unverändert', cls: 'bg-gray-50 text-gray-400' },
+              ].filter(x => x.n > 0).map(x => (
+                <div key={x.label} className={`flex flex-col items-center px-2.5 py-1 rounded-lg ${x.cls}`}>
+                  <span className="text-base font-bold leading-tight">{x.n}</span>
+                  <span className="text-[10px] font-medium">{x.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isDone && syncState.log && syncState.log.filter(e => e.aktion !== 'unverändert').length > 0 && (
+            <details open className="text-xs">
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">
+                Aktionslog ({syncState.log.filter(e => e.aktion !== 'unverändert').length} Änderungen)
+              </summary>
+              <div className="mt-1 max-h-48 overflow-y-auto space-y-1">
+                {syncState.log.filter(e => e.aktion !== 'unverändert').map((entry, i) => {
+                  const { text, cls } = logLabel(entry)
+                  return (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>{text}</span>
+                      <span className="text-gray-700 leading-tight">
+                        <span className="font-medium">{entry.firma}</span>
+                        {entry.rolle && <span className="text-gray-400"> · {entry.rolle}</span>}
+                        {entry.aktion === 'aktualisiert' && entry.von && entry.zu && <span className="text-gray-400"> ({entry.von} → {entry.zu})</span>}
+                        {entry.aktion === 'abgesagt' && entry.von && <span className="text-gray-400"> (war: {entry.von})</span>}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </details>
+          )}
+
+          {isDone && syncState.log && syncState.log.filter(e => e.aktion === 'unverändert').length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-gray-400 hover:text-gray-600">
+                {syncState.log.filter(e => e.aktion === 'unverändert').length} unverändert
+              </summary>
+              <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5 ml-2">
+                {syncState.log.filter(e => e.aktion === 'unverändert').map((entry, i) => (
+                  <div key={i} className="text-gray-400">{entry.firma} · {entry.rolle}</div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {syncState.errors.length > 0 && (
+            <details className="text-xs text-red-600">
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-700">{syncState.errors.length} Fehler</summary>
+              <ul className="mt-1 space-y-0.5 ml-2">{syncState.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin'
+
+const TABS: [Tab, string][] = [
+  ['sync',     'Sync'],
+  ['ai',       'KI / API'],
+  ['google',   'Google'],
+  ['icloud',   'iCloud'],
+  ['calls',    'Anrufe'],
+  ['files',    'Dokumente'],
+  ['linkedin', 'LinkedIn'],
+]
 
 export function SettingsModal({ onClose }: Props) {
-  const [tab, setTab] = useState<Tab>('ai')
+  const [tab, setTab] = useState<Tab>('sync')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
 
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 min-w-0">
-          <div className="flex gap-1 rounded-lg border border-gray-200 bg-white overflow-x-auto flex-1 min-w-0 scrollbar-hide">
-            {([['sync', 'Sync-Steuerung'], ['ai', 'KI-Anbindung'], ['google', 'Google Sync'], ['icloud', 'iCloud Sync'], ['calls', 'Anrufliste'], ['files', 'Dokumente']] as [Tab, string][]).map(([t, label]) => (
-              <button key={t} onClick={() => setTab(t)}
-                className={clsx('px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0',
-                  tab === t ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 shrink-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+          <h2 className="text-sm font-semibold text-gray-800">Einstellungen</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-6">
-          {tab === 'sync' && <SyncControlPanel />}
-          {tab === 'ai' && <AiPanel />}
-          {tab === 'google' && <GoogleSyncPanel />}
-          {tab === 'icloud' && <ICloudSyncPanel />}
-          {tab === 'calls' && <CallsPanel />}
-          {tab === 'files' && <FilesPanel />}
+        {/* Body: sidebar + content */}
+        <div className="flex flex-1 min-h-0">
+          {/* Sidebar */}
+          <nav className="w-36 shrink-0 border-r border-gray-100 py-2 flex flex-col gap-0.5 overflow-y-auto">
+            {TABS.map(([t, label]) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={clsx(
+                  'w-full text-left px-4 py-2 text-xs font-medium transition-colors rounded-none',
+                  tab === t
+                    ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
+                    : 'text-gray-600 hover:bg-gray-50'
+                )}>
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6 min-w-0">
+            {tab === 'sync'     && <SyncControlPanel />}
+            {tab === 'ai'       && <AiPanel />}
+            {tab === 'google'   && <GoogleSyncPanel />}
+            {tab === 'icloud'   && <ICloudSyncPanel />}
+            {tab === 'calls'    && <CallsPanel />}
+            {tab === 'files'    && <FilesPanel />}
+            {tab === 'linkedin' && <LinkedInPanel onSynced={onClose} />}
+          </div>
         </div>
       </div>
     </div>
