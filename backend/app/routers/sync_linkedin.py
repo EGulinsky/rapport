@@ -197,8 +197,8 @@ def _parse_date(text: str) -> Optional[str]:
 async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
-        # networkidle waits until no network requests for 500ms — gives React time to mount the form
-        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=45000)
+        # domcontentloaded fires quickly; wait_for_selector below waits for React to mount the form
+        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
 
         # Wait up to 10 s for the username field; catch gracefully if bot-detection hides it
         try:
