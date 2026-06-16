@@ -68,6 +68,7 @@ export interface Application {
   wurde_besetzt_von?: string
   datum_bewerbung?: string
   letztes_update?: string
+  naechster_schritt?: string
   abgesagt: boolean
   ghosting: boolean
   kommentar?: string

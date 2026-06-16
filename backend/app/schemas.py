@@ -150,6 +150,7 @@ class ApplicationListItem(BaseModel):
     abgesagt: bool
     ghosting: bool
     kommentar: Optional[str] = None
+    naechster_schritt: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

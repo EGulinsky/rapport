@@ -44,6 +44,16 @@ function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolea
         <p className="text-xs text-gray-400 mt-1">{SUB_STATUS_LABELS[app.sub_status] ?? app.sub_status}</p>
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
+      {app.naechster_schritt && (
+        <p className={`text-[10px] mt-1.5 leading-tight font-medium ${
+          app.naechster_schritt.startsWith('Gespräch') ? 'text-indigo-600' :
+          app.naechster_schritt.startsWith('Kein Feedback') || app.naechster_schritt.startsWith('Keine Reaktion') ? 'text-orange-600' :
+          app.naechster_schritt.startsWith('Evtl.') || app.naechster_schritt.startsWith('Feedback aus') ? 'text-yellow-600' :
+          'text-gray-500'
+        }`}>
+          → {app.naechster_schritt}
+        </p>
+      )}
       {(app.letztes_update || app.datum_bewerbung) && (
         <p className="text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100">
           {app.letztes_update
