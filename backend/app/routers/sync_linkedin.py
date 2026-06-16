@@ -694,8 +694,6 @@ async def _async_sync(cfg_id: int):
         errors: list[str] = []
         action_log: list[dict] = []
         STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
-        # Early stages where LinkedIn "archived" reliably means no active process
-        EARLY_STAGES = {"prospecting", "applied"}
 
         for i, job in enumerate(all_jobs):
             _state["processed"] = i + 1
@@ -720,8 +718,8 @@ async def _async_sync(cfg_id: int):
                     cur_idx = STATUS_ORDER.index(old_status) if old_status in STATUS_ORDER else 0
                     new_idx = STATUS_ORDER.index(target_status) if target_status in STATUS_ORDER else 0
 
-                    # Archived → abgesagt: only for early-stage apps (not ongoing interviews)
-                    if target_status == "rejected" and old_status in EARLY_STAGES:
+                    # LinkedIn archived → abgesagt regardless of current stage
+                    if target_status == "rejected" and old_status != "rejected":
                         app.main_status = "rejected"
                         app.abgesagt = True
                         updated += 1
