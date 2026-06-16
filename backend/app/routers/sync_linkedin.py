@@ -197,15 +197,15 @@ def _parse_date(text: str) -> Optional[str]:
 async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
-        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
-        await asyncio.sleep(2)  # let JS settle
+        # networkidle waits until no network requests for 500ms — gives React time to mount the form
+        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=45000)
 
-        # Check what page actually loaded (bot detection / CAPTCHA / redirect)
-        current_url = page.url
-        title = await page.title()
-
-        username_visible = await page.is_visible("#username")
-        if not username_visible:
+        # Wait up to 10 s for the username field; catch gracefully if bot-detection hides it
+        try:
+            await page.wait_for_selector("#username", state="visible", timeout=10000)
+        except Exception:
+            current_url = page.url
+            title = await page.title()
             _state["errors"].append(
                 f"Login-Seite nicht geladen — URL: {current_url} | Titel: {title}"
             )
