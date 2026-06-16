@@ -691,12 +691,13 @@ async def _async_sync(cfg_id: int):
             cfg.session_cookies = json.dumps(cookies)
             db.commit()
 
-            # Scrape all categories; seen_ids is shared to avoid duplicates across categories
+            # Scrape all categories; seen_ids is per-category to catch scroll-duplicates,
+            # but shared job IDs across categories ARE intentional: ARCHIVED must win
+            # over APPLIED even if the same job ID appeared earlier.
             all_jobs: list[dict] = []
-            seen_ids: set[str] = set()
             for card_type, label, default_status in CATEGORIES:
                 _state["step"] = f"Lade Kategorie: {label}…"
-                cat_jobs = await _scrape_category(page, card_type, default_status, seen_ids)
+                cat_jobs = await _scrape_category(page, card_type, default_status, set())
                 all_jobs.extend(cat_jobs)
                 _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs)})"
 
