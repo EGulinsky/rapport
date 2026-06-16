@@ -103,6 +103,20 @@ export const api = {
       a.click()
       URL.revokeObjectURL(url)
     },
+    pdf: async (since?: string): Promise<void> => {
+      const qs = since ? `?since=${since}` : ''
+      const res = await fetch(`${BASE}/export/pdf${qs}`)
+      if (!res.ok) throw new Error(await res.text())
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const match = disposition.match(/filename="([^"]+)"/)
+      a.download = match?.[1] ?? 'Eigenbemühungen.pdf'
+      a.click()
+      URL.revokeObjectURL(url)
+    },
   },
 
   settings: {

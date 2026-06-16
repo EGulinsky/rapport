@@ -7,6 +7,7 @@ import { ApplicationModal } from './components/ApplicationModal'
 import { StatsBar } from './components/StatsBar'
 import { ImportButton } from './components/ImportButton'
 import { ExportButton } from './components/ExportButton'
+import { PdfExportButton } from './components/PdfExportButton'
 import { SyncButton } from './components/SyncButton'
 import { LinkedInSyncButton } from './components/LinkedInSyncButton'
 import { ContactsView } from './components/ContactsView'
@@ -145,6 +146,7 @@ export default function App() {
               <LinkedInSyncButton onSynced={() => load()} />
               <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} />
               <ExportButton />
+              <PdfExportButton />
               <ImportButton onImported={load} />
               <button
                 onClick={() => setShowCleanup(true)}
