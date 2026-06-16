@@ -197,19 +197,28 @@ def _parse_date(text: str) -> Optional[str]:
 
 
 # LinkedIn uses these selectors depending on version/locale
-_EMAIL_SELECTORS = ["#username", "input[name='session_key']", "input[autocomplete='username']", "input[type='email']", "input[type='text']"]
-_PASS_SELECTORS  = ["#password", "input[name='session_password']", "input[autocomplete='current-password']", "input[type='password']"]
+_EMAIL_SELECTORS = ["input[autocomplete='username']", "#username", "input[name='session_key']", "input[type='email']"]
+_PASS_SELECTORS  = ["input[autocomplete='current-password']", "#password", "input[name='session_password']", "input[type='password']"]
 
 
-async def _find_input(page, selectors: list[str], timeout_each: int = 2000):
-    """Try multiple selectors, return the first one present in the DOM (attached)."""
-    for sel in selectors:
-        try:
-            # Use 'attached' not 'visible' — LinkedIn inputs may have CSS animation delay
-            await page.wait_for_selector(sel, state="attached", timeout=timeout_each)
-            return sel
-        except Exception:
-            continue
+async def _find_visible_locator(page, selectors: list[str], timeout_total: int = 10000):
+    """Find the first *visible* element among all candidate selectors and their matches."""
+    import time
+    deadline = time.monotonic() + timeout_total / 1000
+    while time.monotonic() < deadline:
+        for sel in selectors:
+            loc = page.locator(sel)
+            try:
+                count = await loc.count()
+            except Exception:
+                continue
+            for i in range(count):
+                try:
+                    if await loc.nth(i).is_visible():
+                        return loc.nth(i)
+                except Exception:
+                    continue
+        await asyncio.sleep(0.3)
     return None
 
 
@@ -222,11 +231,10 @@ async def _login(page, email: str, password: str) -> bool:
         await asyncio.sleep(2)
 
         _state["step"] = "Anmelden: warte auf Login-Formular…"
-        email_sel = await _find_input(page, _EMAIL_SELECTORS, timeout_each=5000)
-        if not email_sel:
+        email_loc = await _find_visible_locator(page, _EMAIL_SELECTORS, timeout_total=10000)
+        if not email_loc:
             current_url = page.url
             title = await page.title()
-            # Log page source snippet for debugging
             try:
                 snippet = await page.evaluate("document.body.innerText.slice(0, 300)")
             except Exception:
@@ -238,12 +246,16 @@ async def _login(page, email: str, password: str) -> bool:
             _state["step"] = "LinkedIn zeigt keine Login-Maske — Session zurücksetzen und erneut versuchen"
             return False
 
-        pass_sel = await _find_input(page, _PASS_SELECTORS, timeout_each=3000) or "#password"
+        pass_loc = await _find_visible_locator(page, _PASS_SELECTORS, timeout_total=5000)
 
         _state["step"] = "Anmelden: Zugangsdaten eingeben…"
-        await page.fill(email_sel, email)
-        await page.fill(pass_sel, password)
-        submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').first
+        await email_loc.fill(email)
+        if pass_loc:
+            await pass_loc.fill(password)
+        else:
+            await page.keyboard.press("Tab")
+            await page.keyboard.type(password)
+        submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').filter(visible=True).first
         _state["step"] = "Anmelden: Submit…"
         await submit.click()
         _state["step"] = "Anmelden: warte auf Weiterleitung…"
