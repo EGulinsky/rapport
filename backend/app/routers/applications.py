@@ -57,9 +57,13 @@ def list_applications(
     ).all()
 
     if apps:
+        today = date.today()
         max_event_dates = dict(
             db.query(models.Event.application_id, func.max(models.Event.datum))
-            .filter(models.Event.application_id.in_([a.id for a in apps]))
+            .filter(
+                models.Event.application_id.in_([a.id for a in apps]),
+                models.Event.datum <= today,
+            )
             .group_by(models.Event.application_id)
             .all()
         )
