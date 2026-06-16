@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.10',
+    date: '2026-06-16',
+    changes: [
+      'Feature: LinkedIn 2FA inline — Bestätigungscode direkt im App eingeben, kein manueller Login mehr nötig',
+    ],
+  },
+  {
     version: '2.0.9',
     date: '2026-06-16',
     changes: [

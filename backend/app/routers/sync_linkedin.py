@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
 # ── In-memory task state ──────────────────────────────────────────────────────
 
 _state: dict = {
-    "status": "idle",      # idle | running | done | error | needs_login
+    "status": "idle",      # idle | running | done | error | needs_login | needs_2fa
     "step": "",
     "processed": 0,
     "created": 0,
@@ -35,8 +35,13 @@ _state: dict = {
     "finished_at": None,
 }
 
+# 2FA handoff: background task polls this; submit-2fa endpoint sets it
+_2fa_code_input: Optional[str] = None
+
 
 def _reset_state():
+    global _2fa_code_input
+    _2fa_code_input = None
     _state.update({
         "status": "idle",
         "step": "",
@@ -142,6 +147,19 @@ def clear_session(db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+class TwoFaPayload(BaseModel):
+    code: str
+
+
+@router.post("/submit-2fa")
+def submit_two_fa(payload: TwoFaPayload):
+    global _2fa_code_input
+    if _state["status"] != "needs_2fa":
+        raise HTTPException(409, "No 2FA pending")
+    _2fa_code_input = payload.code.strip()
+    return {"ok": True}
+
+
 # ── Playwright scraper ────────────────────────────────────────────────────────
 
 LOGIN_URL = "https://www.linkedin.com/login"
@@ -222,6 +240,87 @@ async def _find_visible_locator(page, selectors: list[str], timeout_total: int =
     return None
 
 
+_PIN_SELECTORS = [
+    "input[name='pin']",
+    "input[id*='pin']",
+    "input[id*='verification']",
+    "input[autocomplete='one-time-code']",
+    "input[inputmode='numeric']",
+    "input[type='number']",
+    "input[type='tel']",
+]
+
+_REMEMBER_SELECTORS = [
+    "#remember-me-prompt__confirm-btn",
+    "button[aria-label*='remember' i]",
+    "button[aria-label*='erinnern' i]",
+    "button[data-litms-control-urn*='remember']",
+]
+
+
+async def _wait_for_2fa_code(timeout: float = 300.0) -> Optional[str]:
+    """Poll the global until the submit-2fa endpoint sets a code."""
+    global _2fa_code_input
+    import time
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _2fa_code_input is not None:
+            code = _2fa_code_input
+            _2fa_code_input = None
+            return code
+        await asyncio.sleep(0.5)
+    return None
+
+
+async def _handle_2fa_checkpoint(page) -> bool:
+    """Wait for user to submit a 2FA code, then fill it on the LinkedIn checkpoint page."""
+    global _2fa_code_input
+    _state["status"] = "needs_2fa"
+    _state["step"] = "LinkedIn verlangt einen Bestätigungscode — Code aus E-Mail oder SMS eingeben"
+
+    code = await _wait_for_2fa_code(timeout=300)
+    if not code:
+        _state["status"] = "error"
+        _state["step"] = "2FA-Timeout — kein Code eingegeben (5 min)"
+        return False
+
+    _state["step"] = "Anmelden: 2FA-Code eingeben…"
+    _state["status"] = "running"
+
+    pin_loc = await _find_visible_locator(page, _PIN_SELECTORS, timeout_total=5000)
+    if pin_loc:
+        await pin_loc.fill(code)
+    else:
+        await page.keyboard.type(code)
+
+    await page.keyboard.press("Enter")
+
+    _state["step"] = "Anmelden: warte auf Weiterleitung nach 2FA…"
+    try:
+        await page.wait_for_url(
+            re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"),
+            timeout=20000,
+        )
+    except Exception:
+        pass
+
+    if "checkpoint" in page.url or "challenge" in page.url or "uas/login" in page.url:
+        _state["status"] = "error"
+        _state["step"] = "2FA fehlgeschlagen — Code falsch oder abgelaufen?"
+        return False
+
+    # Try to accept "Remember this device" prompt
+    try:
+        remember_loc = await _find_visible_locator(page, _REMEMBER_SELECTORS, timeout_total=3000)
+        if remember_loc:
+            await remember_loc.click()
+    except Exception:
+        pass
+
+    _state["step"] = "Anmelden: erfolgreich (2FA bestätigt)"
+    return True
+
+
 async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
@@ -264,9 +363,7 @@ async def _login(page, email: str, password: str) -> bool:
             timeout=20000,
         )
         if "checkpoint" in page.url or "challenge" in page.url:
-            _state["status"] = "needs_login"
-            _state["step"] = "LinkedIn verlangt 2FA — bitte einmalig manuell auf linkedin.com einloggen, dann Session zurücksetzen und erneut versuchen"
-            return False
+            return await _handle_2fa_checkpoint(page)
         _state["step"] = "Anmelden: erfolgreich"
         return True
     except Exception as e:
