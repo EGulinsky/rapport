@@ -1,42 +1,46 @@
-# JobTracker – Projektstand & Handoff-Dokument
+# JobTracker – Projektstand
 
-**Stand:** 13. Juni 2026  
+**Stand:** 16. Juni 2026 · **Version:** v2.0.17  
 **Projekt-Ordner:** `/Users/eugengulinsky/code/jobtracker/`  
 **GitHub:** https://github.com/EGulinsky/jobtracker (privat)  
-**Zugehörige Excel:** `Stellen/Bewerbungen_Eugen_Gulinsky.xlsx` (133 Einträge, Backup vorhanden)
+**Excel-Quelldatei:** `Stellen/Bewerbungen_Eugen_Gulinsky.xlsx` (133 Einträge, Backup vorhanden)
 
 ---
 
 ## Was ist JobTracker?
 
-Self-hosted Webanwendung als Ersatz für die Excel-Bewerbungsliste. Läuft lokal in OrbStack (Docker Compose). Ziel: Bewerbungsprozesse tracken, Kontakte verwalten, Gmail/Kalender/iCloud synchronisieren, KI-gestützte Analyse.
+Self-hosted Webanwendung als Ersatz für die Excel-Bewerbungsliste. Läuft lokal in OrbStack (Docker Compose). Ziel: Bewerbungsprozesse tracken, Kontakte verwalten, Gmail/Kalender/iCloud/LinkedIn synchronisieren, KI-gestützte Analyse.
 
-**URL lokal:** `http://localhost:3000` oder `http://jobtracker-frontend.orb.local`  
+**URL lokal:** `http://192.168.117.10` (OrbStack) oder `http://localhost:3000`  
 **API / Swagger:** `http://localhost:8000/docs`
 
 ---
 
 ## Aktueller Entwicklungsstand
 
-### Backend (Python / FastAPI + SQLite)
+### Backend (Python 3.11 / FastAPI + SQLite)
 
 #### Routers (alle unter `/api/...`)
+
 | Datei | Prefix | Funktion |
 |---|---|---|
-| `applications.py` | `/api/applications` | CRUD Bewerbungen, Events, Kontakt-Verknüpfung |
+| `applications.py` | `/api/applications` | CRUD Bewerbungen, Events, Kontakt-Verknüpfung; `naechster_schritt` berechnet |
 | `contacts.py` | `/api/contacts` | Globale Kontaktverwaltung (n:m mit Bewerbungen) |
 | `import_excel.py` | `/api/import/excel` | Multipart-Upload der xlsx, Status-Mapping |
 | `export_excel.py` | `/api/export/excel` | Rückexport als xlsx |
 | `settings.py` | `/api/settings` | AI-Provider-Konfiguration (verschlüsselt) |
+| `calendar.py` | `/api/calendar` | Kalender-Events nach Datum (alle Event-Typen) |
 | `sync_google.py` | `/api/sync/google` | Google OAuth 2.0 + Gmail + Calendar Sync |
-| `sync_icloud.py` | `/api/sync/icloud` | iCloud Mail (IMAP), Calendar (CalDAV), Contacts (CardDAV), Notes |
+| `sync_icloud.py` | `/api/sync/icloud` | iCloud Mail (IMAP), Calendar (CalDAV), Contacts (CardDAV) |
 | `sync_targeted.py` | `/api/sync/targeted` | Pro-App-Sync über alle Quellen gleichzeitig |
-| `sync_linkedin.py` | `/api/sync/linkedin` | LinkedIn Playwright-Scraper (Session-Cookies gecacht) |
+| `sync_files.py` | `/api/sync/files` | Lokale Dokumente via files_bridge (Port 9998) |
+| `sync_linkedin.py` | `/api/sync/linkedin` | LinkedIn Playwright-Scraper mit 2FA-Inline-Unterstützung |
 | `sync_common.py` | – | Shared Helpers: AI-Klassifikation, Kontakt-Upsert, Dedup |
-| `review.py` | `/api/review` | KI-gematchte Vorschläge zur Nutzerfreigabe |
+| `review.py` | `/api/review` | Review-Queue für KI-Vorschläge; cleanup-Endpoint für Kalender-Status |
 | `cleanup.py` | `/api/cleanup` | Dubletten-Bereinigung und Datenpflege |
 
 #### Datenbankmodelle (SQLite, auto-erstellt beim Start)
+
 | Modell | Beschreibung |
 |---|---|
 | `Application` | Bewerbung mit `main_status` + `sub_status` |
@@ -48,59 +52,73 @@ Self-hosted Webanwendung als Ersatz für die Excel-Bewerbungsliste. Läuft lokal
 | `SyncedItem` | Dedup-Tabelle für bereits verarbeitete externe IDs |
 | `AiSettings` | AI-Provider-Konfiguration (LiteLLM, Groq, Ollama etc.) |
 | `LinkedInSync` | LinkedIn-Credentials + gecachte Session-Cookies |
+| `FilesConfig` | Lokale Dokumente: Ordnerpfad + enabled |
 | `CallsConfig` | Konfiguration für Anruflisten-Sync |
 
 #### AI-Schicht (`app/ai/`)
-- **`provider.py`**: Vendor-agnostisch via **LiteLLM** — unterstützt Groq, Ollama, OpenAI-kompatible Anbieter. API-Keys Fernet-verschlüsselt in `data/fernet.key`.
-- **`tasks.py`**: AI-Aufgaben (Matching, Zusammenfassungen, Analyse)
+- **`provider.py`**: Vendor-agnostisch via **LiteLLM** — Groq, Ollama, OpenAI-kompatibel. API-Keys Fernet-verschlüsselt.
+- **`tasks.py`**: `classify_batch_for_app()` — klassifiziert Events in Batches
+
+#### LinkedIn-Scraper (`sync_linkedin.py`)
+- Headless Chromium via Playwright (separates `Dockerfile.playwright-base` — wird nur bei Playwright-Update neu gebaut)
+- Scraped 5 Kategorien: SAVED / IN_PROGRESS / APPLIED / INTERVIEWS / ARCHIVED
+- JS-basierte Job-Extraktion (stabil gegen CSS-Änderungen)
+- **2FA**: Push-Notification auto-erkannt (URL-Polling) oder manueller Code via `/submit-2fa`
+- **Archived → abgesagt**: Immer, unabhängig vom bisherigen Status
+- **Bug (behoben v2.0.17):** `seen_ids` war global geteilt → ARCHIVED wurde durch APPLIED-Pass überschrieben. Jetzt per-Kategorie.
 
 #### Bridge-Skripte (laufen auf dem Mac, nicht in Docker)
+
 | Skript | Port | Funktion |
 |---|---|---|
-| `calls_bridge.py` | 9997 | Liest iPhone-Anrufliste (`CallHistoryDB`) + WhatsApp-Anrufe, HTTP GET `/calls` |
-| `notes_bridge.py` | 9999 | Liest iCloud-Notizen via AppleScript (JXA), HTTP GET `/notes` |
-
-Beide müssen separat im Terminal gestartet werden: `python3 calls_bridge.py` / `python3 notes_bridge.py`
+| `files_bridge.py` | 9998 | Lokale Bewerbungsunterlagen (PDF, DOCX, TXT, MD) |
+| `calls_bridge.py` | 9997 | iPhone-Anrufliste (CallHistoryDB) + WhatsApp-Anrufe |
+| `notes_bridge.py` | 9999 | iCloud-Notizen via AppleScript (JXA) |
 
 ---
 
 ### Frontend (React 18 + Vite + TypeScript + Tailwind)
 
 #### Komponenten
+
 | Datei | Funktion |
 |---|---|
 | `App.tsx` | Hauptkomponente: Dashboard, Filter, View-Switching |
-| `ApplicationTable.tsx` | Sortierbare Tabelle mit inline StatusPopover |
-| `KanbanBoard.tsx` | Kanban nach `main_status`-Spalten |
-| `ApplicationModal.tsx` | Detail/Edit-Modal: Status, Kontakte, Events, Gesprächsnotizen |
+| `ApplicationTable.tsx` | Sortierbare Tabelle mit "Nächster Schritt"-Spalte (farbkodiert) |
+| `KanbanBoard.tsx` | Drag & Drop Kanban nach `main_status`-Spalten (dnd-kit) |
+| `ApplicationModal.tsx` | Detail/Edit-Modal: Status, Lifecycle-Bar, Kontakte, Timeline |
+| `CalendarView.tsx` | Outlook-ähnliche Kalenderansicht: Tag / Arbeitswoche / Woche / Monat |
 | `StatusBadge.tsx` | Farbige Badges für main_status + sub_status |
 | `StatusPopover.tsx` | Inline-Dropdown zum Statuswechsel direkt in der Tabelle |
 | `ContactsView.tsx` | CRM-Kontaktliste mit Verknüpfung zu Bewerbungen |
 | `StatsBar.tsx` | KPI-Kacheln: Gesamt / Aktiv / Abgesagt / Interview-Rate |
 | `ImportButton.tsx` | Excel-Upload |
 | `ExportButton.tsx` | Excel-Download |
-| `SyncButton.tsx` | Auslöser für Google/iCloud-Sync |
+| `SyncButton.tsx` | Globaler Sync-Trigger mit Sync-Steuerung (Quellen ein-/ausschalten) |
+| `LinkedInSyncButton.tsx` | LinkedIn-Sync mit 2FA-Inline-Dialog (amber Box für Code-Eingabe) |
 | `ReviewModal.tsx` | Review-Inbox: KI-Vorschläge freigeben oder ablehnen |
-| `SettingsModal.tsx` | Google OAuth + iCloud-Zugangsdaten konfigurieren |
-| `AiSettingsModal.tsx` | AI-Provider wählen (Groq/Ollama/OpenAI), API-Key eingeben, Test |
+| `SettingsModal.tsx` | Einstellungen (Sidebar-Layout): Google / iCloud / LinkedIn / Dokumente |
+| `AiSettingsModal.tsx` | AI-Provider wählen (Groq/Ollama/OpenAI), API-Key, Test |
+| `ChangelogModal.tsx` | Versionsverlauf; `CURRENT_VERSION` hier pflegen |
 | `CleanupModal.tsx` | Dubletten bereinigen |
 
 ---
 
-### Kritische Architektur-Entscheidung: Zweistufiges Status-Modell
+## Statusmodell (zweistufig)
 
-**Alt (MVP):** Flache Enum mit 11 Werten (`applied`, `hr_scheduled`, `hr_done`, ...)  
-**Neu (Claude Code):** `main_status` + optionaler `sub_status`
+**Alt (MVP):** Flache Enum (`applied`, `hr_scheduled`, `hr_done`, ...)  
+**Aktuell:** `main_status` + optionaler `sub_status`
 
 ```
-main_status  Werte: prospecting | applied | hr | fb | waiting | negotiating | signed | rejected
-sub_status   Werte: 1_scheduled | 1_done | 2_scheduled | 2_done | 3_scheduled | 3_done | ...
+main_status:  prospecting | applied | hr | fb | waiting | negotiating | signed | rejected
+sub_status:   1_scheduled | 1_done | 2_scheduled | 2_done | 3_scheduled | 3_done | ...
+              (nur bei hr und fb)
 ```
 
 Beispiel: `hr + 2_done` = „HR-Gespräch, 2. Runde geführt"
 
-Die Migrations-Map für alte Flat-Status ist in `models.py` unter `OLD_STATUS_MIGRATION` definiert.  
-Die Excel-Import-Map ist unter `EXCEL_IMPORT_MAP`, der Export unter `EXCEL_EXPORT_MAP`.
+Excel-Import-Map: `EXCEL_IMPORT_MAP` in `models.py`  
+Excel-Export-Map: `EXCEL_EXPORT_MAP` in `models.py`
 
 ---
 
@@ -111,119 +129,130 @@ Die Excel-Import-Map ist unter `EXCEL_IMPORT_MAP`, der Export unter `EXCEL_EXPOR
 cd /Users/eugengulinsky/code/jobtracker
 docker compose up -d
 
-# Stoppen
-docker compose down
-
-# Rebuild nach Code-Änderungen
+# Rebuild nach Code-Änderungen (CI/CD macht das automatisch)
 docker compose up -d --build
 
 # Bridge-Skripte (separat, auf dem Mac)
-python3 calls_bridge.py   # Port 9997
-python3 notes_bridge.py   # Port 9999
+python3 files_bridge.py   # Port 9998
+python3 calls_bridge.py   # Port 9997 (optional)
+python3 notes_bridge.py   # Port 9999 (optional)
 ```
 
-**Docker Compose Services:**
+**Docker-Services:**
 - `backend` – FastAPI auf Port 8000, Volume `jobtracker-data` für SQLite + Fernet-Key
 - `frontend` – Nginx mit React-Build auf Port 3000, proxyt `/api/*` → Backend
 
-**CI/CD:** GitHub Actions (`.github/workflows/ci.yml`)
-- `backend`-Job: ruff Lint + pyright (bei jedem Push/PR auf main)
-- `frontend`-Job: tsc + vite build
-- `docker`-Job: Docker Buildx für beide Images (nur bei Push auf main)
+**CI/CD:** GitHub Actions self-hosted runner (auf dem Mac)
+- `backend` → ruff Lint + pyright
+- `frontend` → tsc + vite build
+- `docker` → Docker Buildx, Deploy via `docker compose up -d`
 
 ---
 
-## Integrations-Setup (noch zu konfigurieren)
+## Implementiert (aktueller Stand)
 
-### Google (Gmail + Calendar)
-1. Google Cloud Console → neue App → OAuth 2.0 Client (Web)
-2. Redirect URI: `http://localhost:8000/api/sync/google/callback`
-3. In JobTracker → Einstellungen → Google: Client ID + Secret eintragen
-4. OAuth-Flow starten → Gmail + Calendar werden gescannt
-
-### iCloud (Mail + Kalender + Kontakte + Notizen)
-1. Apple ID → Sicherheit → App-spezifische Passwörter → neues Passwort generieren
-2. In JobTracker → Einstellungen → iCloud: Apple-ID + App-Passwort eintragen
-3. Sync für Mail (IMAP), Kalender (CalDAV), Kontakte (CardDAV), Notizen starten
-
-### AI-Provider
-- **Groq** (empfohlen, kostenlos): API-Key von [console.groq.com](https://console.groq.com), Modell `groq/llama-3.3-70b-versatile`
-- **Ollama** (lokal, kein API-Key): Base URL `http://host.docker.internal:11434`
-- Einstellungen unter: JobTracker → ⚙ → AI-Provider
-
-### Anrufliste (calls_bridge.py)
-Benötigt **Full Disk Access** für Terminal in macOS:  
-Systemeinstellungen → Datenschutz & Sicherheit → Festplattenvollzugriff → Terminal ✓
+- [x] FastAPI Backend mit SQLite (WAL)
+- [x] Alle CRUD-Endpunkte für Bewerbungen + Events + Kontakte
+- [x] Excel-Import (133 Einträge, Status-Mapping)
+- [x] Excel-Export (Originalformat, 17 Spalten)
+- [x] React Frontend (Tabelle, Kanban, Kalender, Kontakte)
+- [x] Zweistufiges Statusmodell (main_status + sub_status)
+- [x] Lifecycle-Bar im Detail-Modal
+- [x] KPI-Kacheln (StatsBar)
+- [x] Drag & Drop Kanban (dnd-kit)
+- [x] Kalender-Ansicht (Outlook-Stil: Tag/Woche/Monat)
+- [x] „Nächster Schritt" – intelligentes berechnetes Feld
+- [x] Google OAuth 2.0 + Gmail + Google Calendar Sync
+- [x] iCloud Mail (IMAP) + Kalender (CalDAV) + Kontakte (CardDAV) Sync
+- [x] LinkedIn Playwright-Scraper (Session-gecacht, Archived→abgesagt, 2FA inline)
+- [x] Lokale Dokumente Sync (files_bridge.py, Port 9998)
+- [x] AI-Klassifikation via LiteLLM (Groq, Ollama, OpenAI-kompatibel)
+- [x] Review-Queue für KI-Vorschläge
+- [x] Sync-Steuerung: Quellen ein-/ausschaltbar
+- [x] Pro-App Targeted Sync
+- [x] Kontakt-CRM (n:m mit Bewerbungen, Kontakt-Upsert aus Sync)
+- [x] Fernet-Verschlüsselung für alle Credentials
+- [x] Hintergrund-Sync-Loop (alle 20 Minuten, asyncio)
+- [x] CI/CD (GitHub Actions, self-hosted runner)
+- [x] Versionsverlauf (ChangelogModal, CURRENT_VERSION)
+- [x] Dubletten-Bereinigung
 
 ---
 
 ## Was noch fehlt / Nächste Schritte
 
-- [x] **LinkedIn-Sync**: `sync_linkedin.py` implementiert (Playwright, Session-Cookies gecacht)
 - [ ] **Analytics-Seite**: KPI-Charts, Funnel, Quellen-Effektivität (Recharts)
-- [ ] **Alembic-Migrationen**: Aktuell `create_all()` beim Start, Schema noch in Bewegung
-- [ ] **Auth**: Kein Login für MVP (Single-User lokal), JWT + Google-Login für Phase 3
+- [ ] **Alembic-Migrationen**: Aktuell `create_all()` beim Start; beim nächsten Schema-Breaking-Change nötig
+- [ ] **Auth**: Kein Login für MVP (Single-User lokal)
 - [ ] **CORS einschränken**: Aktuell `allow_origins=["*"]`
-- [ ] **Review-Flow testen**: PendingMatch-Tabelle + ReviewModal vorhanden, End-to-End noch offen
-- [ ] **calls_bridge.py**: Erfordert macOS Full Disk Access, noch nicht produktiv getestet
+- [ ] **calls_bridge.py**: Erfordert macOS Full Disk Access; noch nicht produktiv getestet
+- [ ] **Apple Notes Sync**: Bridge vorhanden (`notes_bridge.py`), UI-Anbindung ausstehend
 
 ---
 
 ## Dateistruktur
 
 ```
-/Users/eugengulinsky/code/jobtracker/        ← Projektordner (GitHub: EGulinsky/jobtracker)
-├── CLAUDE.md                                ← Claude Code Kontext (wird auto-gelesen)
-├── README.md                                ← Quick-Start
-├── JobTracker_Projektstand.md               ← dieses Dokument
+/Users/eugengulinsky/code/jobtracker/
+├── CLAUDE.md                          ← Claude Code Kontext (wird auto-gelesen)
+├── README.md                          ← Quick-Start
 ├── docker-compose.yml
-├── calls_bridge.py                          ← Mac-Bridge für Anrufe (Port 9997)
-├── notes_bridge.py                          ← Mac-Bridge für Notizen (Port 9999)
-├── .github/workflows/ci.yml                 ← GitHub Actions CI/CD
-├── .vscode/                                 ← VS Code Projekt-Einstellungen
+├── files_bridge.py                    ← Mac-Bridge für lokale Dokumente (Port 9998)
+├── calls_bridge.py                    ← Mac-Bridge für Anrufe (Port 9997)
+├── notes_bridge.py                    ← Mac-Bridge für Notizen (Port 9999)
+├── .github/workflows/ci.yml           ← GitHub Actions CI/CD (self-hosted runner)
 ├── docs/
-│   └── ARCHITECTURE.md                      ← Technische Architektur-Doku
+│   ├── ARCHITECTURE.md               ← Technische Architektur (aktuell)
+│   ├── JobTracker_Projektstand.md    ← dieses Dokument
+│   └── JobTracker_Konzept_Architektur.md  ← ursprüngliches Planungsdokument
 ├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── models.py                        ← Alle ORM-Modelle + Status-Maps
-│   │   ├── schemas.py
-│   │   ├── database.py
-│   │   ├── ai/
-│   │   │   ├── provider.py                  ← LiteLLM Wrapper (Fernet-Krypto)
-│   │   │   └── tasks.py
-│   │   └── routers/
-│   │       ├── applications.py
-│   │       ├── contacts.py
-│   │       ├── import_excel.py
-│   │       ├── export_excel.py
-│   │       ├── settings.py
-│   │       ├── sync_google.py
-│   │       ├── sync_icloud.py
-│   │       ├── sync_targeted.py             ← Pro-App-Sync (alle Quellen)
-│   │       ├── sync_linkedin.py             ← LinkedIn Playwright-Scraper
-│   │       ├── sync_common.py               ← Shared helpers
-│   │       ├── review.py
-│   │       └── cleanup.py
-│   └── requirements.txt
+│   ├── Dockerfile
+│   ├── Dockerfile.playwright-base    ← Separates Chromium-Base-Image
+│   ├── requirements.txt
+│   └── app/
+│       ├── main.py
+│       ├── models.py                  ← Alle ORM-Modelle + Status-Maps
+│       ├── schemas.py
+│       ├── database.py
+│       ├── ai/
+│       │   ├── provider.py            ← LiteLLM Wrapper (Fernet-Krypto)
+│       │   └── tasks.py
+│       └── routers/
+│           ├── applications.py
+│           ├── contacts.py
+│           ├── import_excel.py
+│           ├── export_excel.py
+│           ├── settings.py
+│           ├── calendar.py
+│           ├── sync_google.py
+│           ├── sync_icloud.py
+│           ├── sync_targeted.py
+│           ├── sync_files.py
+│           ├── sync_linkedin.py
+│           ├── sync_common.py
+│           ├── review.py
+│           └── cleanup.py
 └── frontend/
     └── src/
         ├── App.tsx
-        ├── types.ts                         ← main_status + sub_status Typen
+        ├── types.ts
         ├── api/client.ts
         └── components/
             ├── ApplicationTable.tsx
-            ├── ApplicationModal.tsx         ← inkl. Lifecycle-Bar
+            ├── ApplicationModal.tsx
             ├── KanbanBoard.tsx
+            ├── CalendarView.tsx
             ├── ContactsView.tsx
             ├── ReviewModal.tsx
             ├── SettingsModal.tsx
             ├── AiSettingsModal.tsx
-            ├── SyncButton.tsx (SyncPanel)
+            ├── SyncButton.tsx
+            ├── LinkedInSyncButton.tsx
             ├── StatusBadge.tsx
             ├── StatusPopover.tsx
             ├── StatsBar.tsx
             ├── ImportButton.tsx
             ├── ExportButton.tsx
+            ├── ChangelogModal.tsx
             └── CleanupModal.tsx
 ```

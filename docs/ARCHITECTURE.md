@@ -36,12 +36,13 @@
 └─────────────────────────────────────────────────────────────┘
 
 Externe Dienste (optional, per Sync-Konfiguration):
-  Gmail API  ──►  OAuth 2.0  ──►  Google Cloud Project
-  GCal API   ──►  OAuth 2.0  ──►  (gleiche Credentials)
-  iCloud Mail ─►  IMAP :993  ──►  imap.mail.me.com
-  iCloud Cal  ─►  CalDAV     ──►  caldav.icloud.com
-  LinkedIn    ─►  Playwright ──►  linkedin.com (headless)
-  Calls       ─►  HTTP-Bridge──►  localhost:9988 (macOS-App)
+  Gmail API   ──►  OAuth 2.0  ──►  Google Cloud Project
+  GCal API    ──►  OAuth 2.0  ──►  (gleiche Credentials)
+  iCloud Mail ──►  IMAP :993  ──►  imap.mail.me.com
+  iCloud Cal  ──►  CalDAV     ──►  caldav.icloud.com
+  LinkedIn    ──►  Playwright ──►  linkedin.com (headless Chromium)
+  Calls       ──►  HTTP-Bridge──►  localhost:9997 (macOS-Bridge)
+  Dokumente   ──►  HTTP-Bridge──►  localhost:9998 (macOS-Bridge)
 ```
 
 ### Technologie-Stack
@@ -81,7 +82,7 @@ Das SQLite-File liegt im benannten Volume `jobtracker-data` unter `/app/data/job
 
 ```
 backend/app/
-├── main.py              FastAPI-App, CORS, Lifespan, Router-Registration
+├── main.py              FastAPI-App, CORS, Lifespan, Background-Sync-Loop
 ├── database.py          SQLAlchemy-Engine + SessionLocal + get_db-Dependency
 ├── models.py            ORM-Modelle, Enums, Status-Mappings
 ├── schemas.py           Pydantic Request/Response-Schemas
@@ -89,17 +90,19 @@ backend/app/
 │   ├── provider.py      litellm-Wrapper, Fernet-Kryptographie, AINotConfigured
 │   └── tasks.py         classify_batch_for_app(), BATCH_SIZE
 └── routers/
-    ├── applications.py  CRUD + Events + Contacts pro Bewerbung
+    ├── applications.py  CRUD + Events + Contacts + naechster_schritt berechnet
     ├── contacts.py      Globale Kontaktverwaltung
     ├── import_excel.py  POST /api/import/excel
     ├── export_excel.py  GET /api/export/excel
     ├── settings.py      AI-Settings + Sync-Konfiguration lesen/schreiben
+    ├── calendar.py      GET /api/calendar/events (alle Event-Typen, nach Datum)
     ├── sync_common.py   Shared helpers: dedup, AI-Klassifikation, Kontakt-Upsert
     ├── sync_google.py   Google OAuth + Gmail + GCal
     ├── sync_icloud.py   iCloud IMAP + CalDAV + CardDAV
     ├── sync_targeted.py Pro-App-Sync für alle Quellen
-    ├── sync_linkedin.py LinkedIn Playwright-Scraper
-    ├── review.py        Manuelle Review-Queue (PendingMatches)
+    ├── sync_files.py    Lokale Dokumente via files_bridge (Port 9998)
+    ├── sync_linkedin.py LinkedIn Playwright-Scraper mit 2FA-Inline-Unterstützung
+    ├── review.py        Manuelle Review-Queue (PendingMatches) + cleanup-Endpoints
     └── cleanup.py       Datenbereinigung
 ```
 
@@ -111,15 +114,23 @@ frontend/src/
 ├── types.ts                TypeScript-Typen, Status-Labels/Farben, Konstanten
 ├── api/client.ts           Fetch-Wrapper für alle Backend-Calls
 └── components/
-    ├── ApplicationTable.tsx   Sortierbare Tabellenansicht
-    ├── KanbanBoard.tsx        Kanban-Ansicht nach Status-Spalten
+    ├── ApplicationTable.tsx   Sortierbare Tabellenansicht + "Nächster Schritt"-Spalte
+    ├── KanbanBoard.tsx        Kanban mit Drag & Drop (dnd-kit)
     ├── ApplicationModal.tsx   Detail/Edit-Modal mit Lifecycle-Bar + Timeline
+    ├── CalendarView.tsx       Kalender-Ansicht (Tag/Woche/Monat, Outlook-Stil)
     ├── StatsBar.tsx           KPI-Kacheln oben
     ├── StatusBadge.tsx        Farbige Status-Badges
+    ├── StatusPopover.tsx      Inline-Statuswechsel in der Tabelle
+    ├── ContactsView.tsx       Kontaktübersicht (sortierbar)
+    ├── ReviewModal.tsx        Review-Inbox für KI-Vorschläge
+    ├── SettingsModal.tsx      Einstellungen (Sidebar-Layout): Google/iCloud/LinkedIn/Dokumente
+    ├── AiSettingsModal.tsx    AI-Provider-Konfiguration
+    ├── SyncButton.tsx         Globaler Sync-Trigger mit Sync-Steuerung
+    ├── LinkedInSyncButton.tsx LinkedIn-Sync-Trigger mit 2FA-Inline-Dialog
     ├── ImportButton.tsx       Excel-Upload
     ├── ExportButton.tsx       Excel-Download
-    ├── ContactsView.tsx       Kontaktübersicht (sortierbar)
-    └── SyncPanel.tsx          Sync-Konfiguration + Trigger
+    ├── ChangelogModal.tsx     Versionsverlauf (CURRENT_VERSION hier pflegen)
+    └── CleanupModal.tsx       Dubletten bereinigen
 ```
 
 ---
@@ -208,17 +219,37 @@ Swagger UI: `http://localhost:8000/docs`
 
 | Methode | Pfad | Beschreibung |
 |---|---|---|
-| `POST` | `/api/sync/linkedin/credentials` | LinkedIn-Login speichern |
-| `GET` | `/api/sync/linkedin/status` | Verbindungsstatus |
-| `POST` | `/api/sync/linkedin/sync` | Alle aktiven Bewerbungen auf LinkedIn prüfen |
+| `GET` | `/api/sync/linkedin/config` | Konfiguration + Status (configured, has_session, last_sync) |
+| `POST` | `/api/sync/linkedin/config` | LinkedIn E-Mail + Passwort speichern |
+| `DELETE` | `/api/sync/linkedin/config` | Konfiguration löschen |
+| `GET` | `/api/sync/linkedin/status` | Sync-Status (status, step, processed, log) |
+| `POST` | `/api/sync/linkedin/run` | Scraper starten (Background Task) |
+| `POST` | `/api/sync/linkedin/clear-session` | Session-Cookies löschen (Force-Relogin) |
+| `POST` | `/api/sync/linkedin/submit-2fa` | 2FA-Code aus E-Mail/SMS übermitteln |
+
+### Sync – Lokale Dokumente
+
+| Methode | Pfad | Beschreibung |
+|---|---|---|
+| `GET` | `/api/sync/files/status` | Konfiguration + letzter Sync |
+| `POST` | `/api/sync/files/reset` | Letzten Sync zurücksetzen |
+| `POST` | `/api/sync/files` | Lokale Dokumente synchronisieren (Background Task) |
+
+### Kalender
+
+| Methode | Pfad | Beschreibung |
+|---|---|---|
+| `GET` | `/api/calendar/events` | Alle Kalender-Events (`?start=YYYY-MM-DD&end=YYYY-MM-DD`) |
 
 ### Review-Queue
 
 | Methode | Pfad | Beschreibung |
 |---|---|---|
-| `GET` | `/api/review/pending` | Offene PendingMatches |
+| `GET` | `/api/review/` | Offene PendingMatches |
+| `GET` | `/api/review/count` | Anzahl offener Matches |
 | `POST` | `/api/review/{id}/approve` | Match bestätigen (Event oder Statuswechsel anlegen) |
-| `POST` | `/api/review/{id}/reject` | Match verwerfen |
+| `DELETE` | `/api/review/{id}` | Match verwerfen |
+| `POST` | `/api/review/cleanup-calendar-status` | Alle Kalender-Statusvorschläge massenweise ablehnen |
 
 ### Einstellungen + Hilfsfunktionen
 
@@ -266,19 +297,31 @@ Swagger UI: `http://localhost:8000/docs`
 
 ### 3.5 LinkedIn (Playwright)
 
-- **Methode:** Headless-Browser-Scraping via `playwright`
-- **Session:** Login-Cookies werden JSON-serialisiert in `linkedin_sync.session_cookies` gecacht
-- **Sync:** Lädt Bewerbungsseite (`/my-items/saved-jobs`), prüft Status-Labels pro gespeicherter Stelle
-- **Credentials:** Email + Fernet-verschlüsseltes Passwort in `linkedin_sync`
+- **Methode:** Headless Chromium via `playwright` (separates Docker-Base-Image `Dockerfile.playwright-base`)
+- **Session:** Login-Cookies JSON-serialisiert in `linkedin_sync.session_cookies` gecacht
+- **Kategorien:** SAVED → IN_PROGRESS → APPLIED → INTERVIEWS → ARCHIVED (in dieser Reihenfolge)
+- **Extraktion:** JS-basiert via `a[href*="/jobs/view/"]` — stabil gegen CSS-Klassen-Änderungen
+- **Dedup:** Pro Kategorie eigenes `seen_ids = set()` — ARCHIVED kann gleiche Job-ID wie APPLIED überschreiben
+- **Normalisierung:** `", Verified"`-Badge-Artefakte aus Titeln entfernt; Kurzformate wie `6d`, `2w`, `3mo` als Datum geparsed
+- **2FA-Flow:** `_handle_2fa_checkpoint()` erkennt Push-Notification (URL-Polling) oder wartet auf manuellen Code via `POST /api/sync/linkedin/submit-2fa`
+- **Archived → abgesagt:** Wenn `target_status == "rejected"` und `old_status != "rejected"` → `app.abgesagt = True`, `app.main_status = "rejected"` — unabhängig vom bisherigen Status
+- **Credentials:** E-Mail + Fernet-verschlüsseltes Passwort in `linkedin_sync`
 
-### 3.6 Calls Bridge (macOS-App)
+### 3.6 Lokale Dokumente (files_bridge)
 
-- **Protokoll:** HTTP, lokal auf `localhost:9988`
+- **Bridge:** `files_bridge.py` läuft auf dem Mac (nicht in Docker), Port 9998
+- **Protokoll:** HTTP GET `/files` — liefert PDF/DOCX/TXT/MD-Inhalte aus konfiguriertem Ordner
+- **Konfiguration:** `files_config.folder_path`, `files_config.enabled` in DB
+- **Matching:** Firmennamen-Suche in Dateiinhalt → KI-Klassifikation → Event/PendingMatch
+
+### 3.8 Calls Bridge (macOS-App)
+
+- **Protokoll:** HTTP, lokal auf `localhost:9997`
 - **Funktion:** Liest Anruflisten aus der macOS Phone-App via AppleScript-Bridge
 - **Matching:** Rufnummer → Kontakt → Bewerbung via Telefonnummern-Index
 - **Konfiguration:** `calls_config.enabled`; kein Token nötig (lokal)
 
-### 3.7 AI-Klassifikation (litellm)
+### 3.9 AI-Klassifikation (litellm)
 
 - **Zweck:** Mail/Kalender-Events klassifizieren → Event-Typ bestimmen, Status-Hinweise erkennen
 - **Provider:** Konfigurierbar: Anthropic Claude, OpenAI, Groq (Standard: `groq/llama-3.3-70b-versatile`), Ollama
@@ -457,7 +500,54 @@ upsert_contact_from_sender(db, raw_sender, app_id, firma, is_hh, event_date, bod
 6. Dateiname: jobtracker_export_YYYY-MM-DD.xlsx
 ```
 
-### 5.7 Review-Queue
+### 5.7 LinkedIn-Sync
+
+```
+1. User klickt LinkedIn-Sync (LinkedInSyncButton)
+2. Frontend: POST /api/sync/linkedin/run → Background Task
+3. Browser: Playwright startet Chromium (headless), lädt Session-Cookies
+   a. Session gültig? → weiter
+   b. Session abgelaufen? → Login mit E-Mail + Passwort
+   c. 2FA-Checkpoint? → _handle_2fa_checkpoint():
+      - Option A: Push-Notification auf Handy → LinkedIn redirectet weg von /checkpoint/ → auto-erkannt
+      - Option B: User tippt Code in App → POST /api/sync/linkedin/submit-2fa
+4. Jede Kategorie (SAVED/IN_PROGRESS/APPLIED/INTERVIEWS/ARCHIVED) einzeln scrapen:
+   a. JS-Extraktion: a[href*="/jobs/view/"] → {id, title, context}
+   b. Context-Parsing: Firma + Datum aus umliegendem Text extrahieren
+   c. Per-Kategorie seen_ids (nicht geteilt!) → kein Überschreiben durch frühere Kategorien
+5. _find_or_create_application(): Company + Rolle Substring-Match gegen DB
+   - Match: prüfe target_status vs old_status
+   - No match: neue Bewerbung anlegen
+6. ARCHIVED (target_status=rejected) → app.abgesagt=True, unabhängig vom bisherigen Status
+7. Session-Cookies nach erfolgreichem Run speichern
+```
+
+### 5.8 naechster_schritt-Berechnung
+
+```
+GET /api/applications/ führt drei Extra-Queries aus:
+  next_interviews  = min(Event.datum) WHERE typ='gespräch' AND datum > today
+  last_interviews  = max(Event.datum) WHERE typ='gespräch' AND datum <= today
+  max_event_dates  = max(Event.datum) WHERE datum <= today   [für letztes_update]
+
+_compute_naechster_schritt(app, next_interview, last_interview, today):
+  Zukünftiges Gespräch?      → "Gespräch am TT.MM. (in N Tagen)"
+  Status signed              → "Onboarding vorbereiten"
+  Status negotiating         → "Vertragsdetails klären"
+  Letztes Gespräch ≤ 7 Tage  → "Warte auf Feedback"
+  Letztes Gespräch ≤ 21 Tage → "Feedback ausstehend — evtl. nachfassen"
+  Letztes Gespräch > 21 Tage → "Kein Feedback seit N Tagen — evtl. Ghosting"
+  Status hr/fb               → "Terminvereinbarung ausstehend"
+  Status waiting             → "Warte auf Rückmeldung"
+  Status applied < 14 Tage   → "Warte auf Einladung"
+  Status applied < 30 Tage   → "Evtl. nachfassen"
+  Status applied ≥ 30 Tage   → "Keine Reaktion seit N Tagen"
+  Status prospecting         → "Bewerbung vorbereiten"
+
+Ergebnis: naechster_schritt in ApplicationListItem (nicht in DB gespeichert)
+```
+
+### 5.9 Review-Queue
 
 ```
 Items mit Confidence < 80 landen in pending_matches:
@@ -513,7 +603,7 @@ SyncedItem          (Dedup-Log über alle Quellen)
 | `created_at` | DATETIME | Server-Timestamp bei Anlage |
 | `updated_at` | DATETIME | Server-Timestamp bei Update |
 
-> **Hinweis `letztes_update`:** Der gespeicherte Wert ist das letzte manuelle Update. Im `GET /api/applications/`-Endpoint wird `letztes_update` in-memory überschrieben durch `max(events.datum)`, falls dieser größer ist. Der Wert wird **nicht** in die DB zurückgeschrieben (kein `commit()` im GET).
+> **Hinweis `letztes_update`:** Der gespeicherte Wert ist das letzte manuelle Update. Im `GET /api/applications/`-Endpoint wird `letztes_update` in-memory überschrieben durch `max(events.datum WHERE datum <= today)`, falls größer — zukünftige Termine werden bewusst ausgeschlossen (ein geplantes Gespräch soll nicht als „letztes Update" erscheinen). Kein `db.commit()` dabei.
 
 #### `events`
 
@@ -630,6 +720,17 @@ Dedup-Check: `SELECT 1 FROM synced_items WHERE source=? AND external_id=?`
 | `password_enc` | TEXT | Fernet-verschlüsselt |
 | `session_cookies` | TEXT NULL | JSON-Blob (gecachte Login-Cookies) |
 | `last_sync` | DATETIME NULL | |
+
+#### `files_config` (Singleton)
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `folder_path` | VARCHAR NULL | Pfad zum Dokumente-Ordner (auf dem Mac) |
+| `enabled` | BOOLEAN | Bridge aktiv |
+| `last_sync` | DATETIME NULL | |
+| `created_at` | DATETIME | |
+| `updated_at` | DATETIME | |
 
 #### `calls_config` (Singleton)
 
