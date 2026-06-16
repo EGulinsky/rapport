@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '1.0.8',
+    date: '2026-06-14',
+    changes: [
+      'Fix: Kurzformen von Firmennamen mit 4–5 Zeichen (z.B. „Opitz") werden jetzt im Suchindex erfasst',
+    ],
+  },
+  {
     version: '1.0.7',
     date: '2026-06-14',
     changes: [

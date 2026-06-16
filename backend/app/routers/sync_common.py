@@ -372,7 +372,7 @@ def term_variants(raw_term: str) -> list[str]:
             variants.append(candidate)
     if len(stripped) >= 2:
         first = stripped[0]
-        if (len(first) >= 6
+        if (len(first) >= 4
                 and first.lower() not in _COMMON_FIRST_NAMES
                 and first.lower() not in _CORP_SUFFIXES
                 and first not in variants):
