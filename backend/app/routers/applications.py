@@ -146,7 +146,23 @@ def list_applications(
             .all()
         )
 
+        earliest_bewerbung_events = dict(
+            db.query(models.Event.application_id, func.min(models.Event.datum))
+            .filter(
+                models.Event.application_id.in_(app_ids),
+                models.Event.typ == "bewerbung",
+            )
+            .group_by(models.Event.application_id)
+            .all()
+        )
+
+        fixed_any = False
         for app in apps:
+            if app.datum_bewerbung is None:
+                eb = earliest_bewerbung_events.get(app.id)
+                if eb:
+                    app.datum_bewerbung = eb
+                    fixed_any = True
             md = max_event_dates.get(app.id)
             if md and (app.letztes_update is None or md > app.letztes_update):
                 app.letztes_update = md
@@ -156,6 +172,8 @@ def list_applications(
                 last_interviews.get(app.id),
                 today,
             )
+        if fixed_any:
+            db.commit()
 
     return apps
 
