@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -86,10 +87,13 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
         db.commit()
         return {"status": "approved", "event_id": status_event.id if new_main else None}
 
+    raw_datum: Optional[date] = body.datum or match.datum
+    if raw_datum and app.datum_bewerbung:
+        raw_datum = max(raw_datum, app.datum_bewerbung)
     event = Event(
         application_id=body.application_id,
         typ=body.event_type or match.event_type or "notiz",
-        datum=body.datum or match.datum,
+        datum=raw_datum,
         titel=body.titel or match.titel,
         notiz=match.extract,
         source=match.source,

@@ -10,7 +10,7 @@ import base64
 import html
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from email.utils import parseaddr
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -23,6 +23,13 @@ from app.ai.provider import AINotConfigured, AIRateLimited
 from app.ai.tasks import match_and_classify
 
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
+
+
+def _floor_to_bewerbung(datum: Optional[date], app: models.Application) -> Optional[date]:
+    """Clamp an auto-created event date so it can't precede datum_bewerbung."""
+    if datum is None or app.datum_bewerbung is None:
+        return datum
+    return max(datum, app.datum_bewerbung)
 
 
 def _time_prefix(date_hint: Optional[datetime]) -> str:
@@ -606,7 +613,7 @@ def _save_deterministic_event(
         mark_synced(db, source, external_id)
         return False
 
-    datum = date_hint.date() if date_hint else None
+    datum = _floor_to_bewerbung(date_hint.date() if date_hint else None, app)
 
     # Time prefix only for mail/note events, not calendar or files
     time_pfx = ""
@@ -771,10 +778,11 @@ async def process_item(
         ))
         return False
 
+    app = db.query(models.Application).get(app_id)
     db.add(models.Event(
         application_id=app_id,
         typ=_map_event_type(result.get("event_type", "note")),
-        datum=datum,
+        datum=_floor_to_bewerbung(datum, app) if app else datum,
         titel=result.get("titel") or source,
         notiz=result.get("extract"),
         autor=autor,
@@ -786,7 +794,6 @@ async def process_item(
     new_sub  = result.get("suggested_sub_status")
     # Calendar events are appointments, not status-changing communications
     if new_main and source not in ('gcal', 'icloud_cal'):
-        app = db.query(models.Application).get(app_id)
         if app and app.main_status != new_main:
             db.add(models.PendingMatch(
                 source=source,
@@ -853,10 +860,11 @@ def save_classified_event(
     body = f"{extra_notiz}\n{ai_extract}" if extra_notiz and ai_extract else (extra_notiz or ai_extract or "")
     notiz = f"{time_pfx}{body}" if time_pfx else (body or None)
 
+    app_obj = db.query(models.Application).get(target_app["id"])
     db.add(models.Event(
         application_id=target_app["id"],
         typ=_map_event_type(result.get("event_type", "note")),
-        datum=datum,
+        datum=_floor_to_bewerbung(datum, app_obj) if app_obj else datum,
         titel=result.get("titel") or source,
         notiz=notiz,
         autor=autor,
