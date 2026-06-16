@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from app.database import init_db
 from app.routers import (
-    applications, import_excel, contacts, export_excel, settings,
+    applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
     review, cleanup, calendar,
 )
@@ -112,6 +112,7 @@ app.include_router(applications.router)
 app.include_router(import_excel.router)
 app.include_router(contacts.router)
 app.include_router(export_excel.router)
+app.include_router(export_pdf.router)
 app.include_router(settings.router)
 app.include_router(sync_google.router)
 app.include_router(sync_icloud.router)

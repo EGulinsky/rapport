@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.18',
+    date: '2026-06-16',
+    changes: [
+      'Feature: PDF-Export "Nachweis der Eigenbemühungen" für die Bundesagentur für Arbeit — Bewerbungen ab 01.02.2026 als strukturierte Liste mit Kopfzeile, Fußzeile und Unterschriftsfeld',
+    ],
+  },
+  {
     version: '2.0.17',
     date: '2026-06-16',
     changes: [
