@@ -8,6 +8,36 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.4',
+    date: '2026-06-16',
+    changes: [
+      'Fix: LinkedIn Login-Timeout — warte explizit auf React-Formular-Hydration bevor Felder befüllt werden',
+    ],
+  },
+  {
+    version: '2.0.3',
+    date: '2026-06-16',
+    changes: [
+      'Perf: Sync-Quellen laden bereits indizierte IDs einmalig in ein Set statt pro Element eine DB-Query',
+      'Perf: Fortschritts-Updates nur alle 10 Elemente statt jeden Schritt (weniger DB-Writes)',
+      'Perf: is_synced-Check in gcal/iCloud-Kalender kommt jetzt vor dem Keyword-Filter',
+    ],
+  },
+  {
+    version: '2.0.2',
+    date: '2026-06-16',
+    changes: [
+      'Fix: Lokale Dokumente Toggle-Zustand wird jetzt korrekt gespeichert und geladen',
+    ],
+  },
+  {
+    version: '2.0.1',
+    date: '2026-06-16',
+    changes: [
+      'Fix: Tab „Dokumente" in Einstellungen war abgeschnitten — Tab-Leiste ist jetzt horizontal scrollbar',
+    ],
+  },
+  {
     version: '2.0.0',
     date: '2026-06-16',
     changes: [
