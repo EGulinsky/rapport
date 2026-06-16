@@ -32,7 +32,7 @@ from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, A
 from app.routers.sync_common import (
     is_synced, load_synced_ids, purge_source,
     build_firm_index, build_contact_domain_index, find_hint_apps,
-    process_item, strip_html,
+    process_item, strip_html, earliest_bewerbung_date,
     init_progress, update_progress, finish_progress,
     set_batch_result,
 )
@@ -203,6 +203,7 @@ async def _do_icloud_mail() -> dict:
 
         _, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
+        global_cutoff = earliest_bewerbung_date(db)
 
         update_progress("icloud_mail", 0, 0, "IMAP wird verbunden…")
         try:
@@ -220,6 +221,8 @@ async def _do_icloud_mail() -> dict:
         update_progress("icloud_mail", 0, total, f"{total} Nachrichten gefunden")
         synced_ids = load_synced_ids(db, "icloud_mail")
 
+        from email.utils import parsedate_to_datetime as _parse_date_hdr
+
         for i, msg_id_bytes in enumerate(batch):
             if i % 10 == 0:
                 update_progress("icloud_mail", i, total, f"E-Mail {i + 1}/{total}")
@@ -229,6 +232,38 @@ async def _do_icloud_mail() -> dict:
                 skipped += 1
                 continue
 
+            # ── Phase 1: headers only (FETCH RFC822.HEADER is much faster than full RFC822) ──
+            try:
+                _, hdr_data = imap.fetch(msg_id_bytes, "(RFC822.HEADER)")
+                hdr_msg = email_lib.message_from_bytes(hdr_data[0][1])
+            except Exception as e:
+                errors.append(f"Nachricht {msg_id}: {e}")
+                continue
+
+            subject = hdr_msg.get("Subject", "(kein Betreff)")
+            sender  = hdr_msg.get("From", "")
+            date_hint = None
+            try:
+                date_hint = _parse_date_hdr(hdr_msg.get("Date", "")).astimezone(timezone.utc)
+            except Exception:
+                pass
+
+            # Skip mails before the earliest application date
+            if global_cutoff and date_hint and date_hint.date() < global_cutoff:
+                synced_ids.add(msg_id)
+                skipped += 1
+                continue
+
+            # Quick firm check on subject + sender — skip full fetch if no match
+            quick_hints = find_hint_apps(
+                f"Von: {sender}\nBetreff: {subject}", term_to_apps, contact_domain_index
+            )
+            if not quick_hints:
+                synced_ids.add(msg_id)
+                skipped += 1
+                continue
+
+            # ── Phase 2: full message (only for relevant mails) ────────────
             try:
                 _, data = imap.fetch(msg_id_bytes, "(RFC822)")
                 raw_email = data[0][1]
@@ -237,17 +272,7 @@ async def _do_icloud_mail() -> dict:
                 errors.append(f"Nachricht {msg_id}: {e}")
                 continue
 
-            subject = msg.get("Subject", "(kein Betreff)")
-            sender = msg.get("From", "")
             body = _imap_body(msg)[:1500]
-
-            date_hint = None
-            try:
-                from email.utils import parsedate_to_datetime
-                date_hint = parsedate_to_datetime(msg.get("Date", "")).astimezone(timezone.utc)
-            except Exception:
-                pass
-
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
