@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.9',
+    date: '2026-06-16',
+    changes: [
+      'UX: Einstellungen auf Sidebar-Layout umgestellt — skaliert sauber auf viele Tabs',
+      'Feature: LinkedIn-Tab in Einstellungen — Konfiguration und Sync direkt dort',
+    ],
+  },
+  {
     version: '2.0.8',
     date: '2026-06-16',
     changes: [
