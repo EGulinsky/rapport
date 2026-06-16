@@ -197,15 +197,16 @@ def _parse_date(text: str) -> Optional[str]:
 
 
 # LinkedIn uses these selectors depending on version/locale
-_EMAIL_SELECTORS = ["#username", "input[name='session_key']", "input[autocomplete='username']", "input[type='email']"]
+_EMAIL_SELECTORS = ["#username", "input[name='session_key']", "input[autocomplete='username']", "input[type='email']", "input[type='text']"]
 _PASS_SELECTORS  = ["#password", "input[name='session_password']", "input[autocomplete='current-password']", "input[type='password']"]
 
 
-async def _find_input(page, selectors: list[str], timeout_each: int = 3000):
-    """Try multiple selectors, return the first visible one."""
+async def _find_input(page, selectors: list[str], timeout_each: int = 2000):
+    """Try multiple selectors, return the first one present in the DOM (attached)."""
     for sel in selectors:
         try:
-            await page.wait_for_selector(sel, state="visible", timeout=timeout_each)
+            # Use 'attached' not 'visible' — LinkedIn inputs may have CSS animation delay
+            await page.wait_for_selector(sel, state="attached", timeout=timeout_each)
             return sel
         except Exception:
             continue
