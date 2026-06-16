@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.15',
+    date: '2026-06-16',
+    changes: [
+      'Fix: Kalendertermine schlagen keine Statusänderungen mehr in der Prüfung vor — Termine sind Einträge, keine Status-Kommunikation',
+    ],
+  },
+  {
     version: '2.0.14',
     date: '2026-06-16',
     changes: [

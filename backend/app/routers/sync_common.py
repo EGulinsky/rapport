@@ -784,7 +784,8 @@ async def process_item(
 
     new_main = result.get("suggested_main_status")
     new_sub  = result.get("suggested_sub_status")
-    if new_main:
+    # Calendar events are appointments, not status-changing communications
+    if new_main and source not in ('gcal', 'icloud_cal'):
         app = db.query(models.Application).get(app_id)
         if app and app.main_status != new_main:
             db.add(models.PendingMatch(
