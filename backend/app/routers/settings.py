@@ -88,6 +88,7 @@ def get_sync_settings(db: Session = Depends(get_db)):
         "icloud_contacts_enabled": cfg.icloud_contacts_enabled,
         "icloud_calls_enabled": cfg.icloud_calls_enabled,
         "linkedin_enabled": cfg.linkedin_enabled,
+        "files_enabled": cfg.files_enabled,
     }
 
 
