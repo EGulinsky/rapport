@@ -108,3 +108,19 @@ def reject_match(match_id: int, db: Session = Depends(get_db)):
     match.review_status = "rejected"
     db.commit()
     return {"status": "rejected"}
+
+
+@router.post("/cleanup-calendar-status")
+def cleanup_calendar_status(db: Session = Depends(get_db)):
+    """Reject all pending status-change suggestions from calendar sources."""
+    result = (
+        db.query(PendingMatch)
+        .filter(
+            PendingMatch.review_status == "pending",
+            PendingMatch.status_only.is_(True),
+            PendingMatch.source.in_(["gcal", "icloud_cal"]),
+        )
+        .update({"review_status": "rejected"}, synchronize_session=False)
+    )
+    db.commit()
+    return {"cleaned": result}
