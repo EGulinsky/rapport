@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.13',
+    date: '2026-06-16',
+    changes: [
+      'Fix: Letztes Update ignoriert jetzt zukünftige Termine — zeigt die letzte tatsächliche Aktivität, nicht den nächsten geplanten Termin',
+    ],
+  },
+  {
     version: '2.0.12',
     date: '2026-06-16',
     changes: [
