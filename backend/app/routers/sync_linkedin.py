@@ -199,9 +199,11 @@ def _parse_date(text: str) -> Optional[str]:
 async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
+        _state["step"] = "Anmelden: Login-Seite laden…"
         # domcontentloaded fires quickly; wait_for_selector below waits for React to mount the form
         await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
 
+        _state["step"] = "Anmelden: warte auf Login-Formular…"
         # Wait up to 10 s for the username field; catch gracefully if bot-detection hides it
         try:
             await page.wait_for_selector("#username", state="visible", timeout=10000)
@@ -215,10 +217,13 @@ async def _login(page, email: str, password: str) -> bool:
             _state["step"] = "LinkedIn zeigt keine Login-Maske (Bot-Detection?) — Session-Cookies zurücksetzen und erneut versuchen"
             return False
 
+        _state["step"] = "Anmelden: Zugangsdaten eingeben…"
         await page.fill("#username", email)
         await page.fill("#password", password)
         submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').first
+        _state["step"] = "Anmelden: Submit…"
         await submit.click()
+        _state["step"] = "Anmelden: warte auf Weiterleitung…"
         await page.wait_for_url(
             re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"),
             timeout=20000,
@@ -227,9 +232,11 @@ async def _login(page, email: str, password: str) -> bool:
             _state["status"] = "needs_login"
             _state["step"] = "LinkedIn verlangt 2FA/Verification — bitte erneut anmelden"
             return False
+        _state["step"] = "Anmelden: erfolgreich"
         return True
     except Exception as e:
         _state["errors"].append(f"Login-Fehler: {e}")
+        _state["step"] = f"Login fehlgeschlagen: {e}"
         return False
 
 
@@ -441,15 +448,16 @@ async def _async_sync(cfg_id: int):
             page = await context.new_page()
 
             # Check session validity
-            _state["step"] = "Session prüfen…"
+            _state["step"] = "Session prüfen: öffne LinkedIn…"
             check_url = f"{BASE_JOBS_URL}APPLIED"
             try:
                 await page.goto(check_url, wait_until="domcontentloaded", timeout=20000)
-            except Exception:
+                _state["step"] = f"Session prüfen: geladen ({page.url[:60]})"
+            except Exception as nav_err:
+                _state["step"] = f"Session prüfen: Fallback auf Startseite ({nav_err})"
                 await page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=20000)
 
             if "login" in page.url or "authwall" in page.url or "uas/login" in page.url:
-                _state["step"] = "Anmelden…"
                 logged_in = await _login(page, email, password)
                 if not logged_in:
                     await browser.close()
@@ -466,9 +474,10 @@ async def _async_sync(cfg_id: int):
             all_jobs: list[dict] = []
             seen_ids: set[str] = set()
             for card_type, label, default_status in CATEGORIES:
-                _state["step"] = f"Lade {label}…"
+                _state["step"] = f"Lade Kategorie: {label}…"
                 cat_jobs = await _scrape_category(page, card_type, default_status, seen_ids)
                 all_jobs.extend(cat_jobs)
+                _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs)})"
 
             await browser.close()
 
