@@ -73,35 +73,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build playwright base image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.playwright-base
-          push: false
-          tags: jobtracker-playwright-base:latest
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build images
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build -f ./backend/Dockerfile.playwright-base -t jobtracker-playwright-base:latest ./backend/
+          docker build ./backend/
+          docker build ./frontend/
 
   deploy:
     name: Deploy (local)
