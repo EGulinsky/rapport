@@ -1,141 +1,171 @@
 # JobTracker – Claude Code Kontext
 
-Self-hosted Bewerbungs-Tracking-App als Ersatz für `Bewerbungen_Eugen_Gulinsky.xlsx`.
+Self-hosted Bewerbungs-Tracking-App (Ersatz für `Bewerbungen_Eugen_Gulinsky.xlsx`).  
+Läuft lokal in OrbStack (Docker Compose). Aktueller Stand: v2.0.17.
 
 ## Projekt starten
 
 ```bash
 # App starten (OrbStack / Docker muss laufen)
+cd /Users/eugengulinsky/code/jobtracker
 docker compose up -d
 
-# Frontend-Entwicklung (lokal, ohne Docker)
-cd frontend && npm install && npm run dev   # http://localhost:3000
+# Nach Code-Änderungen neu bauen
+docker compose up -d --build
 
-# Backend-Entwicklung (lokal, ohne Docker)
-cd backend && pip install -r requirements.txt
-uvicorn app.main:app --reload              # http://localhost:8000
+# Logs
+docker compose logs -f backend
+docker compose logs -f frontend
 ```
+
+**URLs:**
+- App: `http://192.168.117.10` (OrbStack static IP — kein nginx-Cache-Problem)
+- API/Swagger: `http://localhost:8000/docs`
+- Alternativ: `http://localhost:3000`
 
 ## Projektstruktur
 
 ```
 jobtracker/
+├── CLAUDE.md
+├── README.md
+├── docker-compose.yml
+├── .github/workflows/ci.yml     # ruff + tsc + docker buildx, self-hosted runner
+├── docs/
+│   ├── ARCHITECTURE.md          # Technische Architektur (aktuell)
+│   ├── JobTracker_Projektstand.md
+│   └── JobTracker_Konzept_Architektur.md   # Ursprüngliches Planungsdokument
 ├── backend/
-│   ├── app/
-│   │   ├── main.py          # FastAPI App + CORS + Lifespan
-│   │   ├── database.py      # SQLAlchemy + SQLite Setup
-│   │   ├── models.py        # ORM-Modelle + Status-Enum + Excel-Mapping
-│   │   ├── schemas.py       # Pydantic-Schemas (Request/Response)
-│   │   └── routers/
-│   │       ├── applications.py   # CRUD + Events + Contacts
-│   │       └── import_excel.py   # POST /api/import/excel
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── App.tsx               # Hauptkomponente: Dashboard + Filter + Kanban
-│       ├── types.ts              # TypeScript-Typen + Status-Labels/Farben
-│       ├── api/client.ts         # Fetch-Wrapper für alle API-Calls
-│       └── components/
-│           ├── ApplicationTable.tsx   # Sortierbare Tabelle
-│           ├── ApplicationModal.tsx   # Detail/Edit-Modal
-│           ├── StatsBar.tsx           # KPI-Kacheln oben
-│           ├── StatusBadge.tsx        # Farbige Status-Badges
-│           └── ImportButton.tsx       # Excel-Upload-Button
-└── docker-compose.yml
+│   ├── Dockerfile
+│   ├── Dockerfile.playwright-base   # Separates Base-Image mit Chromium (~10 min Build)
+│   ├── requirements.txt
+│   └── app/
+│       ├── main.py          # FastAPI App + CORS + Lifespan + Background-Sync-Loop
+│       ├── database.py      # SQLAlchemy Engine + SessionLocal
+│       ├── models.py        # ORM-Modelle + Status-Enums + Excel-Maps
+│       ├── schemas.py       # Pydantic Request/Response-Schemas
+│       ├── ai/
+│       │   ├── provider.py  # litellm-Wrapper + Fernet-Kryptographie
+│       │   └── tasks.py     # classify_batch_for_app()
+│       └── routers/
+│           ├── applications.py   # CRUD + Events + Contacts; naechster_schritt berechnet
+│           ├── contacts.py       # Globale Kontaktverwaltung
+│           ├── import_excel.py   # POST /api/import/excel
+│           ├── export_excel.py   # GET /api/export/excel
+│           ├── settings.py       # AI-Settings + Sync-Konfiguration
+│           ├── calendar.py       # GET /api/calendar/events
+│           ├── sync_common.py    # Dedup, AI-Klassifikation, Kontakt-Upsert
+│           ├── sync_google.py    # Google OAuth + Gmail + GCal
+│           ├── sync_icloud.py    # iCloud IMAP + CalDAV + CardDAV
+│           ├── sync_targeted.py  # Pro-App-Sync für alle Quellen
+│           ├── sync_files.py     # Lokale Dokumente (PDF/DOCX via files_bridge)
+│           ├── sync_linkedin.py  # LinkedIn Playwright-Scraper
+│           ├── review.py         # Review-Queue (PendingMatches)
+│           └── cleanup.py        # Datenbereinigung
+└── frontend/
+    ├── Dockerfile
+    └── src/
+        ├── App.tsx              # Root: Filter, Tabs, Views
+        ├── types.ts             # TypeScript-Typen, Status-Labels/Farben
+        ├── api/client.ts        # Fetch-Wrapper für alle Backend-Calls
+        └── components/
+            ├── ApplicationTable.tsx    # Tabelle mit "Nächster Schritt"-Spalte
+            ├── KanbanBoard.tsx         # Drag & Drop Kanban
+            ├── ApplicationModal.tsx    # Detail/Edit mit Lifecycle-Bar + Timeline
+            ├── CalendarView.tsx        # Outlook-ähnliche Kalenderansicht
+            ├── StatsBar.tsx            # KPI-Kacheln
+            ├── StatusBadge.tsx         # Farbige Status-Badges
+            ├── StatusPopover.tsx       # Inline-Statuswechsel in Tabelle
+            ├── ContactsView.tsx        # CRM-Kontaktübersicht
+            ├── ReviewModal.tsx         # Review-Inbox für KI-Vorschläge
+            ├── SettingsModal.tsx       # Einstellungen: Google/iCloud/LinkedIn/Dokumente
+            ├── AiSettingsModal.tsx     # AI-Provider-Konfiguration
+            ├── SyncButton.tsx          # Globaler Sync-Trigger
+            ├── LinkedInSyncButton.tsx  # LinkedIn-Sync mit 2FA-Inline-Dialog
+            ├── ImportButton.tsx        # Excel-Upload
+            ├── ExportButton.tsx        # Excel-Download
+            ├── ChangelogModal.tsx      # Versionsverlauf; CURRENT_VERSION hier pflegen
+            └── CleanupModal.tsx        # Dubletten bereinigen
 ```
 
 ## Datenbank
 
-SQLite unter `backend/data/jobtracker.db` (Docker Volume `jobtracker-data`).
-Schema wird beim Start automatisch via SQLAlchemy `create_all()` erstellt — kein Alembic nötig für MVP.
+SQLite unter `/app/data/jobtracker.db` (Docker Volume `jobtracker-data`).  
+Schema via SQLAlchemy `create_all()` beim Start — kein Alembic.
 
-## Status-Mapping (Excel → App)
+## Status-Modell
 
-| Excel-Wert | Interner Status |
-|---|---|
-| `00 Anbahnung` | `prospecting` |
-| `01 beworben` | `applied` |
-| `02 1. Gespräch HR/HH terminiert` | `hr_scheduled` |
-| `03 1. Gespräch HR/HH geführt` | `hr_done` |
-| `05 2. Interview geführt` | `interview_2` |
-| `06 1. Gespräch FB terminiert` | `fb_scheduled` |
-| `07 3. Interview geführt` | `interview_3` |
-| `08 2. Gespräch FB terminiert` | `fb_2` |
-| `12 Warten auf finale Entscheidung` | `final_decision` |
-| Abgesagt-Flag = x | `rejected` |
-
-## API-Endpunkte
+Zweistufig: `main_status` + optionaler `sub_status`.
 
 ```
-GET    /api/applications/          Liste (filter: status, search, show_rejected)
-GET    /api/applications/stats     KPI-Zahlen
-GET    /api/applications/{id}      Detail mit Events + Contacts
-POST   /api/applications/          Neu anlegen
-PATCH  /api/applications/{id}      Aktualisieren
-DELETE /api/applications/{id}      Löschen
-POST   /api/applications/{id}/events    Event hinzufügen
-POST   /api/applications/{id}/contacts  Kontakt hinzufügen
-POST   /api/import/excel           Excel-Import (multipart/form-data)
-GET    /health                     Health-Check
+main_status: prospecting | applied | hr | fb | waiting | negotiating | signed | rejected
+sub_status:  1_scheduled | 1_done | 2_scheduled | 2_done | 3_scheduled | 3_done | 4_scheduled | 4_done | 5_scheduled | 5_done
+             (nur bei hr und fb relevant)
 ```
 
-Swagger UI: http://localhost:8000/docs
+Pipeline (für `STATUS_ORDER` im Sync):
+```
+prospecting → applied → hr → fb → waiting → negotiating → signed
+                                                                └→ (alle) → rejected
+```
 
-## Was bereits gebaut ist (MVP)
+## Kryptographie
 
-- [x] FastAPI Backend mit SQLite
-- [x] Alle CRUD-Endpunkte für Bewerbungen
-- [x] Excel-Import (liest `Bewerbungen_Eugen_Gulinsky.xlsx`, 133 Einträge)
-- [x] React Frontend mit Tailwind CSS
-- [x] Tabellenansicht (sortierbar nach Firma/Status/Datum)
-- [x] Kanban-Board nach Status-Spalten
-- [x] Status-Filter-Tabs mit Live-Zähler
-- [x] Detail/Edit-Modal mit allen Feldern
-- [x] KPI-Kacheln (Gesamt / Aktiv / Abgesagt / Interview-Rate)
-- [x] Docker Compose + OrbStack-kompatibel
+Alle sensitiven Felder (Passwörter, OAuth-Tokens, API-Keys) Fernet-verschlüsselt.  
+Schlüssel: `backend/data/fernet.key` (im Docker Volume, nie committen).  
+Funktionen: `encrypt_api_key()` / `decrypt_api_key()` in `app/ai/provider.py`.
 
-## Phase 2 – Nächste Features
+## LinkedIn-Scraper
 
-### Kontakt-Management (CRM)
-- Vollständige Kontaktdetailseite (`/contacts/:id`) mit Interaktions-Timeline
-- vCard / CSV Import für Telefonliste
-- Gmail-Signatur-Parser (Rolle + Firma + Tel automatisch extrahieren)
-- KI-Zusammenfassung pro Kontakt (Claude API)
+Headless Playwright (Chromium) im Backend-Container.  
+Separates Base-Image `Dockerfile.playwright-base` — wird nur bei Playwright-Versions-Update neu gebaut.
 
-### LinkedIn-Sync
-- Playwright-basierter Scraper als Celery-Task
-- Mapping LinkedIn-Status → interne Status-Enum
-- Täglich oder manuell angestoßen
+**Kategorien** (Reihenfolge beachten!):
+```python
+CATEGORIES = [
+    ("SAVED", "Gespeichert", "prospecting"),
+    ("IN_PROGRESS", "In Bearbeitung", "applied"),
+    ("APPLIED", "Beworben", "applied"),
+    ("INTERVIEWS", "Interviews", "hr"),
+    ("ARCHIVED", "Archiviert", "rejected"),
+]
+```
 
-### Gmail-Integration
-- Google OAuth 2.0 (nur Lesezugriff)
-- Bewerbungsrelevante Mails automatisch erkennen und verknüpfen
-- Endpoint: `GET /api/integrations/gmail/sync`
+Jede Kategorie bekommt ein eigenes `seen_ids = set()` — bewusst **nicht** geteilt, damit ARCHIVED denselben Job überschreiben kann.
 
-### Google Calendar
-- Interview-Termine automatisch als Events anlegen
-- Zwei-Wege-Sync
-- Endpoint: `POST /api/integrations/calendar/sync`
+**2FA-Flow:** `_handle_2fa_checkpoint()` pollt URL:
+- Option A: Push-Notification auf Handy → LinkedIn redirectet weg von `/checkpoint/` → auto-erkannt
+- Option B: Code manuell via `/api/sync/linkedin/submit-2fa` eingeben
 
-### Analytics
-- KPI-Funnel-Chart (Recharts)
-- Quellen-Effektivität (LinkedIn / XING / Headhunter)
-- Antwortzeiten-Analyse
-- Claude API für KI-Insights
+## `naechster_schritt`-Feld
 
-## Wichtige Entscheidungen
+Berechnetes Feld, wird **nicht** in der DB gespeichert. `_compute_naechster_schritt()` in `applications.py` läuft per GET-Request mit drei Extra-Queries:
+- `next_interviews`: min(datum) future gespräch-Events
+- `last_interviews`: max(datum) past gespräch-Events
+- `max_event_dates`: max(datum) aller Events (≤ today, um Zukunftstermine auszuschließen)
 
-- **SQLite statt PostgreSQL**: Für Single-User reicht SQLite, kein separater DB-Container nötig
-- **Kein Alembic für MVP**: `create_all()` beim Start, Migrationen erst wenn Schema stabilisiert
-- **CORS offen**: `allow_origins=["*"]` für MVP, vor Produktiv-Einsatz einschränken
-- **Kein Auth für MVP**: Single-User lokal, Auth (JWT + Google OAuth) kommt in Phase 3
+## `letztes_update`
+
+Der DB-Wert ist das manuelle Update-Datum. Im `GET /api/applications/`-Endpoint wird er in-memory durch `max(events.datum WHERE datum <= today)` überschrieben, falls größer — kein `db.commit()` dabei.
+
+## Sync-Quellen und Kalender-Sonderregel
+
+Kalenderquellen (`gcal`, `icloud_cal`) erzeugen **keine** Status-PendingMatches — nur Events.  
+Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
+
+## CI/CD
+
+GitHub Actions self-hosted runner auf dem Mac.  
+Jobs: `backend` (ruff + pyright) → `frontend` (tsc + vite build) → `docker` (buildx).  
+Deploy: Docker Buildx baut neue Images auf dem Runner, `docker compose up -d` rollt sie aus.
+
+## Wichtige Konstanten
+
+- `CURRENT_VERSION` in `frontend/src/components/ChangelogModal.tsx` — bei jeder inhaltlichen Änderung erhöhen
+- OrbStack IPs: Backend `192.168.117.10`, Frontend `192.168.117.11`
+- Fernet-Key-Datei: `backend/data/fernet.key` (wird beim ersten Start auto-generiert)
 
 ## Excel-Datei
 
-Original liegt unter:
-`/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`
-
-Sheet: `Tracking`, 17 Spalten:
-Firma(1) | HH?(2) | Zielfirma(3) | Rolle(4) | BesetztvonHH(5) | Quelle(6) |
-DatumBewerbung(7) | LetztesUpdate(8) | Status(9) | Ghosting(10) | Abgesagt(11) |
-Kommentar(12) | Gespräch1–5(13–17)
+Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`  
+Sheet: `Tracking`, 17 Spalten — Mapping in `models.py` unter `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.

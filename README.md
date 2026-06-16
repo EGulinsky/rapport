@@ -1,47 +1,79 @@
-# JobTracker MVP
+# JobTracker
 
-Self-hosted Bewerbungs-Tracking App als Ersatz für die Excel-Liste.
+Self-hosted Bewerbungs-Tracking-App als Ersatz für die Excel-Bewerbungsliste.  
+Läuft lokal in OrbStack / Docker Compose. Aktueller Stand: **v2.0.17**
 
 ## Voraussetzungen
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac / Linux / Windows)
-- Die Excel-Datei `Bewerbungen_Eugen_Gulinsky.xlsx` zum Import
+- [OrbStack](https://orbstack.dev/) oder Docker Desktop (Mac / Linux / Windows)
 
 ## Schnellstart
 
 ```bash
 # 1. In den Projektordner wechseln
-cd jobtracker
+cd /Users/eugengulinsky/code/jobtracker
 
-# 2. App starten (erstmaliger Build dauert ~2 Minuten)
+# 2. App starten (erstmaliger Build dauert ~2–3 Minuten)
 docker compose up -d --build
 
 # 3. Browser öffnen
-open http://localhost:3000
+open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
+# oder: open http://localhost:3000
 ```
 
-## Excel-Daten importieren
-
-1. App im Browser öffnen: http://localhost:3000
-2. Oben rechts auf **„Excel importieren"** klicken
-3. `Bewerbungen_Eugen_Gulinsky.xlsx` auswählen
-4. Alle 133 Einträge werden automatisch importiert
-
-## Funktionen (MVP)
+## Funktionen
 
 | Feature | Beschreibung |
 |---|---|
-| **Dashboard** | Tabellenansicht aller Bewerbungen, sortierbar nach Firma / Status / Datum |
-| **Kanban-Board** | Pipeline-Ansicht nach Bewerbungsstatus |
-| **Filter** | Nach Status filtern, Abgesagte ein-/ausblenden, Freitextsuche |
-| **Detailansicht** | Vollständiges Profil inkl. Gesprächsnotizen, Bearbeiten / Löschen |
-| **Neue Bewerbung** | Direkt aus der App anlegen |
-| **Excel Import** | Bestehende `.xlsx` per Drag & Drop oder Datei-Auswahl importieren |
-| **KPI-Kacheln** | Gesamt / Aktiv / Abgesagt / Interview-Rate auf einen Blick |
+| **Dashboard / Tabelle** | Alle Bewerbungen, sortierbar; „Nächster Schritt" intelligent berechnet |
+| **Kanban-Board** | Pipeline-Ansicht mit Drag & Drop nach Status-Spalten |
+| **Kalender-Ansicht** | Outlook-ähnlich: Tag / Arbeitswoche / Woche / Monat |
+| **Filter & Suche** | Nach Status, Freitext, Abgesagte ein-/ausblenden |
+| **Detail-Modal** | Vollständiges Profil, Lifecycle-Bar, Timeline, Gesprächsnotizen |
+| **Kontakte (CRM)** | Kontaktpersonen mit n:m-Verknüpfung zu Bewerbungen |
+| **Excel Import** | `.xlsx` im Originalformat (Sheet „Tracking", 17 Spalten) |
+| **Excel Export** | Rückexport ins gleiche Format |
+| **KPI-Kacheln** | Gesamt / Aktiv / Abgesagt / Interview-Rate |
+| **LinkedIn Sync** | Playwright-Scraper: Archived → abgesagt, Status-Updates |
+| **Gmail Sync** | Google OAuth 2.0, bewerbungsrelevante Mails verknüpfen |
+| **Google Calendar** | Interview-Termine als Events, Kontakte aus Teilnehmerliste |
+| **iCloud Mail** | IMAP-Sync (App-Specific Password) |
+| **iCloud Kalender** | CalDAV-Sync |
+| **iCloud Kontakte** | CardDAV-Import |
+| **Lokale Dokumente** | PDF/DOCX/TXT/MD via `files_bridge.py` auf Port 9998 |
+| **Review-Queue** | KI-Vorschläge für Events und Statuswechsel freigeben |
+| **Sync-Steuerung** | Quellen einzeln aktivieren / deaktivieren |
+| **AI-Klassifikation** | Provider-agnostisch via LiteLLM (Groq, Ollama, OpenAI) |
+| **Changelog** | Versionsverlauf im App-Header abrufbar |
+
+## Einstellungen
+
+### LinkedIn
+1. Einstellungen → LinkedIn → E-Mail + Passwort eintragen
+2. „Sync starten" — bei 2FA: Push-Notification bestätigen **oder** Code eingeben
+
+### Google (Gmail + Calendar)
+1. Google Cloud Console → OAuth 2.0 Client (Web), Redirect URI: `http://localhost:8000/api/sync/google/callback`
+2. Einstellungen → Google: Client ID + Secret eintragen → OAuth-Flow starten
+
+### iCloud (Mail + Kalender + Kontakte)
+1. Apple ID → Sicherheit → App-spezifische Passwörter → neues Passwort generieren
+2. Einstellungen → iCloud: Apple-ID + App-Passwort eintragen
+
+### Lokale Dokumente
+```bash
+# Bridge separat starten (auf dem Mac, nicht in Docker)
+python3 files_bridge.py   # Port 9998
+```
+Dann Einstellungen → Dokumente → Ordnerpfad setzen.
+
+### AI-Provider
+- **Groq** (empfohlen, kostenlos): API-Key von [console.groq.com](https://console.groq.com), Modell `groq/llama-3.3-70b-versatile`
+- **Ollama** (lokal, kein API-Key): Base URL `http://host.docker.internal:11434`
 
 ## API-Dokumentation
 
-Swagger UI: http://localhost:8000/docs
+Swagger UI: `http://localhost:8000/docs`
 
 ## App stoppen
 
@@ -57,14 +89,10 @@ Daten bleiben erhalten (Docker Volume `jobtracker-data`).
 # Backend
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload    # http://localhost:8000
 
 # Frontend (neues Terminal)
 cd frontend
 npm install
-npm run dev
+npm run dev                      # http://localhost:5173
 ```
-
----
-
-**Nächste Schritte (Phase 2):** LinkedIn Sync · Gmail Integration · Google Calendar · Kontakt-CRM
