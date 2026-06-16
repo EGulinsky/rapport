@@ -289,6 +289,15 @@ export interface CalendarEvent {
   source?: string
 }
 
+export interface LinkedInSyncLogEntry {
+  aktion: 'neu' | 'abgesagt' | 'aktualisiert' | 'unverändert'
+  firma: string
+  rolle: string
+  von?: string
+  zu?: string
+  status?: string
+}
+
 export interface LinkedInSyncStatus {
   status: 'idle' | 'running' | 'done' | 'error' | 'needs_login'
   step: string
@@ -297,6 +306,7 @@ export interface LinkedInSyncStatus {
   updated: number
   skipped: number
   errors: string[]
+  log: LinkedInSyncLogEntry[]
   started_at: string | null
   finished_at: string | null
 }

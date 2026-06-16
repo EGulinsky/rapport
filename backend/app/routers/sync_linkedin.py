@@ -30,6 +30,7 @@ _state: dict = {
     "updated": 0,
     "skipped": 0,
     "errors": [],
+    "log": [],             # per-application action log
     "started_at": None,
     "finished_at": None,
 }
@@ -44,6 +45,7 @@ def _reset_state():
         "updated": 0,
         "skipped": 0,
         "errors": [],
+        "log": [],
         "started_at": None,
         "finished_at": None,
     })
@@ -476,28 +478,65 @@ async def _async_sync(cfg_id: int):
         _state["step"] = f"Verarbeite {len(all_jobs)} Einträge…"
         created = updated = skipped = 0
         errors: list[str] = []
+        action_log: list[dict] = []
+        STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
+        # Early stages where LinkedIn "archived" reliably means no active process
+        EARLY_STAGES = {"prospecting", "applied"}
 
         for i, job in enumerate(all_jobs):
             _state["processed"] = i + 1
             try:
                 app, was_created = _find_or_create_application(db, job)
+                company = job.get("company", "?")
+                role = job.get("title", "?")
                 if was_created:
                     created += 1
+                    action_log.append({
+                        "aktion": "neu",
+                        "firma": company,
+                        "rolle": role,
+                        "status": app.main_status,
+                    })
                 else:
-                    # Upgrade status if category implies a higher stage
                     target_status = job.get("default_status", "applied")
                     if job.get("status_hint"):
                         target_status = job["status_hint"][0]
-                    STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
-                    cur_idx = STATUS_ORDER.index(app.main_status) if app.main_status in STATUS_ORDER else 0
+
+                    old_status = app.main_status
+                    cur_idx = STATUS_ORDER.index(old_status) if old_status in STATUS_ORDER else 0
                     new_idx = STATUS_ORDER.index(target_status) if target_status in STATUS_ORDER else 0
-                    if new_idx > cur_idx:
+
+                    # Archived → abgesagt: only for early-stage apps (not ongoing interviews)
+                    if target_status == "rejected" and old_status in EARLY_STAGES:
+                        app.main_status = "rejected"
+                        app.abgesagt = True
+                        updated += 1
+                        action_log.append({
+                            "aktion": "abgesagt",
+                            "firma": company,
+                            "rolle": role,
+                            "von": old_status,
+                        })
+                    elif target_status != "rejected" and new_idx > cur_idx:
                         app.main_status = target_status
                         if job.get("status_hint") and job["status_hint"][1]:
                             app.sub_status = job["status_hint"][1]
                         updated += 1
+                        action_log.append({
+                            "aktion": "aktualisiert",
+                            "firma": company,
+                            "rolle": role,
+                            "von": old_status,
+                            "zu": target_status,
+                        })
                     else:
                         skipped += 1
+                        action_log.append({
+                            "aktion": "unverändert",
+                            "firma": company,
+                            "rolle": role,
+                            "status": old_status,
+                        })
             except Exception as e:
                 errors.append(f"{job.get('company', '?')}: {e}")
 
@@ -511,6 +550,7 @@ async def _async_sync(cfg_id: int):
             "updated": updated,
             "skipped": skipped,
             "errors": errors,
+            "log": action_log,
             "finished_at": datetime.now(timezone.utc).isoformat(),
         })
 

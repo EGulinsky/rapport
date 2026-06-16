@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Linkedin, Loader2, X, CheckCircle, AlertCircle, Eye, EyeOff, RefreshCw, Trash2 } from 'lucide-react'
 import { api } from '../api/client'
-import type { LinkedInSyncStatus } from '../types'
+import type { LinkedInSyncStatus, LinkedInSyncLogEntry } from '../types'
 
 interface Props {
   onSynced: () => void
@@ -107,6 +107,13 @@ export function LinkedInSyncButton({ onSynced }: Props) {
   const isError = syncState?.status === 'error'
   const needsLogin = syncState?.status === 'needs_login'
 
+  function logLabel(e: LinkedInSyncLogEntry) {
+    if (e.aktion === 'neu') return { text: 'Neu', cls: 'bg-indigo-50 text-indigo-700' }
+    if (e.aktion === 'abgesagt') return { text: 'Abgesagt', cls: 'bg-red-50 text-red-700' }
+    if (e.aktion === 'aktualisiert') return { text: 'Aktualisiert', cls: 'bg-blue-50 text-blue-700' }
+    return { text: 'Unverändert', cls: 'bg-gray-50 text-gray-500' }
+  }
+
   return (
     <>
       <button
@@ -123,7 +130,7 @@ export function LinkedInSyncButton({ onSynced }: Props) {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-4"
           onClick={e => e.target === e.currentTarget && closeModal()}
         >
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
@@ -260,6 +267,47 @@ export function LinkedInSyncButton({ onSynced }: Props) {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {isDone && syncState.log && syncState.log.filter(e => e.aktion !== 'unverändert').length > 0 && (
+                    <details open className="text-xs">
+                      <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium mb-1">
+                        Aktionslog ({syncState.log.filter(e => e.aktion !== 'unverändert').length} Änderungen)
+                      </summary>
+                      <div className="mt-1 max-h-48 overflow-y-auto space-y-1">
+                        {syncState.log.filter(e => e.aktion !== 'unverändert').map((entry, i) => {
+                          const { text, cls } = logLabel(entry)
+                          return (
+                            <div key={i} className="flex items-start gap-2">
+                              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>{text}</span>
+                              <span className="text-gray-700 leading-tight">
+                                <span className="font-medium">{entry.firma}</span>
+                                {entry.rolle ? <span className="text-gray-400"> · {entry.rolle}</span> : null}
+                                {entry.aktion === 'aktualisiert' && entry.von && entry.zu
+                                  ? <span className="text-gray-400"> ({entry.von} → {entry.zu})</span>
+                                  : null}
+                                {entry.aktion === 'abgesagt' && entry.von
+                                  ? <span className="text-gray-400"> (war: {entry.von})</span>
+                                  : null}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </details>
+                  )}
+
+                  {isDone && syncState.log && syncState.log.filter(e => e.aktion === 'unverändert').length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-gray-400 hover:text-gray-600">
+                        {syncState.log.filter(e => e.aktion === 'unverändert').length} unverändert
+                      </summary>
+                      <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5 ml-2">
+                        {syncState.log.filter(e => e.aktion === 'unverändert').map((entry, i) => (
+                          <div key={i} className="text-gray-400">{entry.firma} · {entry.rolle}</div>
+                        ))}
+                      </div>
+                    </details>
                   )}
 
                   {syncState.errors.length > 0 && (
