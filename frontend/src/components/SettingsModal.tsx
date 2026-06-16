@@ -1050,17 +1050,17 @@ export function SettingsModal({ onClose }: Props) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
 
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div className="flex gap-1 rounded-lg border border-gray-200 overflow-hidden bg-white">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 min-w-0">
+          <div className="flex gap-1 rounded-lg border border-gray-200 bg-white overflow-x-auto flex-1 min-w-0 scrollbar-hide">
             {([['sync', 'Sync-Steuerung'], ['ai', 'KI-Anbindung'], ['google', 'Google Sync'], ['icloud', 'iCloud Sync'], ['calls', 'Anrufliste'], ['files', 'Dokumente']] as [Tab, string][]).map(([t, label]) => (
               <button key={t} onClick={() => setTab(t)}
-                className={clsx('px-4 py-1.5 text-xs font-medium transition-colors',
+                className={clsx('px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0',
                   tab === t ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
                 {label}
               </button>
             ))}
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 shrink-0">
             <X className="h-5 w-5" />
           </button>
         </div>
