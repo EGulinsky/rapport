@@ -304,6 +304,12 @@ REVIEW_THRESHOLD = 0.20   # queue for manual review; below = discard
 
 # ── SyncedItem helpers ────────────────────────────────────────────────────────
 
+def load_synced_ids(db: Session, source: str) -> set[str]:
+    """Load all already-synced external IDs for a source into a set for O(1) lookups."""
+    rows = db.query(models.SyncedItem.external_id).filter_by(source=source).all()
+    return {r[0] for r in rows}
+
+
 def is_synced(db: Session, source: str, external_id: str) -> bool:
     return db.query(models.SyncedItem).filter_by(
         source=source, external_id=external_id

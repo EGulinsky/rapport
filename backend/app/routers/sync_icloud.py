@@ -30,7 +30,7 @@ from app.database import get_db, SessionLocal
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
 from app.routers.sync_common import (
-    is_synced, purge_source,
+    is_synced, load_synced_ids, purge_source,
     build_firm_index, build_contact_domain_index, find_hint_apps,
     process_item, strip_html,
     init_progress, update_progress, finish_progress,
@@ -218,12 +218,14 @@ async def _do_icloud_mail() -> dict:
         batch = ids[-100:]
         total = len(batch)
         update_progress("icloud_mail", 0, total, f"{total} Nachrichten gefunden")
+        synced_ids = load_synced_ids(db, "icloud_mail")
 
         for i, msg_id_bytes in enumerate(batch):
-            update_progress("icloud_mail", i, total, f"E-Mail {i + 1}/{total}")
+            if i % 10 == 0:
+                update_progress("icloud_mail", i, total, f"E-Mail {i + 1}/{total}")
             msg_id = msg_id_bytes.decode()
 
-            if is_synced(db, "icloud_mail", msg_id):
+            if msg_id in synced_ids:
                 skipped += 1
                 continue
 
@@ -491,6 +493,7 @@ async def _do_icloud_notes() -> dict:
 
         total = len(notes)
         update_progress("icloud_notes", 0, total, f"{total} Notizen gefunden")
+        synced_ids = load_synced_ids(db, "icloud_notes")
 
         # ── Phase 1: pre-filter (no AI) ────────────────────────────────────
         pending = []   # (note_key, raw, date_hint, hint_apps)
@@ -503,7 +506,7 @@ async def _do_icloud_notes() -> dict:
                 continue
 
             note_key = hashlib.md5(uid.encode()).hexdigest()[:16]
-            if is_synced(db, "icloud_notes", note_key):
+            if note_key in synced_ids:
                 skipped += 1
                 continue
 
@@ -769,9 +772,11 @@ async def _do_icloud_cal() -> dict:
 
         total = len(all_events)
         update_progress("icloud_cal", 0, total, f"{total} Termine gefunden")
+        synced_ids = load_synced_ids(db, "icloud_cal")
 
         for i, ev in enumerate(all_events):
-            update_progress("icloud_cal", i, total, f"Termin {i + 1}/{total}")
+            if i % 10 == 0:
+                update_progress("icloud_cal", i, total, f"Termin {i + 1}/{total}")
             try:
                 vevent = ev.vobject_instance.vevent
                 summary = str(getattr(vevent, "summary", None) or "")
@@ -780,14 +785,14 @@ async def _do_icloud_cal() -> dict:
             except Exception:
                 continue
 
+            if uid in synced_ids:
+                skipped += 1
+                continue
+
             combined_lower = (summary + " " + desc).lower()
             has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
             has_firm = any(ft in combined_lower for ft in firm_terms_lower)
             if not has_keyword and not has_firm:
-                skipped += 1
-                continue
-
-            if is_synced(db, "icloud_cal", uid):
                 skipped += 1
                 continue
 
@@ -903,9 +908,11 @@ async def _do_icloud_reminders() -> dict:
 
         total = len(all_todos)
         update_progress("icloud_reminders", 0, total, f"{total} Erinnerungen gefunden")
+        synced_ids = load_synced_ids(db, "icloud_todo")
 
         for i, todo in enumerate(all_todos):
-            update_progress("icloud_reminders", i, total, f"Erinnerung {i + 1}/{total}")
+            if i % 10 == 0:
+                update_progress("icloud_reminders", i, total, f"Erinnerung {i + 1}/{total}")
             try:
                 vtodo = todo.vobject_instance.vtodo
                 summary = str(getattr(vtodo, "summary", None) or "")
@@ -914,12 +921,12 @@ async def _do_icloud_reminders() -> dict:
             except Exception:
                 continue
 
-            combined_lower = (summary + " " + desc).lower()
-            if not any(ft in combined_lower for ft in firm_terms_lower):
+            if uid in synced_ids:
                 skipped += 1
                 continue
 
-            if is_synced(db, "icloud_todo", uid):
+            combined_lower = (summary + " " + desc).lower()
+            if not any(ft in combined_lower for ft in firm_terms_lower):
                 skipped += 1
                 continue
 

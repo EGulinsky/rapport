@@ -21,7 +21,7 @@ from app.database import get_db, SessionLocal
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
 from app.routers.sync_common import (
-    is_synced, mark_synced, purge_source,
+    is_synced, mark_synced, load_synced_ids, purge_source,
     strip_html, decode_b64,
     build_firm_index, build_contact_domain_index, find_hint_apps,
     process_item,
@@ -295,11 +295,13 @@ async def _do_gmail() -> dict:
 
         total = len(messages)
         update_progress("gmail", 0, total, f"{total} Nachrichten gefunden")
+        synced_ids = load_synced_ids(db, "gmail")
 
         for i, msg_ref in enumerate(messages):
-            update_progress("gmail", i, total, f"E-Mail {i + 1}/{total}")
+            if i % 10 == 0:
+                update_progress("gmail", i, total, f"E-Mail {i + 1}/{total}")
             msg_id = msg_ref["id"]
-            if is_synced(db, "gmail", msg_id):
+            if msg_id in synced_ids:
                 skipped += 1
                 continue
             try:
@@ -427,10 +429,17 @@ async def _do_gcal() -> dict:
 
         total = len(cal_events)
         update_progress("gcal", 0, total, f"{total} Termine gefunden")
+        synced_ids = load_synced_ids(db, "gcal")
 
         for i, ev in enumerate(cal_events):
-            update_progress("gcal", i, total, f"Termin {i + 1}/{total}")
+            if i % 10 == 0:
+                update_progress("gcal", i, total, f"Termin {i + 1}/{total}")
             ev_id   = ev.get("id", "")
+
+            if ev_id in synced_ids:
+                skipped += 1
+                continue
+
             summary = ev.get("summary", "") or ""
             desc    = ev.get("description", "") or ""
             combined_lower = (summary + " " + desc).lower()
@@ -438,10 +447,6 @@ async def _do_gcal() -> dict:
             has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
             has_firm    = any(ft in combined_lower for ft in firm_terms_lower)
             if not has_keyword and not has_firm:
-                skipped += 1
-                continue
-
-            if is_synced(db, "gcal", ev_id):
                 skipped += 1
                 continue
 
