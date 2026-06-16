@@ -272,53 +272,81 @@ async def _wait_for_2fa_code(timeout: float = 300.0) -> Optional[str]:
     return None
 
 
+def _is_checkpoint_url(url: str) -> bool:
+    return "checkpoint" in url or "challenge" in url or "uas/login" in url
+
+
 async def _handle_2fa_checkpoint(page) -> bool:
-    """Wait for user to submit a 2FA code, then fill it on the LinkedIn checkpoint page."""
+    """Wait for 2FA: either push-approval (auto page redirect) or manual code entry."""
     global _2fa_code_input
+    _2fa_code_input = None
     _state["status"] = "needs_2fa"
-    _state["step"] = "LinkedIn verlangt einen Bestätigungscode — Code aus E-Mail oder SMS eingeben"
+    _state["step"] = (
+        "LinkedIn verlangt Bestätigung — "
+        "App-Benachrichtigung auf dem Handy bestätigen ODER Code aus E-Mail/SMS eingeben"
+    )
 
-    code = await _wait_for_2fa_code(timeout=300)
-    if not code:
-        _state["status"] = "error"
-        _state["step"] = "2FA-Timeout — kein Code eingegeben (5 min)"
-        return False
+    import time
+    deadline = time.monotonic() + 300  # 5 min total
 
-    _state["step"] = "Anmelden: 2FA-Code eingeben…"
-    _state["status"] = "running"
+    while time.monotonic() < deadline:
+        # ── Option A: push-notification approved → page auto-redirected ──
+        current_url = page.url
+        if not _is_checkpoint_url(current_url):
+            _state["status"] = "running"
+            _state["step"] = "Anmelden: erfolgreich (App-Bestätigung erkannt)"
+            # Accept "Remember this device" if shown
+            try:
+                remember_loc = await _find_visible_locator(page, _REMEMBER_SELECTORS, timeout_total=2000)
+                if remember_loc:
+                    await remember_loc.click()
+            except Exception:
+                pass
+            return True
 
-    pin_loc = await _find_visible_locator(page, _PIN_SELECTORS, timeout_total=5000)
-    if pin_loc:
-        await pin_loc.fill(code)
-    else:
-        await page.keyboard.type(code)
+        # ── Option B: user typed a code in the app ──
+        if _2fa_code_input is not None:
+            code = _2fa_code_input
+            _2fa_code_input = None
+            _state["status"] = "running"
+            _state["step"] = "Anmelden: 2FA-Code eingeben…"
 
-    await page.keyboard.press("Enter")
+            pin_loc = await _find_visible_locator(page, _PIN_SELECTORS, timeout_total=5000)
+            if pin_loc:
+                await pin_loc.fill(code)
+            else:
+                await page.keyboard.type(code)
+            await page.keyboard.press("Enter")
 
-    _state["step"] = "Anmelden: warte auf Weiterleitung nach 2FA…"
-    try:
-        await page.wait_for_url(
-            re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"),
-            timeout=20000,
-        )
-    except Exception:
-        pass
+            _state["step"] = "Anmelden: warte auf Weiterleitung nach 2FA…"
+            try:
+                await page.wait_for_url(
+                    re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"),
+                    timeout=20000,
+                )
+            except Exception:
+                pass
 
-    if "checkpoint" in page.url or "challenge" in page.url or "uas/login" in page.url:
-        _state["status"] = "error"
-        _state["step"] = "2FA fehlgeschlagen — Code falsch oder abgelaufen?"
-        return False
+            if _is_checkpoint_url(page.url):
+                _state["status"] = "error"
+                _state["step"] = "2FA fehlgeschlagen — Code falsch oder abgelaufen?"
+                return False
 
-    # Try to accept "Remember this device" prompt
-    try:
-        remember_loc = await _find_visible_locator(page, _REMEMBER_SELECTORS, timeout_total=3000)
-        if remember_loc:
-            await remember_loc.click()
-    except Exception:
-        pass
+            try:
+                remember_loc = await _find_visible_locator(page, _REMEMBER_SELECTORS, timeout_total=2000)
+                if remember_loc:
+                    await remember_loc.click()
+            except Exception:
+                pass
 
-    _state["step"] = "Anmelden: erfolgreich (2FA bestätigt)"
-    return True
+            _state["step"] = "Anmelden: erfolgreich (Code bestätigt)"
+            return True
+
+        await asyncio.sleep(1)
+
+    _state["status"] = "error"
+    _state["step"] = "2FA-Timeout — keine Bestätigung erhalten (5 min)"
+    return False
 
 
 async def _login(page, email: str, password: str) -> bool:
