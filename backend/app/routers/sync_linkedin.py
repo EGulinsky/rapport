@@ -197,12 +197,16 @@ def _parse_date(text: str) -> Optional[str]:
 async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
-        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
+        # LinkedIn is a SPA — wait for the form to hydrate before filling
+        await page.wait_for_selector("#username", state="visible", timeout=45000)
         await page.fill("#username", email)
         await page.fill("#password", password)
-        await page.click('[data-litms-control-urn="login-submit"]')
+        # Try the standard submit button; fall back to form submit
+        submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').first
+        await submit.click()
         # Wait for either the feed or a verification/captcha page
-        await page.wait_for_url(re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items)"), timeout=15000)
+        await page.wait_for_url(re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"), timeout=20000)
         # If redirected to checkpoint, it's 2FA/verification
         if "checkpoint" in page.url or "challenge" in page.url:
             _state["status"] = "needs_login"
