@@ -255,9 +255,9 @@ async def _login(page, email: str, password: str) -> bool:
         else:
             await page.keyboard.press("Tab")
             await page.keyboard.type(password)
-        submit = page.locator('[data-litms-control-urn="login-submit"]:visible, button[type="submit"]:visible').first
+        # Submit via Enter (confirmed working; button selectors are unreliable across LI versions)
         _state["step"] = "Anmelden: Submit…"
-        await submit.click()
+        await page.keyboard.press("Enter")
         _state["step"] = "Anmelden: warte auf Weiterleitung…"
         await page.wait_for_url(
             re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"),
@@ -265,7 +265,7 @@ async def _login(page, email: str, password: str) -> bool:
         )
         if "checkpoint" in page.url or "challenge" in page.url:
             _state["status"] = "needs_login"
-            _state["step"] = "LinkedIn verlangt 2FA/Verification — bitte erneut anmelden"
+            _state["step"] = "LinkedIn verlangt 2FA — bitte einmalig manuell auf linkedin.com einloggen, dann Session zurücksetzen und erneut versuchen"
             return False
         _state["step"] = "Anmelden: erfolgreich"
         return True
