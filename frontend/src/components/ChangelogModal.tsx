@@ -8,10 +8,17 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.11',
+    date: '2026-06-16',
+    changes: [
+      'Fix: LinkedIn Scraper — neuer JS-basierter Ansatz für LinkedIn-Job-Extraktion (layout-stabil, Cookie-Consent wird automatisch weggedrückt)',
+    ],
+  },
+  {
     version: '2.0.10',
     date: '2026-06-16',
     changes: [
-      'Feature: LinkedIn 2FA inline — Bestätigungscode direkt im App eingeben, kein manueller Login mehr nötig',
+      'Feature: LinkedIn 2FA inline — App-Push-Notification oder Code aus E-Mail/SMS direkt im App eingeben',
     ],
   },
   {
