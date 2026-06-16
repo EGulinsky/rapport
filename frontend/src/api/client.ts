@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig } from '../types'
 
 const BASE = '/api'
 
@@ -121,6 +121,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+    getFiles: () => request<FilesConfig>('/settings/files'),
+    saveFiles: (data: Partial<FilesConfig>) => request<FilesConfig>('/settings/files', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  },
+
+  files: {
+    status: () => request<FilesConfig>('/sync/files/status'),
+    sync: () => request<SyncResult>('/sync/files', { method: 'POST' }),
+    reset: () => fetch(`${BASE}/sync/files/reset`, { method: 'POST' }),
+  },
+
+  schedule: {
+    status: () => request<{ interval_minutes: number; running_sources: string[] }>('/sync/schedule/status'),
   },
 
   sync: {

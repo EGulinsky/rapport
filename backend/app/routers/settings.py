@@ -105,6 +105,36 @@ def save_sync_settings(payload: dict, db: Session = Depends(get_db)):
     return get_sync_settings(db)
 
 
+@router.get("/files")
+def get_files_config(db: Session = Depends(get_db)):
+    cfg = db.query(models.FilesConfig).first()
+    if not cfg:
+        cfg = models.FilesConfig(enabled=True)
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+    return {
+        "folder_path": cfg.folder_path,
+        "enabled": cfg.enabled,
+        "last_sync": cfg.last_sync.isoformat() if cfg.last_sync else None,
+    }
+
+
+@router.post("/files")
+def save_files_config(payload: dict, db: Session = Depends(get_db)):
+    cfg = db.query(models.FilesConfig).first()
+    if not cfg:
+        cfg = models.FilesConfig()
+        db.add(cfg)
+    if "folder_path" in payload:
+        cfg.folder_path = payload["folder_path"] or None
+    if "enabled" in payload and isinstance(payload["enabled"], bool):
+        cfg.enabled = payload["enabled"]
+    db.commit()
+    db.refresh(cfg)
+    return get_files_config(db)
+
+
 @router.post("/ai/test")
 async def test_ai(payload: Optional[schemas.AiSettingsWrite] = None, db: Session = Depends(get_db)):
     # If form values are passed, test against them directly (without saving)

@@ -327,7 +327,7 @@ async def _do_gmail() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
             try:
-                ok = await process_item(db, "gmail", msg_id, raw, date_hint, hint_apps=hint_apps or None)
+                ok = await process_item(db, "gmail", msg_id, raw, date_hint, hint_apps=hint_apps)
             except AINotConfigured as e:
                 finish_progress("gmail")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -476,7 +476,7 @@ async def _do_gcal() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
             try:
-                ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps or None)
+                ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps)
             except AINotConfigured as e:
                 finish_progress("gcal")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}

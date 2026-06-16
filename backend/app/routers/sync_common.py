@@ -358,6 +358,36 @@ _GENERIC_EMAIL_DOMAINS = frozenset([
     "msn.com", "aol.com", "protonmail.com", "pm.me",
 ])
 
+# ── Deterministic event-type patterns (keyword matching, no AI) ───────────────
+
+_RE_REJECTION = re.compile(
+    r'\b(absage|abgelehnt|leider nicht|leider haben|bedauern|nicht berücksichtigt|'
+    r'nicht in betracht|nicht weiterverfolgen|anderweitig besetzt|anderen kandidaten|'
+    r'no longer|unfortunately|not moving forward|unsuccessful|regret to inform|'
+    r'not be moving|have decided not|we have filled|position has been filled)\b',
+    re.IGNORECASE,
+)
+_RE_INVITATION = re.compile(
+    r'\b(einladung|einladen|interview|vorstellungsgespräch|kennenlerngespräch|'
+    r'kennenlernen|probearbeitstag|assessment.?center|telefoninterview|'
+    r'invitation|schedule an interview|would like to meet|discuss your application|'
+    r'next round|nächste runde|telefonat vereinbaren|gespräch einladen|'
+    r'möchten sie einladen|freuen uns auf ein gespräch)\b',
+    re.IGNORECASE,
+)
+_RE_OFFER = re.compile(
+    r'\b(vertragsangebot|jobangebot|angebot erhalten|angebot unterbreiten|zusage|'
+    r'freuen uns ihnen anzubieten|pleased to offer|job offer|offer of employment|'
+    r'employment offer|offer letter|we would like to offer)\b',
+    re.IGNORECASE,
+)
+_RE_ACK = re.compile(
+    r'\b(bewerbung erhalten|eingang bestätigt|eingegangen|bewerbung eingegangen|'
+    r'received your application|thank you for applying|danke für ihre bewerbung|'
+    r'bestätigen den eingang|haben ihre bewerbung|bewerbung ist bei uns angekommen)\b',
+    re.IGNORECASE,
+)
+
 
 def term_variants(raw_term: str) -> list[str]:
     """Return the term plus shorter variants stripped of trailing corporate suffixes."""
@@ -460,6 +490,177 @@ def find_hint_apps(
     return hints
 
 
+# ── Deterministic classification helpers ─────────────────────────────────────
+
+def _classify_type_from_text(text: str) -> tuple[str, Optional[str]]:
+    """Returns (event_typ, suggested_main_status|None) using keyword patterns — no AI."""
+    if _RE_REJECTION.search(text):
+        return 'status', 'rejected'
+    if _RE_OFFER.search(text):
+        return 'status', 'negotiating'
+    if _RE_INVITATION.search(text):
+        return 'gespräch', None
+    if _RE_ACK.search(text):
+        return 'status', None
+    return 'notiz', None
+
+
+def _extract_title_from_raw(raw_text: str) -> str:
+    """Extract Betreff/Titel/Datei/Erinnerung header value from raw text."""
+    for line in raw_text.splitlines():
+        line = line.strip()
+        for prefix in ('Betreff:', 'Subject:', 'Titel:', 'Datei:', 'Erinnerung:'):
+            if line.startswith(prefix):
+                val = line.split(':', 1)[1].strip()
+                if val:
+                    return val[:200]
+    return ''
+
+
+def _extract_body_preview(raw_text: str, max_len: int = 300) -> Optional[str]:
+    """Return text after the first blank line (body after headers)."""
+    lines = raw_text.splitlines()
+    past_headers = False
+    body_lines: list[str] = []
+    for line in lines:
+        if not past_headers:
+            if not line.strip():
+                past_headers = True
+        else:
+            body_lines.append(line)
+    body = "\n".join(body_lines).strip()
+    return body[:max_len] if body else None
+
+
+def _classify_deterministic(
+    source: str,
+    raw_text: str,
+    date_hint: Optional[datetime],
+    hint_apps: list[dict],
+) -> Optional[dict]:
+    """
+    Classify an item without AI.
+
+    Returns a result dict {app_id, typ, titel, status, notiz} when confident,
+    or None when AI disambiguation is required (2+ hint_apps for a non-calendar source).
+    """
+    # Calendar events: always a gespräch, single app match required
+    if source in ('gcal', 'icloud_cal'):
+        if len(hint_apps) == 1:
+            return {
+                'app_id': hint_apps[0]['id'],
+                'typ': 'gespräch',
+                'titel': _extract_title_from_raw(raw_text) or 'Termin',
+                'status': None,
+                'notiz': None,
+            }
+        return None  # multiple matches → AI
+
+    # Local documents: firm from filename/folder name, always notiz
+    if source == 'local_files':
+        if len(hint_apps) == 1:
+            return {
+                'app_id': hint_apps[0]['id'],
+                'typ': 'notiz',
+                'titel': _extract_title_from_raw(raw_text) or 'Dokument',
+                'status': None,
+                'notiz': None,
+            }
+        return None  # multiple matches for a file → skip (AI not worth it)
+
+    # Single firm match: classify event type by keywords
+    if len(hint_apps) == 1:
+        typ, status = _classify_type_from_text(raw_text)
+        notiz: Optional[str] = None
+        if source == 'icloud_notes':
+            notiz = _extract_body_preview(raw_text, max_len=300)
+        return {
+            'app_id': hint_apps[0]['id'],
+            'typ': typ,
+            'titel': _extract_title_from_raw(raw_text) or source,
+            'status': status,
+            'notiz': notiz,
+        }
+
+    # Multiple firm matches → need AI to disambiguate
+    return None
+
+
+def _save_deterministic_event(
+    db: Session,
+    source: str,
+    external_id: str,
+    det: dict,
+    raw_text: str,
+    date_hint: Optional[datetime],
+) -> bool:
+    """Persist a deterministically classified event. Returns True if event was created."""
+    app = db.query(models.Application).get(det['app_id'])
+    if not app:
+        mark_synced(db, source, external_id)
+        return False
+
+    datum = date_hint.date() if date_hint else None
+
+    # Time prefix only for mail/note events, not calendar or files
+    time_pfx = ""
+    if source not in ('gcal', 'icloud_cal', 'local_files'):
+        time_pfx = _time_prefix(date_hint)
+
+    notiz = det.get('notiz')
+    if time_pfx and notiz:
+        notiz = f"{time_pfx.rstrip(chr(10))}\n{notiz}"
+    elif time_pfx:
+        notiz = time_pfx.rstrip('\n') or None
+
+    db.add(models.Event(
+        application_id=det['app_id'],
+        typ=det['typ'],
+        datum=datum,
+        titel=det['titel'] or source,
+        notiz=notiz or None,
+        source=source,
+    ))
+    mark_synced(db, source, external_id)
+
+    # Auto-create contact from sender (mail events only)
+    if source in ('gmail', 'icloud_mail'):
+        for line in raw_text.splitlines():
+            if line.startswith("Von: ") or line.startswith("From: "):
+                sender = line.split(": ", 1)[1].strip()
+                if sender:
+                    upsert_contact_from_sender(
+                        db, sender,
+                        app_id=det['app_id'],
+                        firma=app.firma,
+                        is_headhunter=app.is_headhunter,
+                        event_date=datum,
+                        body=raw_text,
+                    )
+                break
+
+    # Queue status change for user review (PendingMatch)
+    status = det.get('status')
+    if status and app.main_status != status:
+        exists = db.query(models.PendingMatch).filter_by(
+            source=source, external_id=f"{external_id}__status"
+        ).first()
+        if not exists:
+            db.add(models.PendingMatch(
+                source=source,
+                external_id=f"{external_id}__status",
+                confidence=80,
+                event_type="status_change",
+                datum=datum,
+                titel=f"Status: {app.main_status} → {status}",
+                suggested_app_id=det['app_id'],
+                suggested_main_status=status,
+                status_only=True,
+            ))
+
+    return True
+
+
 # ── Core item pipeline ────────────────────────────────────────────────────────
 
 def _map_event_type(et: str) -> str:
@@ -482,10 +683,22 @@ async def process_item(
     date_hint: Optional[datetime] = None,
     hint_apps: Optional[list[dict]] = None,
 ) -> bool:
-    """Run AI analysis and persist event or review queue entry. Returns True if event was created."""
+    """Classify and persist event. Uses deterministic rules first; AI only for ambiguous cases."""
     if is_synced(db, source, external_id):
         return False
 
+    # ── Deterministic fast path (no AI) ─────────────────────────────────────
+    if hint_apps is not None:
+        if not hint_apps:
+            # No firm match → irrelevant, skip without calling AI
+            mark_synced(db, source, external_id)
+            return False
+        det = _classify_deterministic(source, raw_text, date_hint, hint_apps)
+        if det is not None:
+            return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint)
+        # Multiple hint_apps → fall through to AI for disambiguation
+
+    # ── AI fallback (only for ambiguous multi-firm cases) ───────────────────
     # Send only active apps to AI to conserve tokens.
     # Rejected hint_apps are appended so they can still be matched (e.g. follow-up mails).
     active = db.query(models.Application).filter_by(abgesagt=False).all()

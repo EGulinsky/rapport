@@ -337,6 +337,28 @@ def _migrate_gespraeche_to_events():
     conn.close()
 
 
+def _migrate_sync_settings_files():
+    """Add files_enabled column to sync_settings table if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sync_settings'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(sync_settings)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "files_enabled" not in cols:
+        cur.execute("ALTER TABLE sync_settings ADD COLUMN files_enabled INTEGER NOT NULL DEFAULT 1")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_google_email():
     """Add gmail_email column to google_sync table if missing."""
     import sqlite3
@@ -365,6 +387,7 @@ def init_db():
     _migrate_icloud()
     _migrate_calls()
     _migrate_google_email()
+    _migrate_sync_settings_files()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
     Base.metadata.create_all(bind=engine)

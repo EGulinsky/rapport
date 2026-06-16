@@ -265,6 +265,14 @@ export interface SyncSettings {
   icloud_contacts_enabled: boolean
   icloud_calls_enabled: boolean
   linkedin_enabled: boolean
+  files_enabled: boolean
+}
+
+export interface FilesConfig {
+  folder_path?: string
+  enabled: boolean
+  last_sync?: string
+  bridge_reachable?: boolean
 }
 
 export interface CalendarEvent {

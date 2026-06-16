@@ -302,3 +302,15 @@ class SyncSettings(Base):
     icloud_contacts_enabled  = Column(Boolean, default=True, nullable=False)
     icloud_calls_enabled     = Column(Boolean, default=True, nullable=False)
     linkedin_enabled         = Column(Boolean, default=True, nullable=False)
+    files_enabled            = Column(Boolean, default=True, nullable=False)
+
+
+class FilesConfig(Base):
+    __tablename__ = "files_config"
+
+    id           = Column(Integer, primary_key=True)
+    folder_path  = Column(String, nullable=True)
+    enabled      = Column(Boolean, default=True, nullable=False)
+    last_sync    = Column(DateTime(timezone=True), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at   = Column(DateTime(timezone=True), onupdate=func.now())

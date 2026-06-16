@@ -8,6 +8,18 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.0',
+    date: '2026-06-16',
+    changes: [
+      'Neues Sync-System: Deterministische Klassifizierung ersetzt KI für ~90% der Fälle (Kalender, lokale Dateien, Einzel-Firmenzuordnung)',
+      'Hintergrund-Sync: Automatische Indizierung alle 20 Minuten via asyncio-Loop',
+      'Neue Quelle: Lokale Bewerbungsunterlagen (PDF, DOCX, TXT, MD) via files_bridge.py auf Port 9998',
+      'Einstellungen → Tab „Dokumente": Ordnerpfad konfigurieren, Bridge-Status, manueller Sync',
+      'Sync-Steuerung: Neuer Toggle „Lokale Dokumente" im Sync-Steuerungs-Panel',
+      'Leere Firmenzuordnung → sofortige KI-Umgehung statt unnötiger API-Calls',
+    ],
+  },
+  {
     version: '1.0.8',
     date: '2026-06-14',
     changes: [

@@ -40,6 +40,7 @@ const SOURCE_CONFIGS: { key: string; label: string }[] = [
   { key: 'icloud_notes',       label: 'iCloud Notizen' },
   { key: 'icloud_reminders',   label: 'iCloud Erinnerungen' },
   { key: 'icloud_calls',       label: 'Anrufliste' },
+  { key: 'local_files',        label: 'Dokumente' },
 ]
 
 export function SyncButton({ onSynced, onReviewOpen }: Props) {
@@ -103,15 +104,17 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
 
       // Load sync settings to skip disabled sources
       const syncCfg = await api.settings.getSync().catch(() => null)
+      const filesCfg = await api.settings.getFiles().catch(() => null)
       const googleOn  = syncCfg?.google_enabled  ?? true
       const icloudOn  = syncCfg?.icloud_enabled  ?? true
+      const filesOn   = (syncCfg?.files_enabled ?? true) && (filesCfg?.enabled ?? false) && !!(filesCfg?.folder_path)
 
       // Contacts first (fast, no AI) — calls matching depends on them being present
       if (icloudOn && (syncCfg?.icloud_contacts_enabled ?? true)) {
         await api.icloud.syncContacts().catch(() => null)
       }
 
-      // Fire all AI-based syncs as background tasks — they return immediately
+      // Fire all syncs as background tasks — they return immediately
       const FIRE_SOURCES = [
         { key: 'gmail',            enabled: googleOn && (syncCfg?.gmail_enabled            ?? true), fn: () => api.sync.syncGmail() },
         { key: 'gcal',             enabled: googleOn && (syncCfg?.gcal_enabled             ?? true), fn: () => api.sync.syncCalendar() },
@@ -120,6 +123,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
         { key: 'icloud_notes',     enabled: icloudOn && (syncCfg?.icloud_notes_enabled     ?? true), fn: () => api.icloud.syncNotes() },
         { key: 'icloud_reminders', enabled: icloudOn && (syncCfg?.icloud_reminders_enabled ?? true), fn: () => api.icloud.syncReminders() },
         { key: 'icloud_calls',     enabled: icloudOn && (syncCfg?.icloud_calls_enabled     ?? true), fn: () => api.icloud.syncCalls() },
+        { key: 'local_files',      enabled: filesOn,                                                  fn: () => api.files.sync() },
       ].filter(s => s.enabled)
 
       const startedSources = new Set<string>()

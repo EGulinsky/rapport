@@ -250,7 +250,7 @@ async def _do_icloud_mail() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
             try:
-                ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps or None)
+                ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps)
             except AINotConfigured as e:
                 finish_progress("icloud_mail")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -405,7 +405,7 @@ async def _sync_notes_with_api(api: Any, cfg: models.ICloudSync, db: Session) ->
         hint_apps = find_hint_apps(raw, term_to_apps)
 
         try:
-            ok = await process_item(db, "icloud_notes", note_key, raw, None, hint_apps=hint_apps or None)
+            ok = await process_item(db, "icloud_notes", note_key, raw, None, hint_apps=hint_apps)
         except AINotConfigured as e:
             finish_progress("icloud_notes")
             raise HTTPException(400, str(e))
@@ -806,7 +806,7 @@ async def _do_icloud_cal() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps)
 
             try:
-                ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps or None)
+                ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps)
             except AINotConfigured as e:
                 finish_progress("icloud_cal")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -939,7 +939,7 @@ async def _do_icloud_reminders() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps)
 
             try:
-                ok = await process_item(db, "icloud_todo", uid, raw, date_hint, hint_apps=hint_apps or None)
+                ok = await process_item(db, "icloud_todo", uid, raw, date_hint, hint_apps=hint_apps)
             except AINotConfigured as e:
                 finish_progress("icloud_reminders")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
