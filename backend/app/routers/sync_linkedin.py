@@ -198,16 +198,29 @@ async def _login(page, email: str, password: str) -> bool:
     """Attempt email/password login. Returns True if successful."""
     try:
         await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
-        # LinkedIn is a SPA — wait for the form to hydrate before filling
-        await page.wait_for_selector("#username", state="visible", timeout=45000)
+        await asyncio.sleep(2)  # let JS settle
+
+        # Check what page actually loaded (bot detection / CAPTCHA / redirect)
+        current_url = page.url
+        title = await page.title()
+
+        username_visible = await page.is_visible("#username")
+        if not username_visible:
+            _state["errors"].append(
+                f"Login-Seite nicht geladen — URL: {current_url} | Titel: {title}"
+            )
+            _state["status"] = "needs_login"
+            _state["step"] = "LinkedIn zeigt keine Login-Maske (Bot-Detection?) — Session-Cookies zurücksetzen und erneut versuchen"
+            return False
+
         await page.fill("#username", email)
         await page.fill("#password", password)
-        # Try the standard submit button; fall back to form submit
         submit = page.locator('[data-litms-control-urn="login-submit"], button[type="submit"]').first
         await submit.click()
-        # Wait for either the feed or a verification/captcha page
-        await page.wait_for_url(re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"), timeout=20000)
-        # If redirected to checkpoint, it's 2FA/verification
+        await page.wait_for_url(
+            re.compile(r"linkedin\.com/(feed|checkpoint|jobs|my-items|uas/login)"),
+            timeout=20000,
+        )
         if "checkpoint" in page.url or "challenge" in page.url:
             _state["status"] = "needs_login"
             _state["step"] = "LinkedIn verlangt 2FA/Verification — bitte erneut anmelden"
@@ -391,16 +404,28 @@ async def _async_sync(cfg_id: int):
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--window-size=1280,800",
+                ],
             )
             context = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
+                    "Chrome/124.0.0.0 Safari/537.36"
                 ),
                 viewport={"width": 1280, "height": 800},
                 locale="de-DE",
+                extra_http_headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"},
+            )
+            # Remove webdriver fingerprint
+            await context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
 
             # Restore saved session
