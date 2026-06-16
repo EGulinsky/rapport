@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.17',
+    date: '2026-06-16',
+    changes: [
+      'Fix: LinkedIn Sync — Archived-Einträge wurden durch geteiltes seen_ids-Set mit früheren Kategorien überschrieben; jetzt pro Kategorie isoliert (ARCHIVED schlägt APPLIED korrekt)',
+    ],
+  },
+  {
     version: '2.0.16',
     date: '2026-06-16',
     changes: [
