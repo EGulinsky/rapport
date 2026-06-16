@@ -299,7 +299,7 @@ export interface LinkedInSyncLogEntry {
 }
 
 export interface LinkedInSyncStatus {
-  status: 'idle' | 'running' | 'done' | 'error' | 'needs_login'
+  status: 'idle' | 'running' | 'done' | 'error' | 'needs_login' | 'needs_2fa'
   step: string
   processed: number
   created: number

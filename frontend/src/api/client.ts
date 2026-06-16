@@ -209,6 +209,7 @@ export const api = {
     run: () => request('/sync/linkedin/run', { method: 'POST' }),
     status: () => request<LinkedInSyncStatus>('/sync/linkedin/status'),
     clearSession: () => request('/sync/linkedin/clear-session', { method: 'POST' }),
+    submitTwoFa: (code: string) => request('/sync/linkedin/submit-2fa', { method: 'POST', body: JSON.stringify({ code }) }),
   },
 
   calendar: {

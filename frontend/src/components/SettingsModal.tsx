@@ -1048,6 +1048,8 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
   const [saving, setSaving] = useState(false)
   const [syncState, setSyncState] = useState<LinkedInSyncStatus | null>(null)
   const [liError, setLiError] = useState<string | null>(null)
+  const [twoFaCode, setTwoFaCode] = useState('')
+  const [submitting2fa, setSubmitting2fa] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function stopPolling() {
@@ -1104,10 +1106,21 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
     return { text: 'Unverändert', cls: 'bg-gray-50 text-gray-500' }
   }
 
+  async function handleSubmit2fa() {
+    if (!twoFaCode.trim()) return
+    setSubmitting2fa(true); setLiError(null)
+    try {
+      await api.linkedin.submitTwoFa(twoFaCode.trim())
+      setTwoFaCode('')
+    } catch (e: unknown) { setLiError(e instanceof Error ? e.message : String(e)) }
+    finally { setSubmitting2fa(false) }
+  }
+
   const isRunning = syncState?.status === 'running'
   const isDone = syncState?.status === 'done'
   const isError = syncState?.status === 'error'
   const needsLogin = syncState?.status === 'needs_login'
+  const needs2fa = syncState?.status === 'needs_2fa'
 
   return (
     <div className="space-y-4">
@@ -1179,10 +1192,31 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
       {/* Sync status */}
       {syncState && (
         <div className="space-y-3 border border-gray-100 rounded-lg p-3">
-          {isRunning && (
+          {(isRunning || needs2fa) && (
             <div className="flex items-center gap-2 text-xs text-gray-600">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0077B5]" />
               <span>{syncState.step || 'Läuft…'}</span>
+            </div>
+          )}
+          {needs2fa && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800">LinkedIn Bestätigungscode</p>
+              <p className="text-xs text-amber-700">Prüfe deine E-Mail oder SMS von LinkedIn und gib den 6-stelligen Code ein.</p>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={twoFaCode}
+                  onChange={e => setTwoFaCode(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit2fa()}
+                  autoFocus
+                />
+                <button onClick={handleSubmit2fa} disabled={submitting2fa || twoFaCode.length < 6}
+                  className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                  {submitting2fa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Bestätigen'}
+                </button>
+              </div>
             </div>
           )}
           {isDone && (
