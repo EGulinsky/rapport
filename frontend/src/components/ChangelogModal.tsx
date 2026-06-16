@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.5',
+    date: '2026-06-16',
+    changes: [
+      'Perf: Playwright-Chromium in separates Docker-Base-Image ausgelagert — wird nur neu gebaut wenn sich Playwright-Version oder Dockerfile.playwright-base ändert',
+      'Perf: Normale Deploys überspringen Chromium-Download komplett (~10 min gespart)',
+    ],
+  },
+  {
     version: '2.0.4',
     date: '2026-06-16',
     changes: [

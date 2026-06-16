@@ -105,6 +105,23 @@ jobs:
       - name: Pull latest code
         run: git -C /Users/eugengulinsky/code/jobtracker pull
 
+      - name: Rebuild playwright base image if needed
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          REPO=/Users/eugengulinsky/code/jobtracker
+          # Hash of files that affect the base image
+          CURRENT_HASH=$(cat "$REPO/backend/Dockerfile.playwright-base" "$REPO/backend/requirements.txt" | sha256sum | cut -d' ' -f1)
+          HASH_FILE="$REPO/.playwright-base-hash"
+          STORED_HASH=$(cat "$HASH_FILE" 2>/dev/null || echo "")
+          if [ "$CURRENT_HASH" != "$STORED_HASH" ] || ! docker image inspect jobtracker-playwright-base:latest >/dev/null 2>&1; then
+            echo "Rebuilding playwright base image..."
+            docker build -f "$REPO/backend/Dockerfile.playwright-base" -t jobtracker-playwright-base:latest "$REPO/backend/"
+            echo "$CURRENT_HASH" > "$HASH_FILE"
+          else
+            echo "Playwright base image up to date, skipping rebuild."
+          fi
+
       - name: Rebuild and restart containers
         env:
           DOCKER_BUILDKIT: "1"
