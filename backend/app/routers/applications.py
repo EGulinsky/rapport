@@ -15,6 +15,60 @@ def _status_label(main: str, sub: str | None) -> str:
         label += f" – {SUB_STATUS_LABELS.get(sub, sub)}"
     return label
 
+
+def _compute_naechster_schritt(
+    app,
+    next_interview: Optional[date],
+    last_interview: Optional[date],
+    today: date,
+) -> str:
+    status = app.main_status or ""
+
+    if app.abgesagt or status == "rejected":
+        return ""
+
+    if next_interview:
+        delta = (next_interview - today).days
+        when = next_interview.strftime("%d.%m.%Y")
+        if delta == 0:
+            return f"Gespräch heute ({when})"
+        if delta == 1:
+            return f"Gespräch morgen ({when})"
+        return f"Gespräch am {when} (in {delta} Tagen)"
+
+    if status == "signed":
+        return "Onboarding vorbereiten"
+
+    if status == "negotiating":
+        return "Vertragsdetails klären"
+
+    if last_interview:
+        days = (today - last_interview).days
+        if days <= 7:
+            return "Warte auf Feedback"
+        if days <= 21:
+            return f"Feedback ausstehend — evtl. nachfassen ({days} Tage)"
+        return f"Kein Feedback seit {days} Tagen — evtl. Ghosting"
+
+    if status in ("hr", "fb"):
+        return "Terminvereinbarung ausstehend"
+
+    if status == "waiting":
+        return "Warte auf Rückmeldung"
+
+    if status == "applied":
+        days_since = (today - app.datum_bewerbung).days if app.datum_bewerbung else 0
+        if days_since < 14:
+            return "Warte auf Einladung"
+        if days_since < 30:
+            return f"Evtl. nachfassen ({days_since} Tage ohne Reaktion)"
+        return f"Keine Reaktion seit {days_since} Tagen"
+
+    if status == "prospecting":
+        return "Bewerbung vorbereiten"
+
+    return ""
+
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 
@@ -58,19 +112,50 @@ def list_applications(
 
     if apps:
         today = date.today()
+        app_ids = [a.id for a in apps]
+
         max_event_dates = dict(
             db.query(models.Event.application_id, func.max(models.Event.datum))
             .filter(
-                models.Event.application_id.in_([a.id for a in apps]),
+                models.Event.application_id.in_(app_ids),
                 models.Event.datum <= today,
             )
             .group_by(models.Event.application_id)
             .all()
         )
+
+        next_interviews = dict(
+            db.query(models.Event.application_id, func.min(models.Event.datum))
+            .filter(
+                models.Event.application_id.in_(app_ids),
+                models.Event.typ == "gespräch",
+                models.Event.datum > today,
+            )
+            .group_by(models.Event.application_id)
+            .all()
+        )
+
+        last_interviews = dict(
+            db.query(models.Event.application_id, func.max(models.Event.datum))
+            .filter(
+                models.Event.application_id.in_(app_ids),
+                models.Event.typ == "gespräch",
+                models.Event.datum <= today,
+            )
+            .group_by(models.Event.application_id)
+            .all()
+        )
+
         for app in apps:
             md = max_event_dates.get(app.id)
             if md and (app.letztes_update is None or md > app.letztes_update):
                 app.letztes_update = md
+            app.naechster_schritt = _compute_naechster_schritt(
+                app,
+                next_interviews.get(app.id),
+                last_interviews.get(app.id),
+                today,
+            )
 
     return apps
 

@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.14',
+    date: '2026-06-16',
+    changes: [
+      'Feature: Nächster Schritt — intelligentes berechnetes Feld in Tabelle und Kanban (zukünftige Termine, Feedback-Status, Ghosting-Warnung, Stage-basierte Empfehlung)',
+    ],
+  },
+  {
     version: '2.0.13',
     date: '2026-06-16',
     changes: [
