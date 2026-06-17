@@ -8,6 +8,24 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.24',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper — Firmenname zeigte ", Verified" wenn Badge-Text nach Normalisierung leer wurde (ln_norm-Filter ergänzt)',
+      'Fix: LinkedIn-Scraper — Scroll trifft jetzt die interne List-Div statt window (LinkedIn lazy-lädt über Container-scrollTop)',
+      'Fix: Debug-Excel — Raw-Context-Spalte war leer (_raw_context fehlte im raw-Dict)',
+    ],
+  },
+  {
+    version: '2.0.23',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper — Set-basiertes Stale-Tracking (all_dom_ids) ersetzt dom_count; funktioniert auch bei Virtual Scrolling',
+      'Fix: Datumsextraktion — JS-Extractor ohne \\n-Bedingung, aria-label-Fallback, Raw-Context als letzter Fallback',
+      'Debug: Raw-Context-Spalte im Debug-Excel zeigt was der Scraper aus dem DOM liest',
+    ],
+  },
+  {
     version: '2.0.22',
     date: '2026-06-17',
     changes: [
