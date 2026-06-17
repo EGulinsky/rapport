@@ -1152,7 +1152,6 @@ def _make_live_candidate(source: str, external_id: str, datum, titel: str, extra
 def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
     """Search Gmail directly for q (Pool 3)."""
     from app import models as _m
-    from app.routers.sync_common import load_synced_ids
     from app.routers.sync_google import _refresh_if_needed
     from googleapiclient.discovery import build
 
@@ -1162,14 +1161,11 @@ def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
 
     creds = _refresh_if_needed(cfg, db)
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    synced_ids = load_synced_ids(db, "gmail")
 
     resp = service.users().messages().list(userId="me", q=q, maxResults=25).execute()
     out = []
     for msg_ref in resp.get("messages", []):
         msg_id = msg_ref["id"]
-        if msg_id in synced_ids:
-            continue
         existing = db.query(_m.Event).filter(
             _m.Event.external_id == msg_id, _m.Event.application_id == app_id
         ).first()
@@ -1203,7 +1199,6 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
     """Search Google Calendar for q using the API full-text search (Pool 3)."""
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
     from app import models as _m
-    from app.routers.sync_common import load_synced_ids
     from app.routers.sync_google import _refresh_if_needed
     from googleapiclient.discovery import build
 
@@ -1211,7 +1206,6 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
     if not cfg or not cfg.refresh_token_enc:
         return []
 
-    synced_ids = load_synced_ids(db, "gcal")
     creds = _refresh_if_needed(cfg, db)
     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
@@ -1241,8 +1235,6 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
 
         for ev in resp.get("items", []):
             ev_id = ev.get("id", "")
-            if ev_id in synced_ids:
-                continue
             existing = db.query(_m.Event).filter(
                 _m.Event.external_id == ev_id, _m.Event.application_id == app_id
             ).first()
@@ -1271,14 +1263,12 @@ def _icloud_mail_live_candidates(q: str, app_id: int, seen_external: set, db) ->
     """Search iCloud Mail via IMAP for q (Pool 3)."""
     import email as _email_lib
     from app import models as _m
-    from app.routers.sync_common import load_synced_ids
     from app.routers.sync_icloud import _imap_connect
 
     cfg = db.query(_m.ICloudSync).first()
     if not cfg or not cfg.app_password_enc:
         return []
 
-    synced_ids = load_synced_ids(db, "icloud_mail")
     out = []
     imap = None
     try:
@@ -1293,8 +1283,6 @@ def _icloud_mail_live_candidates(q: str, app_id: int, seen_external: set, db) ->
                 ids_set.update(part.split())
         for msg_id_bytes in list(ids_set)[:25]:
             msg_id = msg_id_bytes.decode()
-            if msg_id in synced_ids:
-                continue
             existing = db.query(_m.Event).filter(
                 _m.Event.external_id == msg_id, _m.Event.application_id == app_id
             ).first()
@@ -1385,13 +1373,11 @@ def _icloud_notes_live_candidates(q: str, app_id: int, seen_external: set, db) -
     """Search iCloud Notes via pyicloud for q (Pool 3)."""
     from app import models as _m
     from app.routers.sync_icloud import _get_pyicloud_api
-    from app.routers.sync_common import load_synced_ids
 
     cfg = db.query(_m.ICloudSync).first()
     if not cfg or not cfg.web_password_enc:
         return []
 
-    synced_ids = load_synced_ids(db, "icloud_notes")
     q_lower = q.lower()
     out = []
     try:
@@ -1412,8 +1398,6 @@ def _icloud_notes_live_candidates(q: str, app_id: int, seen_external: set, db) -
             if q_lower not in title.lower() and q_lower not in body.lower():
                 continue
             note_id = str(getattr(note, 'id', None) or note.get('id', '') if isinstance(note, dict) else id(note))
-            if note_id in synced_ids:
-                continue
             c = _make_live_candidate("icloud_notes", note_id, None, title or "(ohne Titel)", body[:100], seen_external)
             if c:
                 out.append(c)
