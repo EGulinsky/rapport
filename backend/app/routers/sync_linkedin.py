@@ -182,6 +182,18 @@ def debug_excel():
 
     ws.freeze_panes = "A2"
 
+    # ── Sheet 2: Kategorien-Übersicht ────────────────────────────────────────
+    ws2 = wb.create_sheet("Kategorien")
+    ws2.append(["Kategorie (LI)", "Label", "Gefunden"])
+    for cell in ws2[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+    for cat in (_state.get("category_counts") or []):
+        ws2.append([cat.get("card_type", ""), cat.get("label", ""), cat.get("count", 0)])
+    ws2.column_dimensions["A"].width = 18
+    ws2.column_dimensions["B"].width = 18
+    ws2.column_dimensions["C"].width = 12
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -771,12 +783,18 @@ async def _async_sync(cfg_id: int):
             # but shared job IDs across categories ARE intentional: ARCHIVED must win
             # over APPLIED even if the same job ID appeared earlier.
             all_jobs: list[dict] = []
+            category_counts: list[dict] = []
             for card_type, label, default_status in CATEGORIES:
                 _state["step"] = f"Lade Kategorie: {label}…"
                 cat_jobs = await _scrape_category(page, card_type, default_status, set())
+                for j in cat_jobs:
+                    j["_card_type"] = card_type
+                    j["_label"] = label
                 all_jobs.extend(cat_jobs)
+                category_counts.append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
                 _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs)})"
 
+            _state["category_counts"] = category_counts
             await browser.close()
 
         if not all_jobs and _state["status"] != "needs_login":
@@ -796,7 +814,7 @@ async def _async_sync(cfg_id: int):
                 "firma_li":       job.get("company", ""),
                 "rolle_li":       job.get("title", ""),
                 "datum_li":       job.get("applied_date", ""),
-                "kategorie_li":   job.get("default_status", ""),
+                "kategorie_li":   job.get("_label") or job.get("default_status", ""),
                 "status_hint_li": str(job.get("status_hint") or ""),
             }
             try:
