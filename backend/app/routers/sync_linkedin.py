@@ -801,8 +801,6 @@ async def _async_sync(cfg_id: int):
             }
             try:
                 app, was_created = _find_or_create_application(db, job)
-                company = job.get("company", "?")
-                role = job.get("title", "?")
                 if was_created:
                     created += 1
                     action_log.append({**raw, "aktion": "neu", "status_db": app.main_status})
