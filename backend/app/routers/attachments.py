@@ -8,7 +8,6 @@ from __future__ import annotations
 import hashlib
 import mimetypes
 import os
-import shutil
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile

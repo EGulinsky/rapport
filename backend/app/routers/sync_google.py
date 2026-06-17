@@ -545,7 +545,6 @@ async def _do_gcal() -> dict:
 
         # Remove timeline events whose Google Calendar entries no longer exist within the sync window
         if uid_set:
-            from datetime import date as _date
             window_start = (now - timedelta(days=180)).date()
             window_end   = (now + timedelta(days=90)).date()
             orphaned = (
