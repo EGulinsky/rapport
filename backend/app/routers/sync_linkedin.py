@@ -685,20 +685,31 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             else:
                 stale_rounds = 0
 
-            # Scroll the job list container (LinkedIn uses an inner scrollable div,
-            # not window scroll, for lazy-loading more cards)
-            await page.evaluate("""
-                const container = document.querySelector(
-                    '.jobs-search-results-list, .job-card-list, [class*="job-card-list"], ' +
-                    '[class*="jobs-search-results"], ul[class*="scaffold-layout__list"], ' +
-                    'main section ul, .scaffold-layout__list'
-                );
-                if (container) {
-                    container.scrollTop = container.scrollHeight;
-                } else {
-                    window.scrollTo(0, document.body.scrollHeight);
+            # Scroll last job card into view — works regardless of which container
+            # is scrollable (My Jobs page uses different CSS than job search).
+            # Falls back to mouse wheel + window scroll if no cards found.
+            scrolled = await page.evaluate("""
+                () => {
+                    const links = document.querySelectorAll('a[href*="/jobs/view/"]');
+                    if (links.length > 0) {
+                        links[links.length - 1].scrollIntoView({behavior: 'instant', block: 'end'});
+                        return true;
+                    }
+                    // fallback: scroll every overflow:auto/scroll element
+                    let scrolled = false;
+                    document.querySelectorAll('*').forEach(el => {
+                        const s = getComputedStyle(el);
+                        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 50) {
+                            el.scrollTop = el.scrollHeight;
+                            scrolled = true;
+                        }
+                    });
+                    if (!scrolled) window.scrollTo(0, document.body.scrollHeight);
+                    return scrolled;
                 }
             """)
+            # Also send PageDown key for cases where scroll events are needed
+            await page.keyboard.press("End")
             await asyncio.sleep(2.5)
 
     return jobs

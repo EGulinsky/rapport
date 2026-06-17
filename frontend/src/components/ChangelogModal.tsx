@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.25',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper — Scroll nutzt jetzt scrollIntoView auf letztem Job-Card + End-Taste; funktioniert auf "My Jobs"-Seite unabhängig vom Container-Layout',
+    ],
+  },
+  {
     version: '2.0.24',
     date: '2026-06-17',
     changes: [
