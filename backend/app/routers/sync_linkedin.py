@@ -846,9 +846,19 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
 
 def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool]:
     """Match job to existing application or create new. Returns (app, created)."""
+    li_job_id = job.get("id", "")
+
+    # 1. Exact match by LinkedIn job ID (prevents duplicates across syncs)
+    if li_job_id:
+        app = db.query(models.Application).filter(
+            models.Application.linkedin_job_id == li_job_id
+        ).first()
+        if app:
+            return app, False
+
+    # 2. Fuzzy match by company + role for jobs without a stored ID yet
     company_lower = job["company"].lower()
     role_lower = job["title"].lower()
-
     apps = db.query(models.Application).all()
     for app in apps:
         firma_lower = (app.firma or "").lower()
@@ -862,9 +872,12 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
             or (app.rolle or "").lower() in role_lower
         )
         if company_match and role_match:
+            # Backfill the job ID so future syncs use the fast path
+            if li_job_id and not app.linkedin_job_id:
+                app.linkedin_job_id = li_job_id
             return app, False
 
-    # Determine status for new application
+    # 3. Create new application
     initial_status = job.get("default_status", "applied")
     if job.get("status_hint"):
         initial_status = job["status_hint"][0]
@@ -889,6 +902,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         quelle="LinkedIn",
         main_status=initial_status,
         abgesagt=(initial_status == "rejected"),
+        linkedin_job_id=li_job_id or None,
     )
     db.add(new_app)
     db.flush()

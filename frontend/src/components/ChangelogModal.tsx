@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.40',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Sync legt keine Duplikate mehr an — jede Bewerbung bekommt beim ersten Sync ihre LinkedIn-Job-ID gespeichert; alle folgenden Syncs matchen primär danach (kein Fuzzy-String-Vergleich mehr nötig)',
+    ],
+  },
+  {
     version: '2.0.39',
     date: '2026-06-17',
     changes: [
