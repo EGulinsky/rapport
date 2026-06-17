@@ -503,27 +503,48 @@ _CONSENT_SELECTORS = [
 
 _EXTRACT_JOBS_JS = """
 () => {
-    // LinkedIn uses /jobs/view/ for standard job cards, but Interview-tab cards
-    // may use /jobs/collections/ or other paths. We match any LinkedIn jobs URL
-    // that contains a numeric job ID, then de-duplicate by href.
-    const allLinks = Array.from(document.querySelectorAll(
-        'a[href*="/jobs/view/"], a[href*="/jobs/collections/"], a[href*="linkedin.com/jobs/"]'
-    )).filter(a => {
+    // Strategy 1: find job cards via any link that contains a numeric LinkedIn job ID.
+    // Covers /jobs/view/, /jobs/collections/, and Interview-tab URLs.
+    const jobIdRe = /\\/(?:view|collections|search|detail)\\/(\\d{6,})/;
+    const allLinks = Array.from(document.querySelectorAll('a[href]')).filter(a => {
         const txt = (a.innerText || '').trim();
-        return txt.length > 5 && /\\/jobs\\/.*\\/(\\d{6,})/.test(a.href || '');
+        return txt.length > 5 && jobIdRe.test(a.href || '');
     });
 
-    // De-duplicate by href to avoid counting the same card twice
-    const seen = new Set();
+    // Strategy 2: also scan cards by data-job-id / data-entity-urn attributes
+    // (used in some LinkedIn My Jobs views where the title isn't a direct href).
+    const cardEls = Array.from(document.querySelectorAll('[data-job-id], [data-entity-urn*="jobPosting"]'));
+    for (const card of cardEls) {
+        let jobId2 = card.getAttribute('data-job-id') || '';
+        if (!jobId2) {
+            const urn = card.getAttribute('data-entity-urn') || '';
+            const um = urn.match(/:(\\d{6,})$/);
+            if (um) jobId2 = um[1];
+        }
+        if (!jobId2) continue;
+        // Find the title link inside the card
+        const titleLink = card.querySelector('a[href]');
+        if (titleLink && !(titleLink.href || '').includes(jobId2)) {
+            // Only add if not already covered by Strategy 1
+            if (!(titleLink.href || '').includes('/jobs/')) {
+                allLinks.push(titleLink);
+            }
+        }
+    }
+
+    // De-duplicate by extracted job ID
+    const seenIds = new Set();
     const titleLinks = allLinks.filter(a => {
-        if (seen.has(a.href)) return false;
-        seen.add(a.href);
+        const m = (a.href || '').match(jobIdRe);
+        const id = m ? m[1] : '';
+        if (!id || seenIds.has(id)) return false;
+        seenIds.add(id);
         return true;
     });
 
     return titleLinks.map(link => {
         const href = link.href || '';
-        const m = href.match(/\\/jobs\\/.*\\/(\\d{6,})/);
+        const m = href.match(jobIdRe);
         const jobId = m ? m[1] : '';
         const title = (link.innerText || '').trim();
 
@@ -596,7 +617,8 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     # domcontentloaded; without this wait only the first card may be in the DOM.
     try:
         await page.wait_for_selector(
-            'a[href*="/jobs/view/"], a[href*="/jobs/collections/"]', timeout=10000
+            'a[href*="/jobs/view/"], a[href*="/jobs/collections/"], [data-job-id]',
+            timeout=10000,
         )
     except Exception:
         pass
@@ -706,28 +728,38 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         clicked_next = False
         if pages_navigated >= max_pages - 1:
             break  # already scraped max_pages pages, done
-        next_selectors = [
-            "button.artdeco-pagination__button--next",
-            "button[aria-label='Next']",
-            "button[aria-label='Nächste']",
-            "button[aria-label*='next page']",
-            "button[aria-label*='nächste Seite']",
-        ]
-        for sel in next_selectors:
-            try:
-                loc = page.locator(sel)
-                if await loc.count() > 0:
-                    btn = loc.first
-                    if await btn.is_visible() and await btn.is_enabled():
-                        _state["log"].append(f"[{card_type}] clicking pagination Next ({sel}) page={pages_navigated+2}")
-                        await btn.click()
-                        await asyncio.sleep(3)
-                        pages_navigated += 1
-                        clicked_next = True
-                        stale_rounds = 0
-                        break
-            except Exception:
-                pass
+        # Use JS to find and click the Next button — more robust than CSS selectors
+        # because LinkedIn's aria-labels change with locale and version.
+        next_result = await page.evaluate("""
+            () => {
+                // artdeco pagination next button (class-based)
+                let btn = document.querySelector('.artdeco-pagination__button--next:not([disabled])');
+                if (btn && btn.offsetParent !== null) { btn.click(); return 'artdeco-class'; }
+
+                // Any button/a whose text or aria-label contains next/nächste/weiter
+                const nextWords = ['next', 'nächste', 'weiter', 'następna', 'suivant'];
+                for (const el of document.querySelectorAll('button, a[role="button"]')) {
+                    if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+                    const txt = (el.innerText || '').toLowerCase().trim();
+                    const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                    if (nextWords.some(w => txt === w || aria.includes(w))) {
+                        el.click(); return 'text:' + (txt || aria);
+                    }
+                }
+
+                // data-test attribute LinkedIn sometimes uses
+                const testBtn = document.querySelector('[data-test-pagination-page-btn="next"] button, [data-test-pagination-page-btn="next"]');
+                if (testBtn && !testBtn.disabled) { testBtn.click(); return 'data-test'; }
+
+                return null;
+            }
+        """)
+        if next_result:
+            _state["log"].append(f"[{card_type}] pagination Next clicked via JS ({next_result}), page={pages_navigated+2}")
+            await asyncio.sleep(3)
+            pages_navigated += 1
+            clicked_next = True
+            stale_rounds = 0
 
         if clicked_next:
             continue

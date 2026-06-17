@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.33',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn Pagination Next-Button per JavaScript gesucht (nicht CSS-Selektor) — funktioniert unabhängig von Locale und LinkedIn-Version',
+      'Fix: Job-Extraktion erkennt jetzt auch /jobs/collections/, /jobs/detail/ und data-job-id-Attribute — deckt Interview-Tab-Links ab',
+    ],
+  },
+  {
     version: '2.0.32',
     date: '2026-06-17',
     changes: [
