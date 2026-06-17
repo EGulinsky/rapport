@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import type { PendingMatch, Application } from '../types'
 import { MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS } from '../types'
-import { Check, X, ChevronDown, Mail, Calendar, FileText, ArrowRight } from 'lucide-react'
+import { Check, X, ChevronDown, Mail, Calendar, FileText, ArrowRight, Linkedin } from 'lucide-react'
 import clsx from 'clsx'
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -11,6 +11,7 @@ const SOURCE_LABEL: Record<string, string> = {
   icloud_cal: 'iCloud Kalender',
   icloud_notes: 'iCloud Notizen',
   icloud_mail: 'iCloud Mail',
+  linkedin: 'LinkedIn',
 }
 const EVENT_TYPE_OPTIONS = ['bewerbung', 'status', 'gespräch', 'notiz', 'angebot', 'absage']
 
@@ -291,7 +292,9 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                 {/* Status change proposal */}
                 {isStatusOnly && item.suggested_main_status && (
                   <div className="rounded-lg border border-violet-200 bg-violet-50 p-3">
-                    <p className="text-xs font-medium text-violet-700 mb-2">KI schlägt Status-Änderung vor:</p>
+                    <p className="text-xs font-medium text-violet-700 mb-2">
+                      {item.source === 'linkedin' ? 'LinkedIn meldet Status-Änderung:' : 'KI schlägt Status-Änderung vor:'}
+                    </p>
                     <div className="flex items-center gap-2">
                       <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', item.current_main_status ? MAIN_STATUS_COLORS[item.current_main_status as keyof typeof MAIN_STATUS_COLORS] ?? 'bg-gray-100 text-gray-600' : 'bg-gray-100 text-gray-600')}>
                         {item.current_main_status ? MAIN_STATUS_LABELS[item.current_main_status as keyof typeof MAIN_STATUS_LABELS] ?? item.current_main_status : '—'}
@@ -423,6 +426,7 @@ const SOURCE_ICON: Record<string, React.ReactNode> = {
   icloud_cal: <Calendar className="h-3.5 w-3.5" />,
   icloud_notes: <FileText className="h-3.5 w-3.5" />,
   icloud_mail: <Mail className="h-3.5 w-3.5" />,
+  linkedin: <Linkedin className="h-3.5 w-3.5" />,
 }
 
 function ContentPreview({ item }: { item: PendingMatch }) {
