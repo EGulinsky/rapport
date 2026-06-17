@@ -1228,7 +1228,6 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
                 timeMax=time_max,
                 maxResults=100,
                 singleEvents=True,
-                orderBy="updated",
                 q=q,
             ).execute()
         except Exception:
