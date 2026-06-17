@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.36',
+    date: '2026-06-17',
+    changes: [
+      'Fix: Interviews-Sync nutzt jetzt die korrekte URL (linkedin.com/jobs-tracker/?stage=interview) statt der ungültigen ?cardType=INTERVIEWS-URL — LinkedIn ignorierte den Parameter und zeigte fälschlicherweise den Saved-Tab',
+    ],
+  },
+  {
     version: '2.0.35',
     date: '2026-06-17',
     changes: [
