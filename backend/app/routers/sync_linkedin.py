@@ -140,7 +140,7 @@ def debug_excel():
     ws = wb.active
     ws.title = "LinkedIn Sync"
 
-    headers = ["#", "LI Job-ID", "Firma (LI)", "Rolle (LI)", "Datum (LI)", "Kategorie (LI)", "Status-Hint (LI)", "Aktion", "Status DB"]
+    headers = ["#", "LI Job-ID", "Firma (LI)", "Rolle (LI)", "Datum (LI)", "Kategorie (LI)", "Status-Hint (LI)", "Aktion", "Status DB", "Raw Context (debug)"]
     header_fill = PatternFill("solid", fgColor="1E4078")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -168,6 +168,7 @@ def debug_excel():
             entry.get("status_hint_li", ""),
             entry.get("aktion", ""),
             entry.get("status_db", ""),
+            entry.get("_raw_context", ""),
         ]
         fill_color = ACTION_COLORS.get(entry.get("aktion", ""), "FFFFFF")
         fill = PatternFill("solid", fgColor=fill_color) if fill_color != "FFFFFF" else None
@@ -176,7 +177,7 @@ def debug_excel():
             if fill:
                 cell.fill = fill
 
-    col_widths = [5, 16, 40, 45, 14, 16, 20, 14, 28]
+    col_widths = [5, 16, 40, 45, 14, 16, 20, 14, 28, 60]
     for col, w in enumerate(col_widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = w
 
@@ -498,7 +499,6 @@ _CONSENT_SELECTORS = [
 
 _EXTRACT_JOBS_JS = """
 () => {
-    // Find all title links (non-logo: have visible text > 5 chars)
     const titleLinks = Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'))
         .filter(a => (a.innerText || '').trim().length > 5);
 
@@ -508,19 +508,38 @@ _EXTRACT_JOBS_JS = """
         const jobId = m ? m[1] : '';
         const title = (link.innerText || '').trim();
 
-        // Walk up to find a container that has more context (company, date)
+        // Walk up to find a card container with more context.
+        // Accept containers with substantial text even without newlines —
+        // LinkedIn sometimes renders card text as separate DOM nodes
+        // that join without \\n in innerText.
         let el = link;
         let contextText = '';
-        for (let i = 0; i < 10; i++) {
+        let dateHint = '';
+        for (let i = 0; i < 15; i++) {
             el = el.parentElement;
             if (!el) break;
             const t = (el.innerText || '').trim();
-            if (t.length > title.length + 5 && t.includes('\\n')) {
-                contextText = t;
-                break;
+            if (t.length > title.length + 10) {
+                if (!contextText) contextText = t;
+                // Keep walking to find a larger block that likely contains date
+                if (t.length > title.length + 30) { contextText = t; break; }
             }
         }
-        return {id: jobId, title, context: contextText.slice(0, 500)};
+
+        // Separately scan ALL text nodes in the card for "Applied"/"ago"
+        // in case LinkedIn renders the date in a sibling subtree.
+        const card = link.closest('li, [data-job-id], article, [class*="job-card"]') || link.parentElement;
+        if (card) {
+            const full = (card.innerText || '').trim();
+            if (full.length > contextText.length) contextText = full;
+            // Extract date hint from aria-labels too
+            card.querySelectorAll('[aria-label]').forEach(el => {
+                const lbl = el.getAttribute('aria-label') || '';
+                if (/applied|ago|\\d+[dwm]/i.test(lbl)) dateHint = lbl;
+            });
+        }
+
+        return {id: jobId, title, context: contextText.slice(0, 800), dateHint};
     });
 }
 """
@@ -556,14 +575,17 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     await _accept_consent(page)
     await asyncio.sleep(1)
 
-    # Stale detection: track DOM element count (not just unique new jobs).
-    # Tracking len(jobs) causes early exit when scrolling re-surfaces known IDs.
-    prev_dom_count = -1
+    # Stale detection: track ALL job IDs ever seen in DOM.
+    # dom_count fails with virtual scrolling (items replaced not added).
+    # New IDs in DOM = genuine new content loaded, even if total count unchanged.
+    all_dom_ids: set[str] = set()
     stale_rounds = 0
 
     while True:
         raw_items: list[dict] = await page.evaluate(_EXTRACT_JOBS_JS)
-        dom_count = len(raw_items)
+
+        new_in_dom = {item.get("id", "") for item in raw_items if item.get("id")} - all_dom_ids
+        all_dom_ids.update(new_in_dom)
 
         for item in raw_items:
             job_id = item.get("id", "")
@@ -575,6 +597,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             # Normalize: collapse whitespace, strip LinkedIn's ", Verified" badge artifact
             title = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', raw_title)).strip()
             context = item.get("context", "")
+            date_hint = item.get("dateHint", "")  # aria-label fallback from JS
 
             # Build filtered lines: skip blanks, title (normalized), and ", Verified" artifacts
             title_norm = title.lower()
@@ -607,6 +630,14 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             if not company and lines:
                 company = lines[0]
 
+            # Fallback: try full context as one block (LinkedIn sometimes has no newlines)
+            if not date_text and context:
+                if re.search(r"\d+\s*(?:d|w|mo?)\b", context, re.I) or "applied" in context.lower():
+                    date_text = context
+            # Last resort: aria-label date hint from JS
+            if not date_text and date_hint:
+                date_text = date_hint
+
             applied_date = _parse_date(date_text) if date_text else None
 
             status_text = (date_text + " " + context).lower()
@@ -624,6 +655,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                     "applied_date": applied_date,
                     "default_status": default_status,
                     "status_hint": mapped_status,
+                    "_raw_context": context[:200],  # debug: keep for Excel
                 })
 
         # Try "Show more results" button before declaring stale
@@ -638,7 +670,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 loc = page.locator(show_more_sel)
                 if await loc.count() > 0 and await loc.first.is_visible():
                     await loc.first.click()
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(2.5)
                     clicked_more = True
                     stale_rounds = 0
                     break
@@ -646,17 +678,16 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 pass
 
         if not clicked_more:
-            if dom_count == prev_dom_count:
+            if not new_in_dom:
                 stale_rounds += 1
                 if stale_rounds >= 3:
                     break
             else:
                 stale_rounds = 0
-            prev_dom_count = dom_count
 
-            # Scroll to bottom of page to trigger lazy loading
+            # Scroll to bottom to trigger lazy loading / virtual scroll
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await asyncio.sleep(2)
+            await asyncio.sleep(2.5)
 
     return jobs
 
