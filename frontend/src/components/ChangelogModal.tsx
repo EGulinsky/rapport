@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.34',
+    date: '2026-06-17',
+    changes: [
+      'Fix: "database is locked" beim LinkedIn-Sync — busy_timeout auf 60s erhöht; kritische db.commit()-Aufrufe mit Retry-Logik (bis 5 Versuche) abgesichert',
+    ],
+  },
+  {
     version: '2.0.33',
     date: '2026-06-17',
     changes: [

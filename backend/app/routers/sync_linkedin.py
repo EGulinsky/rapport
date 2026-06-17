@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from datetime import date, datetime, timezone
 from typing import Optional
 
@@ -19,6 +20,21 @@ from app.database import get_db
 from app import models
 
 router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
+
+
+def _commit_with_retry(db, retries: int = 5, delay: float = 2.0) -> None:
+    """Commit with retry on SQLite 'database is locked' errors."""
+    import sqlite3
+    for attempt in range(retries):
+        try:
+            db.commit()
+            return
+        except Exception as exc:
+            if attempt < retries - 1 and "locked" in str(exc).lower():
+                db.rollback()
+                time.sleep(delay * (attempt + 1))
+            else:
+                raise
 
 # ── In-memory task state ──────────────────────────────────────────────────────
 
@@ -968,7 +984,7 @@ async def _async_sync(cfg_id: int):
             # Save fresh session cookies
             cookies = await context.cookies()
             cfg.session_cookies = json.dumps(cookies)
-            db.commit()
+            _commit_with_retry(db)
 
             # Scrape all categories; seen_ids is per-category to catch scroll-duplicates,
             # but shared job IDs across categories ARE intentional: ARCHIVED must win
@@ -1043,7 +1059,7 @@ async def _async_sync(cfg_id: int):
                 action_log.append({**raw, "aktion": "fehler", "status_db": str(e)})
 
         cfg.last_sync = datetime.now(timezone.utc)
-        db.commit()
+        _commit_with_retry(db)
 
         _state.update({
             "status": "done",
