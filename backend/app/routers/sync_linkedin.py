@@ -607,7 +607,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 if not ln:
                     continue
                 ln_norm = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', ln)).strip().lower()
-                if ln_norm == title_norm or ln_norm in (',', '· verified', ', verified', 'verified'):
+                if not ln_norm or ln_norm == title_norm or ln_norm in (',', '· verified', ', verified', 'verified'):
                     continue
                 lines.append(ln)
 
@@ -685,8 +685,20 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             else:
                 stale_rounds = 0
 
-            # Scroll to bottom to trigger lazy loading / virtual scroll
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            # Scroll the job list container (LinkedIn uses an inner scrollable div,
+            # not window scroll, for lazy-loading more cards)
+            await page.evaluate("""
+                const container = document.querySelector(
+                    '.jobs-search-results-list, .job-card-list, [class*="job-card-list"], ' +
+                    '[class*="jobs-search-results"], ul[class*="scaffold-layout__list"], ' +
+                    'main section ul, .scaffold-layout__list'
+                );
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                } else {
+                    window.scrollTo(0, document.body.scrollHeight);
+                }
+            """)
             await asyncio.sleep(2.5)
 
     return jobs
@@ -872,6 +884,7 @@ async def _async_sync(cfg_id: int):
                 "datum_li":       job.get("applied_date", ""),
                 "kategorie_li":   job.get("_label") or job.get("default_status", ""),
                 "status_hint_li": str(job.get("status_hint") or ""),
+                "_raw_context":   job.get("_raw_context", ""),
             }
             try:
                 app, was_created = _find_or_create_application(db, job)
