@@ -152,21 +152,6 @@ def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
             table_header()
             fill = False
 
-    # ── Unterschriftsfeld ─────────────────────────────────────────────────────
-    pdf.ln(14)
-    pdf.set_font("A", "", 9)
-    pdf.cell(0, 5, "Ich versichere die Richtigkeit und Vollständigkeit der oben gemachten Angaben.",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(14)
-    pdf.cell(75, 5, "_" * 38, new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.cell(15, 5, "",        new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.cell(75, 5, "_" * 38, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.set_font("A", "I", 8)
-    pdf.set_text_color(120, 120, 120)
-    pdf.cell(75, 4, "Ort, Datum",              new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.cell(15, 4, "",                         new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.cell(75, 4, f"Unterschrift ({name})",   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
     buf = io.BytesIO()
     pdf.output(buf)
     return buf.getvalue()

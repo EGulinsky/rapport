@@ -799,6 +799,7 @@ async def _do_icloud_cal() -> dict:
         update_progress("icloud_cal", 0, total, f"{total} Termine gefunden")
         synced_ids = load_synced_ids(db, "icloud_cal")
 
+        uid_set: set[str] = set()
         for i, ev in enumerate(all_events):
             if i % 10 == 0:
                 update_progress("icloud_cal", i, total, f"Termin {i + 1}/{total}")
@@ -810,16 +811,7 @@ async def _do_icloud_cal() -> dict:
             except Exception:
                 continue
 
-            if uid in synced_ids:
-                skipped += 1
-                continue
-
-            combined_lower = (summary + " " + desc).lower()
-            has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
-            has_firm = any(ft in combined_lower for ft in firm_terms_lower)
-            if not has_keyword and not has_firm:
-                skipped += 1
-                continue
+            uid_set.add(uid)
 
             date_hint = None
             try:
@@ -830,6 +822,24 @@ async def _do_icloud_cal() -> dict:
                     date_hint = datetime(dtstart.year, dtstart.month, dtstart.day, tzinfo=timezone.utc)
             except Exception:
                 pass
+
+            if uid in synced_ids:
+                # Check if the event changed (date or title)
+                new_datum = date_hint.date() if date_hint else None
+                if new_datum:
+                    existing = db.query(models.Event).filter_by(source="icloud_cal", external_id=uid).first()
+                    if existing and (existing.datum != new_datum or existing.titel != summary):
+                        existing.datum = new_datum
+                        existing.titel = summary
+                skipped += 1
+                continue
+
+            combined_lower = (summary + " " + desc).lower()
+            has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
+            has_firm = any(ft in combined_lower for ft in firm_terms_lower)
+            if not has_keyword and not has_firm:
+                skipped += 1
+                continue
 
             location = str(getattr(vevent, "location", None) or "")
             raw = f"Titel: {summary}\nOrt: {location}\nBeschreibung: {desc[:800]}"
@@ -852,6 +862,30 @@ async def _do_icloud_cal() -> dict:
                 created += 1
 
         db.commit()
+
+        # Remove timeline events whose calendar entries no longer exist within the sync window
+        if uid_set:
+            window_start = start.date()
+            window_end = end.date()
+            deleted_count = 0
+            orphaned = (
+                db.query(models.Event)
+                .filter(
+                    models.Event.source == "icloud_cal",
+                    models.Event.external_id.isnot(None),
+                    models.Event.datum >= window_start,
+                    models.Event.datum <= window_end,
+                )
+                .all()
+            )
+            for orphan in orphaned:
+                if orphan.external_id not in uid_set:
+                    db.query(models.SyncedItem).filter_by(source="icloud_cal", external_id=orphan.external_id).delete()
+                    db.delete(orphan)
+                    deleted_count += 1
+            if deleted_count:
+                db.commit()
+
         cfg.calendar_last_sync = datetime.now(timezone.utc)
         db.commit()
         finish_progress("icloud_cal")
@@ -1569,6 +1603,7 @@ async def _do_icloud_calls() -> dict:
                     titel=titel,
                     notiz=notiz,
                     source="icloud_calls",
+                    external_id=source_key,
                 ))
                 created += 1
 

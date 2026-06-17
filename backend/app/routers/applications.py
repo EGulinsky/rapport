@@ -286,6 +286,11 @@ def list_events(app_id: int, db: Session = Depends(get_db)):
 def add_event(app_id: int, payload: schemas.EventBase, db: Session = Depends(get_db)):
     event = models.Event(application_id=app_id, **payload.model_dump())
     db.add(event)
+    # Sync datum_bewerbung when a bewerbung event is added
+    if event.typ == "bewerbung" and event.datum:
+        app = db.query(models.Application).get(app_id)
+        if app:
+            app.datum_bewerbung = event.datum
     db.commit()
     db.refresh(event)
     return event
@@ -299,7 +304,19 @@ def delete_event(app_id: int, event_id: int, db: Session = Depends(get_db)):
     ).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event nicht gefunden")
+    was_bewerbung = event.typ == "bewerbung"
     db.delete(event)
+    # If the deleted event was a bewerbung event, recalculate datum_bewerbung from remaining events
+    if was_bewerbung:
+        app = db.query(models.Application).get(app_id)
+        if app:
+            remaining = (
+                db.query(models.Event)
+                .filter(models.Event.application_id == app_id, models.Event.typ == "bewerbung", models.Event.id != event_id)
+                .order_by(models.Event.datum)
+                .first()
+            )
+            app.datum_bewerbung = remaining.datum if remaining else None
     db.commit()
 
 
@@ -313,6 +330,11 @@ def update_event(app_id: int, event_id: int, payload: schemas.EventUpdate, db: S
         raise HTTPException(status_code=404, detail="Event nicht gefunden")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(event, field, value)
+    # Sync datum_bewerbung when a bewerbung event date changes
+    if event.typ == "bewerbung" and event.datum:
+        app = db.query(models.Application).get(app_id)
+        if app:
+            app.datum_bewerbung = event.datum
     db.commit()
     db.refresh(event)
     return event

@@ -4,14 +4,14 @@ Duplicate detection and cleanup for Applications, Contacts, and Events.
 Strategy:
   Applications  – group by (firma.lower(), rolle.lower()); keep highest-scored entry;
                   merge events + contacts onto the keeper, then delete the rest.
-  Contacts      – group by email.lower() (if set) else (name.lower(), firma.lower());
-                  merge application links onto the keeper, then delete the rest.
-  Events        – group by (application_id, typ, datum, titel.lower());
-                  keep the entry with the richest content, delete the rest.
+  Contacts      – group by name.lower(); send to PendingMatch for manual review.
+  Events        – group by (application_id, typ, datum, titel.lower()) → auto-delete.
+                  Cross-application duplicates (same external_id) → PendingMatch.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -75,13 +75,11 @@ def _find_app_groups(db: Session) -> list[dict]:
 
 
 def _find_contact_groups(db: Session) -> list[dict]:
+    """Group contacts by name-only (simple, cross-firm, cross-application)."""
     contacts = db.query(models.Contact).all()
-    buckets: dict[Any, list[models.Contact]] = {}
+    buckets: dict[str, list[models.Contact]] = {}
     for c in contacts:
-        if c.email and "@" in c.email:
-            key = ("email", c.email.strip().lower())
-        else:
-            key = ("name", c.name.strip().lower(), (c.firma or "").strip().lower())
+        key = c.name.strip().lower()
         buckets.setdefault(key, []).append(c)
 
     groups = []
@@ -101,6 +99,7 @@ def _find_contact_groups(db: Session) -> list[dict]:
 
 
 def _find_event_groups(db: Session) -> list[dict]:
+    """Find within-application event duplicates (same typ+datum+titel)."""
     events = db.query(models.Event).all()
     buckets: dict[tuple, list[models.Event]] = {}
     for e in events:
@@ -115,6 +114,34 @@ def _find_event_groups(db: Session) -> list[dict]:
     groups = []
     for dups in buckets.values():
         if len(dups) < 2:
+            continue
+        dups.sort(key=_event_score, reverse=True)
+        keeper = dups[0]
+        to_remove = dups[1:]
+        groups.append({
+            "keep":   _event_dict(keeper),
+            "remove": [_event_dict(r) for r in to_remove],
+        })
+    return groups
+
+
+def _find_cross_app_event_groups(db: Session) -> list[dict]:
+    """Find cross-application event duplicates by external_id."""
+    events = (
+        db.query(models.Event)
+        .filter(models.Event.external_id.isnot(None))
+        .all()
+    )
+    buckets: dict[str, list[models.Event]] = {}
+    for e in events:
+        key = e.external_id.strip()
+        buckets.setdefault(key, []).append(e)
+
+    groups = []
+    for dups in buckets.values():
+        # Only flag if events are from different applications
+        app_ids = {e.application_id for e in dups}
+        if len(app_ids) < 2:
             continue
         dups.sort(key=_event_score, reverse=True)
         keeper = dups[0]
@@ -171,9 +198,10 @@ def _event_dict(e: models.Event) -> dict:
 def cleanup_preview(db: Session = Depends(get_db)):
     """Dry-run: return what would be merged/deleted, without changing anything."""
     return {
-        "applications": _find_app_groups(db),
-        "contacts":     _find_contact_groups(db),
-        "events":       _find_event_groups(db),
+        "applications":    _find_app_groups(db),
+        "contacts":        _find_contact_groups(db),
+        "events":          _find_event_groups(db),
+        "cross_app_events": _find_cross_app_event_groups(db),
     }
 
 
@@ -215,35 +243,39 @@ async def cleanup_run(db: Session = Depends(get_db)):
 
     await asyncio.sleep(0)  # yield to event loop
 
-    # ── 2. Contacts ───────────────────────────────────────────────────────────
-    update_progress(PROGRESS_KEY, 1, 3, "Kontakte werden bereinigt…")
+    # ── 2. Contacts → PendingMatch (manual review) ────────────────────────────
+    update_progress(PROGRESS_KEY, 1, 4, "Kontakte werden analysiert…")
     contact_groups = _find_contact_groups(db)
-    deleted_contacts = 0
+    queued_contacts = 0
 
+    from datetime import date as _date
     for g in contact_groups:
-        keeper_id = g["keep"]["id"]
-        keeper = db.query(models.Contact).get(keeper_id)
-        if not keeper:
-            continue
-        keeper_app_ids = {a.id for a in keeper.applications}
+        keeper = g["keep"]
         for rem in g["remove"]:
-            dup = db.query(models.Contact).get(rem["id"])
-            if not dup:
+            pm_ext_id = f"cleanup_contact_{keeper['id']}_{rem['id']}"
+            exists = db.query(models.PendingMatch).filter_by(
+                source="cleanup", external_id=pm_ext_id
+            ).first()
+            if exists:
                 continue
-            for app in list(dup.applications):
-                if app.id not in keeper_app_ids:
-                    keeper.applications.append(app)
-                    keeper_app_ids.add(app.id)
-            dup.applications.clear()
-            db.flush()
-            db.delete(dup)
-            deleted_contacts += 1
+            db.add(models.PendingMatch(
+                source="cleanup",
+                external_id=pm_ext_id,
+                confidence=90,
+                event_type="duplicate_contact",
+                datum=_date.today(),
+                titel=f"Doppelter Kontakt: {keeper['name']}",
+                extract=f"Behalten: ID {keeper['id']} ({keeper.get('firma') or '–'})\nDuplikat: ID {rem['id']} ({rem.get('firma') or '–'})",
+                raw_content=json.dumps({"keeper_contact_id": keeper["id"], "dup_contact_id": rem["id"]}),
+                suggested_app_id=None,
+            ))
+            queued_contacts += 1
     db.commit()
 
     await asyncio.sleep(0)
 
-    # ── 3. Events ─────────────────────────────────────────────────────────────
-    update_progress(PROGRESS_KEY, 2, 3, "Timeline-Einträge werden bereinigt…")
+    # ── 3. Events (same app) → auto-delete ────────────────────────────────────
+    update_progress(PROGRESS_KEY, 2, 4, "Timeline-Einträge werden bereinigt…")
     event_groups = _find_event_groups(db)
     deleted_events = 0
 
@@ -255,13 +287,45 @@ async def cleanup_run(db: Session = Depends(get_db)):
                 deleted_events += 1
     db.commit()
 
+    await asyncio.sleep(0)
+
+    # ── 4. Cross-app Events → PendingMatch ───────────────────────────────────
+    update_progress(PROGRESS_KEY, 3, 4, "Bewerbungsübergreifende Duplikate werden analysiert…")
+    cross_groups = _find_cross_app_event_groups(db)
+    queued_events = 0
+
+    for g in cross_groups:
+        keeper_ev = g["keep"]
+        for rem in g["remove"]:
+            pm_ext_id = f"cleanup_event_{keeper_ev['id']}_{rem['id']}"
+            exists = db.query(models.PendingMatch).filter_by(
+                source="cleanup", external_id=pm_ext_id
+            ).first()
+            if exists:
+                continue
+            db.add(models.PendingMatch(
+                source="cleanup",
+                external_id=pm_ext_id,
+                confidence=95,
+                event_type="duplicate_event",
+                datum=_date.today(),
+                titel=f"Doppelter Eintrag: {keeper_ev.get('titel') or keeper_ev.get('typ')}",
+                extract=f"Bewerbung {keeper_ev['application_id']} (behalten) vs. {rem['application_id']} (Duplikat)",
+                raw_content=json.dumps({"keeper_event_id": keeper_ev["id"], "dup_event_id": rem["id"]}),
+                suggested_app_id=keeper_ev["application_id"],
+            ))
+            queued_events += 1
+    db.commit()
+
     finish_progress(PROGRESS_KEY)
 
     return {
-        "deleted_applications": deleted_apps,
-        "deleted_contacts":     deleted_contacts,
-        "deleted_events":       deleted_events,
-        "merged_app_groups":    len(app_groups),
-        "merged_contact_groups": len(contact_groups),
-        "merged_event_groups":  len(event_groups),
+        "deleted_applications":   deleted_apps,
+        "queued_contacts":        queued_contacts,
+        "deleted_events":         deleted_events,
+        "queued_cross_app_events": queued_events,
+        "merged_app_groups":      len(app_groups),
+        "contact_groups_queued":  len(contact_groups),
+        "merged_event_groups":    len(event_groups),
+        "cross_app_event_groups": len(cross_groups),
     }

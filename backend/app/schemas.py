@@ -50,6 +50,17 @@ class ContactWithApp(ContactRead):
     applications: List[ApplicationBrief] = []
 
 
+class AttachmentRead(BaseModel):
+    id: int
+    filename: str
+    content_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    source: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
 class EventBase(BaseModel):
     typ: str
     datum: Optional[date] = None
@@ -75,7 +86,9 @@ class EventCreate(EventBase):
 class EventRead(EventBase):
     id: int
     application_id: int
+    external_id: Optional[str] = None
     created_at: Optional[datetime] = None
+    attachments: list[AttachmentRead] = []
 
     model_config = {"from_attributes": True}
 

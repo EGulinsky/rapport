@@ -159,6 +159,35 @@ async def _do_local_files() -> dict:
             processed += 1
             if ok:
                 created += 1
+                # Store file as attachment if bridge provides raw content
+                raw_bytes_b64: Optional[str] = file_info.get("raw_bytes")
+                if raw_bytes_b64:
+                    try:
+                        import base64
+                        from app.routers.attachments import store_attachment
+                        raw_bytes = base64.b64decode(raw_bytes_b64)
+                        # Find the event we just created
+                        ev = db.query(models.Event).filter_by(
+                            source="local_files", external_id=file_id
+                        ).order_by(models.Event.id.desc()).first()
+                        if ev:
+                            size_mb = len(raw_bytes) / 1024 / 1024
+                            if size_mb > 100:
+                                from datetime import date as _date
+                                db.add(models.PendingMatch(
+                                    source="attachment",
+                                    external_id=f"attachment_{file_id}",
+                                    confidence=99,
+                                    event_type="large_attachment",
+                                    datum=_date.today(),
+                                    titel=f"Großer Anhang: {name}",
+                                    extract=f"Datei {name} ({size_mb:.1f} MB) ist zu groß.",
+                                    suggested_app_id=ev.application_id,
+                                ))
+                            else:
+                                store_attachment(db, ev.id, name, raw_bytes, source="local_files", external_id=file_id)
+                    except Exception:
+                        pass
 
         db.commit()
         cfg.last_sync = datetime.now(timezone.utc)

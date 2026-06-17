@@ -464,24 +464,16 @@ async def _do_gcal() -> dict:
         update_progress("gcal", 0, total, f"{total} Termine gefunden")
         synced_ids = load_synced_ids(db, "gcal")
 
+        uid_set: set[str] = set()
         for i, ev in enumerate(cal_events):
             if i % 10 == 0:
                 update_progress("gcal", i, total, f"Termin {i + 1}/{total}")
             ev_id   = ev.get("id", "")
-
-            if ev_id in synced_ids:
-                skipped += 1
+            if not ev_id:
                 continue
 
             summary = ev.get("summary", "") or ""
             desc    = ev.get("description", "") or ""
-            combined_lower = (summary + " " + desc).lower()
-
-            has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
-            has_firm    = any(ft in combined_lower for ft in firm_terms_lower)
-            if not has_keyword and not has_firm:
-                skipped += 1
-                continue
 
             start_raw = ev.get("start", {})
             date_hint = None
@@ -491,6 +483,26 @@ async def _do_gcal() -> dict:
                     date_hint = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
             except Exception:
                 pass
+
+            uid_set.add(ev_id)
+
+            if ev_id in synced_ids:
+                # Check if the event changed (date or title)
+                new_datum = date_hint.date() if date_hint else None
+                if new_datum:
+                    existing = db.query(models.Event).filter_by(source="gcal", external_id=ev_id).first()
+                    if existing and (existing.datum != new_datum or existing.titel != summary):
+                        existing.datum = new_datum
+                        existing.titel = summary
+                skipped += 1
+                continue
+
+            combined_lower = (summary + " " + desc).lower()
+            has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
+            has_firm    = any(ft in combined_lower for ft in firm_terms_lower)
+            if not has_keyword and not has_firm:
+                skipped += 1
+                continue
 
             location  = ev.get("location", "")
             organizer = ev.get("organizer", {})
@@ -530,6 +542,31 @@ async def _do_gcal() -> dict:
                 created += 1
 
         db.commit()
+
+        # Remove timeline events whose Google Calendar entries no longer exist within the sync window
+        if uid_set:
+            from datetime import date as _date
+            window_start = (now - timedelta(days=180)).date()
+            window_end   = (now + timedelta(days=90)).date()
+            orphaned = (
+                db.query(models.Event)
+                .filter(
+                    models.Event.source == "gcal",
+                    models.Event.external_id.isnot(None),
+                    models.Event.datum >= window_start,
+                    models.Event.datum <= window_end,
+                )
+                .all()
+            )
+            deleted_count = 0
+            for orphan in orphaned:
+                if orphan.external_id not in uid_set:
+                    db.query(models.SyncedItem).filter_by(source="gcal", external_id=orphan.external_id).delete()
+                    db.delete(orphan)
+                    deleted_count += 1
+            if deleted_count:
+                db.commit()
+
         cfg.gcal_last_sync = datetime.now(timezone.utc)
         db.commit()
         finish_progress("gcal")

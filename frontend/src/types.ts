@@ -98,6 +98,15 @@ export interface ContactWithApp extends Contact {
   applications?: { id: number; firma: string; rolle: string }[]
 }
 
+export interface Attachment {
+  id: number
+  filename: string
+  content_type?: string
+  size_bytes?: number
+  source?: string
+  created_at?: string
+}
+
 export interface Event {
   id: number
   application_id: number
@@ -107,7 +116,22 @@ export interface Event {
   notiz?: string
   autor?: string
   source?: string
+  external_id?: string
   created_at?: string
+  attachments?: Attachment[]
+}
+
+export interface ManualCandidate {
+  id: number
+  source: string
+  external_id?: string
+  event_type?: string
+  datum?: string
+  titel?: string
+  extract?: string
+  confidence: number
+  suggested_app_id?: number
+  suggested_app_firma?: string
 }
 
 export interface Stats {

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
   SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE,
-  type Application, type MainStatus, type Contact, type Event,
+  type Application, type MainStatus, type Contact, type Event, type ManualCandidate,
 } from '../types'
 
 interface Props {
@@ -30,6 +30,14 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
   const [addingNote, setAddingNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState({ notiz: '', datum: '' })
   const [savingNote, setSavingNote] = useState(false)
+  const [addingBewerbung, setAddingBewerbung] = useState(false)
+  const [bewerbungDraft, setBewerbungDraft] = useState({ datum: '', titel: 'Bewerbung eingereicht' })
+  const [savingBewerbung, setSavingBewerbung] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualQuery, setManualQuery] = useState('')
+  const [manualCandidates, setManualCandidates] = useState<ManualCandidate[]>([])
+  const [manualLoading, setManualLoading] = useState(false)
+  const [manualConflict, setManualConflict] = useState<{ candidate: ManualCandidate; conflict_app_firma: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>({})
@@ -150,6 +158,62 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     }
   }
 
+  async function openManual() {
+    if (!appId) return
+    setManualOpen(true)
+    setSyncMenuOpen(false)
+    setManualLoading(true)
+    try {
+      const results = await api.targeted.candidates(appId, '')
+      setManualCandidates(results)
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  async function searchManual() {
+    if (!appId) return
+    setManualLoading(true)
+    try {
+      const results = await api.targeted.candidates(appId, manualQuery)
+      setManualCandidates(results)
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  async function assignCandidate(candidate: ManualCandidate, removeFromOther = false) {
+    if (!appId) return
+    const res = await api.targeted.assign(appId, {
+      match_id: candidate.id,
+      remove_from_other: removeFromOther,
+    })
+    if (res.conflict && !removeFromOther) {
+      setManualConflict({ candidate, conflict_app_firma: res.conflict_app_firma ?? 'andere Bewerbung' })
+      return
+    }
+    setManualConflict(null)
+    setManualOpen(false)
+    await refreshContacts()
+  }
+
+  async function saveBewerbung() {
+    if (!appId || !bewerbungDraft.datum) return
+    setSavingBewerbung(true)
+    try {
+      await api.applications.addEvent(appId, {
+        typ: 'bewerbung',
+        datum: bewerbungDraft.datum,
+        titel: bewerbungDraft.titel.trim() || 'Bewerbung eingereicht',
+      })
+      await refreshContacts()
+      setBewerbungDraft({ datum: '', titel: 'Bewerbung eingereicht' })
+      setAddingBewerbung(false)
+    } finally {
+      setSavingBewerbung(false)
+    }
+  }
+
   async function saveContact() {
     if (!appId || !contactDraft.name) return
     setSavingContact(true)
@@ -225,6 +289,7 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
   })()
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
 
@@ -292,6 +357,17 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                     <span>
                       Re-sync
                       <span className="block text-[10px] text-gray-400">Reset + neu einlesen</span>
+                    </span>
+                  </button>
+                  <hr className="my-1 border-gray-100" />
+                  <button
+                    onClick={openManual}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Search className="h-3.5 w-3.5 text-green-500" />
+                    <span>
+                      Manuell zuordnen
+                      <span className="block text-[10px] text-gray-400">Direkt aus Sync-Quellen</span>
                     </span>
                   </button>
                 </div>
@@ -495,7 +571,6 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                 ['quelle', 'Quelle (LinkedIn, XING, …)'],
                 ['zielfirma_bei_hh', 'Zielfirma (bei HH)'],
                 ['wurde_besetzt_von', 'Besetzt von'],
-                ['datum_bewerbung', 'Datum Bewerbung'],
               ].map(([key, placeholder]) => (
                 <input
                   key={key}
@@ -505,6 +580,12 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                   onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
                 />
               ))}
+              <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-500">
+                <span className="text-xs text-gray-400 mr-1">Bewerbungsdatum:</span>
+                {app?.datum_bewerbung
+                  ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE')
+                  : <span className="italic">über Timeline-Ereignis "Bewerbung" setzen</span>}
+              </div>
             </div>
           ) : (
             <dl className="grid grid-cols-2 gap-3">
@@ -551,12 +632,21 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                 <Clock className="h-3.5 w-3.5" /> Verlauf
               </p>
               {!addingNote && (
-                <button
-                  onClick={() => setAddingNote(true)}
-                  className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
-                >
-                  <Plus className="h-3 w-3" /> Notiz
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAddingNote(true)}
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                  >
+                    <Plus className="h-3 w-3" /> Notiz
+                  </button>
+                  <button
+                    onClick={() => setAddingBewerbung(true)}
+                    className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700"
+                    title="Bewerbungsdatum als neues Timeline-Ereignis setzen"
+                  >
+                    <Plus className="h-3 w-3" /> Bewerbung
+                  </button>
+                </div>
               )}
             </div>
 
@@ -581,6 +671,33 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                     <button type="button" onClick={() => { setAddingNote(false); setNoteDraft({ notiz: '', datum: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
                     <button type="button" disabled={!noteDraft.notiz.trim() || savingNote} onClick={saveNote} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                       {savingNote ? 'Speichern…' : 'Speichern'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {addingBewerbung && (
+              <div className="mb-3 rounded-lg border border-green-200 bg-green-50 p-3 space-y-2">
+                <p className="text-xs text-green-700 font-medium">Bewerbungsdatum setzen</p>
+                <input
+                  autoFocus
+                  className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Titel (z.B. Bewerbung eingereicht)"
+                  value={bewerbungDraft.titel}
+                  onChange={e => setBewerbungDraft(d => ({ ...d, titel: e.target.value }))}
+                />
+                <div className="flex items-center justify-between">
+                  <input
+                    type="date"
+                    className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
+                    value={bewerbungDraft.datum}
+                    onChange={e => setBewerbungDraft(d => ({ ...d, datum: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setAddingBewerbung(false); setBewerbungDraft({ datum: '', titel: 'Bewerbung eingereicht' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" disabled={!bewerbungDraft.datum || savingBewerbung} onClick={saveBewerbung} className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50">
+                      {savingBewerbung ? 'Speichern…' : 'Speichern'}
                     </button>
                   </div>
                 </div>
@@ -775,6 +892,72 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
         </div>
       </div>
     </div>
+
+    {/* Manual assign dialog */}
+    {manualOpen && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) { setManualOpen(false); setManualConflict(null) } }}>
+        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[80vh]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h3 className="font-semibold text-gray-900 text-sm">Manuell zuordnen</h3>
+            <button onClick={() => { setManualOpen(false); setManualConflict(null) }} className="p-1 rounded hover:bg-gray-100 text-gray-400">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {manualConflict ? (
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-700">
+                Dieser Eintrag ist bereits mit <strong>{manualConflict.conflict_app_firma}</strong> verknüpft.
+                Was soll passieren?
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setManualConflict(null)} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2">Abbrechen</button>
+                <button onClick={() => assignCandidate(manualConflict.candidate, false)} className="rounded-md border border-gray-200 px-3 py-2 text-xs hover:bg-gray-50">Beide verknüpfen</button>
+                <button onClick={() => assignCandidate(manualConflict.candidate, true)} className="rounded-md bg-indigo-600 px-3 py-2 text-xs text-white hover:bg-indigo-700">Aus anderer Bewerbung entfernen</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="px-5 py-3 border-b border-gray-100 flex gap-2">
+                <input
+                  className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Suchen…"
+                  value={manualQuery}
+                  onChange={e => setManualQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && searchManual()}
+                />
+                <button onClick={searchManual} disabled={manualLoading} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-3 space-y-2">
+                {manualLoading && <p className="text-sm text-gray-400 text-center py-4">Lädt…</p>}
+                {!manualLoading && manualCandidates.length === 0 && (
+                  <p className="text-sm text-gray-400 italic text-center py-4">Keine Treffer</p>
+                )}
+                {manualCandidates.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => assignCandidate(c)}
+                    className="w-full text-left rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 p-3 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{c.titel || c.event_type || c.source}</p>
+                        {c.datum && <p className="text-xs text-gray-500">{new Date(c.datum).toLocaleDateString('de-DE')}</p>}
+                        {c.extract && <p className="text-xs text-gray-400 truncate mt-0.5">{c.extract}</p>}
+                        {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">Vorschlag: {c.suggested_app_firma}</p>}
+                      </div>
+                      <SourceBadge source={c.source} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
@@ -813,19 +996,42 @@ const SOURCE_META: Record<string, { icon: React.ReactNode; label: string; cls: s
   call:         { icon: <Phone className="h-3 w-3" />,    label: 'Anruf',          cls: 'bg-green-50 text-green-700 border-green-100' },
 }
 
-function SourceBadge({ source }: { source?: string }) {
+function buildDeepLink(source: string | undefined, external_id: string | undefined): string | null {
+  if (!source || !external_id) return null
+  // Strip status-suffix used for PendingMatch keys (e.g. "abc__status")
+  const rawId = external_id.replace(/__status$/, '')
+  switch (source) {
+    case 'gmail':
+      return `https://mail.google.com/mail/u/0/#all/${rawId}`
+    case 'gcal':
+      return `https://calendar.google.com/calendar/r/eventedit/${btoa(rawId)}`
+    case 'icloud_mail':
+      return `message://${rawId}`
+    case 'icloud_cal':
+      return `x-apple-calevent:///${rawId}`
+    case 'icloud_notes':
+      return `applenotes://${rawId}`
+    default:
+      return null
+  }
+}
+
+function SourceBadge({ source, external_id }: { source?: string; external_id?: string }) {
   if (!source) return null
   const meta = SOURCE_META[source]
-  if (!meta) return (
-    <span className="inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium bg-gray-50 text-gray-500 border-gray-200">
-      {source}
-    </span>
-  )
-  return (
-    <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${meta.cls}`}>
-      {meta.label}
-    </span>
-  )
+  const deepLink = buildDeepLink(source, external_id)
+  const cls = meta
+    ? `inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${meta.cls}`
+    : 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium bg-gray-50 text-gray-500 border-gray-200'
+  const label = meta ? meta.label : source
+  if (deepLink) {
+    return (
+      <a href={deepLink} target="_blank" rel="noreferrer" className={`${cls} hover:opacity-80 cursor-pointer`} title="In App öffnen">
+        {label} <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+      </a>
+    )
+  }
+  return <span className={cls}>{label}</span>
 }
 
 const EVENT_TYPES = ['bewerbung', 'status', 'notiz', 'gespräch'] as const
@@ -925,7 +1131,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
       <div className="text-xs text-gray-400 mb-0.5 flex items-center gap-2 flex-wrap">
         <span>{dateStr ?? <span className="italic">kein Datum</span>}{timeStr && <span className="text-gray-400">, {timeStr}</span>}</span>
         <span className="uppercase tracking-wide font-medium text-gray-400">{style.label}</span>
-        <SourceBadge source={event.source} />
+        <SourceBadge source={event.source} external_id={event.external_id} />
         <span className="ml-auto hidden group-hover:flex items-center gap-1">
           <button
             onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}
@@ -946,6 +1152,25 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
       {event.titel && <p className="text-sm font-medium text-gray-800">{event.titel}</p>}
       {event.autor && <p className="text-xs text-gray-500 italic">{event.autor}</p>}
       {event.notiz && <p className="text-sm text-gray-600 whitespace-pre-wrap">{event.notiz}</p>}
+      {(event.attachments ?? []).length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {event.attachments!.map(att => (
+            <a
+              key={att.id}
+              href={api.attachments.download(att.id)}
+              download={att.filename}
+              className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
+            >
+              <Paperclip className="h-3 w-3 text-gray-400" />
+              <span className="truncate max-w-[160px]">{att.filename}</span>
+              {att.size_bytes && (
+                <span className="text-gray-400">({(att.size_bytes / 1024).toFixed(0)} KB)</span>
+              )}
+              <Download className="h-2.5 w-2.5 text-gray-400" />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
