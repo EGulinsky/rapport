@@ -46,6 +46,7 @@ _state: dict = {
     "skipped": 0,
     "errors": [],
     "log": [],             # per-application action log
+    "pagination_log": [],  # debug: pagination events per category (persists after sync)
     "raw_jobs": [],        # all scraped jobs (debug)
     "started_at": None,
     "finished_at": None,
@@ -67,6 +68,7 @@ def _reset_state():
         "skipped": 0,
         "errors": [],
         "log": [],
+        "pagination_log": [],
         "started_at": None,
         "finished_at": None,
     })
@@ -210,6 +212,17 @@ def debug_excel():
     ws2.column_dimensions["A"].width = 18
     ws2.column_dimensions["B"].width = 18
     ws2.column_dimensions["C"].width = 12
+
+    # ── Sheet 3: Pagination-Log ───────────────────────────────────────────────
+    ws3 = wb.create_sheet("Pagination-Log")
+    ws3.append(["#", "Eintrag"])
+    for cell in ws3[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+    for i, entry in enumerate((_state.get("pagination_log") or []), 1):
+        ws3.append([i, str(entry)])
+    ws3.column_dimensions["A"].width = 5
+    ws3.column_dimensions["B"].width = 100
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -649,8 +662,8 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             return {bodyH: document.body.scrollHeight, winH: window.innerHeight, buttons, scrollable, url: window.location.href};
         }
     """)
-    _state["log"].append(f"[{card_type}] page load: bodyH={page_info['bodyH']}, winH={page_info['winH']}, buttons={page_info['buttons']}")
-    _state["log"].append(f"[{card_type}] scrollable containers: {page_info['scrollable']}")
+    _state["pagination_log"].append(f"[{card_type}] page load: bodyH={page_info['bodyH']}, winH={page_info['winH']}")
+    _state["pagination_log"].append(f"[{card_type}] buttons: {page_info['buttons'][:10]}")
 
     # Save page HTML for offline mock testing
     try:
@@ -746,49 +759,50 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 })
 
         # 1) Try numbered pagination "Next" button (LinkedIn My Jobs ARCHIVED / INTERVIEWS)
-        # Respect max_pages: if we've already navigated max_pages-1 times, stop here.
         clicked_next = False
         if pages_navigated >= max_pages - 1:
-            break  # already scraped max_pages pages, done
-        # Use JS to find and click the Next button — more robust than CSS selectors
-        # because LinkedIn's aria-labels change with locale and version.
-        next_result = await page.evaluate("""
-            () => {
-                // artdeco pagination next button (class-based)
-                let btn = document.querySelector('.artdeco-pagination__button--next:not([disabled])');
-                if (btn && btn.offsetParent !== null) { btn.click(); return 'artdeco-class'; }
+            _state["pagination_log"].append(f"[{card_type}] max_pages={max_pages} erreicht, stoppe")
+            break
 
-                // Any button/a whose text or aria-label contains next/nächste/weiter
-                const nextWords = ['next', 'nächste', 'weiter', 'następna', 'suivant'];
-                for (const el of document.querySelectorAll('button, a[role="button"]')) {
-                    if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
-                    const txt = (el.innerText || '').toLowerCase().trim();
-                    const aria = (el.getAttribute('aria-label') || '').toLowerCase();
-                    if (nextWords.some(w => txt === w || aria.includes(w))) {
-                        el.click(); return 'text:' + (txt || aria);
-                    }
-                }
+        # Find the Next button via JS (returns element handle info), then click natively
+        # so Playwright can detect the resulting network activity.
+        next_locator = None
+        # Strategy A: artdeco class (most reliable, locale-independent)
+        loc_a = page.locator('.artdeco-pagination__button--next:not([disabled])').first
+        try:
+            if await loc_a.count() > 0 and await loc_a.is_visible(timeout=1000):
+                next_locator = loc_a
+        except Exception:
+            pass
 
-                // data-test attribute LinkedIn sometimes uses
-                const testBtn = document.querySelector('[data-test-pagination-page-btn="next"] button, [data-test-pagination-page-btn="next"]');
-                if (testBtn && !testBtn.disabled) { testBtn.click(); return 'data-test'; }
+        # Strategy B: aria-label or text matching for locale variants
+        if not next_locator:
+            for word in ['next', 'nächste', 'weiter']:
+                try:
+                    loc_b = page.locator(f'button:not([disabled])[aria-label*="{word}" i], button:not([disabled]):text-is("{word}")')
+                    if await loc_b.count() > 0 and await loc_b.first.is_visible(timeout=500):
+                        next_locator = loc_b.first
+                        break
+                except Exception:
+                    pass
 
-                return null;
-            }
-        """)
-        if next_result:
-            _state["log"].append(f"[{card_type}] pagination Next clicked via JS ({next_result}), page={pages_navigated+2}")
-            await asyncio.sleep(2)
-            # Poll until new job IDs appear in DOM (up to 12 s) to handle slow SPA transitions
-            for _w in range(12):
-                _probe = await page.evaluate(_EXTRACT_JOBS_JS)
-                _probe_ids = {it.get("id") for it in _probe if it.get("id")} - all_dom_ids
-                if _probe_ids:
-                    break
-                await asyncio.sleep(1)
-            pages_navigated += 1
-            clicked_next = True
-            stale_rounds = 0
+        if next_locator:
+            try:
+                await next_locator.scroll_into_view_if_needed(timeout=3000)
+                await next_locator.click(timeout=5000)
+                # Wait for network to settle after SPA navigation
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    await asyncio.sleep(5)
+                pages_navigated += 1
+                clicked_next = True
+                stale_rounds = 0
+                _state["pagination_log"].append(
+                    f"[{card_type}] p{pages_navigated+1}: Next geklickt, jobs_bisher={len(jobs)}, all_dom_ids={len(all_dom_ids)}"
+                )
+            except Exception as e:
+                _state["pagination_log"].append(f"[{card_type}] Next-Klick Fehler: {e}")
 
         if clicked_next:
             continue
@@ -815,7 +829,11 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         if not clicked_more:
             if not new_in_dom:
                 stale_rounds += 1
-                if stale_rounds >= 3:
+                _state["pagination_log"].append(
+                    f"[{card_type}] stale_round={stale_rounds}: keine neuen IDs, jobs={len(jobs)}, all_dom_ids={len(all_dom_ids)}"
+                )
+                if stale_rounds >= 5:
+                    _state["pagination_log"].append(f"[{card_type}] Abbruch nach {stale_rounds} leeren Runden")
                     break
             else:
                 stale_rounds = 0
@@ -839,7 +857,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             await asyncio.sleep(3)
             scroll_round += 1
             after_h = await page.evaluate("() => ({bodyH: document.body.scrollHeight, jobLinks: document.querySelectorAll('a[href*=\"/jobs/view/\"]').length})")
-            _state["log"].append(f"[{card_type}] scroll#{scroll_round}: bodyH={after_h['bodyH']}, jobLinks={after_h['jobLinks']}, all_dom_ids={len(all_dom_ids)}, stale={stale_rounds}")
+            _state["pagination_log"].append(
+                f"[{card_type}] scroll#{scroll_round}: bodyH={after_h['bodyH']}, jobLinks={after_h['jobLinks']}, stale={stale_rounds}"
+            )
 
     return jobs
 
