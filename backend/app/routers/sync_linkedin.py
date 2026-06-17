@@ -504,8 +504,8 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             date_text = ""
             for line in lines:
                 low = line.lower()
-                # Date: short ("6d ago") or long ("6 days ago") or "Applied on..."
-                if (re.search(r"\d+\s*(?:d|w|mo)\b", low)
+                # Date: short ("6d ago", "2m ago", "3mo ago") or long ("6 days ago") or "Applied on..."
+                if (re.search(r"\d+\s*(?:d|w|mo?)\b", low)
                         or re.search(r"\d+\s+(?:day|week|month|hour)", low)
                         or re.search(r"\d{1,2}/\d{1,2}/\d{4}", low)
                         or low.startswith("applied")):
