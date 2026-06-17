@@ -1235,12 +1235,6 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
 
         for ev in resp.get("items", []):
             ev_id = ev.get("id", "")
-            existing = db.query(_m.Event).filter(
-                _m.Event.external_id == ev_id, _m.Event.application_id == app_id
-            ).first()
-            if existing:
-                continue
-
             summary = ev.get("summary", "(kein Titel)")
             start = ev.get("start", {})
             date_str = start.get("dateTime", start.get("date", ""))
