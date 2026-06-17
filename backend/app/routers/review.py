@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from typing import Optional
 
@@ -5,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import PendingMatch, Event, Application
+from app.models import PendingMatch, Event, Application, Contact
 from app.routers.applications import _status_label
 from app.schemas import PendingMatchRead, ApproveMatch
 
@@ -59,6 +60,43 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
     app = db.query(Application).filter(Application.id == body.application_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
+
+    # ── Cleanup duplicates ────────────────────────────────────────────────────
+    if match.event_type == "duplicate_contact":
+        try:
+            payload = json.loads(match.raw_content or "{}")
+            keeper_id = payload.get("keeper_contact_id")
+            dup_id = payload.get("dup_contact_id")
+        except Exception:
+            keeper_id = dup_id = None
+        if keeper_id and dup_id:
+            keeper = db.query(Contact).get(keeper_id)
+            dup = db.query(Contact).get(dup_id)
+            if keeper and dup:
+                keeper_app_ids = {a.id for a in keeper.applications}
+                for app in list(dup.applications):
+                    if app.id not in keeper_app_ids:
+                        keeper.applications.append(app)
+                dup.applications.clear()
+                db.flush()
+                db.delete(dup)
+        match.review_status = "approved"
+        db.commit()
+        return {"status": "approved", "event_id": None}
+
+    if match.event_type == "duplicate_event":
+        try:
+            payload = json.loads(match.raw_content or "{}")
+            dup_event_id = payload.get("dup_event_id")
+        except Exception:
+            dup_event_id = None
+        if dup_event_id:
+            ev = db.query(Event).get(dup_event_id)
+            if ev:
+                db.delete(ev)
+        match.review_status = "approved"
+        db.commit()
+        return {"status": "approved", "event_id": None}
 
     if match.status_only:
         # Apply the suggested status change and record a status event

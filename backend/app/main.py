@@ -8,7 +8,7 @@ from app.database import init_db
 from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
-    review, cleanup, calendar,
+    review, cleanup, calendar, attachments,
 )
 
 logger = logging.getLogger(__name__)
@@ -120,6 +120,7 @@ app.include_router(sync_targeted.router)
 app.include_router(sync_linkedin.router)
 app.include_router(sync_files.router)
 app.include_router(review.router)
+app.include_router(attachments.router)
 app.include_router(cleanup.router)
 app.include_router(calendar.router)
 

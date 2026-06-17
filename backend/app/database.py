@@ -381,6 +381,58 @@ def _migrate_google_email():
     conn.close()
 
 
+def _migrate_attachments():
+    """Create attachments table if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'")
+    if not cur.fetchone():
+        cur.execute("""
+            CREATE TABLE attachments (
+                id INTEGER PRIMARY KEY,
+                event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                content_type TEXT,
+                size_bytes INTEGER,
+                storage_path TEXT NOT NULL,
+                source TEXT,
+                external_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("CREATE INDEX ix_attachments_event_id ON attachments (event_id)")
+    conn.commit()
+    conn.close()
+
+    # Ensure /data/attachments directory exists
+    attachments_dir = os.path.join(os.path.dirname(db_path), "attachments")
+    os.makedirs(attachments_dir, exist_ok=True)
+
+
+def _migrate_event_external_id():
+    """Add external_id column to events if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "external_id" not in cols:
+        cur.execute("ALTER TABLE events ADD COLUMN external_id TEXT")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_linkedin_job_id():
     """Add linkedin_job_id column to applications if missing."""
     import sqlite3
@@ -409,6 +461,8 @@ def init_db():
     _migrate_sync_settings_files()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
+    _migrate_attachments()
+    _migrate_event_external_id()
     _migrate_linkedin_job_id()
     Base.metadata.create_all(bind=engine)
     _backfill_events()

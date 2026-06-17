@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -1014,3 +1015,114 @@ async def sync_for_app(app_id: int, background_tasks: BackgroundTasks, db: Sessi
 @router.get("/{app_id}/result")
 def get_result(app_id: int):
     return _task_results.get(str(app_id)) or {"done": False}
+
+
+@router.get("/{app_id}/candidates")
+def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
+    """Return pending review items that could be manually assigned to this application."""
+    app = db.query(models.Application).get(app_id)
+    if not app:
+        raise HTTPException(404, "Bewerbung nicht gefunden.")
+
+    q_lower = q.strip().lower()
+    terms = _search_terms(app)
+
+    pending = (
+        db.query(models.PendingMatch)
+        .filter(models.PendingMatch.review_status == "pending")
+        .order_by(models.PendingMatch.datum.desc())
+        .limit(200)
+        .all()
+    )
+
+    results = []
+    for pm in pending:
+        text = " ".join(filter(None, [pm.titel, pm.extract, pm.raw_content or ""])).lower()
+        # Filter by query string if provided, otherwise by application terms
+        if q_lower:
+            if q_lower not in text:
+                continue
+        else:
+            if not any(t.lower() in text for t in terms):
+                continue
+        results.append({
+            "id":             pm.id,
+            "source":         pm.source,
+            "external_id":    pm.external_id,
+            "event_type":     pm.event_type,
+            "datum":          str(pm.datum) if pm.datum else None,
+            "titel":          pm.titel,
+            "extract":        pm.extract,
+            "confidence":     pm.confidence,
+            "suggested_app_id":   pm.suggested_app_id,
+            "suggested_app_firma": pm.application.firma if pm.application else None,
+        })
+    return results
+
+
+class ManualAssignPayload(BaseModel):
+    match_id: int
+    event_type: Optional[str] = None
+    datum: Optional[str] = None
+    titel: Optional[str] = None
+    remove_from_other: bool = False
+
+
+@router.post("/{app_id}/assign")
+def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(get_db)):
+    """Manually assign a PendingMatch item to an application without AI."""
+    app = db.query(models.Application).get(app_id)
+    if not app:
+        raise HTTPException(404, "Bewerbung nicht gefunden.")
+
+    pm = db.query(models.PendingMatch).get(body.match_id)
+    if not pm:
+        raise HTTPException(404, "PendingMatch nicht gefunden.")
+
+    from datetime import date as _date
+    try:
+        datum = _date.fromisoformat(body.datum) if body.datum else pm.datum
+    except ValueError:
+        datum = pm.datum
+
+    # Check if an Event with the same external_id already exists in another application
+    ext_id = pm.external_id
+    conflict_event = (
+        db.query(models.Event)
+        .filter(
+            models.Event.external_id == ext_id,
+            models.Event.application_id != app_id,
+        )
+        .first()
+    ) if ext_id else None
+
+    if conflict_event and not body.remove_from_other:
+        conflict_app = db.query(models.Application).get(conflict_event.application_id)
+        return {
+            "conflict": True,
+            "conflict_app_id": conflict_event.application_id,
+            "conflict_app_firma": conflict_app.firma if conflict_app else None,
+            "conflict_event_id": conflict_event.id,
+        }
+
+    if conflict_event and body.remove_from_other:
+        db.delete(conflict_event)
+
+    event_typ = body.event_type or pm.event_type or "notiz"
+    if event_typ in ("status_change", "duplicate_contact", "duplicate_event"):
+        event_typ = "notiz"
+
+    ev = models.Event(
+        application_id=app_id,
+        typ=event_typ,
+        datum=datum,
+        titel=body.titel or pm.titel,
+        notiz=pm.extract,
+        source=pm.source,
+        external_id=ext_id,
+    )
+    db.add(ev)
+    pm.review_status = "approved"
+    db.commit()
+    db.refresh(ev)
+    return {"conflict": False, "event_id": ev.id}

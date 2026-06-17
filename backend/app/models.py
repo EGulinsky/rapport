@@ -180,10 +180,28 @@ class Event(Base):
     notiz           = Column(Text, nullable=True)
     autor           = Column(String, nullable=True)   # sender for mail events
     source          = Column(String, nullable=True)   # "gmail","gcal","notes","call"
+    external_id     = Column(String, nullable=True)   # original ID from sync source (for deep links)
 
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     application     = relationship("Application", back_populates="events")
+    attachments     = relationship("Attachment", back_populates="event", cascade="all, delete-orphan")
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    event_id     = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    filename     = Column(String, nullable=False)
+    content_type = Column(String, nullable=True)
+    size_bytes   = Column(Integer, nullable=True)
+    storage_path = Column(String, nullable=False)   # relative to /data/attachments/
+    source       = Column(String, nullable=True)    # "gmail", "icloud_mail", "local_files", etc.
+    external_id  = Column(String, nullable=True)    # original attachment ID from source
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+
+    event = relationship("Event", back_populates="attachments")
 
 
 class GoogleSync(Base):

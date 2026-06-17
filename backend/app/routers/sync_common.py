@@ -642,6 +642,7 @@ def _save_deterministic_event(
         titel=det['titel'] or source,
         notiz=notiz or None,
         source=source,
+        external_id=external_id,
     ))
     mark_synced(db, source, external_id)
 
@@ -799,6 +800,7 @@ async def process_item(
         notiz=result.get("extract"),
         autor=autor,
         source=source,
+        external_id=external_id,
     ))
     mark_synced(db, source, external_id)
 
@@ -884,6 +886,7 @@ def save_classified_event(
         notiz=notiz,
         autor=autor,
         source=source,
+        external_id=external_id,
     ))
     mark_synced(db, source, external_id)
 

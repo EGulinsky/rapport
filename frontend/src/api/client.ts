@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate } from '../types'
 
 const BASE = '/api'
 
@@ -209,6 +209,9 @@ export const api = {
     syncForApp: (appId: number) => request<SyncResult>(`/sync/targeted/${appId}`, { method: 'POST' }),
     resetForApp: (appId: number) => request<{ deleted_events: number; deleted_items: number }>(`/sync/targeted/${appId}/reset`, { method: 'POST' }),
     getResult: (appId: number) => request<{ done: boolean; created?: number; processed?: number; errors?: string[] }>(`/sync/targeted/${appId}/result`),
+    candidates: (appId: number, q?: string) => request<ManualCandidate[]>(`/sync/targeted/${appId}/candidates${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    assign: (appId: number, data: { match_id: number; event_type?: string; datum?: string; titel?: string; remove_from_other?: boolean }) =>
+      request<{ conflict: boolean; conflict_app_id?: number; conflict_app_firma?: string; conflict_event_id?: number; event_id?: number }>(`/sync/targeted/${appId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   review: {
@@ -237,6 +240,18 @@ export const api = {
     status: () => request<LinkedInSyncStatus>('/sync/linkedin/status'),
     clearSession: () => request('/sync/linkedin/clear-session', { method: 'POST' }),
     submitTwoFa: (code: string) => request('/sync/linkedin/submit-2fa', { method: 'POST', body: JSON.stringify({ code }) }),
+  },
+
+  attachments: {
+    download: (id: number) => `${BASE}/attachments/${id}/download`,
+    upload: async (eventId: number, file: File): Promise<{ id: number; filename: string; size_bytes: number }> => {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`${BASE}/attachments/${eventId}/upload`, { method: 'POST', body: form })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    delete: (id: number) => request<void>(`/attachments/${id}`, { method: 'DELETE' }),
   },
 
   calendar: {

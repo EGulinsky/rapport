@@ -8,6 +8,20 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.1.0',
+    date: '2026-06-17',
+    changes: [
+      'Issue #1: Unterschriftsfeld aus PDF-Export entfernt',
+      'Issue #2: Kalender-Änderungserkennung — verschobene/gelöschte Termine werden beim Sync automatisch im Timeline aktualisiert/entfernt (iCloud Kalender + Google Kalender)',
+      'Issue #3: Manuell zuordnen — neuer Button im Sync-Dropdown öffnet Kandidaten-Panel mit Direktzuordnung ohne KI; Konfliktabfrage wenn Eintrag bereits in anderer Bewerbung',
+      'Issue #4: Duplikat-Bereinigung erweitert — Kontakte nach Namen, bewerbungsübergreifende Events per external_id; beide gehen in manuelle Nachbearbeitung statt automatischer Löschung',
+      'Issue #5: Dateianhänge — Anhänge werden im Container gespeichert, im Timeline angezeigt und können heruntergeladen werden; >100 MB geht in manuelle Nachbearbeitung',
+      'Issue #6: Deep Links in Timeline — Gmail, Google Kalender, iCloud Mail/Kalender/Notizen können direkt in der jeweiligen App geöffnet werden (klickbarer Source-Badge)',
+      'Issue #7: Bewerbungsdatum readonly — datum_bewerbung nur noch über Timeline-Ereignis "Bewerbung" setzbar; Änderungen synchronisieren automatisch das Datenbankfeld',
+      'Intern: external_id-Feld auf Event-Tabelle für Deep Links und cross-App-Duplikaterkennung',
+    ],
+  },
+  {
     version: '2.0.42',
     date: '2026-06-17',
     changes: [
