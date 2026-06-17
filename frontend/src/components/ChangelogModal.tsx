@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.32',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper paginiert APPLIED/SAVED/IN_PROGRESS nur Seite 1 (aktuelle Jobs), ARCHIVED und INTERVIEWS alle Seiten — verhindert dass alte archivierte Jobs als "Beworben" erscheinen',
+      'Fix: LinkedIn INTERVIEWS — JS-Extraktion erkennt jetzt auch /jobs/collections/ und andere LI-Job-URL-Typen',
+    ],
+  },
+  {
     version: '2.0.31',
     date: '2026-06-17',
     changes: [
