@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -782,11 +782,23 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     if job.get("status_hint"):
         initial_status = job["status_hint"][0]
 
+    def _to_date(val):
+        if val is None:
+            return None
+        if isinstance(val, date):
+            return val
+        try:
+            return date.fromisoformat(str(val))
+        except Exception:
+            return None
+
+    applied_date_obj = _to_date(job["applied_date"])
+
     new_app = models.Application(
         firma=job["company"],
         rolle=job["title"],
-        datum_bewerbung=job["applied_date"],
-        letztes_update=job["applied_date"],
+        datum_bewerbung=applied_date_obj,
+        letztes_update=applied_date_obj,
         quelle="LinkedIn",
         main_status=initial_status,
         abgesagt=(initial_status == "rejected"),
@@ -805,7 +817,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     db.add(models.Event(
         application_id=new_app.id,
         typ=event_typ,
-        datum=job["applied_date"],
+        datum=applied_date_obj,
         titel=event_titel,
         source="linkedin",
     ))

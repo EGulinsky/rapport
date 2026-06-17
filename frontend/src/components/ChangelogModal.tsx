@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.30',
+    date: '2026-06-17',
+    changes: [
+      'Fix: SQLite TypeError beim Erstellen neuer LinkedIn-Bewerbungen — datum_bewerbung/letztes_update als date-Objekt statt String übergeben',
+    ],
+  },
+  {
     version: '2.0.29',
     date: '2026-06-17',
     changes: [
