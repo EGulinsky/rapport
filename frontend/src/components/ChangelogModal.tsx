@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { BUILD_NUMBER } from '../version'
 
 interface Release {
   version: string
@@ -540,9 +541,14 @@ export function ChangelogModal({ open, onClose }: Props) {
                   v{r.version}
                 </span>
                 {i === 0 && (
-                  <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 rounded px-1.5 py-0.5">
-                    aktuell
-                  </span>
+                  <>
+                    <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 rounded px-1.5 py-0.5">
+                      aktuell
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      Build {BUILD_NUMBER}
+                    </span>
+                  </>
                 )}
                 <span className="text-xs text-gray-400 ml-auto">{r.date}</span>
               </div>

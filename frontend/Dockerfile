@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine AS builder
+ARG BUILD_NUMBER=0
+ENV VITE_BUILD_NUMBER=$BUILD_NUMBER
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \

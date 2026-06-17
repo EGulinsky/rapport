@@ -16,6 +16,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
 import { ChangelogModal, CURRENT_VERSION } from './components/ChangelogModal'
+import { BUILD_NUMBER } from './version'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
   type Application, type Stats, type MainStatus,
@@ -104,7 +105,7 @@ export default function App() {
                     onClick={() => setShowChangelog(true)}
                     className="text-[10px] text-indigo-400 hover:text-indigo-600 font-mono leading-none mt-0.5 text-left transition-colors"
                   >
-                    v{CURRENT_VERSION}
+                    v{CURRENT_VERSION} · {BUILD_NUMBER}
                   </button>
                 </div>
               </div>
