@@ -24,7 +24,6 @@ router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
 
 def _commit_with_retry(db, retries: int = 5, delay: float = 2.0) -> None:
     """Commit with retry on SQLite 'database is locked' errors."""
-    import sqlite3
     for attempt in range(retries):
         try:
             db.commit()
