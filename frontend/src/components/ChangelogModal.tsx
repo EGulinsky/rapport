@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.42',
+    date: '2026-06-17',
+    changes: [
+      'Fix: Archived-Sync nutzt jetzt korrekte URL (linkedin.com/jobs-tracker/?stage=archived) — analog zu Interviews',
+    ],
+  },
+  {
     version: '2.0.41',
     date: '2026-06-17',
     changes: [

@@ -289,7 +289,7 @@ CATEGORIES: list[tuple[str, str, str, int, str]] = [
     ("IN_PROGRESS", "In Bearbeitung", "applied",     1,  _MY_ITEMS + "IN_PROGRESS"),
     ("APPLIED",     "Beworben",       "applied",     1,  _MY_ITEMS + "APPLIED"),
     ("INTERVIEWS",  "Interviews",     "hr",          99, _TRACKER  + "interview"),
-    ("ARCHIVED",    "Archiviert",     "rejected",    99, _MY_ITEMS + "ARCHIVED"),
+    ("ARCHIVED",    "Archiviert",     "rejected",    99, _TRACKER  + "archived"),
 ]
 
 # LinkedIn status footer text → override main_status
