@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.29',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper wartet auf ersten Job-Link im DOM (wait_for_selector) bevor JS läuft — LinkedIn rendert Interview-Karten asynchron, daher wurden nur 1 von 6 gefunden',
+    ],
+  },
+  {
     version: '2.0.28',
     date: '2026-06-17',
     changes: [

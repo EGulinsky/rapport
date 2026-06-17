@@ -567,13 +567,19 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
     except Exception:
         return []
-    await asyncio.sleep(3)
 
     if "login" in page.url or "authwall" in page.url:
         return []
 
     await _accept_consent(page)
-    await asyncio.sleep(1)
+
+    # Wait for job cards to render — LinkedIn loads them asynchronously after
+    # domcontentloaded; without this wait only the first card may be in the DOM.
+    try:
+        await page.wait_for_selector('a[href*="/jobs/view/"]', timeout=10000)
+    except Exception:
+        pass
+    await asyncio.sleep(2)
 
     # Log page state for debugging scroll issues
     page_info = await page.evaluate("""
