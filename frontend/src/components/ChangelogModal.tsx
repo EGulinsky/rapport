@@ -8,6 +8,34 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.22',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper scrollt jetzt alle Seiten durch — stale-Erkennung basiert auf DOM-Elementanzahl statt eindeutiger neuer Jobs; scrollTo(scrollHeight) statt scrollBy(800px); "Show more results"-Button wird geklickt',
+    ],
+  },
+  {
+    version: '2.0.21',
+    date: '2026-06-17',
+    changes: [
+      'Feature: LinkedIn Debug-Excel nach Sync — alle gefundenen Stellen mit LI Job-ID, Firma, Rolle, Datum, Kategorie, Status-Hint und DB-Aktion; Sheet "Kategorien" zeigt Trefferanzahl pro LI-Kategorie',
+    ],
+  },
+  {
+    version: '2.0.20',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Datumserkennung für bare "m" (2m, 3m, 4m, 5m ago) — sowohl Zeilenfilter als auch Parser ergänzt (mo? deckt m und mo ab)',
+    ],
+  },
+  {
+    version: '2.0.19',
+    date: '2026-06-17',
+    changes: [
+      'Fix: Bewerbungsdatum in Tabellenansicht — wird jetzt automatisch aus dem frühesten bewerbung-Event abgeleitet wenn DB-Feld leer ist (trifft v.a. LinkedIn-Einträge)',
+    ],
+  },
+  {
     version: '2.0.18',
     date: '2026-06-16',
     changes: [
