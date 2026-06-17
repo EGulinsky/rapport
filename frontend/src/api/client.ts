@@ -210,7 +210,7 @@ export const api = {
     resetForApp: (appId: number) => request<{ deleted_events: number; deleted_items: number }>(`/sync/targeted/${appId}/reset`, { method: 'POST' }),
     getResult: (appId: number) => request<{ done: boolean; created?: number; processed?: number; errors?: string[] }>(`/sync/targeted/${appId}/result`),
     candidates: (appId: number, q?: string) => request<ManualCandidate[]>(`/sync/targeted/${appId}/candidates${q ? `?q=${encodeURIComponent(q)}` : ''}`),
-    assign: (appId: number, data: { match_id: number; external_id?: string; event_type?: string; datum?: string; titel?: string; remove_from_other?: boolean }) =>
+    assign: (appId: number, data: { match_id: number; external_id?: string; source?: string; event_type?: string; datum?: string; titel?: string; remove_from_other?: boolean }) =>
       request<{ conflict: boolean; conflict_app_id?: number; conflict_app_firma?: string; conflict_event_id?: number; event_id?: number }>(`/sync/targeted/${appId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
   },
 

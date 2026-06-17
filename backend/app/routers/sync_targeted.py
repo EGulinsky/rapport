@@ -1108,12 +1108,18 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
             "_pool":               "event",
         })
 
-    # ── Pool 3: Gmail live search (only when query given) ─────────────────
+    # ── Pool 3: Live search across all connected external sources ────────
     if q_lower:
-        try:
-            results += _gmail_live_candidates(q_lower, app_id, seen_external, db)
-        except Exception:
-            pass  # Gmail not connected or API error — silently skip
+        for _live_fn in (
+            _gmail_live_candidates,
+            _icloud_mail_live_candidates,
+            _icloud_cal_live_candidates,
+            _icloud_notes_live_candidates,
+        ):
+            try:
+                results += _live_fn(q_lower, app_id, seen_external, db)
+            except Exception:
+                pass  # source not connected or API error — silently skip
 
     # strip internal _pool field before returning
     for r in results:
@@ -1123,13 +1129,31 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
     return results[:100]
 
 
+def _make_live_candidate(source: str, external_id: str, datum, titel: str, extract: str, seen: set) -> dict | None:
+    key = f"{source}:{external_id}"
+    if key in seen:
+        return None
+    seen.add(key)
+    return {
+        "id":                  0,
+        "source":              source,
+        "external_id":         external_id,
+        "event_type":          "termin" if "cal" in source else "email" if "mail" in source or source == "gmail" else "notiz",
+        "datum":               str(datum) if datum else None,
+        "titel":               titel,
+        "extract":             extract,
+        "confidence":          70,
+        "suggested_app_id":    None,
+        "suggested_app_firma": None,
+    }
+
+
 def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
-    """Search Gmail directly for q and return metadata as candidates (Pool 3)."""
+    """Search Gmail directly for q (Pool 3)."""
     from app import models as _m
-    from app.routers.sync_common import load_synced_ids, strip_html
+    from app.routers.sync_common import load_synced_ids
     from app.routers.sync_google import _refresh_if_needed
     from googleapiclient.discovery import build
-    import base64
 
     cfg = db.query(_m.GoogleSync).first()
     if not cfg or not cfg.refresh_token_enc:
@@ -1137,27 +1161,19 @@ def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
 
     creds = _refresh_if_needed(cfg, db)
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-
     synced_ids = load_synced_ids(db, "gmail")
 
     resp = service.users().messages().list(userId="me", q=q, maxResults=25).execute()
-    msgs = resp.get("messages", [])
-
     out = []
-    for msg_ref in msgs:
+    for msg_ref in resp.get("messages", []):
         msg_id = msg_ref["id"]
-        key = f"gmail:{msg_id}"
-        if key in seen_external or msg_id in synced_ids:
+        if msg_id in synced_ids:
             continue
-
-        # Check if already an Event in this app
         existing = db.query(_m.Event).filter(
-            _m.Event.external_id == msg_id,
-            _m.Event.application_id == app_id,
+            _m.Event.external_id == msg_id, _m.Event.application_id == app_id
         ).first()
         if existing:
             continue
-
         try:
             meta = service.users().messages().get(
                 userId="me", id=msg_id, format="metadata",
@@ -1165,42 +1181,182 @@ def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
             ).execute()
         except Exception:
             continue
-
         hdrs = {h["name"].lower(): h["value"] for h in meta["payload"].get("headers", [])}
         subject = hdrs.get("subject", "(kein Betreff)")
         sender = hdrs.get("from", "")
         date_str = hdrs.get("date", "")
-
-        # Parse date
         datum = None
         if date_str:
             try:
                 from email.utils import parsedate_to_datetime as _pdt
-                datum = str(_pdt(date_str).date())
+                datum = _pdt(date_str).date()
             except Exception:
                 pass
-
-        seen_external.add(key)
-        out.append({
-            "id":                  0,
-            "source":              "gmail",
-            "external_id":         msg_id,
-            "event_type":          "email",
-            "datum":               datum,
-            "titel":               subject,
-            "extract":             f"Von: {sender}",
-            "confidence":          70,
-            "suggested_app_id":    None,
-            "suggested_app_firma": None,
-            "_pool":               "gmail_live",
-        })
-
+        c = _make_live_candidate("gmail", msg_id, datum, subject, f"Von: {sender}", seen_external)
+        if c:
+            out.append(c)
     return out
+
+
+def _icloud_mail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
+    """Search iCloud Mail via IMAP for q (Pool 3)."""
+    import email as _email_lib
+    from app import models as _m
+    from app.routers.sync_common import load_synced_ids
+    from app.routers.sync_icloud import _imap_connect
+
+    cfg = db.query(_m.ICloudSync).first()
+    if not cfg or not cfg.app_password_enc:
+        return []
+
+    synced_ids = load_synced_ids(db, "icloud_mail")
+    out = []
+    imap = None
+    try:
+        imap = _imap_connect(cfg)
+        imap.select("INBOX")
+        # Search by subject OR from
+        _, ids_sub = imap.search(None, f'SUBJECT "{q}"')
+        _, ids_frm = imap.search(None, f'FROM "{q}"')
+        ids_set: set[bytes] = set()
+        for part in [ids_sub[0], ids_frm[0]]:
+            if part:
+                ids_set.update(part.split())
+        for msg_id_bytes in list(ids_set)[:25]:
+            msg_id = msg_id_bytes.decode()
+            if msg_id in synced_ids:
+                continue
+            existing = db.query(_m.Event).filter(
+                _m.Event.external_id == msg_id, _m.Event.application_id == app_id
+            ).first()
+            if existing:
+                continue
+            try:
+                _, hdr_data = imap.fetch(msg_id_bytes, "(RFC822.HEADER)")
+                hdr_msg = _email_lib.message_from_bytes(hdr_data[0][1])
+            except Exception:
+                continue
+            subject = hdr_msg.get("Subject", "(kein Betreff)")
+            sender = hdr_msg.get("From", "")
+            date_str = hdr_msg.get("Date", "")
+            datum = None
+            if date_str:
+                try:
+                    from email.utils import parsedate_to_datetime as _pdt
+                    datum = _pdt(date_str).date()
+                except Exception:
+                    pass
+            c = _make_live_candidate("icloud_mail", msg_id, datum, subject, f"Von: {sender}", seen_external)
+            if c:
+                out.append(c)
+    except Exception:
+        pass
+    finally:
+        if imap:
+            try:
+                imap.logout()
+            except Exception:
+                pass
+    return out
+
+
+def _icloud_cal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
+    """Search iCloud Calendar via CalDAV for q (Pool 3)."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from app import models as _m
+    from app.routers.sync_icloud import CALDAV_URL
+    from app.ai.provider import decrypt_api_key
+
+    cfg = db.query(_m.ICloudSync).first()
+    if not cfg or not cfg.app_password_enc:
+        return []
+
+    try:
+        import caldav
+    except ImportError:
+        return []
+
+    q_lower = q.lower()
+    out = []
+    try:
+        client = caldav.DAVClient(
+            url=CALDAV_URL,
+            username=cfg.apple_id,
+            password=decrypt_api_key(cfg.app_password_enc),
+        )
+        principal = client.principal()
+        now = _dt.now(_tz.utc)
+        start = now - _td(days=365)
+        end = now + _td(days=90)
+        for cal in principal.calendars():
+            try:
+                for ev in cal.date_search(start=start, end=end, expand=True):
+                    try:
+                        comp = ev.icalendar_component
+                    except Exception:
+                        continue
+                    summary = str(comp.get("SUMMARY", ""))
+                    desc = str(comp.get("DESCRIPTION", ""))
+                    if q_lower not in summary.lower() and q_lower not in desc.lower():
+                        continue
+                    uid = str(comp.get("UID", ""))
+                    dtstart = comp.get("DTSTART")
+                    datum = dtstart.dt.date() if dtstart and hasattr(dtstart.dt, "date") else (dtstart.dt if dtstart else None)
+                    c = _make_live_candidate("icloud_cal", uid, datum, summary or "(kein Titel)", desc[:100] if desc else "", seen_external)
+                    if c:
+                        out.append(c)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out[:25]
+
+
+def _icloud_notes_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
+    """Search iCloud Notes via pyicloud for q (Pool 3)."""
+    from app import models as _m
+    from app.routers.sync_icloud import _get_pyicloud_api
+    from app.routers.sync_common import load_synced_ids
+
+    cfg = db.query(_m.ICloudSync).first()
+    if not cfg or not cfg.web_password_enc:
+        return []
+
+    synced_ids = load_synced_ids(db, "icloud_notes")
+    q_lower = q.lower()
+    out = []
+    try:
+        api = _get_pyicloud_api(cfg)
+        notes_service = api.notes
+        if hasattr(notes_service, 'get_notes'):
+            raw_notes = notes_service.get_notes()
+        elif hasattr(notes_service, 'notes'):
+            raw_notes = notes_service.notes
+        else:
+            raw_notes = list(notes_service)
+        if isinstance(raw_notes, dict):
+            raw_notes = list(raw_notes.values())
+
+        for note in raw_notes:
+            title = str(getattr(note, 'title', None) or note.get('title', '') if isinstance(note, dict) else '')
+            body = str(getattr(note, 'body', None) or note.get('body', '') if isinstance(note, dict) else '')
+            if q_lower not in title.lower() and q_lower not in body.lower():
+                continue
+            note_id = str(getattr(note, 'id', None) or note.get('id', '') if isinstance(note, dict) else id(note))
+            if note_id in synced_ids:
+                continue
+            c = _make_live_candidate("icloud_notes", note_id, None, title or "(ohne Titel)", body[:100], seen_external)
+            if c:
+                out.append(c)
+    except Exception:
+        pass
+    return out[:25]
 
 
 class ManualAssignPayload(BaseModel):
     match_id: int
-    external_id: Optional[str] = None  # required when match_id==0 (gmail-live pool)
+    external_id: Optional[str] = None  # required when match_id==0 (live pool)
+    source: Optional[str] = None       # required when match_id==0: "gmail"|"icloud_mail"|"icloud_cal"|"icloud_notes"
     event_type: Optional[str] = None
     datum: Optional[str] = None
     titel: Optional[str] = None
@@ -1221,86 +1377,124 @@ def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(
 
     from datetime import date as _date
 
-    # ── Pool 3: Gmail live item (id=0, external_id is the Gmail message ID) ─
+    # ── Pool 3: Live item from any external source (match_id==0) ─────────────
     if body.match_id == 0:
-        if not body.external_id:
-            raise HTTPException(400, "external_id fehlt für Gmail-Live-Zuweisung.")
-        gmail_msg_id = body.external_id
-        # Re-check: already an Event for this app?
+        if not body.external_id or not body.source:
+            raise HTTPException(400, "external_id und source erforderlich für Live-Zuweisung.")
+        src = body.source
+        ext_id = body.external_id
+
         existing = db.query(models.Event).filter(
-            models.Event.external_id == gmail_msg_id,
+            models.Event.external_id == ext_id,
             models.Event.application_id == app_id,
         ).first()
         if existing:
             return {"conflict": False, "event_id": existing.id}
 
-        try:
-            from app.routers.sync_google import _refresh_if_needed
-            from googleapiclient.discovery import build as _gbuild
-            cfg = db.query(models.GoogleSync).first()
-            if not cfg or not cfg.refresh_token_enc:
-                raise HTTPException(400, "Google nicht verbunden.")
-            creds = _refresh_if_needed(cfg, db)
-            service = _gbuild("gmail", "v1", credentials=creds, cache_discovery=False)
-            msg_full = service.users().messages().get(
-                userId="me", id=gmail_msg_id, format="full"
-            ).execute()
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(502, f"Gmail API Fehler: {exc}")
-
         from app.routers.sync_common import strip_html, mark_synced
-        payload = msg_full.get("payload", {})
-        hdrs = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
-        subject = hdrs.get("subject", "(kein Betreff)")
-        date_str = hdrs.get("date", "")
+
+        subject = body.titel or "(kein Titel)"
+        body_text: Optional[str] = None
         datum_val = None
-        if date_str:
-            try:
-                from email.utils import parsedate_to_datetime as _pdt
-                datum_val = _pdt(date_str).date()
-            except Exception:
-                pass
-
-        # Extract body text (simplified)
-        def _body(p):
-            import base64
-            mime = p.get("mimeType", "")
-            if mime == "text/plain":
-                d = p.get("body", {}).get("data", "")
-                return base64.urlsafe_b64decode(d + "==").decode("utf-8", errors="replace") if d else ""
-            if mime == "text/html":
-                d = p.get("body", {}).get("data", "")
-                return strip_html(base64.urlsafe_b64decode(d + "==").decode("utf-8", errors="replace")) if d else ""
-            for part in p.get("parts", []):
-                t = _body(part)
-                if t:
-                    return t
-            return ""
-
-        body_text = _body(payload)[:500]
-
-        event_typ = body.event_type or "email"
-        if event_typ in ("status_change", "duplicate_contact", "duplicate_event"):
-            event_typ = "email"
-
         try:
-            datum_out = _date.fromisoformat(body.datum) if body.datum else datum_val
+            datum_val = _date.fromisoformat(body.datum) if body.datum else None
         except ValueError:
-            datum_out = datum_val
+            pass
+
+        if src == "gmail":
+            try:
+                from app.routers.sync_google import _refresh_if_needed
+                from googleapiclient.discovery import build as _gbuild
+                import base64 as _b64
+                gcfg = db.query(models.GoogleSync).first()
+                if not gcfg or not gcfg.refresh_token_enc:
+                    raise HTTPException(400, "Google nicht verbunden.")
+                creds = _refresh_if_needed(gcfg, db)
+                service = _gbuild("gmail", "v1", credentials=creds, cache_discovery=False)
+                msg_full = service.users().messages().get(userId="me", id=ext_id, format="full").execute()
+                pl = msg_full.get("payload", {})
+                hdrs = {h["name"].lower(): h["value"] for h in pl.get("headers", [])}
+                subject = hdrs.get("subject", subject)
+                date_str = hdrs.get("date", "")
+                if date_str and not datum_val:
+                    try:
+                        from email.utils import parsedate_to_datetime as _pdt
+                        datum_val = _pdt(date_str).date()
+                    except Exception:
+                        pass
+
+                def _gbody(p):
+                    mime = p.get("mimeType", "")
+                    if mime == "text/plain":
+                        d = p.get("body", {}).get("data", "")
+                        return _b64.urlsafe_b64decode(d + "==").decode("utf-8", errors="replace") if d else ""
+                    if mime == "text/html":
+                        d = p.get("body", {}).get("data", "")
+                        return strip_html(_b64.urlsafe_b64decode(d + "==").decode("utf-8", errors="replace")) if d else ""
+                    for part in p.get("parts", []):
+                        t = _gbody(part)
+                        if t:
+                            return t
+                    return ""
+                body_text = _gbody(pl)[:500] or None
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(502, f"Gmail API Fehler: {exc}")
+
+        elif src == "icloud_mail":
+            import email as _email_lib
+            from app.routers.sync_icloud import _imap_connect
+            icfg = db.query(models.ICloudSync).first()
+            if not icfg or not icfg.app_password_enc:
+                raise HTTPException(400, "iCloud nicht verbunden.")
+            imap = None
+            try:
+                imap = _imap_connect(icfg)
+                imap.select("INBOX")
+                _, fetch_data = imap.fetch(ext_id.encode(), "(RFC822)")
+                raw = fetch_data[0][1] if fetch_data and fetch_data[0] else b""
+                msg = _email_lib.message_from_bytes(raw)
+                subject = msg.get("Subject", subject)
+                date_str = msg.get("Date", "")
+                if date_str and not datum_val:
+                    try:
+                        from email.utils import parsedate_to_datetime as _pdt
+                        datum_val = _pdt(date_str).date()
+                    except Exception:
+                        pass
+                from app.routers.sync_icloud import _imap_body
+                body_text = (_imap_body(msg) or "")[:500] or None
+            except Exception as exc:
+                raise HTTPException(502, f"iCloud-Mail Fehler: {exc}")
+            finally:
+                if imap:
+                    try:
+                        imap.logout()
+                    except Exception:
+                        pass
+
+        elif src == "icloud_cal":
+            pass  # title/datum already sent from frontend via candidates metadata
+
+        elif src == "icloud_notes":
+            pass  # title already sent; no full-body fetch needed
+
+        event_typ = body.event_type or ("termin" if "cal" in src else "email" if "mail" in src or src == "gmail" else "notiz")
+        if event_typ in ("status_change", "duplicate_contact", "duplicate_event"):
+            event_typ = "notiz"
 
         ev = models.Event(
             application_id=app_id,
             typ=event_typ,
-            datum=datum_out,
+            datum=datum_val,
             titel=subject,
-            notiz=body_text or None,
-            source="gmail",
-            external_id=gmail_msg_id,
+            notiz=body_text,
+            source=src,
+            external_id=ext_id,
         )
         db.add(ev)
-        mark_synced(db, "gmail", gmail_msg_id)
+        mark_synced(db, src, ext_id)
         db.commit()
         db.refresh(ev)
         return {"conflict": False, "event_id": ev.id}
