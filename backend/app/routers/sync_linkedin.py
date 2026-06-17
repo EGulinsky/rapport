@@ -575,11 +575,26 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     await _accept_consent(page)
     await asyncio.sleep(1)
 
+    # Log page state for debugging scroll issues
+    page_info = await page.evaluate("""
+        () => {
+            const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim()).filter(t => t).slice(0, 20);
+            const scrollable = Array.from(document.querySelectorAll('*')).filter(el => {
+                const s = getComputedStyle(el);
+                return (s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 50;
+            }).map(el => `${el.tagName}.${el.className.slice(0,40)} h=${el.scrollHeight}/${el.clientHeight}`).slice(0, 10);
+            return {bodyH: document.body.scrollHeight, winH: window.innerHeight, buttons, scrollable, url: window.location.href};
+        }
+    """)
+    _state["log"].append(f"[{card_type}] page load: bodyH={page_info['bodyH']}, winH={page_info['winH']}, buttons={page_info['buttons']}")
+    _state["log"].append(f"[{card_type}] scrollable containers: {page_info['scrollable']}")
+
     # Stale detection: track ALL job IDs ever seen in DOM.
     # dom_count fails with virtual scrolling (items replaced not added).
     # New IDs in DOM = genuine new content loaded, even if total count unchanged.
     all_dom_ids: set[str] = set()
     stale_rounds = 0
+    scroll_round = 0
 
     while True:
         raw_items: list[dict] = await page.evaluate(_EXTRACT_JOBS_JS)
@@ -707,6 +722,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             await asyncio.sleep(0.5)
             await page.mouse.wheel(0, 2500)
             await asyncio.sleep(3)
+            scroll_round += 1
+            after_h = await page.evaluate("() => ({bodyH: document.body.scrollHeight, jobLinks: document.querySelectorAll('a[href*=\"/jobs/view/\"]').length})")
+            _state["log"].append(f"[{card_type}] scroll#{scroll_round}: bodyH={after_h['bodyH']}, jobLinks={after_h['jobLinks']}, all_dom_ids={len(all_dom_ids)}, stale={stale_rounds}")
 
     return jobs
 

@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.27',
+    date: '2026-06-17',
+    changes: [
+      'Debug: LinkedIn-Scraper loggt nach Seitenload alle Buttons, scrollbare Container und Seitenhöhe; nach jedem Scroll-Versuch DOM-Höhe und Job-Link-Anzahl — sichtbar im Sync-Log',
+    ],
+  },
+  {
     version: '2.0.26',
     date: '2026-06-17',
     changes: [
