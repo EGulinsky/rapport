@@ -1017,9 +1017,19 @@ def get_result(app_id: int):
     return _task_results.get(str(app_id)) or {"done": False}
 
 
+_SYNC_SOURCES = {"gmail", "gcal", "icloud_mail", "icloud_cal", "icloud_notes", "calls"}
+
+
 @router.get("/{app_id}/candidates")
 def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
-    """Return pending review items that could be manually assigned to this application."""
+    """Return items that could be manually assigned to this application.
+
+    Two pools:
+    1. PendingMatch rows (not yet assigned anywhere)
+    2. Events already assigned to OTHER applications but from a sync source
+       (can be re-assigned here)
+    Both pools are filtered by the query string (or app search terms if no query).
+    """
     app = db.query(models.Application).get(app_id)
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
@@ -1027,6 +1037,16 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
     q_lower = q.strip().lower()
     terms = _search_terms(app)
 
+    def _matches(haystack: str) -> bool:
+        h = haystack.lower()
+        if q_lower:
+            return q_lower in h
+        return any(t.lower() in h for t in terms)
+
+    results = []
+    seen_external: set[str] = set()
+
+    # ── Pool 1: PendingMatch ──────────────────────────────────────────────
     pending = (
         db.query(models.PendingMatch)
         .filter(models.PendingMatch.review_status == "pending")
@@ -1034,30 +1054,66 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
         .limit(200)
         .all()
     )
-
-    results = []
     for pm in pending:
-        text = " ".join(filter(None, [pm.titel, pm.extract, pm.raw_content or ""])).lower()
-        # Filter by query string if provided, otherwise by application terms
-        if q_lower:
-            if q_lower not in text:
-                continue
-        else:
-            if not any(t.lower() in text for t in terms):
-                continue
+        haystack = " ".join(filter(None, [pm.titel, pm.extract, pm.raw_content or ""]))
+        if not _matches(haystack):
+            continue
+        key = f"{pm.source}:{pm.external_id}"
+        seen_external.add(key)
         results.append({
-            "id":             pm.id,
-            "source":         pm.source,
-            "external_id":    pm.external_id,
-            "event_type":     pm.event_type,
-            "datum":          str(pm.datum) if pm.datum else None,
-            "titel":          pm.titel,
-            "extract":        pm.extract,
-            "confidence":     pm.confidence,
-            "suggested_app_id":   pm.suggested_app_id,
+            "id":                  pm.id,
+            "source":              pm.source,
+            "external_id":         pm.external_id,
+            "event_type":          pm.event_type,
+            "datum":               str(pm.datum) if pm.datum else None,
+            "titel":               pm.titel,
+            "extract":             pm.extract,
+            "confidence":          pm.confidence,
+            "suggested_app_id":    pm.suggested_app_id,
             "suggested_app_firma": pm.application.firma if pm.application else None,
+            "_pool":               "pending",
         })
-    return results
+
+    # ── Pool 2: Events from OTHER applications (sync sources only) ────────
+    other_events = (
+        db.query(models.Event)
+        .filter(
+            models.Event.application_id != app_id,
+            models.Event.source.in_(list(_SYNC_SOURCES)),
+        )
+        .order_by(models.Event.datum.desc())
+        .limit(500)
+        .all()
+    )
+    for ev in other_events:
+        key = f"{ev.source}:{ev.external_id}" if ev.external_id else f"ev:{ev.id}"
+        if key in seen_external:
+            continue
+        haystack = " ".join(filter(None, [ev.titel, ev.notiz or ""]))
+        if not _matches(haystack):
+            continue
+        seen_external.add(key)
+        other_app = db.query(models.Application).get(ev.application_id)
+        results.append({
+            "id":                  -(ev.id),   # negative = event pool, not PendingMatch
+            "source":              ev.source,
+            "external_id":         ev.external_id,
+            "event_type":          ev.typ,
+            "datum":               str(ev.datum) if ev.datum else None,
+            "titel":               ev.titel,
+            "extract":             ev.notiz,
+            "confidence":          50,
+            "suggested_app_id":    ev.application_id,
+            "suggested_app_firma": other_app.firma if other_app else None,
+            "_pool":               "event",
+        })
+
+    # strip internal _pool field before returning
+    for r in results:
+        r.pop("_pool", None)
+
+    results.sort(key=lambda r: r["datum"] or "", reverse=True)
+    return results[:100]
 
 
 class ManualAssignPayload(BaseModel):
@@ -1070,22 +1126,61 @@ class ManualAssignPayload(BaseModel):
 
 @router.post("/{app_id}/assign")
 def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(get_db)):
-    """Manually assign a PendingMatch item to an application without AI."""
+    """Manually assign a PendingMatch or existing Event to an application.
+
+    Positive match_id → PendingMatch row.
+    Negative match_id → abs(match_id) is an Event.id from another application
+    (returned by list_candidates when the item is already in Pool 2).
+    """
     app = db.query(models.Application).get(app_id)
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
 
+    from datetime import date as _date
+
+    # ── Pool 2: re-assign an existing Event ───────────────────────────────
+    if body.match_id < 0:
+        event_id = abs(body.match_id)
+        src_event = db.query(models.Event).get(event_id)
+        if not src_event:
+            raise HTTPException(404, "Event nicht gefunden.")
+        if src_event.application_id == app_id:
+            return {"conflict": False, "event_id": src_event.id}
+
+        if not body.remove_from_other:
+            conflict_app = db.query(models.Application).get(src_event.application_id)
+            return {
+                "conflict": True,
+                "conflict_app_id": src_event.application_id,
+                "conflict_app_firma": conflict_app.firma if conflict_app else None,
+                "conflict_event_id": src_event.id,
+            }
+
+        # Move event to this application
+        src_event.application_id = app_id
+        if body.event_type:
+            src_event.typ = body.event_type
+        if body.titel:
+            src_event.titel = body.titel
+        if body.datum:
+            try:
+                src_event.datum = _date.fromisoformat(body.datum)
+            except ValueError:
+                pass
+        db.commit()
+        db.refresh(src_event)
+        return {"conflict": False, "event_id": src_event.id}
+
+    # ── Pool 1: PendingMatch ───────────────────────────────────────────────
     pm = db.query(models.PendingMatch).get(body.match_id)
     if not pm:
         raise HTTPException(404, "PendingMatch nicht gefunden.")
 
-    from datetime import date as _date
     try:
         datum = _date.fromisoformat(body.datum) if body.datum else pm.datum
     except ValueError:
         datum = pm.datum
 
-    # Check if an Event with the same external_id already exists in another application
     ext_id = pm.external_id
     conflict_event = (
         db.query(models.Event)
