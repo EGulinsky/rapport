@@ -933,28 +933,55 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                   <Search className="h-4 w-4" />
                 </button>
               </div>
-              <div className="overflow-y-auto flex-1 p-3 space-y-2">
+              <div className="overflow-y-auto flex-1 p-3 space-y-3">
                 {manualLoading && <p className="text-sm text-gray-400 text-center py-4">Lädt…</p>}
                 {!manualLoading && manualCandidates.length === 0 && (
                   <p className="text-sm text-gray-400 italic text-center py-4">Keine Treffer</p>
                 )}
-                {manualCandidates.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => assignCandidate(c)}
-                    className="w-full text-left rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 p-3 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{c.titel || c.event_type || c.source}</p>
-                        {c.datum && <p className="text-xs text-gray-500">{new Date(c.datum).toLocaleDateString('de-DE')}</p>}
-                        {c.extract && <p className="text-xs text-gray-400 truncate mt-0.5">{c.extract}</p>}
-                        {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">Vorschlag: {c.suggested_app_firma}</p>}
-                      </div>
-                      <SourceBadge source={c.source} />
-                    </div>
-                  </button>
-                ))}
+                {!manualLoading && (() => {
+                  const SOURCE_ORDER = ['gmail','gcal','icloud_mail','icloud_cal','icloud_notes','pending','event']
+                  const grouped: Record<string, typeof manualCandidates> = {}
+                  manualCandidates.forEach(c => {
+                    const key = c.source || 'event'
+                    ;(grouped[key] ??= []).push(c)
+                  })
+                  const keys = [
+                    ...SOURCE_ORDER.filter(k => grouped[k]),
+                    ...Object.keys(grouped).filter(k => !SOURCE_ORDER.includes(k)),
+                  ]
+                  return keys.map(src => {
+                    const items = grouped[src]
+                    const meta = SOURCE_META[src]
+                    const label = meta?.label ?? src
+                    const cls   = meta?.cls   ?? 'bg-gray-50 text-gray-600 border-gray-200'
+                    return (
+                      <details key={src} open className="text-xs">
+                        <summary className="flex items-center gap-1.5 cursor-pointer select-none list-none mb-1.5">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cls}`}>
+                            {meta?.icon}{label}
+                          </span>
+                          <span className="text-gray-400">({items.length})</span>
+                        </summary>
+                        <div className="space-y-1.5 pl-1">
+                          {items.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => assignCandidate(c)}
+                              className="w-full text-left rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 p-3 transition-colors"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{c.titel || c.event_type || c.source}</p>
+                                {c.datum && <p className="text-xs text-gray-500">{new Date(c.datum).toLocaleDateString('de-DE')}</p>}
+                                {c.extract && <p className="text-xs text-gray-400 truncate mt-0.5">{c.extract}</p>}
+                                {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">Vorschlag: {c.suggested_app_firma}</p>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </details>
+                    )
+                  })
+                })()}
               </div>
             </>
           )}
