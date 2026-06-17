@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.41',
+    date: '2026-06-17',
+    changes: [
+      'Fix: Pagination ARCHIVED — Playwright-nativer Click statt JS-evaluate + wait_for_load_state("networkidle") statt Polling; stale_rounds-Schwelle auf 5 erhöht',
+      'Debug: Excel-Export enthält jetzt Sheet "Pagination-Log" mit allen Klick- und Stale-Ereignissen pro Kategorie',
+    ],
+  },
+  {
     version: '2.0.40',
     date: '2026-06-17',
     changes: [
