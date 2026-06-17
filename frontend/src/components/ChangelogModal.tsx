@@ -8,6 +8,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.37',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper wartet nach "Weiter"-Klick aktiv bis neue Jobs im DOM erscheinen (max. 12 s) — verhindert vorzeitigen Abbruch bei langsamen Seitenübergängen (Archived hatte deshalb zu wenige Ergebnisse)',
+      'Fix: Duplikate zwischen Kategorien eliminiert — erscheint dieselbe Stelle in mehreren Tabs (z. B. Beworben + Interviews), wird nur die höherpriore Kategorie übernommen',
+    ],
+  },
+  {
     version: '2.0.36',
     date: '2026-06-17',
     changes: [

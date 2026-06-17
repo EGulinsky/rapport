@@ -780,7 +780,14 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         """)
         if next_result:
             _state["log"].append(f"[{card_type}] pagination Next clicked via JS ({next_result}), page={pages_navigated+2}")
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
+            # Poll until new job IDs appear in DOM (up to 12 s) to handle slow SPA transitions
+            for _w in range(12):
+                _probe = await page.evaluate(_EXTRACT_JOBS_JS)
+                _probe_ids = {it.get("id") for it in _probe if it.get("id")} - all_dom_ids
+                if _probe_ids:
+                    break
+                await asyncio.sleep(1)
             pages_navigated += 1
             clicked_next = True
             stale_rounds = 0
@@ -997,7 +1004,7 @@ async def _async_sync(cfg_id: int):
             # Scrape all categories; seen_ids is per-category to catch scroll-duplicates,
             # but shared job IDs across categories ARE intentional: ARCHIVED must win
             # over APPLIED even if the same job ID appeared earlier.
-            all_jobs: list[dict] = []
+            all_jobs_by_id: dict[str, dict] = {}
             category_counts: list[dict] = []
             for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
                 _state["step"] = f"Lade Kategorie: {label}…"
@@ -1005,9 +1012,11 @@ async def _async_sync(cfg_id: int):
                 for j in cat_jobs:
                     j["_card_type"] = card_type
                     j["_label"] = label
-                all_jobs.extend(cat_jobs)
+                    # Later categories (higher priority) overwrite earlier ones for the same job ID
+                    all_jobs_by_id[j["id"]] = j
                 category_counts.append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
-                _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs)})"
+                _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_id)})"
+            all_jobs = list(all_jobs_by_id.values())
 
             _state["category_counts"] = category_counts
             await browser.close()
