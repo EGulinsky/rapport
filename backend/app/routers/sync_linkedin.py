@@ -277,19 +277,16 @@ def submit_two_fa(payload: TwoFaPayload):
 # ── Playwright scraper ────────────────────────────────────────────────────────
 
 LOGIN_URL = "https://www.linkedin.com/login"
-_MY_ITEMS = "https://www.linkedin.com/my-items/saved-jobs/?cardType="
 _TRACKER  = "https://www.linkedin.com/jobs-tracker/?stage="
 
 # (card_type, label, default_status, max_pages, url)
-# APPLIED/SAVED/IN_PROGRESS: page 1 only — LinkedIn stores ALL historical applications
-# across many pages, but only the first page reflects the current active view.
-# ARCHIVED/INTERVIEWS: paginate fully to catch all entries.
+# Alle Tabs über jobs-tracker/?stage= — vollständige Pagination für alle.
 CATEGORIES: list[tuple[str, str, str, int, str]] = [
-    ("SAVED",       "Gespeichert",    "prospecting", 1,  _MY_ITEMS + "SAVED"),
-    ("IN_PROGRESS", "In Bearbeitung", "applied",     1,  _MY_ITEMS + "IN_PROGRESS"),
-    ("APPLIED",     "Beworben",       "applied",     1,  _MY_ITEMS + "APPLIED"),
-    ("INTERVIEWS",  "Interviews",     "hr",          99, _TRACKER  + "interview"),
-    ("ARCHIVED",    "Archiviert",     "rejected",    99, _TRACKER  + "archived"),
+    ("SAVED",       "Gespeichert",    "prospecting", 99, _TRACKER + "saved"),
+    ("IN_PROGRESS", "In Bearbeitung", "applied",     99, _TRACKER + "in-progress"),
+    ("APPLIED",     "Beworben",       "applied",     99, _TRACKER + "applied"),
+    ("INTERVIEWS",  "Interviews",     "hr",          99, _TRACKER + "interview"),
+    ("ARCHIVED",    "Archiviert",     "rejected",    99, _TRACKER + "archived"),
 ]
 
 # LinkedIn status footer text → override main_status
@@ -627,7 +624,7 @@ async def _accept_consent(page) -> None:
 async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
     """Scroll through one LinkedIn job category and collect all job cards."""
     if not url:
-        url = _MY_ITEMS + card_type
+        url = _TRACKER + card_type.lower()
     jobs: list[dict] = []
 
     try:
@@ -1012,7 +1009,7 @@ async def _async_sync(cfg_id: int):
 
             # Check session validity
             _state["step"] = "Session prüfen: öffne LinkedIn…"
-            check_url = _MY_ITEMS + "APPLIED"
+            check_url = _TRACKER + "applied"
             try:
                 await page.goto(check_url, wait_until="domcontentloaded", timeout=20000)
                 _state["step"] = f"Session prüfen: geladen ({page.url[:60]})"
