@@ -251,12 +251,16 @@ LOGIN_URL = "https://www.linkedin.com/login"
 BASE_JOBS_URL = "https://www.linkedin.com/my-items/saved-jobs/?cardType="
 
 # All LinkedIn job categories → (cardType param, default main_status)
-CATEGORIES: list[tuple[str, str, str]] = [
-    ("SAVED",       "Gespeichert",   "prospecting"),
-    ("IN_PROGRESS", "In Bearbeitung","applied"),
-    ("APPLIED",     "Beworben",      "applied"),
-    ("INTERVIEWS",  "Interviews",    "hr"),
-    ("ARCHIVED",    "Archiviert",    "rejected"),
+# (card_type, label, default_status, max_pages)
+# APPLIED/SAVED/IN_PROGRESS: page 1 only — LinkedIn stores ALL historical applications
+# across many pages, but only the first page reflects the current active view.
+# ARCHIVED/INTERVIEWS: paginate fully to catch all entries.
+CATEGORIES: list[tuple[str, str, str, int]] = [
+    ("SAVED",       "Gespeichert",    "prospecting", 1),
+    ("IN_PROGRESS", "In Bearbeitung", "applied",     1),
+    ("APPLIED",     "Beworben",       "applied",     1),
+    ("INTERVIEWS",  "Interviews",     "hr",          99),
+    ("ARCHIVED",    "Archiviert",     "rejected",    99),
 ]
 
 # LinkedIn status footer text → override main_status
@@ -573,7 +577,7 @@ async def _accept_consent(page) -> None:
             continue
 
 
-async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str]) -> list[dict]:
+async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99) -> list[dict]:
     """Scroll through one LinkedIn job category and collect all job cards."""
     url = f"{BASE_JOBS_URL}{card_type}"
     jobs: list[dict] = []
@@ -618,6 +622,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     all_dom_ids: set[str] = set()
     stale_rounds = 0
     scroll_round = 0
+    pages_navigated = 0  # counts Next-button clicks (pagination pages)
 
     while True:
         raw_items: list[dict] = await page.evaluate(_EXTRACT_JOBS_JS)
@@ -697,7 +702,10 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 })
 
         # 1) Try numbered pagination "Next" button (LinkedIn My Jobs ARCHIVED / INTERVIEWS)
+        # Respect max_pages: if we've already navigated max_pages-1 times, stop here.
         clicked_next = False
+        if pages_navigated >= max_pages - 1:
+            break  # already scraped max_pages pages, done
         next_selectors = [
             "button.artdeco-pagination__button--next",
             "button[aria-label='Next']",
@@ -711,9 +719,10 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 if await loc.count() > 0:
                     btn = loc.first
                     if await btn.is_visible() and await btn.is_enabled():
-                        _state["log"].append(f"[{card_type}] clicking pagination Next ({sel})")
+                        _state["log"].append(f"[{card_type}] clicking pagination Next ({sel}) page={pages_navigated+2}")
                         await btn.click()
                         await asyncio.sleep(3)
+                        pages_navigated += 1
                         clicked_next = True
                         stale_rounds = 0
                         break
@@ -934,9 +943,9 @@ async def _async_sync(cfg_id: int):
             # over APPLIED even if the same job ID appeared earlier.
             all_jobs: list[dict] = []
             category_counts: list[dict] = []
-            for card_type, label, default_status in CATEGORIES:
+            for card_type, label, default_status, max_pages in CATEGORIES:
                 _state["step"] = f"Lade Kategorie: {label}…"
-                cat_jobs = await _scrape_category(page, card_type, default_status, set())
+                cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages)
                 for j in cat_jobs:
                     j["_card_type"] = card_type
                     j["_label"] = label
