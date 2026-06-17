@@ -263,19 +263,19 @@ def submit_two_fa(payload: TwoFaPayload):
 # ── Playwright scraper ────────────────────────────────────────────────────────
 
 LOGIN_URL = "https://www.linkedin.com/login"
-BASE_JOBS_URL = "https://www.linkedin.com/my-items/saved-jobs/?cardType="
+_MY_ITEMS = "https://www.linkedin.com/my-items/saved-jobs/?cardType="
+_TRACKER  = "https://www.linkedin.com/jobs-tracker/?stage="
 
-# All LinkedIn job categories → (cardType param, default main_status)
-# (card_type, label, default_status, max_pages)
+# (card_type, label, default_status, max_pages, url)
 # APPLIED/SAVED/IN_PROGRESS: page 1 only — LinkedIn stores ALL historical applications
 # across many pages, but only the first page reflects the current active view.
 # ARCHIVED/INTERVIEWS: paginate fully to catch all entries.
-CATEGORIES: list[tuple[str, str, str, int]] = [
-    ("SAVED",       "Gespeichert",    "prospecting", 1),
-    ("IN_PROGRESS", "In Bearbeitung", "applied",     1),
-    ("APPLIED",     "Beworben",       "applied",     1),
-    ("INTERVIEWS",  "Interviews",     "hr",          99),
-    ("ARCHIVED",    "Archiviert",     "rejected",    99),
+CATEGORIES: list[tuple[str, str, str, int, str]] = [
+    ("SAVED",       "Gespeichert",    "prospecting", 1,  _MY_ITEMS + "SAVED"),
+    ("IN_PROGRESS", "In Bearbeitung", "applied",     1,  _MY_ITEMS + "IN_PROGRESS"),
+    ("APPLIED",     "Beworben",       "applied",     1,  _MY_ITEMS + "APPLIED"),
+    ("INTERVIEWS",  "Interviews",     "hr",          99, _TRACKER  + "interview"),
+    ("ARCHIVED",    "Archiviert",     "rejected",    99, _MY_ITEMS + "ARCHIVED"),
 ]
 
 # LinkedIn status footer text → override main_status
@@ -613,9 +613,10 @@ async def _accept_consent(page) -> None:
             continue
 
 
-async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99) -> list[dict]:
+async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
     """Scroll through one LinkedIn job category and collect all job cards."""
-    url = f"{BASE_JOBS_URL}{card_type}"
+    if not url:
+        url = _MY_ITEMS + card_type
     jobs: list[dict] = []
 
     try:
@@ -972,7 +973,7 @@ async def _async_sync(cfg_id: int):
 
             # Check session validity
             _state["step"] = "Session prüfen: öffne LinkedIn…"
-            check_url = f"{BASE_JOBS_URL}APPLIED"
+            check_url = _MY_ITEMS + "APPLIED"
             try:
                 await page.goto(check_url, wait_until="domcontentloaded", timeout=20000)
                 _state["step"] = f"Session prüfen: geladen ({page.url[:60]})"
@@ -998,9 +999,9 @@ async def _async_sync(cfg_id: int):
             # over APPLIED even if the same job ID appeared earlier.
             all_jobs: list[dict] = []
             category_counts: list[dict] = []
-            for card_type, label, default_status, max_pages in CATEGORIES:
+            for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
                 _state["step"] = f"Lade Kategorie: {label}…"
-                cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages)
+                cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url)
                 for j in cat_jobs:
                     j["_card_type"] = card_type
                     j["_label"] = label
