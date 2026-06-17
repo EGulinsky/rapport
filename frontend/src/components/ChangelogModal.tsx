@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.31',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn INTERVIEWS — JS-Extraktion erkennt jetzt auch /jobs/collections/ und andere LI-Job-URL-Typen (nicht nur /jobs/view/); Interview-Karten verwenden andere Link-Formate',
+    ],
+  },
+  {
     version: '2.0.30',
     date: '2026-06-17',
     changes: [

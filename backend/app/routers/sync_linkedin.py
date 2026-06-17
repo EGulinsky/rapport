@@ -499,12 +499,27 @@ _CONSENT_SELECTORS = [
 
 _EXTRACT_JOBS_JS = """
 () => {
-    const titleLinks = Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'))
-        .filter(a => (a.innerText || '').trim().length > 5);
+    // LinkedIn uses /jobs/view/ for standard job cards, but Interview-tab cards
+    // may use /jobs/collections/ or other paths. We match any LinkedIn jobs URL
+    // that contains a numeric job ID, then de-duplicate by href.
+    const allLinks = Array.from(document.querySelectorAll(
+        'a[href*="/jobs/view/"], a[href*="/jobs/collections/"], a[href*="linkedin.com/jobs/"]'
+    )).filter(a => {
+        const txt = (a.innerText || '').trim();
+        return txt.length > 5 && /\\/jobs\\/.*\\/(\\d{6,})/.test(a.href || '');
+    });
+
+    // De-duplicate by href to avoid counting the same card twice
+    const seen = new Set();
+    const titleLinks = allLinks.filter(a => {
+        if (seen.has(a.href)) return false;
+        seen.add(a.href);
+        return true;
+    });
 
     return titleLinks.map(link => {
         const href = link.href || '';
-        const m = href.match(/\\/jobs\\/view\\/(\\d+)/);
+        const m = href.match(/\\/jobs\\/.*\\/(\\d{6,})/);
         const jobId = m ? m[1] : '';
         const title = (link.innerText || '').trim();
 
@@ -576,7 +591,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     # Wait for job cards to render — LinkedIn loads them asynchronously after
     # domcontentloaded; without this wait only the first card may be in the DOM.
     try:
-        await page.wait_for_selector('a[href*="/jobs/view/"]', timeout=10000)
+        await page.wait_for_selector(
+            'a[href*="/jobs/view/"], a[href*="/jobs/collections/"]', timeout=10000
+        )
     except Exception:
         pass
     await asyncio.sleep(2)
