@@ -1112,6 +1112,7 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
     if q_lower:
         for _live_fn in (
             _gmail_live_candidates,
+            _gcal_live_candidates,
             _icloud_mail_live_candidates,
             _icloud_cal_live_candidates,
             _icloud_notes_live_candidates,
@@ -1196,6 +1197,74 @@ def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
         if c:
             out.append(c)
     return out
+
+
+def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
+    """Search Google Calendar for q using the API full-text search (Pool 3)."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from app import models as _m
+    from app.routers.sync_common import load_synced_ids
+    from app.routers.sync_google import _refresh_if_needed
+    from googleapiclient.discovery import build
+
+    cfg = db.query(_m.GoogleSync).first()
+    if not cfg or not cfg.refresh_token_enc:
+        return []
+
+    synced_ids = load_synced_ids(db, "gcal")
+    creds = _refresh_if_needed(cfg, db)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    now = _dt.now(_tz.utc)
+    time_min = (now - _td(days=730)).isoformat()
+    time_max = (now + _td(days=90)).isoformat()
+
+    out = []
+    try:
+        cal_list = service.calendarList().list().execute()
+    except Exception:
+        return []
+
+    for cal in cal_list.get("items", []):
+        cal_id = cal["id"]
+        try:
+            resp = service.events().list(
+                calendarId=cal_id,
+                timeMin=time_min,
+                timeMax=time_max,
+                maxResults=25,
+                singleEvents=True,
+                q=q,
+            ).execute()
+        except Exception:
+            continue
+
+        for ev in resp.get("items", []):
+            ev_id = ev.get("id", "")
+            if ev_id in synced_ids:
+                continue
+            existing = db.query(_m.Event).filter(
+                _m.Event.external_id == ev_id, _m.Event.application_id == app_id
+            ).first()
+            if existing:
+                continue
+
+            summary = ev.get("summary", "(kein Titel)")
+            start = ev.get("start", {})
+            date_str = start.get("dateTime", start.get("date", ""))
+            datum = None
+            if date_str:
+                try:
+                    datum = _dt.fromisoformat(date_str.replace("Z", "+00:00")).date()
+                except Exception:
+                    pass
+
+            desc = (ev.get("description") or "")[:100]
+            c = _make_live_candidate("gcal", ev_id, datum, summary, desc or cal.get("summary", ""), seen_external)
+            if c:
+                out.append(c)
+
+    return out[:25]
 
 
 def _icloud_mail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
@@ -1473,6 +1542,41 @@ def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(
                         imap.logout()
                     except Exception:
                         pass
+
+        elif src == "gcal":
+            # Fetch full event details to get description
+            try:
+                from app.routers.sync_google import _refresh_if_needed
+                from googleapiclient.discovery import build as _gbuild
+                gcfg = db.query(models.GoogleSync).first()
+                if gcfg and gcfg.refresh_token_enc:
+                    creds = _refresh_if_needed(gcfg, db)
+                    service = _gbuild("calendar", "v3", credentials=creds, cache_discovery=False)
+                    # Try primary calendar first, then all calendars
+                    ev_data = None
+                    try:
+                        ev_data = service.events().get(calendarId="primary", eventId=ext_id).execute()
+                    except Exception:
+                        cals = service.calendarList().list().execute()
+                        for cal in cals.get("items", []):
+                            try:
+                                ev_data = service.events().get(calendarId=cal["id"], eventId=ext_id).execute()
+                                break
+                            except Exception:
+                                continue
+                    if ev_data:
+                        subject = ev_data.get("summary", subject)
+                        body_text = (ev_data.get("description") or "")[:500] or None
+                        start = ev_data.get("start", {})
+                        date_str = start.get("dateTime", start.get("date", ""))
+                        if date_str and not datum_val:
+                            try:
+                                from datetime import datetime as _dtime
+                                datum_val = _dtime.fromisoformat(date_str.replace("Z", "+00:00")).date()
+                            except Exception:
+                                pass
+            except Exception:
+                pass
 
         elif src == "icloud_cal":
             pass  # title/datum already sent from frontend via candidates metadata
