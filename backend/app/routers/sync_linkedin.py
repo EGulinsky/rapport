@@ -200,6 +200,10 @@ def _parse_date(text: str) -> Optional[str]:
     m = re.search(r"(\d+)\s*mo\b", t)
     if m:
         return (datetime.now() - timedelta(days=int(m.group(1)) * 30)).strftime("%Y-%m-%d")
+    # "2m ago" — bare 'm' for months (word boundary ensures 'mo' above takes priority)
+    m = re.search(r"(\d+)\s*m\b", t)
+    if m:
+        return (datetime.now() - timedelta(days=int(m.group(1)) * 30)).strftime("%Y-%m-%d")
     # long form: "3 days ago", "2 weeks ago", "1 month ago"
     m = re.search(r"(\d+)\s+day", t)
     if m:
