@@ -1226,8 +1226,9 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
                 calendarId=cal_id,
                 timeMin=time_min,
                 timeMax=time_max,
-                maxResults=25,
+                maxResults=100,
                 singleEvents=True,
+                orderBy="updated",
                 q=q,
             ).execute()
         except Exception:
@@ -1256,7 +1257,7 @@ def _gcal_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
             if c:
                 out.append(c)
 
-    return out[:25]
+    return out[:50]
 
 
 def _icloud_mail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
