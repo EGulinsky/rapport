@@ -127,6 +127,7 @@ class Application(Base):
     ghosting            = Column(Boolean, default=False)
 
     kommentar           = Column(Text, nullable=True)
+    linkedin_job_id     = Column(String, nullable=True, index=True)
 
     gespraech_1         = Column(Text, nullable=True)
     gespraech_2         = Column(Text, nullable=True)

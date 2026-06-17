@@ -381,6 +381,25 @@ def _migrate_google_email():
     conn.close()
 
 
+def _migrate_linkedin_job_id():
+    """Add linkedin_job_id column to applications if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(applications)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "linkedin_job_id" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN linkedin_job_id TEXT")
+        cur.execute("CREATE INDEX IF NOT EXISTS ix_applications_linkedin_job_id ON applications (linkedin_job_id)")
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -390,6 +409,7 @@ def init_db():
     _migrate_sync_settings_files()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
+    _migrate_linkedin_job_id()
     Base.metadata.create_all(bind=engine)
     _backfill_events()
     _migrate_gespraeche_to_events()
