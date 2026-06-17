@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.38',
+    date: '2026-06-17',
+    changes: [
+      'Fix: Interviews-Tab — Kontext-Extraktion begrenzt auf 500 Zeichen pro Karte, verhindert dass alle Stellen einer Seite als Kontext einer einzelnen Stelle übernommen werden (führte zu falscher Firma und Schein-Duplikaten)',
+    ],
+  },
+  {
     version: '2.0.37',
     date: '2026-06-17',
     changes: [

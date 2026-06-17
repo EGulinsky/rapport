@@ -564,9 +564,9 @@ _EXTRACT_JOBS_JS = """
         const title = (link.innerText || '').trim();
 
         // Walk up to find a card container with more context.
-        // Accept containers with substantial text even without newlines —
-        // LinkedIn sometimes renders card text as separate DOM nodes
-        // that join without \\n in innerText.
+        // Cap at 500 chars — a single job card never exceeds this, but
+        // a container holding ALL cards on the page (Interviews tab) easily does.
+        const MAX_CARD = 500;
         let el = link;
         let contextText = '';
         let dateHint = '';
@@ -574,20 +574,17 @@ _EXTRACT_JOBS_JS = """
             el = el.parentElement;
             if (!el) break;
             const t = (el.innerText || '').trim();
-            if (t.length > title.length + 10) {
+            if (t.length > title.length + 10 && t.length <= MAX_CARD) {
                 if (!contextText) contextText = t;
-                // Keep walking to find a larger block that likely contains date
                 if (t.length > title.length + 30) { contextText = t; break; }
             }
         }
 
-        // Separately scan ALL text nodes in the card for "Applied"/"ago"
-        // in case LinkedIn renders the date in a sibling subtree.
+        // Also check .closest() for a card boundary; only override if it fits in one card.
         const card = link.closest('li, [data-job-id], article, [class*="job-card"]') || link.parentElement;
         if (card) {
             const full = (card.innerText || '').trim();
-            if (full.length > contextText.length) contextText = full;
-            // Extract date hint from aria-labels too
+            if (full.length > contextText.length && full.length <= MAX_CARD) contextText = full;
             card.querySelectorAll('[aria-label]').forEach(el => {
                 const lbl = el.getAttribute('aria-label') || '';
                 if (/applied|ago|\\d+[dwm]/i.test(lbl)) dateHint = lbl;
