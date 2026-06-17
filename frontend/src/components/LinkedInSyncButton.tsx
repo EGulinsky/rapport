@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Linkedin, Loader2, X, CheckCircle, AlertCircle, Eye, EyeOff, RefreshCw, Trash2 } from 'lucide-react'
+import { Linkedin, Loader2, X, CheckCircle, AlertCircle, Eye, EyeOff, RefreshCw, Trash2, Sheet } from 'lucide-react'
 import { api } from '../api/client'
 import type { LinkedInSyncStatus, LinkedInSyncLogEntry } from '../types'
 
@@ -362,12 +362,24 @@ export function LinkedInSyncButton({ onSynced }: Props) {
                 </>
               )}
               {view === 'running' && !isRunning && (
-                <button
-                  onClick={closeModal}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  Schließen
-                </button>
+                <>
+                  {isDone && (
+                    <button
+                      onClick={async () => { try { await api.export.linkedinDebugExcel() } catch (e) { alert(String(e)) } }}
+                      title="Debug-Excel mit allen gefundenen LI-Stellen herunterladen"
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5"
+                    >
+                      <Sheet className="h-3.5 w-3.5 text-green-600" />
+                      Debug-Excel
+                    </button>
+                  )}
+                  <button
+                    onClick={closeModal}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                  >
+                    Schließen
+                  </button>
+                </>
               )}
             </div>
           </div>

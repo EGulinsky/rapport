@@ -31,6 +31,7 @@ _state: dict = {
     "skipped": 0,
     "errors": [],
     "log": [],             # per-application action log
+    "raw_jobs": [],        # all scraped jobs (debug)
     "started_at": None,
     "finished_at": None,
 }
@@ -121,6 +122,77 @@ def delete_config(db: Session = Depends(get_db)):
 @router.get("/status")
 def get_status():
     return dict(_state)
+
+
+@router.get("/debug-excel")
+def debug_excel():
+    """Download an Excel with all scraped LI jobs from the last sync run."""
+    import io
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    log = _state.get("log") or []
+    if not log:
+        raise HTTPException(404, "Kein Sync-Log vorhanden — bitte zuerst einen LinkedIn-Sync durchführen")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "LinkedIn Sync"
+
+    headers = ["#", "LI Job-ID", "Firma (LI)", "Rolle (LI)", "Datum (LI)", "Kategorie (LI)", "Status-Hint (LI)", "Aktion", "Status DB"]
+    header_fill = PatternFill("solid", fgColor="1E4078")
+    header_font = Font(bold=True, color="FFFFFF")
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    ACTION_COLORS = {
+        "neu":          "C6EFCE",
+        "aktualisiert": "FFEB9C",
+        "abgesagt":     "FFC7CE",
+        "fehler":       "FF0000",
+        "unverändert":  "FFFFFF",
+    }
+
+    for row_i, entry in enumerate(log, 2):
+        row = [
+            row_i - 1,
+            entry.get("li_job_id", ""),
+            entry.get("firma_li", ""),
+            entry.get("rolle_li", ""),
+            entry.get("datum_li", ""),
+            entry.get("kategorie_li", ""),
+            entry.get("status_hint_li", ""),
+            entry.get("aktion", ""),
+            entry.get("status_db", ""),
+        ]
+        fill_color = ACTION_COLORS.get(entry.get("aktion", ""), "FFFFFF")
+        fill = PatternFill("solid", fgColor=fill_color) if fill_color != "FFFFFF" else None
+        for col, val in enumerate(row, 1):
+            cell = ws.cell(row=row_i, column=col, value=val)
+            if fill:
+                cell.fill = fill
+
+    col_widths = [5, 16, 40, 45, 14, 16, 20, 14, 28]
+    for col, w in enumerate(col_widths, 1):
+        ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = w
+
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from datetime import date
+    ts = date.today().strftime("%Y-%m-%d")
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="linkedin_sync_debug_{ts}.xlsx"'},
+    )
 
 
 @router.post("/run")
@@ -710,6 +782,7 @@ async def _async_sync(cfg_id: int):
         if not all_jobs and _state["status"] != "needs_login":
             _state["step"] = "Keine Jobs gefunden — LinkedIn-Layout evtl. geändert"
 
+        _state["raw_jobs"] = all_jobs  # keep for debug export
         _state["step"] = f"Verarbeite {len(all_jobs)} Einträge…"
         created = updated = skipped = 0
         errors: list[str] = []
@@ -718,18 +791,21 @@ async def _async_sync(cfg_id: int):
 
         for i, job in enumerate(all_jobs):
             _state["processed"] = i + 1
+            raw = {
+                "li_job_id":      job.get("id", ""),
+                "firma_li":       job.get("company", ""),
+                "rolle_li":       job.get("title", ""),
+                "datum_li":       job.get("applied_date", ""),
+                "kategorie_li":   job.get("default_status", ""),
+                "status_hint_li": str(job.get("status_hint") or ""),
+            }
             try:
                 app, was_created = _find_or_create_application(db, job)
                 company = job.get("company", "?")
                 role = job.get("title", "?")
                 if was_created:
                     created += 1
-                    action_log.append({
-                        "aktion": "neu",
-                        "firma": company,
-                        "rolle": role,
-                        "status": app.main_status,
-                    })
+                    action_log.append({**raw, "aktion": "neu", "status_db": app.main_status})
                 else:
                     target_status = job.get("default_status", "applied")
                     if job.get("status_hint"):
@@ -744,34 +820,19 @@ async def _async_sync(cfg_id: int):
                         app.main_status = "rejected"
                         app.abgesagt = True
                         updated += 1
-                        action_log.append({
-                            "aktion": "abgesagt",
-                            "firma": company,
-                            "rolle": role,
-                            "von": old_status,
-                        })
+                        action_log.append({**raw, "aktion": "abgesagt", "status_db": f"{old_status} → rejected"})
                     elif target_status != "rejected" and new_idx > cur_idx:
                         app.main_status = target_status
                         if job.get("status_hint") and job["status_hint"][1]:
                             app.sub_status = job["status_hint"][1]
                         updated += 1
-                        action_log.append({
-                            "aktion": "aktualisiert",
-                            "firma": company,
-                            "rolle": role,
-                            "von": old_status,
-                            "zu": target_status,
-                        })
+                        action_log.append({**raw, "aktion": "aktualisiert", "status_db": f"{old_status} → {target_status}"})
                     else:
                         skipped += 1
-                        action_log.append({
-                            "aktion": "unverändert",
-                            "firma": company,
-                            "rolle": role,
-                            "status": old_status,
-                        })
+                        action_log.append({**raw, "aktion": "unverändert", "status_db": old_status})
             except Exception as e:
                 errors.append(f"{job.get('company', '?')}: {e}")
+                action_log.append({**raw, "aktion": "fehler", "status_db": str(e)})
 
         cfg.last_sync = datetime.now(timezone.utc)
         db.commit()
