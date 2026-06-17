@@ -11,7 +11,7 @@ const CHANGELOG: Release[] = [
     version: '2.0.42',
     date: '2026-06-17',
     changes: [
-      'Fix: Archived-Sync nutzt jetzt korrekte URL (linkedin.com/jobs-tracker/?stage=archived) — analog zu Interviews',
+      'Fix: Alle LinkedIn-Kategorien nutzen jetzt jobs-tracker/?stage= (saved/in-progress/applied/interview/archived) — vollständige Pagination für alle Tabs, keine my-items-URL mehr',
     ],
   },
   {
