@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.28',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn ARCHIVED/INTERVIEWS nutzen Seitenpaginierung (1/2/3/Next), kein Infinite Scroll — Scraper klickt jetzt "Next"-Button durch bevor er scrollt',
+    ],
+  },
+  {
     version: '2.0.27',
     date: '2026-06-17',
     changes: [
