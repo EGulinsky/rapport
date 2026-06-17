@@ -114,4 +114,5 @@ jobs:
       - name: Rebuild and restart containers
         env:
           DOCKER_BUILDKIT: "1"
+          BUILD_NUMBER: ${{ github.run_number }}
         run: docker compose -f /Users/eugengulinsky/code/jobtracker/docker-compose.yml up -d --build

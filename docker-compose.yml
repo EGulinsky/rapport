@@ -22,7 +22,10 @@ services:
       retries: 3
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        BUILD_NUMBER: ${BUILD_NUMBER:-0}
     container_name: jobtracker-frontend
     restart: unless-stopped
     ports:
