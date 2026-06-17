@@ -165,11 +165,12 @@ def debug_excel():
         cell.alignment = Alignment(horizontal="center")
 
     ACTION_COLORS = {
-        "neu":          "C6EFCE",
-        "aktualisiert": "FFEB9C",
-        "abgesagt":     "FFC7CE",
-        "fehler":       "FF0000",
-        "unverändert":  "FFFFFF",
+        "neu":              "C6EFCE",
+        "aktualisiert":     "FFEB9C",
+        "abgesagt":         "FFC7CE",
+        "fehler":           "FF0000",
+        "unverändert":      "FFFFFF",
+        "zur Überprüfung":  "BDD7EE",
     }
 
     for row_i, entry in enumerate(log, 2):
@@ -1053,18 +1054,36 @@ async def _async_sync(cfg_id: int):
                     cur_idx = STATUS_ORDER.index(old_status) if old_status in STATUS_ORDER else 0
                     new_idx = STATUS_ORDER.index(target_status) if target_status in STATUS_ORDER else 0
 
-                    # LinkedIn archived → abgesagt regardless of current stage
-                    if target_status == "rejected" and old_status != "rejected":
-                        app.main_status = "rejected"
-                        app.abgesagt = True
+                    status_changed = (
+                        (target_status == "rejected" and old_status != "rejected")
+                        or (target_status != "rejected" and new_idx > cur_idx)
+                    )
+
+                    if status_changed:
+                        # Queue for manual review instead of applying directly
+                        li_job_id = job.get("id", "")
+                        pm_ext_id = f"linkedin_{li_job_id}__status__{target_status}"
+                        already_pending = db.query(models.PendingMatch).filter(
+                            models.PendingMatch.source == "linkedin",
+                            models.PendingMatch.external_id == pm_ext_id,
+                            models.PendingMatch.review_status == "pending",
+                        ).first()
+                        if not already_pending:
+                            sub_hint = job["status_hint"][1] if job.get("status_hint") else None
+                            db.add(models.PendingMatch(
+                                source="linkedin",
+                                external_id=pm_ext_id,
+                                confidence=90,
+                                event_type="status_change",
+                                datum=date.today(),
+                                titel=f"Status: {old_status} → {target_status}",
+                                suggested_app_id=app.id,
+                                suggested_main_status=target_status,
+                                suggested_sub_status=sub_hint,
+                                status_only=True,
+                            ))
                         updated += 1
-                        action_log.append({**raw, "aktion": "abgesagt", "status_db": f"{old_status} → rejected"})
-                    elif target_status != "rejected" and new_idx > cur_idx:
-                        app.main_status = target_status
-                        if job.get("status_hint") and job["status_hint"][1]:
-                            app.sub_status = job["status_hint"][1]
-                        updated += 1
-                        action_log.append({**raw, "aktion": "aktualisiert", "status_db": f"{old_status} → {target_status}"})
+                        action_log.append({**raw, "aktion": "zur Überprüfung", "status_db": f"{old_status} → {target_status}?"})
                     else:
                         skipped += 1
                         action_log.append({**raw, "aktion": "unverändert", "status_db": old_status})

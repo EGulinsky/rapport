@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.39',
+    date: '2026-06-17',
+    changes: [
+      'Neu: LinkedIn-Sync wendet Statusänderungen nicht mehr direkt an — sie landen als "Status-Vorschlag" in der manuellen Überprüfung (LinkedIn-Icon, Text "LinkedIn meldet Status-Änderung:")',
+    ],
+  },
+  {
     version: '2.0.38',
     date: '2026-06-17',
     changes: [
