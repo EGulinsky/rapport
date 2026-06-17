@@ -17,7 +17,7 @@ if DATABASE_URL.startswith("sqlite"):
         # WAL journal mode: readers never block writers and vice-versa,
         # eliminating the write-lock contention that causes 502s during background syncs.
         dbapi_conn.execute("PRAGMA journal_mode=WAL")
-        dbapi_conn.execute("PRAGMA busy_timeout=30000")
+        dbapi_conn.execute("PRAGMA busy_timeout=60000")
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
