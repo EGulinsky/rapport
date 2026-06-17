@@ -556,10 +556,14 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     await _accept_consent(page)
     await asyncio.sleep(1)
 
-    prev_count = -1
+    # Stale detection: track DOM element count (not just unique new jobs).
+    # Tracking len(jobs) causes early exit when scrolling re-surfaces known IDs.
+    prev_dom_count = -1
     stale_rounds = 0
+
     while True:
         raw_items: list[dict] = await page.evaluate(_EXTRACT_JOBS_JS)
+        dom_count = len(raw_items)
 
         for item in raw_items:
             job_id = item.get("id", "")
@@ -622,16 +626,37 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                     "status_hint": mapped_status,
                 })
 
-        if len(jobs) == prev_count:
-            stale_rounds += 1
-            if stale_rounds >= 3:
-                break
-        else:
-            stale_rounds = 0
-        prev_count = len(jobs)
+        # Try "Show more results" button before declaring stale
+        clicked_more = False
+        for show_more_sel in [
+            "button[aria-label*='more result']",
+            "button[aria-label*='mehr']",
+            "button.see-more-jobs",
+            "button[data-tracking-control-name*='load_more']",
+        ]:
+            try:
+                loc = page.locator(show_more_sel)
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    await loc.first.click()
+                    await asyncio.sleep(2)
+                    clicked_more = True
+                    stale_rounds = 0
+                    break
+            except Exception:
+                pass
 
-        await page.evaluate("window.scrollBy(0, 800)")
-        await asyncio.sleep(1.5)
+        if not clicked_more:
+            if dom_count == prev_dom_count:
+                stale_rounds += 1
+                if stale_rounds >= 3:
+                    break
+            else:
+                stale_rounds = 0
+            prev_dom_count = dom_count
+
+            # Scroll to bottom of page to trigger lazy loading
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(2)
 
     return jobs
 
