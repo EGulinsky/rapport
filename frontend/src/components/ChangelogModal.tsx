@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.35',
+    date: '2026-06-17',
+    changes: [
+      'Debug: LinkedIn-Scraper speichert nach Seitenload das rohe HTML jeder Kategorie nach /tmp/linkedin_capture_CATEGORY.html für Offline-Tests',
+    ],
+  },
+  {
     version: '2.0.34',
     date: '2026-06-17',
     changes: [

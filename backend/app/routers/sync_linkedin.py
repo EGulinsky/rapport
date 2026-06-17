@@ -653,6 +653,14 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     _state["log"].append(f"[{card_type}] page load: bodyH={page_info['bodyH']}, winH={page_info['winH']}, buttons={page_info['buttons']}")
     _state["log"].append(f"[{card_type}] scrollable containers: {page_info['scrollable']}")
 
+    # Save page HTML for offline mock testing
+    try:
+        html = await page.content()
+        import pathlib
+        pathlib.Path(f"/tmp/linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
+    except Exception:
+        pass
+
     # Stale detection: track ALL job IDs ever seen in DOM.
     # dom_count fails with virtual scrolling (items replaced not added).
     # New IDs in DOM = genuine new content loaded, even if total count unchanged.
