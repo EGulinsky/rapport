@@ -8,6 +8,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.0.26',
+    date: '2026-06-17',
+    changes: [
+      'Fix: LinkedIn-Scraper Scroll — echte Mausrad-Events (page.mouse.wheel) nach scrollIntoView statt End-Taste; triggert LinkedIn IntersectionObserver zuverlässig; stale-Toleranz auf 5 Runden erhöht (war 3)',
+    ],
+  },
+  {
     version: '2.0.25',
     date: '2026-06-17',
     changes: [

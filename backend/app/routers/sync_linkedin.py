@@ -680,37 +680,33 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         if not clicked_more:
             if not new_in_dom:
                 stale_rounds += 1
-                if stale_rounds >= 3:
+                if stale_rounds >= 5:
                     break
             else:
                 stale_rounds = 0
 
-            # Scroll last job card into view — works regardless of which container
-            # is scrollable (My Jobs page uses different CSS than job search).
-            # Falls back to mouse wheel + window scroll if no cards found.
-            scrolled = await page.evaluate("""
+            # Scroll last job card into view, then fire real mouse-wheel events.
+            # scrollIntoView alone doesn't trigger LinkedIn's IntersectionObserver;
+            # actual wheel deltas do because they update the scroll position past
+            # the last rendered item.
+            await page.evaluate("""
                 () => {
                     const links = document.querySelectorAll('a[href*="/jobs/view/"]');
                     if (links.length > 0) {
-                        links[links.length - 1].scrollIntoView({behavior: 'instant', block: 'end'});
-                        return true;
+                        links[links.length - 1].scrollIntoView({behavior: 'instant', block: 'center'});
+                    } else {
+                        window.scrollTo(0, document.body.scrollHeight);
                     }
-                    // fallback: scroll every overflow:auto/scroll element
-                    let scrolled = false;
-                    document.querySelectorAll('*').forEach(el => {
-                        const s = getComputedStyle(el);
-                        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 50) {
-                            el.scrollTop = el.scrollHeight;
-                            scrolled = true;
-                        }
-                    });
-                    if (!scrolled) window.scrollTo(0, document.body.scrollHeight);
-                    return scrolled;
                 }
             """)
-            # Also send PageDown key for cases where scroll events are needed
-            await page.keyboard.press("End")
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(0.3)
+            # Move cursor to centre of viewport and wheel down — this is the most
+            # reliable way to trigger IntersectionObserver-based lazy loading.
+            await page.mouse.move(760, 400)
+            await page.mouse.wheel(0, 2500)
+            await asyncio.sleep(0.5)
+            await page.mouse.wheel(0, 2500)
+            await asyncio.sleep(3)
 
     return jobs
 
