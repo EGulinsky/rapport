@@ -186,6 +186,7 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     if (!appId) return
     const res = await api.targeted.assign(appId, {
       match_id: candidate.id,
+      external_id: candidate.external_id,
       remove_from_other: removeFromOther,
     })
     if (res.conflict && !removeFromOther) {

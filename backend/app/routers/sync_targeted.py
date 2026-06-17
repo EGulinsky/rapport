@@ -1108,6 +1108,13 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
             "_pool":               "event",
         })
 
+    # ── Pool 3: Gmail live search (only when query given) ─────────────────
+    if q_lower:
+        try:
+            results += _gmail_live_candidates(q_lower, app_id, seen_external, db)
+        except Exception:
+            pass  # Gmail not connected or API error — silently skip
+
     # strip internal _pool field before returning
     for r in results:
         r.pop("_pool", None)
@@ -1116,8 +1123,84 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
     return results[:100]
 
 
+def _gmail_live_candidates(q: str, app_id: int, seen_external: set, db) -> list:
+    """Search Gmail directly for q and return metadata as candidates (Pool 3)."""
+    from app import models as _m
+    from app.routers.sync_common import load_synced_ids, strip_html
+    from app.routers.sync_google import _refresh_if_needed
+    from googleapiclient.discovery import build
+    import base64
+
+    cfg = db.query(_m.GoogleSync).first()
+    if not cfg or not cfg.refresh_token_enc:
+        return []
+
+    creds = _refresh_if_needed(cfg, db)
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+    synced_ids = load_synced_ids(db, "gmail")
+
+    resp = service.users().messages().list(userId="me", q=q, maxResults=25).execute()
+    msgs = resp.get("messages", [])
+
+    out = []
+    for msg_ref in msgs:
+        msg_id = msg_ref["id"]
+        key = f"gmail:{msg_id}"
+        if key in seen_external or msg_id in synced_ids:
+            continue
+
+        # Check if already an Event in this app
+        existing = db.query(_m.Event).filter(
+            _m.Event.external_id == msg_id,
+            _m.Event.application_id == app_id,
+        ).first()
+        if existing:
+            continue
+
+        try:
+            meta = service.users().messages().get(
+                userId="me", id=msg_id, format="metadata",
+                metadataHeaders=["From", "Subject", "Date"]
+            ).execute()
+        except Exception:
+            continue
+
+        hdrs = {h["name"].lower(): h["value"] for h in meta["payload"].get("headers", [])}
+        subject = hdrs.get("subject", "(kein Betreff)")
+        sender = hdrs.get("from", "")
+        date_str = hdrs.get("date", "")
+
+        # Parse date
+        datum = None
+        if date_str:
+            try:
+                from email.utils import parsedate_to_datetime as _pdt
+                datum = str(_pdt(date_str).date())
+            except Exception:
+                pass
+
+        seen_external.add(key)
+        out.append({
+            "id":                  0,
+            "source":              "gmail",
+            "external_id":         msg_id,
+            "event_type":          "email",
+            "datum":               datum,
+            "titel":               subject,
+            "extract":             f"Von: {sender}",
+            "confidence":          70,
+            "suggested_app_id":    None,
+            "suggested_app_firma": None,
+            "_pool":               "gmail_live",
+        })
+
+    return out
+
+
 class ManualAssignPayload(BaseModel):
     match_id: int
+    external_id: Optional[str] = None  # required when match_id==0 (gmail-live pool)
     event_type: Optional[str] = None
     datum: Optional[str] = None
     titel: Optional[str] = None
@@ -1137,6 +1220,90 @@ def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(
         raise HTTPException(404, "Bewerbung nicht gefunden.")
 
     from datetime import date as _date
+
+    # ── Pool 3: Gmail live item (id=0, external_id is the Gmail message ID) ─
+    if body.match_id == 0:
+        if not body.external_id:
+            raise HTTPException(400, "external_id fehlt für Gmail-Live-Zuweisung.")
+        gmail_msg_id = body.external_id
+        # Re-check: already an Event for this app?
+        existing = db.query(models.Event).filter(
+            models.Event.external_id == gmail_msg_id,
+            models.Event.application_id == app_id,
+        ).first()
+        if existing:
+            return {"conflict": False, "event_id": existing.id}
+
+        try:
+            from app.routers.sync_google import _refresh_if_needed
+            from googleapiclient.discovery import build as _gbuild
+            cfg = db.query(models.GoogleSync).first()
+            if not cfg or not cfg.refresh_token_enc:
+                raise HTTPException(400, "Google nicht verbunden.")
+            creds = _refresh_if_needed(cfg, db)
+            service = _gbuild("gmail", "v1", credentials=creds, cache_discovery=False)
+            msg_full = service.users().messages().get(
+                userId="me", id=gmail_msg_id, format="full"
+            ).execute()
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"Gmail API Fehler: {exc}")
+
+        from app.routers.sync_common import strip_html, mark_synced
+        payload = msg_full.get("payload", {})
+        hdrs = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
+        subject = hdrs.get("subject", "(kein Betreff)")
+        date_str = hdrs.get("date", "")
+        datum_val = None
+        if date_str:
+            try:
+                from email.utils import parsedate_to_datetime as _pdt
+                datum_val = _pdt(date_str).date()
+            except Exception:
+                pass
+
+        # Extract body text (simplified)
+        def _body(p):
+            import base64
+            mime = p.get("mimeType", "")
+            if mime == "text/plain":
+                d = p.get("body", {}).get("data", "")
+                return base64.urlsafe_b64decode(d + "==").decode("utf-8", errors="replace") if d else ""
+            if mime == "text/html":
+                d = p.get("body", {}).get("data", "")
+                return strip_html(base64.urlsafe_b64decode(d + "==").decode("utf-8", errors="replace")) if d else ""
+            for part in p.get("parts", []):
+                t = _body(part)
+                if t:
+                    return t
+            return ""
+
+        body_text = _body(payload)[:500]
+
+        event_typ = body.event_type or "email"
+        if event_typ in ("status_change", "duplicate_contact", "duplicate_event"):
+            event_typ = "email"
+
+        try:
+            datum_out = _date.fromisoformat(body.datum) if body.datum else datum_val
+        except ValueError:
+            datum_out = datum_val
+
+        ev = models.Event(
+            application_id=app_id,
+            typ=event_typ,
+            datum=datum_out,
+            titel=subject,
+            notiz=body_text or None,
+            source="gmail",
+            external_id=gmail_msg_id,
+        )
+        db.add(ev)
+        mark_synced(db, "gmail", gmail_msg_id)
+        db.commit()
+        db.refresh(ev)
+        return {"conflict": False, "event_id": ev.id}
 
     # ── Pool 2: re-assign an existing Event ───────────────────────────────
     if body.match_id < 0:
