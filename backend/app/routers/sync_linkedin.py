@@ -673,7 +673,34 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                     "_raw_context": context[:200],  # debug: keep for Excel
                 })
 
-        # Try "Show more results" button before declaring stale
+        # 1) Try numbered pagination "Next" button (LinkedIn My Jobs ARCHIVED / INTERVIEWS)
+        clicked_next = False
+        next_selectors = [
+            "button.artdeco-pagination__button--next",
+            "button[aria-label='Next']",
+            "button[aria-label='Nächste']",
+            "button[aria-label*='next page']",
+            "button[aria-label*='nächste Seite']",
+        ]
+        for sel in next_selectors:
+            try:
+                loc = page.locator(sel)
+                if await loc.count() > 0:
+                    btn = loc.first
+                    if await btn.is_visible() and await btn.is_enabled():
+                        _state["log"].append(f"[{card_type}] clicking pagination Next ({sel})")
+                        await btn.click()
+                        await asyncio.sleep(3)
+                        clicked_next = True
+                        stale_rounds = 0
+                        break
+            except Exception:
+                pass
+
+        if clicked_next:
+            continue
+
+        # 2) Try "Show more results" button (APPLIED infinite-scroll variant)
         clicked_more = False
         for show_more_sel in [
             "button[aria-label*='more result']",
@@ -695,15 +722,12 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         if not clicked_more:
             if not new_in_dom:
                 stale_rounds += 1
-                if stale_rounds >= 5:
+                if stale_rounds >= 3:
                     break
             else:
                 stale_rounds = 0
 
-            # Scroll last job card into view, then fire real mouse-wheel events.
-            # scrollIntoView alone doesn't trigger LinkedIn's IntersectionObserver;
-            # actual wheel deltas do because they update the scroll position past
-            # the last rendered item.
+            # 3) Fallback: scroll via mouse wheel for infinite-scroll pages
             await page.evaluate("""
                 () => {
                     const links = document.querySelectorAll('a[href*="/jobs/view/"]');
@@ -715,8 +739,6 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 }
             """)
             await asyncio.sleep(0.3)
-            # Move cursor to centre of viewport and wheel down — this is the most
-            # reliable way to trigger IntersectionObserver-based lazy loading.
             await page.mouse.move(760, 400)
             await page.mouse.wheel(0, 2500)
             await asyncio.sleep(0.5)
