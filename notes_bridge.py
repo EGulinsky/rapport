@@ -59,7 +59,7 @@ class Handler(BaseHTTPRequestHandler):
             err = json.dumps({'error': str(e)}).encode()
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(err))
+            self.send_header('Content-Length', str(len(err)))
             self.end_headers()
             self.wfile.write(err)
 
