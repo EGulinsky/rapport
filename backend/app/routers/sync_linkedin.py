@@ -530,7 +530,7 @@ _CONSENT_SELECTORS = [
 
 def _parse_li_entry(chunk: str) -> Optional[dict]:
     """Parse one text chunk between two 'Add note' delimiters into a job dict."""
-    lines = [l.strip() for l in chunk.split("\n") if l.strip()]
+    lines = [ln.strip() for ln in chunk.split("\n") if ln.strip()]
 
     # Find first "Firma · Ort" line
     dot_idx = None
