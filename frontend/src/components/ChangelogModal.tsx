@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.2.0',
+    date: '2026-06-23',
+    changes: [
+      'LinkedIn-Sync: Komplett-Umstellung auf text-basiertes Parsing (inner_text + "Add note"-Trenner) — ersetzt fragiles JS-DOM-Scraping; liest Firma, Stelle, Ort, Beworben-Datum und Statushinweise direkt aus dem Seitentext',
+      'LinkedIn-Sync: Dedup-Key jetzt Firma + Stelle (statt LinkedIn-Job-ID) — robuster gegen URL-Änderungen',
+      'LinkedIn-Sync: Paginierung vereinfacht — nur noch Next-Button-Klick, kein Scrolling mehr nötig',
+    ],
+  },
+  {
     version: '2.1.0',
     date: '2026-06-17',
     changes: [
