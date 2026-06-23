@@ -167,10 +167,12 @@ export function KanbanBoard({ columns, onSelect, onChanged }: Props) {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {columns.map(({ status, items }) => (
-          <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} />
-        ))}
+      <div className="overflow-x-auto w-full">
+        <div className="flex gap-4 pb-4 w-max min-w-full">
+          {columns.map(({ status, items }) => (
+            <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} />
+          ))}
+        </div>
       </div>
       <DragOverlay>
         {draggingApp && <KanbanCard app={draggingApp} />}
