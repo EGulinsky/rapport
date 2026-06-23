@@ -872,7 +872,8 @@ async def _async_sync(cfg_id: int):
             # Scrape all categories; seen_ids is per-category to catch scroll-duplicates,
             # but shared job IDs across categories ARE intentional: ARCHIVED must win
             # over APPLIED even if the same job ID appeared earlier.
-            all_jobs_by_id: dict[str, dict] = {}
+            # Dedup by firma|title — later categories (higher priority) overwrite earlier ones
+            all_jobs_by_key: dict[str, dict] = {}
             category_counts: list[dict] = []
             for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
                 _state["step"] = f"Lade Kategorie: {label}…"
@@ -880,11 +881,11 @@ async def _async_sync(cfg_id: int):
                 for j in cat_jobs:
                     j["_card_type"] = card_type
                     j["_label"] = label
-                    # Later categories (higher priority) overwrite earlier ones for the same job ID
-                    all_jobs_by_id[j["id"]] = j
+                    dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
+                    all_jobs_by_key[dedup_key] = j
                 category_counts.append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
-                _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_id)})"
-            all_jobs = list(all_jobs_by_id.values())
+                _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_key)})"
+            all_jobs = list(all_jobs_by_key.values())
 
             _state["category_counts"] = category_counts
             await browser.close()
