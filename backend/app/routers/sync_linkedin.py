@@ -527,94 +527,58 @@ _CONSENT_SELECTORS = [
     "button[data-test-modal-close-btn]",
 ]
 
-_EXTRACT_JOBS_JS = """
-() => {
-    // Strategy 1: find job cards via any link that contains a numeric LinkedIn job ID.
-    // Covers /jobs/view/, /jobs/collections/, and Interview-tab URLs.
-    const jobIdRe = /\\/(?:view|collections|search|detail)\\/(\\d{6,})/;
-    const allLinks = Array.from(document.querySelectorAll('a[href]')).filter(a => {
-        const txt = (a.innerText || '').trim();
-        return txt.length > 5 && jobIdRe.test(a.href || '');
-    });
 
-    // Strategy 2: also scan cards by data-job-id / data-entity-urn attributes
-    // (used in some LinkedIn My Jobs views where the title isn't a direct href).
-    const cardEls = Array.from(document.querySelectorAll('[data-job-id], [data-entity-urn*="jobPosting"]'));
-    for (const card of cardEls) {
-        let jobId2 = card.getAttribute('data-job-id') || '';
-        if (!jobId2) {
-            const urn = card.getAttribute('data-entity-urn') || '';
-            const um = urn.match(/:(\\d{6,})$/);
-            if (um) jobId2 = um[1];
-        }
-        if (!jobId2) continue;
-        // Find the title link inside the card
-        const titleLink = card.querySelector('a[href]');
-        if (titleLink && !(titleLink.href || '').includes(jobId2)) {
-            // Only add if not already covered by Strategy 1
-            if (!(titleLink.href || '').includes('/jobs/')) {
-                allLinks.push(titleLink);
-            }
-        }
+def _parse_li_entry(chunk: str) -> Optional[dict]:
+    """Parse one text chunk between two 'Add note' delimiters into a job dict."""
+    lines = [l.strip() for l in chunk.split("\n") if l.strip()]
+
+    # Find first "Firma · Ort" line
+    dot_idx = None
+    for i, line in enumerate(lines):
+        if "·" in line and len(line) < 300:
+            dot_idx = i
+            break
+
+    if dot_idx is None or dot_idx == 0:
+        return None
+
+    parts = lines[dot_idx].split("·", 1)
+    firma = parts[0].strip()
+    ort = parts[1].strip() if len(parts) > 1 else ""
+
+    # Skip navigation items (tab pills like "Applied · 10")
+    if not firma or len(firma) < 3 or ort.strip().isdigit():
+        return None
+
+    title = lines[dot_idx - 1]
+    if len(title) < 4:
+        return None
+
+    # "Applied X ago" line
+    beworben_text = ""
+    for line in lines[dot_idx + 1:]:
+        if re.match(r"Applied\b", line, re.IGNORECASE):
+            beworben_text = line
+            break
+
+    # Status hint lines
+    hinweis = ""
+    _HINT_KW = [
+        "not moving forward", "application viewed", "resume downloaded",
+        "no longer accepting", "offer", "interview scheduled",
+    ]
+    for line in lines[dot_idx + 1:]:
+        if any(kw in line.lower() for kw in _HINT_KW):
+            hinweis = line
+            break
+
+    return {
+        "title": title,
+        "firma": firma,
+        "ort": ort,
+        "beworben": beworben_text,
+        "hinweis": hinweis,
     }
-
-    // De-duplicate by extracted job ID
-    const seenIds = new Set();
-    const titleLinks = allLinks.filter(a => {
-        const m = (a.href || '').match(jobIdRe);
-        const id = m ? m[1] : '';
-        if (!id || seenIds.has(id)) return false;
-        seenIds.add(id);
-        return true;
-    });
-
-    return titleLinks.map(link => {
-        const href = link.href || '';
-        const m = href.match(jobIdRe);
-        const jobId = m ? m[1] : '';
-
-        // Try to get just the job title from a child element before falling back
-        // to innerText (which may include company/location/status on newer LI DOM).
-        const titleEl = link.querySelector('strong, [class*="title"], [class*="job-title"], span[aria-hidden="true"]');
-        let title = titleEl ? (titleEl.innerText || '').trim() : '';
-        if (!title) {
-            // Fallback: first non-empty line of the link text
-            const raw = (link.innerText || '').trim();
-            title = raw.split('\\n').map(l => l.trim()).find(l => l.length > 3) || raw;
-        }
-
-        // Walk up to find a card container with more context.
-        // Cap at 500 chars — a single job card never exceeds this, but
-        // a container holding ALL cards on the page (Interviews tab) easily does.
-        const MAX_CARD = 500;
-        let el = link;
-        let contextText = '';
-        let dateHint = '';
-        for (let i = 0; i < 15; i++) {
-            el = el.parentElement;
-            if (!el) break;
-            const t = (el.innerText || '').trim();
-            if (t.length > title.length + 10 && t.length <= MAX_CARD) {
-                if (!contextText) contextText = t;
-                if (t.length > title.length + 30) { contextText = t; break; }
-            }
-        }
-
-        // Also check .closest() for a card boundary; only override if it fits in one card.
-        const card = link.closest('li, [data-job-id], article, [class*="job-card"]') || link.parentElement;
-        if (card) {
-            const full = (card.innerText || '').trim();
-            if (full.length > contextText.length && full.length <= MAX_CARD) contextText = full;
-            card.querySelectorAll('[aria-label]').forEach(el => {
-                const lbl = el.getAttribute('aria-label') || '';
-                if (/applied|ago|\\d+[dwm]/i.test(lbl)) dateHint = lbl;
-            });
-        }
-
-        return {id: jobId, title, context: contextText.slice(0, 800), dateHint};
-    });
-}
-"""
 
 
 async def _accept_consent(page) -> None:
@@ -631,10 +595,12 @@ async def _accept_consent(page) -> None:
 
 
 async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
-    """Scroll through one LinkedIn job category and collect all job cards."""
+    """Read one LinkedIn job-tracker tab via page text and 'Add note' delimiters."""
     if not url:
         url = _TRACKER + card_type.lower()
     jobs: list[dict] = []
+    seen_keys: set[str] = set()
+    pages_navigated = 0
 
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
@@ -645,33 +611,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         return []
 
     await _accept_consent(page)
+    await asyncio.sleep(3)
 
-    # Wait for job cards to render — LinkedIn loads them asynchronously after
-    # domcontentloaded; without this wait only the first card may be in the DOM.
-    try:
-        await page.wait_for_selector(
-            'a[href*="/jobs/view/"], a[href*="/jobs/collections/"], [data-job-id]',
-            timeout=10000,
-        )
-    except Exception:
-        pass
-    await asyncio.sleep(2)
-
-    # Log page state for debugging scroll issues
-    page_info = await page.evaluate("""
-        () => {
-            const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim()).filter(t => t).slice(0, 20);
-            const scrollable = Array.from(document.querySelectorAll('*')).filter(el => {
-                const s = getComputedStyle(el);
-                return (s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 50;
-            }).map(el => `${el.tagName}.${el.className.slice(0,40)} h=${el.scrollHeight}/${el.clientHeight}`).slice(0, 10);
-            return {bodyH: document.body.scrollHeight, winH: window.innerHeight, buttons, scrollable, url: window.location.href};
-        }
-    """)
-    _state["pagination_log"].append(f"[{card_type}] page load: bodyH={page_info['bodyH']}, winH={page_info['winH']}")
-    _state["pagination_log"].append(f"[{card_type}] buttons: {page_info['buttons'][:10]}")
-
-    # Save page HTML for offline mock testing
+    # Save page HTML for offline debugging
     try:
         html = await page.content()
         import pathlib
@@ -679,198 +621,70 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     except Exception:
         pass
 
-    # Stale detection: track ALL job IDs ever seen in DOM.
-    # dom_count fails with virtual scrolling (items replaced not added).
-    # New IDs in DOM = genuine new content loaded, even if total count unchanged.
-    all_dom_ids: set[str] = set()
-    stale_rounds = 0
-    scroll_round = 0
-    pages_navigated = 0  # counts Next-button clicks (pagination pages)
-
     while True:
-        raw_items: list[dict] = await page.evaluate(_EXTRACT_JOBS_JS)
+        text = await page.inner_text("body")
 
-        new_in_dom = {item.get("id", "") for item in raw_items if item.get("id")} - all_dom_ids
-        all_dom_ids.update(new_in_dom)
+        # Split on "Add note" — each chunk between two delimiters is one job entry
+        chunks = re.split(r"\bAdd\s+note\b", text, flags=re.IGNORECASE)
+        _state["pagination_log"].append(
+            f"[{card_type}] p{pages_navigated + 1}: {len(chunks) - 1} Einträge im Text"
+        )
 
-        for item in raw_items:
-            job_id = item.get("id", "")
-            if not job_id or job_id in seen_ids:
+        for chunk in chunks[:-1]:
+            entry = _parse_li_entry(chunk)
+            if not entry:
                 continue
-            seen_ids.add(job_id)
+            dedup_key = f"{entry['firma'].lower().strip()} | {entry['title'].lower().strip()}"
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
 
-            raw_title = item.get("title", "").strip()
-            # Normalize: collapse whitespace, strip LinkedIn's ", Verified" badge artifact
-            title = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', raw_title)).strip()
-            # If JS returned concatenated card text as title, take only the part before
-            # the first · separator or before known LI UI strings.
-            for _suffix_pat in (r'\s*·\s*.+', r'\s*Applied\b.+', r'\s*Posted\b.+', r'\s*Notes\b.+'):
-                title = re.sub(_suffix_pat, '', title, flags=re.IGNORECASE).strip()
-            title = title.strip()
-            context = item.get("context", "")
-            date_hint = item.get("dateHint", "")  # aria-label fallback from JS
+            applied_date = _parse_date(entry["beworben"]) if entry["beworben"] else None
 
-            # Build filtered lines: skip blanks, title (normalized), and ", Verified" artifacts
-            title_norm = title.lower()
-            lines = []
-            for ln in context.split("\n"):
-                ln = ln.strip()
-                if not ln:
-                    continue
-                ln_norm = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', ln)).strip().lower()
-                if not ln_norm or ln_norm == title_norm or ln_norm in (',', '· verified', ', verified', 'verified'):
-                    continue
-                lines.append(ln)
-
-            company = ""
-            date_text = ""
-            for line in lines:
-                low = line.lower()
-                # Date: short ("6d ago", "2m ago", "3mo ago") or long ("6 days ago") or "Applied on..."
-                if (re.search(r"\d+\s*(?:d|w|mo?)\b", low)
-                        or re.search(r"\d+\s+(?:day|week|month|hour)", low)
-                        or re.search(r"\d{1,2}/\d{1,2}/\d{4}", low)
-                        or low.startswith("applied")):
-                    if not date_text:
-                        date_text = line
-                elif not company and len(line) < 120:
-                    # Skip location-only lines
-                    if not re.search(r"\(|\bhybrid\b|\bremote\b|\bon.?site\b", low):
-                        company = line
-
-            if not company and lines:
-                company = lines[0]
-
-            # Fallback: try full context as one block (LinkedIn sometimes has no newlines)
-            if not date_text and context:
-                if re.search(r"\d+\s*(?:d|w|mo?)\b", context, re.I) or "applied" in context.lower():
-                    date_text = context
-            # Last resort: aria-label date hint from JS
-            if not date_text and date_hint:
-                date_text = date_hint
-
-            applied_date = _parse_date(date_text) if date_text else None
-
-            status_text = (date_text + " " + context).lower()
+            status_text = (entry["beworben"] + " " + entry["hinweis"]).lower()
             mapped_status: Optional[tuple] = None
             for keyword, mapping in _STATUS_MAP.items():
                 if keyword in status_text:
                     mapped_status = mapping
                     break
 
-            if title and company:
-                jobs.append({
-                    "id": job_id,
-                    "title": title,
-                    "company": company,
-                    "applied_date": applied_date,
-                    "default_status": default_status,
-                    "status_hint": mapped_status,
-                    "_raw_context": context[:200],  # debug: keep for Excel
-                })
+            jobs.append({
+                "id": "",
+                "title": entry["title"],
+                "company": entry["firma"],
+                "ort": entry["ort"],
+                "applied_date": applied_date,
+                "default_status": default_status,
+                "status_hint": mapped_status,
+                "hinweis": entry["hinweis"],
+                "_raw_context": f"{entry['firma']} · {entry['ort']} | {entry['beworben']} | {entry['hinweis']}",
+            })
 
-        # 1) Try numbered pagination "Next" button (LinkedIn My Jobs ARCHIVED / INTERVIEWS)
-        clicked_next = False
         if pages_navigated >= max_pages - 1:
             _state["pagination_log"].append(f"[{card_type}] max_pages={max_pages} erreicht, stoppe")
             break
 
-        # Find the Next button via JS (returns element handle info), then click natively
-        # so Playwright can detect the resulting network activity.
-        next_locator = None
-        # Strategy A: artdeco class (most reliable, locale-independent)
+        # Click "Next" for pagination
+        clicked_next = False
         loc_a = page.locator('.artdeco-pagination__button--next:not([disabled])').first
         try:
             if await loc_a.count() > 0 and await loc_a.is_visible(timeout=1000):
-                next_locator = loc_a
-        except Exception:
-            pass
-
-        # Strategy B: aria-label or text matching for locale variants
-        if not next_locator:
-            for word in ['next', 'nächste', 'weiter']:
-                try:
-                    loc_b = page.locator(f'button:not([disabled])[aria-label*="{word}" i], button:not([disabled]):text-is("{word}")')
-                    if await loc_b.count() > 0 and await loc_b.first.is_visible(timeout=500):
-                        next_locator = loc_b.first
-                        break
-                except Exception:
-                    pass
-
-        if next_locator:
-            try:
-                await next_locator.scroll_into_view_if_needed(timeout=3000)
-                await next_locator.click(timeout=5000)
-                # Wait for network to settle after SPA navigation
+                await loc_a.scroll_into_view_if_needed(timeout=3000)
+                await loc_a.click(timeout=5000)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
                 pages_navigated += 1
                 clicked_next = True
-                stale_rounds = 0
                 _state["pagination_log"].append(
-                    f"[{card_type}] p{pages_navigated+1}: Next geklickt, jobs_bisher={len(jobs)}, all_dom_ids={len(all_dom_ids)}"
+                    f"[{card_type}] p{pages_navigated + 1}: Next geklickt, jobs_bisher={len(jobs)}"
                 )
-            except Exception as e:
-                _state["pagination_log"].append(f"[{card_type}] Next-Klick Fehler: {e}")
+        except Exception as e:
+            _state["pagination_log"].append(f"[{card_type}] Next-Fehler: {e}")
 
-        if clicked_next:
-            continue
-
-        # 2) Try "Show more results" button (APPLIED infinite-scroll variant)
-        clicked_more = False
-        for show_more_sel in [
-            "button[aria-label*='more result']",
-            "button[aria-label*='mehr']",
-            "button.see-more-jobs",
-            "button[data-tracking-control-name*='load_more']",
-        ]:
-            try:
-                loc = page.locator(show_more_sel)
-                if await loc.count() > 0 and await loc.first.is_visible():
-                    await loc.first.click()
-                    await asyncio.sleep(2.5)
-                    clicked_more = True
-                    stale_rounds = 0
-                    break
-            except Exception:
-                pass
-
-        if not clicked_more:
-            if not new_in_dom:
-                stale_rounds += 1
-                _state["pagination_log"].append(
-                    f"[{card_type}] stale_round={stale_rounds}: keine neuen IDs, jobs={len(jobs)}, all_dom_ids={len(all_dom_ids)}"
-                )
-                if stale_rounds >= 5:
-                    _state["pagination_log"].append(f"[{card_type}] Abbruch nach {stale_rounds} leeren Runden")
-                    break
-            else:
-                stale_rounds = 0
-
-            # 3) Fallback: scroll via mouse wheel for infinite-scroll pages
-            await page.evaluate("""
-                () => {
-                    const links = document.querySelectorAll('a[href*="/jobs/view/"]');
-                    if (links.length > 0) {
-                        links[links.length - 1].scrollIntoView({behavior: 'instant', block: 'center'});
-                    } else {
-                        window.scrollTo(0, document.body.scrollHeight);
-                    }
-                }
-            """)
-            await asyncio.sleep(0.3)
-            await page.mouse.move(760, 400)
-            await page.mouse.wheel(0, 2500)
-            await asyncio.sleep(0.5)
-            await page.mouse.wheel(0, 2500)
-            await asyncio.sleep(3)
-            scroll_round += 1
-            after_h = await page.evaluate("() => ({bodyH: document.body.scrollHeight, jobLinks: document.querySelectorAll('a[href*=\"/jobs/view/\"]').length})")
-            _state["pagination_log"].append(
-                f"[{card_type}] scroll#{scroll_round}: bodyH={after_h['bodyH']}, jobLinks={after_h['jobLinks']}, stale={stale_rounds}"
-            )
+        if not clicked_next:
+            break
 
     return jobs
 
