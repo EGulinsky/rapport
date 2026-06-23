@@ -594,90 +594,128 @@ async def _accept_consent(page) -> None:
             continue
 
 
+def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str) -> tuple[list[dict], int]:
+    """Parse all job entries from page inner_text. Returns (new_jobs, total_chunks)."""
+    chunks = re.split(r"\bAdd\s+note\b", text, flags=re.IGNORECASE)
+    new_jobs: list[dict] = []
+
+    for chunk in chunks[:-1]:
+        entry = _parse_li_entry(chunk)
+        if not entry:
+            continue
+        dedup_key = f"{entry['firma'].lower().strip()} | {entry['title'].lower().strip()}"
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        applied_date = _parse_date(entry["beworben"]) if entry["beworben"] else None
+
+        status_text = (entry["beworben"] + " " + entry["hinweis"]).lower()
+        mapped_status: Optional[tuple] = None
+        for keyword, mapping in _STATUS_MAP.items():
+            if keyword in status_text:
+                mapped_status = mapping
+                break
+
+        new_jobs.append({
+            "id": "",
+            "title": entry["title"],
+            "company": entry["firma"],
+            "ort": entry["ort"],
+            "applied_date": applied_date,
+            "default_status": default_status,
+            "status_hint": mapped_status,
+            "hinweis": entry["hinweis"],
+            "_raw_context": f"{entry['firma']} · {entry['ort']} | {entry['beworben']} | {entry['hinweis']}",
+        })
+
+    return new_jobs, len(chunks) - 1
+
+
 async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
     """Read one LinkedIn job-tracker tab via page text and 'Add note' delimiters.
 
-    Pagination via URL &start=N (10 items per page) — avoids unreliable button clicks
-    in headless Playwright.
+    Pagination strategy:
+    1. Primary: click artdeco Next button (scroll into view first)
+    2. Fallback: detect page number buttons via aria-label
+    3. Stop when no new jobs found on a page or no Next button visible
     """
     base_url = url if url else _TRACKER + card_type.lower()
     jobs: list[dict] = []
     seen_keys: set[str] = set()
-    consent_done = False
+
+    try:
+        await page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
+    except Exception:
+        return []
+
+    if "login" in page.url or "authwall" in page.url:
+        return []
+
+    await _accept_consent(page)
+    # Extra wait for SPA to render job cards
+    await asyncio.sleep(4)
+
+    # Save first-page HTML for offline debugging
+    try:
+        html = await page.content()
+        import pathlib
+        pathlib.Path(f"/tmp/linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
+    except Exception:
+        pass
 
     for page_num in range(max_pages):
-        start = page_num * 10
-        page_url = f"{base_url}&start={start}" if start > 0 else base_url
+        # Scroll to bottom: reveals lazy-loaded cards and pagination buttons
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(1)
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(2)
 
-        try:
-            await page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
-        except Exception:
+        text = await page.inner_text("body")
+        new_jobs, chunk_count = _extract_jobs_from_text(text, seen_keys, default_status)
+        jobs.extend(new_jobs)
+
+        # Log pagination hints found in text
+        has_next_text = bool(re.search(r'\bNext\b', text[-2000:], re.IGNORECASE))
+        _state["pagination_log"].append(
+            f"[{card_type}] p{page_num + 1}: {chunk_count} chunks, "
+            f"{len(new_jobs)} neue Jobs (gesamt {len(jobs)}), next_in_text={has_next_text}"
+        )
+
+        if page_num >= max_pages - 1:
             break
 
-        if "login" in page.url or "authwall" in page.url:
-            break
-
-        if not consent_done:
-            await _accept_consent(page)
-            consent_done = True
-
-        await asyncio.sleep(3)
-
-        # Save first page HTML for offline debugging
-        if page_num == 0:
+        # Try to click Next button — try multiple selectors
+        clicked_next = False
+        next_selectors = [
+            ".artdeco-pagination__button--next:not([disabled])",
+            "button[aria-label*='Next']:not([disabled])",
+            "button[aria-label*='Nächste']:not([disabled])",
+            "button[aria-label*='next' i]:not([disabled])",
+        ]
+        for sel in next_selectors:
+            loc = page.locator(sel).first
             try:
-                html = await page.content()
-                import pathlib
-                pathlib.Path(f"/tmp/linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
+                if await loc.count() > 0 and await loc.is_visible(timeout=1000):
+                    await loc.scroll_into_view_if_needed(timeout=3000)
+                    await asyncio.sleep(0.5)
+                    await loc.click(timeout=5000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        await asyncio.sleep(4)
+                    clicked_next = True
+                    _state["pagination_log"].append(
+                        f"[{card_type}] p{page_num + 1}→{page_num + 2}: Next geklickt ({sel})"
+                    )
+                    break
             except Exception:
                 pass
 
-        text = await page.inner_text("body")
-
-        # Split on "Add note" — each chunk is one job entry
-        chunks = re.split(r"\bAdd\s+note\b", text, flags=re.IGNORECASE)
-        entries_on_page = 0
-        _state["pagination_log"].append(
-            f"[{card_type}] start={start}: {len(chunks) - 1} chunks im Text"
-        )
-
-        for chunk in chunks[:-1]:
-            entry = _parse_li_entry(chunk)
-            if not entry:
-                continue
-            dedup_key = f"{entry['firma'].lower().strip()} | {entry['title'].lower().strip()}"
-            if dedup_key in seen_keys:
-                continue
-            seen_keys.add(dedup_key)
-            entries_on_page += 1
-
-            applied_date = _parse_date(entry["beworben"]) if entry["beworben"] else None
-
-            status_text = (entry["beworben"] + " " + entry["hinweis"]).lower()
-            mapped_status: Optional[tuple] = None
-            for keyword, mapping in _STATUS_MAP.items():
-                if keyword in status_text:
-                    mapped_status = mapping
-                    break
-
-            jobs.append({
-                "id": "",
-                "title": entry["title"],
-                "company": entry["firma"],
-                "ort": entry["ort"],
-                "applied_date": applied_date,
-                "default_status": default_status,
-                "status_hint": mapped_status,
-                "hinweis": entry["hinweis"],
-                "_raw_context": f"{entry['firma']} · {entry['ort']} | {entry['beworben']} | {entry['hinweis']}",
-            })
-
-        _state["pagination_log"].append(
-            f"[{card_type}] start={start}: {entries_on_page} neue Jobs (gesamt {len(jobs)})"
-        )
-
-        # Stop if this page had no new entries (end of list)
-        if entries_on_page == 0:
+        if not clicked_next:
+            _state["pagination_log"].append(
+                f"[{card_type}] p{page_num + 1}: kein Next-Button → Ende"
+            )
             break
 
     return jobs
