@@ -528,57 +528,10 @@ _CONSENT_SELECTORS = [
 ]
 
 
-def _parse_li_entry(chunk: str) -> Optional[dict]:
-    """Parse one text chunk between two 'Add note' delimiters into a job dict."""
-    lines = [ln.strip() for ln in chunk.split("\n") if ln.strip()]
-
-    # Find first "Firma · Ort" line
-    dot_idx = None
-    for i, line in enumerate(lines):
-        if "·" in line and len(line) < 300:
-            dot_idx = i
-            break
-
-    if dot_idx is None or dot_idx == 0:
-        return None
-
-    parts = lines[dot_idx].split("·", 1)
-    firma = parts[0].strip()
-    ort = parts[1].strip() if len(parts) > 1 else ""
-
-    # Skip navigation items (tab pills like "Applied · 10")
-    if not firma or len(firma) < 3 or ort.strip().isdigit():
-        return None
-
-    title = lines[dot_idx - 1]
-    if len(title) < 4:
-        return None
-
-    # "Applied X ago" line
-    beworben_text = ""
-    for line in lines[dot_idx + 1:]:
-        if re.match(r"Applied\b", line, re.IGNORECASE):
-            beworben_text = line
-            break
-
-    # Status hint lines
-    hinweis = ""
-    _HINT_KW = [
-        "not moving forward", "application viewed", "resume downloaded",
-        "no longer accepting", "offer", "interview scheduled",
-    ]
-    for line in lines[dot_idx + 1:]:
-        if any(kw in line.lower() for kw in _HINT_KW):
-            hinweis = line
-            break
-
-    return {
-        "title": title,
-        "firma": firma,
-        "ort": ort,
-        "beworben": beworben_text,
-        "hinweis": hinweis,
-    }
+_HINT_KW = [
+    "not moving forward", "application viewed", "resume downloaded",
+    "no longer accepting", "offer", "interview scheduled",
+]
 
 
 async def _accept_consent(page) -> None:
@@ -595,22 +548,62 @@ async def _accept_consent(page) -> None:
 
 
 def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str) -> tuple[list[dict], int]:
-    """Parse all job entries from page inner_text. Returns (new_jobs, total_chunks)."""
-    chunks = re.split(r"\b(?:Add|Edit)\s+note\b", text, flags=re.IGNORECASE)
+    """Parse all job entries from page inner_text using 'Firma · Ort' anchor scanning.
+
+    Each line containing '·' is treated as a potential Firma · Ort anchor. Navigation
+    tab pills (e.g. 'Applied · 10') are skipped. The title is the line immediately
+    before the anchor; beworben/hinweis are scanned between consecutive anchors.
+    This approach handles entries with and without notes uniformly.
+    """
+    lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+
+    # Collect indices of valid "Firma · Ort" anchor lines
+    anchor_indices: list[int] = []
+    for i, line in enumerate(lines):
+        if "·" not in line or len(line) >= 300:
+            continue
+        parts = line.split("·", 1)
+        firma = parts[0].strip()
+        ort = parts[1].strip() if len(parts) > 1 else ""
+        # Skip nav tab pills like "Applied · 10"
+        if not firma or len(firma) < 3 or ort.strip().isdigit():
+            continue
+        # Title must be the preceding line and be meaningful
+        if i == 0 or len(lines[i - 1]) < 4:
+            continue
+        anchor_indices.append(i)
+
     new_jobs: list[dict] = []
 
-    for chunk in chunks[:-1]:
-        entry = _parse_li_entry(chunk)
-        if not entry:
-            continue
-        dedup_key = f"{entry['firma'].lower().strip()} | {entry['title'].lower().strip()}"
+    for pos, dot_idx in enumerate(anchor_indices):
+        parts = lines[dot_idx].split("·", 1)
+        firma = parts[0].strip()
+        ort = parts[1].strip() if len(parts) > 1 else ""
+        title = lines[dot_idx - 1]
+
+        next_anchor = anchor_indices[pos + 1] if pos + 1 < len(anchor_indices) else len(lines)
+        following = lines[dot_idx + 1:next_anchor]
+
+        beworben_text = ""
+        for line in following:
+            if re.match(r"Applied\b", line, re.IGNORECASE):
+                beworben_text = line
+                break
+
+        hinweis = ""
+        for line in following:
+            if any(kw in line.lower() for kw in _HINT_KW):
+                hinweis = line
+                break
+
+        dedup_key = f"{firma.lower().strip()} | {title.lower().strip()}"
         if dedup_key in seen_keys:
             continue
         seen_keys.add(dedup_key)
 
-        applied_date = _parse_date(entry["beworben"]) if entry["beworben"] else None
+        applied_date = _parse_date(beworben_text) if beworben_text else None
 
-        status_text = (entry["beworben"] + " " + entry["hinweis"]).lower()
+        status_text = (beworben_text + " " + hinweis).lower()
         mapped_status: Optional[tuple] = None
         for keyword, mapping in _STATUS_MAP.items():
             if keyword in status_text:
@@ -619,17 +612,17 @@ def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str)
 
         new_jobs.append({
             "id": "",
-            "title": entry["title"],
-            "company": entry["firma"],
-            "ort": entry["ort"],
+            "title": title,
+            "company": firma,
+            "ort": ort,
             "applied_date": applied_date,
             "default_status": default_status,
             "status_hint": mapped_status,
-            "hinweis": entry["hinweis"],
-            "_raw_context": f"{entry['firma']} · {entry['ort']} | {entry['beworben']} | {entry['hinweis']}",
+            "hinweis": hinweis,
+            "_raw_context": f"{firma} · {ort} | {beworben_text} | {hinweis}",
         })
 
-    return new_jobs, len(chunks) - 1
+    return new_jobs, len(anchor_indices)
 
 
 async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
