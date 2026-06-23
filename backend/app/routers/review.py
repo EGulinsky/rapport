@@ -57,11 +57,7 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    app = db.query(Application).filter(Application.id == body.application_id).first()
-    if not app:
-        raise HTTPException(status_code=404, detail="Application not found")
-
-    # ── Cleanup duplicates ────────────────────────────────────────────────────
+    # ── Cleanup duplicates (no application required) ─────────────────────────
     if match.event_type == "duplicate_contact":
         try:
             payload = json.loads(match.raw_content or "{}")
@@ -83,6 +79,10 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": None}
+
+    app = db.query(Application).filter(Application.id == body.application_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
 
     if match.event_type == "duplicate_event":
         try:
