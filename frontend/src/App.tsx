@@ -9,7 +9,7 @@ import { ImportButton } from './components/ImportButton'
 import { ExportButton } from './components/ExportButton'
 import { PdfExportButton } from './components/PdfExportButton'
 import { SyncButton } from './components/SyncButton'
-// import { LinkedInSyncButton } from './components/LinkedInSyncButton'
+import { LinkedInSyncButton } from './components/LinkedInSyncButton'
 import { ContactsView } from './components/ContactsView'
 import { CalendarView } from './components/CalendarView'
 import { SettingsModal } from './components/SettingsModal'
@@ -144,6 +144,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
+<LinkedInSyncButton onSynced={load} />
 <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} />
               <ExportButton />
               <PdfExportButton />
