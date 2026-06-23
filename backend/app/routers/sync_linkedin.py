@@ -572,7 +572,16 @@ _EXTRACT_JOBS_JS = """
         const href = link.href || '';
         const m = href.match(jobIdRe);
         const jobId = m ? m[1] : '';
-        const title = (link.innerText || '').trim();
+
+        // Try to get just the job title from a child element before falling back
+        // to innerText (which may include company/location/status on newer LI DOM).
+        const titleEl = link.querySelector('strong, [class*="title"], [class*="job-title"], span[aria-hidden="true"]');
+        let title = titleEl ? (titleEl.innerText || '').trim() : '';
+        if (!title) {
+            // Fallback: first non-empty line of the link text
+            const raw = (link.innerText || '').trim();
+            title = raw.split('\\n').map(l => l.trim()).find(l => l.length > 3) || raw;
+        }
 
         // Walk up to find a card container with more context.
         // Cap at 500 chars — a single job card never exceeds this, but
@@ -693,6 +702,11 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             raw_title = item.get("title", "").strip()
             # Normalize: collapse whitespace, strip LinkedIn's ", Verified" badge artifact
             title = re.sub(r'\s*,?\s*·?\s*[Vv]erified\s*', '', re.sub(r'\s+', ' ', raw_title)).strip()
+            # If JS returned concatenated card text as title, take only the part before
+            # the first · separator or before known LI UI strings.
+            for _suffix_pat in (r'\s*·\s*.+', r'\s*Applied\b.+', r'\s*Posted\b.+', r'\s*Notes\b.+'):
+                title = re.sub(_suffix_pat, '', title, flags=re.IGNORECASE).strip()
+            title = title.strip()
             context = item.get("context", "")
             date_hint = item.get("dateHint", "")  # aria-label fallback from JS
 
