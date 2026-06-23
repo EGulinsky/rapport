@@ -596,7 +596,7 @@ async def _accept_consent(page) -> None:
 
 def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str) -> tuple[list[dict], int]:
     """Parse all job entries from page inner_text. Returns (new_jobs, total_chunks)."""
-    chunks = re.split(r"\bAdd\s+note\b", text, flags=re.IGNORECASE)
+    chunks = re.split(r"\b(?:Add|Edit)\s+note\b", text, flags=re.IGNORECASE)
     new_jobs: list[dict] = []
 
     for chunk in chunks[:-1]:
