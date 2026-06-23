@@ -688,9 +688,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         # Try to click Next button — try multiple selectors
         clicked_next = False
         next_selectors = [
+            "[data-testid='pagination-controls-next-button-visible']",
             ".artdeco-pagination__button--next:not([disabled])",
             "button[aria-label*='Next']:not([disabled])",
-            "button[aria-label*='Nächste']:not([disabled])",
             "button[aria-label*='next' i]:not([disabled])",
         ]
         for sel in next_selectors:
