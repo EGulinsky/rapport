@@ -56,6 +56,13 @@ _SKIP_CONTACT_LOCALS = frozenset({
     "newsletter", "automatisch", "automated", "reply", "bounce",
 })
 
+# ATS systems use per-message tracking addresses — the email is not the person's real address.
+_ATS_TRACKING_DOMAINS = frozenset({
+    "talent.icims.com", "icims.com", "greenhouse-mail.io",
+    "workablemail.com", "jobvite.com", "lever.co", "smartrecruiters.com",
+    "successfactors.com", "taleo.net", "myworkday.com",
+})
+
 
 def _get_owner_emails(db: Session) -> frozenset[str]:
     """Return all email addresses that belong to the app owner (from configured accounts)."""
@@ -194,9 +201,22 @@ def _upsert_contact(
 
     extra = extra or {}
 
+    domain = email_addr.split("@", 1)[1] if "@" in email_addr else ""
+    is_ats_tracking = domain in _ATS_TRACKING_DOMAINS
+
     existing = db.query(_models.Contact).filter(
         func.lower(_models.Contact.email) == email_addr
     ).first()
+
+    # Fallback: same name + company → treat as the same person
+    if not existing and name and firma:
+        existing = db.query(_models.Contact).filter(
+            func.lower(_models.Contact.name) == name.strip().lower(),
+            func.lower(_models.Contact.firma) == firma.strip().lower(),
+        ).first()
+        # If found via name+firma and the new email is a real address (not ATS), update it
+        if existing and not is_ats_tracking and not existing.email:
+            existing.email = email_addr
 
     app_obj = db.query(_models.Application).get(app_id)
     if not app_obj:
@@ -220,7 +240,7 @@ def _upsert_contact(
 
     contact = _models.Contact(
         name=(name.strip() or email_addr.split("@")[0]),
-        email=email_addr,
+        email=None if is_ats_tracking else email_addr,
         firma=firma or None,
         typ="Headhunter" if is_headhunter else None,
         letzter_kontakt=event_date,
