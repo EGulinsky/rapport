@@ -879,12 +879,21 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     """Match job to existing application or create new. Returns (app, created)."""
     li_job_id = job.get("id", "")
 
+    clean_title = job.get("title", "")
+
+    def _needs_rolle_cleanup(rolle: str) -> bool:
+        """True if the stored rolle still contains raw LinkedIn card noise."""
+        low = rolle.lower()
+        return any(s in low for s in ("applied", "posted", "notes", "add note", "(hybrid)", "(remote)"))
+
     # 1. Exact match by LinkedIn job ID (prevents duplicates across syncs)
     if li_job_id:
         app = db.query(models.Application).filter(
             models.Application.linkedin_job_id == li_job_id
         ).first()
         if app:
+            if clean_title and _needs_rolle_cleanup(app.rolle or ""):
+                app.rolle = clean_title
             return app, False
 
     # 2. Fuzzy match by company + role for jobs without a stored ID yet
@@ -906,6 +915,8 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
             # Backfill the job ID so future syncs use the fast path
             if li_job_id and not app.linkedin_job_id:
                 app.linkedin_job_id = li_job_id
+            if clean_title and _needs_rolle_cleanup(app.rolle or ""):
+                app.rolle = clean_title
             return app, False
 
     # 3. Create new application
