@@ -128,7 +128,8 @@ def save_files_config(payload: dict, db: Session = Depends(get_db)):
         cfg = models.FilesConfig()
         db.add(cfg)
     if "folder_path" in payload:
-        cfg.folder_path = payload["folder_path"] or None
+        fp = (payload["folder_path"] or "").strip().strip("'\"") or None
+        cfg.folder_path = fp
     if "enabled" in payload and isinstance(payload["enabled"], bool):
         cfg.enabled = payload["enabled"]
     db.commit()
