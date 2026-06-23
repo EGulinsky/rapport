@@ -595,39 +595,50 @@ async def _accept_consent(page) -> None:
 
 
 async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
-    """Read one LinkedIn job-tracker tab via page text and 'Add note' delimiters."""
-    if not url:
-        url = _TRACKER + card_type.lower()
+    """Read one LinkedIn job-tracker tab via page text and 'Add note' delimiters.
+
+    Pagination via URL &start=N (10 items per page) — avoids unreliable button clicks
+    in headless Playwright.
+    """
+    base_url = url if url else _TRACKER + card_type.lower()
     jobs: list[dict] = []
     seen_keys: set[str] = set()
-    pages_navigated = 0
+    consent_done = False
 
-    try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-    except Exception:
-        return []
+    for page_num in range(max_pages):
+        start = page_num * 10
+        page_url = f"{base_url}&start={start}" if start > 0 else base_url
 
-    if "login" in page.url or "authwall" in page.url:
-        return []
+        try:
+            await page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+        except Exception:
+            break
 
-    await _accept_consent(page)
-    await asyncio.sleep(3)
+        if "login" in page.url or "authwall" in page.url:
+            break
 
-    # Save page HTML for offline debugging
-    try:
-        html = await page.content()
-        import pathlib
-        pathlib.Path(f"/tmp/linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
-    except Exception:
-        pass
+        if not consent_done:
+            await _accept_consent(page)
+            consent_done = True
 
-    while True:
+        await asyncio.sleep(3)
+
+        # Save first page HTML for offline debugging
+        if page_num == 0:
+            try:
+                html = await page.content()
+                import pathlib
+                pathlib.Path(f"/tmp/linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
+            except Exception:
+                pass
+
         text = await page.inner_text("body")
 
-        # Split on "Add note" — each chunk between two delimiters is one job entry
+        # Split on "Add note" — each chunk is one job entry
         chunks = re.split(r"\bAdd\s+note\b", text, flags=re.IGNORECASE)
+        entries_on_page = 0
         _state["pagination_log"].append(
-            f"[{card_type}] p{pages_navigated + 1}: {len(chunks) - 1} Einträge im Text"
+            f"[{card_type}] start={start}: {len(chunks) - 1} chunks im Text"
         )
 
         for chunk in chunks[:-1]:
@@ -638,6 +649,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
             if dedup_key in seen_keys:
                 continue
             seen_keys.add(dedup_key)
+            entries_on_page += 1
 
             applied_date = _parse_date(entry["beworben"]) if entry["beworben"] else None
 
@@ -660,30 +672,12 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                 "_raw_context": f"{entry['firma']} · {entry['ort']} | {entry['beworben']} | {entry['hinweis']}",
             })
 
-        if pages_navigated >= max_pages - 1:
-            _state["pagination_log"].append(f"[{card_type}] max_pages={max_pages} erreicht, stoppe")
-            break
+        _state["pagination_log"].append(
+            f"[{card_type}] start={start}: {entries_on_page} neue Jobs (gesamt {len(jobs)})"
+        )
 
-        # Click "Next" for pagination
-        clicked_next = False
-        loc_a = page.locator('.artdeco-pagination__button--next:not([disabled])').first
-        try:
-            if await loc_a.count() > 0 and await loc_a.is_visible(timeout=1000):
-                await loc_a.scroll_into_view_if_needed(timeout=3000)
-                await loc_a.click(timeout=5000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=15000)
-                except Exception:
-                    await asyncio.sleep(3)
-                pages_navigated += 1
-                clicked_next = True
-                _state["pagination_log"].append(
-                    f"[{card_type}] p{pages_navigated + 1}: Next geklickt, jobs_bisher={len(jobs)}"
-                )
-        except Exception as e:
-            _state["pagination_log"].append(f"[{card_type}] Next-Fehler: {e}")
-
-        if not clicked_next:
+        # Stop if this page had no new entries (end of list)
+        if entries_on_page == 0:
             break
 
     return jobs
