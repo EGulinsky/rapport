@@ -131,18 +131,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 flex-1 max-w-lg">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Firma oder Rolle suchen…"
-                  className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-
             <div className="flex items-center gap-2">
 <LinkedInSyncButton onSynced={load} />
 <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} />
@@ -198,6 +186,17 @@ export default function App() {
         {mainView === 'applications' && (<>
         {/* Stats */}
         {stats && <StatsBar stats={stats} />}
+
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Firma oder Rolle suchen…"
+            className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          />
+        </div>
 
         {/* Controls row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
