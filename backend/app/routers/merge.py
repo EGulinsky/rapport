@@ -39,10 +39,15 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
     winner = apps[req.winner_id]
     losers = [apps[i] for i in req.loser_ids if i in apps]
 
-    # Apply field overrides to winner
+    # Apply field overrides to winner, logging status changes explicitly
+    old_main = winner.main_status
     for field, source_id in req.field_overrides.items():
         if field in MERGEABLE_APP_FIELDS and source_id in apps:
             setattr(winner, field, getattr(apps[source_id], field))
+    if winner.main_status != old_main:
+        add_audit(db, "status_change", "user", app_id=winner.id,
+                  field="main_status", old_value=old_main, new_value=winner.main_status,
+                  reason="Zusammenführen: Status übernommen")
 
     for loser in losers:
         # Store alias so future syncs recognise the old identifiers
