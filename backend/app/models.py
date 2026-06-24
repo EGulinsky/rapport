@@ -146,6 +146,9 @@ class Application(Base):
 
     @property
     def ghosting(self) -> bool:
+        # list_applications sets _ghosting_override before overwriting letztes_update
+        if hasattr(self, '_ghosting_override'):
+            return self._ghosting_override
         from datetime import date
         if self.main_status in ("rejected", "signed", "negotiating", "prospecting"):
             return False
