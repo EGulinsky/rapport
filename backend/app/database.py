@@ -457,6 +457,24 @@ def _migrate_linkedin_job_id():
     conn.close()
 
 
+def _migrate_pre_rejection_status():
+    """Add pre_rejection_status column to applications if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(applications)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "pre_rejection_status" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN pre_rejection_status TEXT")
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -469,6 +487,7 @@ def init_db():
     _migrate_attachments()
     _migrate_event_external_id()
     _migrate_linkedin_job_id()
+    _migrate_pre_rejection_status()
     Base.metadata.create_all(bind=engine)
     _backfill_events()
     _migrate_gespraeche_to_events()

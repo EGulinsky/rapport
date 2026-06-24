@@ -22,9 +22,17 @@ interface Props {
 function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolean }) {
   return (
     <div className={clsx(
-      'w-full text-left rounded-xl border border-gray-200 bg-white p-3 shadow-sm',
-      isDragging ? 'opacity-50 shadow-lg rotate-1' : 'hover:border-indigo-300 hover:shadow-md transition-all'
+      'w-full text-left rounded-xl border bg-white p-3 shadow-sm',
+      app.abgesagt
+        ? 'border-l-4 border-l-red-300 border-gray-200 opacity-60 bg-rose-50/20'
+        : 'border-gray-200',
+      isDragging ? 'opacity-50 shadow-lg rotate-1' : (!app.abgesagt && 'hover:border-indigo-300 hover:shadow-md transition-all')
     )}>
+      {app.abgesagt && (
+        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600 mb-1.5">
+          Abgesagt
+        </span>
+      )}
       {app.is_headhunter ? (
         <>
           <div className="flex items-center gap-1 mb-0.5">
@@ -36,7 +44,9 @@ function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolea
           </p>
         </>
       ) : (
-        <p className="font-medium text-sm text-gray-900 leading-tight">{app.firma}</p>
+        <p className={clsx('font-medium text-sm leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>
+          {app.firma}
+        </p>
       )}
       <p className="text-xs text-gray-500 mt-0.5 leading-tight">{app.rolle}</p>
       <p className="text-[10px] text-gray-300 font-mono mt-0.5 select-all leading-tight">{app.id}</p>
@@ -44,7 +54,7 @@ function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolea
         <p className="text-xs text-gray-400 mt-1">{SUB_STATUS_LABELS[app.sub_status] ?? app.sub_status}</p>
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
-      {app.naechster_schritt && (
+      {!app.abgesagt && app.naechster_schritt && (
         <p className={`text-[10px] mt-1.5 leading-tight font-medium ${
           app.naechster_schritt.startsWith('Gespräch') ? 'text-indigo-600' :
           app.naechster_schritt.startsWith('Kein Feedback') || app.naechster_schritt.startsWith('Keine Reaktion') ? 'text-orange-600' :

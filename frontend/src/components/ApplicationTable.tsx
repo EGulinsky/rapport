@@ -139,8 +139,10 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                   key={app.id}
                   onClick={() => onSelect(app.id)}
               className={clsx(
-                'cursor-pointer hover:bg-indigo-50/40 transition-colors',
-                app.abgesagt && 'opacity-50',
+                'cursor-pointer transition-colors',
+                app.abgesagt
+                  ? 'bg-rose-50/40 opacity-65 hover:bg-rose-50/60'
+                  : 'hover:bg-indigo-50/40',
                 selectedIds?.has(app.id) && 'bg-indigo-50/60'
               )}
             >
@@ -170,7 +172,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                       )}
                     </>
                   ) : (
-                    <p className="font-medium text-gray-900 leading-tight">{app.firma}</p>
+                    <p className={clsx('font-medium leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>{app.firma}</p>
                   )}
                   <p className="text-xs text-gray-500 leading-tight mt-0.5">{app.rolle}</p>
                 </div>

@@ -98,6 +98,7 @@ class ApplicationBase(BaseModel):
     rolle: str
     main_status: str = "applied"
     sub_status: Optional[str] = None
+    pre_rejection_status: Optional[str] = None
     is_headhunter: bool = False
     zielfirma_bei_hh: Optional[str] = None
     quelle: Optional[str] = None
@@ -154,6 +155,7 @@ class ApplicationListItem(BaseModel):
     rolle: str
     main_status: str
     sub_status: Optional[str] = None
+    pre_rejection_status: Optional[str] = None
     is_headhunter: bool
     zielfirma_bei_hh: Optional[str] = None
     quelle: Optional[str] = None
