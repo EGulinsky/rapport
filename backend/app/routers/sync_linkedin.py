@@ -735,10 +735,18 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.rolle = clean_title
             return app, False
 
-    # 2. Fuzzy match by company + role for jobs without a stored ID yet
+    # 2. Fuzzy match by company + role for jobs without a stored ID yet.
+    # When the incoming job is archived/rejected, prefer already-rejected
+    # applications so that old R+S-type entries don't accidentally match a new
+    # active application at the same company.
     company_lower = job["company"].lower()
     role_lower = job["title"].lower()
+    is_rejected_source = (job.get("default_status") == "rejected")
     apps = db.query(models.Application).all()
+    # Sort: if the incoming job is archived, try already-rejected apps first
+    if is_rejected_source:
+        apps = sorted(apps, key=lambda a: 0 if a.abgesagt else 1)
+
     for app in apps:
         firma_lower = (app.firma or "").lower()
         company_match = (
