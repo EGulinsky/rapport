@@ -145,7 +145,7 @@ class Application(Base):
 
     @property
     def ghosting(self) -> bool:
-        from datetime import date, timedelta
+        from datetime import date
         if self.main_status in ("rejected", "signed", "negotiating", "prospecting"):
             return False
         last = self.letztes_update or self.datum_bewerbung

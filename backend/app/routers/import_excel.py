@@ -92,7 +92,6 @@ async def import_excel(
             datum_bew = parse_date(row[6])
             letztes   = parse_date(row[7])
             status_raw= cell_str(row[8])
-            ghosting  = str(row[9]).strip().lower() == "x" if row[9] else False
             abgesagt  = str(row[10]).strip().lower() == "x" if row[10] else False
             kommentar = cell_str(row[11])
             g1 = cell_str(row[12]) if len(row) > 12 else None
