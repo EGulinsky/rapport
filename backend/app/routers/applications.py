@@ -24,7 +24,7 @@ def _compute_naechster_schritt(
 ) -> str:
     status = app.main_status or ""
 
-    if app.abgesagt or status == "rejected":
+    if status == "rejected":
         return ""
 
     if next_interview:
@@ -85,7 +85,7 @@ def list_applications(
         q = q.filter(models.Application.main_status == main_status)
 
     if not show_rejected:
-        q = q.filter(models.Application.abgesagt.is_(False))
+        q = q.filter(models.Application.main_status != "rejected")
 
     if search:
         term = f"%{search}%"
@@ -182,7 +182,7 @@ def list_applications(
 def get_stats(db: Session = Depends(get_db)):
     all_apps = db.query(models.Application).all()
     total = len(all_apps)
-    rejected = sum(1 for a in all_apps if a.abgesagt)
+    rejected = sum(1 for a in all_apps if a.main_status == "rejected")
     active = total - rejected
 
     by_status: dict = {}
@@ -209,8 +209,6 @@ def get_application(app_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=schemas.ApplicationRead, status_code=201)
 def create_application(payload: schemas.ApplicationCreate, db: Session = Depends(get_db)):
     data = payload.model_dump()
-    if data.get("main_status") == "rejected":
-        data["abgesagt"] = True
     app = models.Application(**data)
     app.letztes_update = date.today()
     db.add(app)
@@ -237,12 +235,6 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
 
     old_main = app.main_status
     old_sub  = app.sub_status
-
-    # Keep abgesagt in sync with main_status
-    if update_data.get("main_status") == "rejected":
-        update_data.setdefault("abgesagt", True)
-    elif "main_status" in update_data and update_data["main_status"] != "rejected":
-        update_data.setdefault("abgesagt", False)
 
     # Clear sub_status when switching to a stage that doesn't use it
     if "main_status" in update_data and update_data["main_status"] not in ("hr", "fb"):

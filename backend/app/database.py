@@ -58,10 +58,11 @@ def _migrate_status_fields():
             (main, sub, old_val),
         )
 
-    # Sync abgesagt flag for rejected entries
-    cur.execute(
-        "UPDATE applications SET abgesagt=1 WHERE main_status='rejected' AND abgesagt=0"
-    )
+    # Drop legacy abgesagt column (now a computed property: main_status == 'rejected')
+    cur.execute("PRAGMA table_info(applications)")
+    app_cols = {row[1] for row in cur.fetchall()}
+    if "abgesagt" in app_cols:
+        cur.execute("ALTER TABLE applications DROP COLUMN abgesagt")
 
     # Add source column to events if missing
     cur.execute("PRAGMA table_info(events)")

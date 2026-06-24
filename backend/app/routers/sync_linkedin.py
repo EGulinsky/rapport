@@ -790,7 +790,6 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         letztes_update=applied_date_obj,
         quelle="LinkedIn",
         main_status=initial_status,
-        abgesagt=(initial_status == "rejected"),
         linkedin_job_id=li_job_id or None,
     )
     db.add(new_app)
