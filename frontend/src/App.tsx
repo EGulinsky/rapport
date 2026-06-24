@@ -57,7 +57,7 @@ export default function App() {
         api.applications.list({
           main_status: filterStatus === 'all' ? undefined : filterStatus,
           search: debouncedSearch || undefined,
-          show_rejected: showRejected,
+          show_rejected: showRejected || showGhostingOnly,
         }),
         api.applications.stats(),
       ])
@@ -80,7 +80,7 @@ export default function App() {
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
 
   const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
-  const kanbanColumns: MainStatus[] = showRejected ? [...MAIN_PIPELINE, 'rejected'] : MAIN_PIPELINE
+  const kanbanColumns: MainStatus[] = (showRejected || showGhostingOnly) ? [...MAIN_PIPELINE, 'rejected'] : MAIN_PIPELINE
   const kanbanByStatus = kanbanColumns.map(s => ({
     status: s,
     items: visibleApps
