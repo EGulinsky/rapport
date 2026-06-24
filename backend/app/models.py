@@ -149,9 +149,15 @@ class Application(Base):
         # list_applications sets _ghosting_override before overwriting letztes_update
         if hasattr(self, '_ghosting_override'):
             return self._ghosting_override
-        from datetime import date
-        if self.main_status in ("rejected", "signed", "negotiating", "prospecting"):
+        if self.main_status in ("signed", "negotiating", "prospecting"):
             return False
+        if self.main_status == "rejected":
+            # Ghosted-then-rejected: gap of >= 14 days between application and rejection
+            if self.datum_bewerbung and self.letztes_update:
+                return (self.letztes_update - self.datum_bewerbung).days >= 14
+            return False
+        # Active application: no activity for > 14 days
+        from datetime import date
         last = self.letztes_update or self.datum_bewerbung
         if last is None:
             return False
