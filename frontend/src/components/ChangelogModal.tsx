@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.4.7',
+    date: '2026-06-24',
+    changes: [
+      'Fix: Normaler Sync erstellte bei jeder neuen Absage-E-Mail einen neuen Review-Vorschlag — fehlender already_reviewed-Check (analog zum LI-Sync-Fix) in _save_deterministic_event, process_item (AI-Pfad) und save_classified_event; Absage-Vorschläge pro App+Zielstatus werden jetzt nach einmaliger Review-Entscheidung nicht mehr neu erstellt',
+    ],
+  },
+  {
     version: '2.4.6',
     date: '2026-06-24',
     changes: [
