@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.4.5',
+    date: '2026-06-24',
+    changes: [
+      'Syncs ändern Bewerbungsstatus nie mehr automatisch — alle Statusvorschläge (normaler Sync, gezielter Sync, LI-Sync) landen in der manuellen Review-Queue (PendingMatch); gezielter Sync hat diese Logik jetzt ebenfalls (war vorher still ignoriert)',
+    ],
+  },
+  {
     version: '2.4.4',
     date: '2026-06-24',
     changes: [

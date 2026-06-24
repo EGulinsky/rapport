@@ -938,6 +938,28 @@ def save_classified_event(
             body=raw_text,
         )
 
+    # Queue status change for user review (never apply automatically)
+    new_main = result.get("suggested_main_status")
+    if new_main and app_obj and app_obj.main_status != new_main:
+        already = db.query(models.PendingMatch).filter_by(
+            source=source, external_id=f"{external_id}__status"
+        ).first()
+        if not already:
+            db.add(models.PendingMatch(
+                source=source,
+                external_id=f"{external_id}__status",
+                confidence=int(confidence * 100),
+                event_type="status_change",
+                datum=datum,
+                titel=f"Status: {app_obj.main_status} → {new_main}",
+                extract=result.get("extract"),
+                raw_content=raw_text,
+                suggested_app_id=target_app["id"],
+                suggested_main_status=new_main,
+                suggested_sub_status=result.get("suggested_sub_status"),
+                status_only=True,
+            ))
+
     return True
 
 
@@ -950,7 +972,7 @@ async def process_item_for_app(
     target_app: dict,
     extra_notiz: Optional[str] = None,
 ) -> bool:
-    """Like process_item but scoped to a single known application. No review queue."""
+    """Like process_item but scoped to a single known application."""
     if is_synced(db, source, external_id):
         return False
 
