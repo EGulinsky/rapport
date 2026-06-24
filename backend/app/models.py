@@ -127,6 +127,7 @@ class Application(Base):
     kommentar           = Column(Text, nullable=True)
     linkedin_job_id     = Column(String, nullable=True, index=True)
     stellenanzeige_url  = Column(String, nullable=True)
+    pre_rejection_status = Column(String, nullable=True)  # last active status before rejection
 
     gespraech_1         = Column(Text, nullable=True)
     gespraech_2         = Column(Text, nullable=True)

@@ -62,6 +62,7 @@ export interface Application {
   rolle: string
   main_status: MainStatus
   sub_status?: string
+  pre_rejection_status?: string
   is_headhunter: boolean
   zielfirma_bei_hh?: string
   quelle?: string

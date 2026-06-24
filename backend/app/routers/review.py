@@ -103,6 +103,8 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
         new_main = match.suggested_main_status
         new_sub  = match.suggested_sub_status
         if new_main:
+            if new_main == "rejected" and app.main_status != "rejected":
+                app.pre_rejection_status = app.main_status
             app.main_status = new_main
             if new_sub:
                 app.sub_status = new_sub

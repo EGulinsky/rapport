@@ -83,12 +83,23 @@ export default function App() {
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
 
   const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
-  const kanbanColumns: MainStatus[] = (showRejected || showGhostingOnly) ? [...MAIN_PIPELINE, 'rejected'] : MAIN_PIPELINE
+
+  // Rejected apps appear in their last-active column, not a separate "Abgesagt" column
+  const kanbanColumns: MainStatus[] = MAIN_PIPELINE
+  function kanbanColumnForApp(a: Application): MainStatus {
+    if (a.abgesagt) {
+      const pre = a.pre_rejection_status
+      return (pre && MAIN_PIPELINE.includes(pre as MainStatus) ? pre : 'applied') as MainStatus
+    }
+    return a.main_status
+  }
   const kanbanByStatus = kanbanColumns.map(s => ({
     status: s,
     items: visibleApps
-      .filter(a => a.main_status === s)
+      .filter(a => kanbanColumnForApp(a) === s)
       .sort((a, b) => {
+        // Active apps first, then rejected
+        if (a.abgesagt !== b.abgesagt) return a.abgesagt ? 1 : -1
         const da = a.letztes_update ?? a.datum_bewerbung ?? ''
         const db2 = b.letztes_update ?? b.datum_bewerbung ?? ''
         return db2.localeCompare(da)

@@ -244,6 +244,10 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
     if "main_status" in update_data and update_data["main_status"] not in ("hr", "fb"):
         update_data.setdefault("sub_status", None)
 
+    # Record the last active status before rejection so the UI can place the card in the right column
+    if update_data.get("main_status") == "rejected" and old_main != "rejected":
+        update_data["pre_rejection_status"] = old_main
+
     for field, value in update_data.items():
         setattr(app, field, value)
     app.letztes_update = date.today()

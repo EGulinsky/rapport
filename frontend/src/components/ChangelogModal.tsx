@@ -9,9 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '2.4.0',
+    version: '2.4.1',
     date: '2026-06-24',
     changes: [
+      'Abgesagte Bewerbungen: erscheinen beim Einblenden in der Spalte ihres letzten aktiven Status (kein separates "Abgesagt"-Spalte mehr) — rot markiert (Rahmen, Durchstreichung, Hintergrund) sowohl in Kanban als auch Tabelle',
       'Merge-Funktion: Bewerbungen und Kontakte zusammenführen — 2+ Einträge auswählen (Tabelle: Checkboxen), Merge-Dialog zeigt Felder nebeneinander, pro Feld auswählen welcher Wert übernommen wird; Ereignisse und Kontakte werden automatisch zusammengeführt',
       'Merge-Alias: nach dem Mergen werden die alten Bezeichnungen gespeichert — zukünftige Syncs (LI und normal) erkennen die ursprünglichen Firmen-/Stellennamen und legen keine Duplikate mehr an',
       'LinkedIn-Sync: Fortschrittsanzeige pro Stufe — während Scraping: Seite X — Y gefunden pro Kategorie; nach jeder Kategorie: Treffer-Tabelle mit Zählern; während Verarbeitung: Fortschrittsbalken X/Y',
