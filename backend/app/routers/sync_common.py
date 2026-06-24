@@ -451,7 +451,7 @@ def term_variants(raw_term: str) -> list[str]:
 
 def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
     """Build a search-term clause and reverse index term→apps from all applications."""
-    active = db.query(models.Application).all()
+    active = db.query(models.Application).filter_by(abgesagt=False).all()
     term_to_apps: dict[str, list[dict]] = {}
     for a in active:
         app_dict = {"id": a.id, "firma": a.firma, "rolle": a.rolle}
