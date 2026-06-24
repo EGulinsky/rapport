@@ -18,14 +18,6 @@ import re
 from datetime import datetime, date as _date, timezone
 from typing import Optional
 
-
-def _rolle_in_name(rolle: str, name_lower: str) -> bool:
-    """True if the role (cleaned of m/w/d suffix) appears as substring in the folder name."""
-    if not rolle:
-        return False
-    cleaned = re.sub(r'\s*\(m[/\|]w[/\|]d\)\s*$', '', rolle, flags=re.IGNORECASE).strip().lower()
-    return bool(cleaned) and cleaned in name_lower
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -40,6 +32,11 @@ from app.routers.sync_common import (
 )
 
 router = APIRouter(prefix="/api/sync/files", tags=["sync"])
+
+
+def _rolle_in_name(rolle: str, name_lower: str) -> bool:
+    cleaned = re.sub(r'\s*\(m[/|]w[/|]d\)\s*$', '', rolle, flags=re.IGNORECASE).strip().lower()
+    return bool(cleaned) and cleaned in name_lower
 
 FILES_BRIDGE_URL = os.getenv("FILES_BRIDGE_URL", "http://host.docker.internal:9998")
 
