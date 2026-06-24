@@ -596,7 +596,8 @@ def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str,
                 hinweis = line
                 break
 
-        dedup_key = f"{firma.lower().strip()} | {title.lower().strip()}"
+        from app.dedup import dedup_key as _dk
+        dedup_key = _dk(firma, title)
         if dedup_key in seen_keys:
             continue
         seen_keys.add(dedup_key)
@@ -749,12 +750,11 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.rolle = clean_title
             return app, False
 
-    # 2. Fuzzy match by company + role for jobs without a stored ID yet.
-    # When the incoming job is archived/rejected, prefer already-rejected
-    # applications so that old R+S-type entries don't accidentally match a new
-    # active application at the same company.
-    company_lower = job["company"].lower()
-    role_lower = job["title"].lower()
+    # 2. Normalized-equality match: both company AND role must match after
+    # stripping corporate suffixes and gender markers.
+    from app.dedup import norm_firma, norm_rolle
+    job_firma = norm_firma(job["company"])
+    job_rolle = norm_rolle(job["title"])
     is_rejected_source = (job.get("default_status") == "rejected")
     apps = db.query(models.Application).all()
     # Sort: if the incoming job is archived, try already-rejected apps first
@@ -762,16 +762,11 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         apps = sorted(apps, key=lambda a: 0 if a.abgesagt else 1)
 
     for app in apps:
-        firma_lower = (app.firma or "").lower()
         company_match = (
-            company_lower in firma_lower
-            or firma_lower in company_lower
-            or (app.zielfirma_bei_hh or "").lower() in company_lower
+            norm_firma(app.firma or "") == job_firma
+            or norm_firma(app.zielfirma_bei_hh or "") == job_firma
         )
-        role_match = (
-            role_lower in (app.rolle or "").lower()
-            or (app.rolle or "").lower() in role_lower
-        )
+        role_match = norm_rolle(app.rolle or "") == job_rolle
         if company_match and role_match:
             # Backfill the job ID so future syncs use the fast path
             if li_job_id and not app.linkedin_job_id:

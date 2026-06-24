@@ -7,6 +7,7 @@ import io
 from app.database import get_db
 from app import models, schemas
 from app.models import EXCEL_IMPORT_MAP, MAIN_STATUS_LABELS, SUB_STATUS_LABELS
+from app.dedup import dedup_key as _dedup_key
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -71,7 +72,7 @@ async def import_excel(
     existing_keys = set()
     if skip_duplicates:
         for a in db.query(models.Application.firma, models.Application.rolle).all():
-            existing_keys.add(f"{(a.firma or '').lower().strip()}|{(a.rolle or '').lower().strip()}")
+            existing_keys.add(_dedup_key(a.firma or '', a.rolle or ''))
 
     # Excel columns (1-indexed):
     # 1=Firma 2=HH? 3=Zielfirma 4=Rolle 5=BesetztvonHH 6=Quelle
@@ -100,7 +101,7 @@ async def import_excel(
             g4 = cell_str(row[15]) if len(row) > 15 else None
             g5 = cell_str(row[16]) if len(row) > 16 else None
 
-            dedup_key = f"{firma.lower().strip()}|{rolle.lower().strip()}"
+            dedup_key = _dedup_key(firma, rolle)
             if skip_duplicates and dedup_key in existing_keys:
                 skipped += 1
                 continue
