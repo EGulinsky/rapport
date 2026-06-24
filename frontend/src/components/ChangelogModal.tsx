@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.5',
+    date: '2026-06-24',
+    changes: [
+      'Auto-Sync Dokumente: Ordner eine Ebene unterhalb des konfigurierten Stammordners werden direkt als Bewerbungsordner behandelt — Ordnername wird gegen Firmennamen gematcht, alle Dateien darin werden als Ereignis (Typ "Datei") angehängt, ohne dateiweise KI/Keyword-Analyse',
+    ],
+  },
+  {
     version: '2.5.4',
     date: '2026-06-24',
     changes: [
