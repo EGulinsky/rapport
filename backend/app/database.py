@@ -490,7 +490,7 @@ def _migrate_pre_rejection_status():
         ("Warten auf Entscheidung", "waiting"),
         ("Angebotsverhandlung", "negotiating"),
     ]:
-        cur.execute(f"""
+        cur.execute("""
             UPDATE applications SET pre_rejection_status = ?
             WHERE main_status = 'rejected'
               AND id IN (
