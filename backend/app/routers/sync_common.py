@@ -452,6 +452,8 @@ def term_variants(raw_term: str) -> list[str]:
 def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
     """Build a search-term clause and reverse index term→apps from all applications."""
     active = db.query(models.Application).filter(models.Application.main_status != "rejected").all()
+    active_ids = {a.id for a in active}
+    app_by_id = {a.id: a for a in active}
     term_to_apps: dict[str, list[dict]] = {}
     for a in active:
         app_dict = {"id": a.id, "firma": a.firma, "rolle": a.rolle}
@@ -461,6 +463,21 @@ def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
                     term_to_apps.setdefault(key, [])
                     if app_dict not in term_to_apps[key]:
                         term_to_apps[key].append(app_dict)
+
+    # Also index alias firma names from past merges so old names still match
+    for alias in db.query(models.MergeAlias).filter(
+        models.MergeAlias.entity_type == "application",
+        models.MergeAlias.alias_firma.isnot(None),
+    ).all():
+        if alias.canonical_id not in active_ids:
+            continue
+        canonical = app_by_id[alias.canonical_id]
+        app_dict = {"id": canonical.id, "firma": canonical.firma, "rolle": canonical.rolle}
+        for key in term_variants(alias.alias_firma):
+            term_to_apps.setdefault(key, [])
+            if app_dict not in term_to_apps[key]:
+                term_to_apps[key].append(app_dict)
+
     clause = " OR ".join(f'"{t}"' for t in term_to_apps)
     return clause, term_to_apps
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles } from 'lucide-react'
+import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge } from 'lucide-react'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
@@ -16,6 +16,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
 import { ChangelogModal, CURRENT_VERSION } from './components/ChangelogModal'
+import { AppMergeDialog } from './components/MergeDialog'
 import { BUILD_NUMBER } from './version'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
@@ -37,6 +38,8 @@ export default function App() {
   const [showGhostingOnly, setShowGhostingOnly] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedAppIds, setSelectedAppIds] = useState<Set<number>>(new Set())
+  const [showMerge, setShowMerge] = useState(false)
   const [mainView, setMainView] = useState<MainView>('applications')
   const [loading, setLoading] = useState(false)
   const [showAiSettings, setShowAiSettings] = useState(false)
@@ -229,6 +232,23 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            {selectedAppIds.size >= 2 && viewMode === 'table' && (
+              <button
+                onClick={() => setShowMerge(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+              >
+                <GitMerge className="h-3.5 w-3.5" />
+                Mergen ({selectedAppIds.size})
+              </button>
+            )}
+            {selectedAppIds.size > 0 && viewMode === 'table' && (
+              <button
+                onClick={() => setSelectedAppIds(new Set())}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Auswahl aufheben
+              </button>
+            )}
             <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
               <input
                 type="checkbox"
@@ -268,7 +288,17 @@ export default function App() {
 
         {/* Main content */}
         {viewMode === 'table' ? (
-          <ApplicationTable applications={visibleApps} onSelect={setSelectedId} onStatusChanged={load} />
+          <ApplicationTable
+            applications={visibleApps}
+            onSelect={setSelectedId}
+            onStatusChanged={load}
+            selectedIds={selectedAppIds}
+            onToggleSelect={id => setSelectedAppIds(prev => {
+              const next = new Set(prev)
+              next.has(id) ? next.delete(id) : next.add(id)
+              return next
+            })}
+          />
         ) : (
           <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} />
         )}
@@ -299,6 +329,14 @@ export default function App() {
       )}
 
       <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
+
+      {showMerge && selectedAppIds.size >= 2 && (
+        <AppMergeDialog
+          appIds={[...selectedAppIds]}
+          onMerged={() => { setShowMerge(false); setSelectedAppIds(new Set()); load() }}
+          onClose={() => setShowMerge(false)}
+        />
+      )}
 
       {/* New application modal */}
       {selectedId === -1 && (

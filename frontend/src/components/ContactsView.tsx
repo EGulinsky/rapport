@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown } from 'lucide-react'
+import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge } from 'lucide-react'
 import { api } from '../api/client'
 import type { ContactWithApp } from '../types'
+import { ContactMergeDialog } from './MergeDialog'
 import clsx from 'clsx'
 
 const TYPE_COLORS: Record<string, string> = {
@@ -24,6 +25,7 @@ export function ContactsView({ onOpenApplication }: Props) {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [showMerge, setShowMerge] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -121,6 +123,15 @@ export function ContactsView({ onOpenApplication }: Props) {
           />
         </div>
 
+        {selected.size >= 2 && (
+          <button
+            onClick={() => setShowMerge(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-50 border border-violet-200 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+          >
+            <GitMerge className="h-3.5 w-3.5" />
+            Mergen ({selected.size})
+          </button>
+        )}
         {selected.size > 0 && (
           <button
             onClick={deleteSelected}
@@ -256,6 +267,15 @@ export function ContactsView({ onOpenApplication }: Props) {
           </div>
         )}
       </div>
+
+      {showMerge && selected.size >= 2 && (
+        <ContactMergeDialog
+          contactIds={[...selected]}
+          contacts={contacts.filter(c => selected.has(c.id))}
+          onMerged={() => { setShowMerge(false); load() }}
+          onClose={() => setShowMerge(false)}
+        />
+      )}
     </div>
   )
 }

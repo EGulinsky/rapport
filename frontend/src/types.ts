@@ -324,6 +324,17 @@ export interface LinkedInSyncLogEntry {
   status?: string
 }
 
+export interface MergeRequest {
+  winner_id: number
+  loser_ids: number[]
+  field_overrides: Record<string, number>
+}
+
+export interface MergeResult {
+  success: boolean
+  winner_id: number
+}
+
 export interface LinkedInSyncCategoryCount {
   card_type: string
   label: string

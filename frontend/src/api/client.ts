@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult } from '../types'
 
 const BASE = '/api'
 
@@ -271,5 +271,18 @@ export const api = {
       if (!res.ok) throw new Error(await res.text())
       return res.json()
     },
+  },
+
+  merge: {
+    applications: (req: MergeRequest) =>
+      request<MergeResult>('/merge/applications', {
+        method: 'POST',
+        body: JSON.stringify(req),
+      }),
+    contacts: (req: MergeRequest) =>
+      request<MergeResult>('/merge/contacts', {
+        method: 'POST',
+        body: JSON.stringify(req),
+      }),
   },
 }
