@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.7',
+    date: '2026-06-24',
+    changes: [
+      'Fix: DB-Migration setzte main_status bei jedem Container-Neustart auf den alten Wert zurück, wenn die legacy-Spalte "status" noch befüllt war — betroffen war z.B. Rohde & Schwarz #119 (manuell auf "beworben" gesetzt, nach Deploy wieder "abgesagt"). Alte Spalte wird jetzt beim ersten Start gedroppt; Migration überschreibt nur noch Zeilen mit NULL-Status.',
+    ],
+  },
+  {
     version: '2.5.6',
     date: '2026-06-24',
     changes: [

@@ -50,17 +50,22 @@ def _migrate_status_fields():
     if "sub_status" not in existing_cols:
         cur.execute("ALTER TABLE applications ADD COLUMN sub_status TEXT")
 
-    # Migrate rows that still have old status and no main_status yet
+    # Migrate rows that still have old status and no main_status yet.
+    # Only touch rows where main_status is truly unset (NULL), never overwrite
+    # a manually set status. After migration, the old status column is dropped
+    # so this loop becomes a permanent no-op.
     for old_val, (main, sub) in OLD_STATUS_MIGRATION.items():
         cur.execute(
             "UPDATE applications SET main_status=?, sub_status=? "
-            "WHERE status=? AND (main_status IS NULL OR main_status='applied')",
+            "WHERE status=? AND main_status IS NULL",
             (main, sub, old_val),
         )
 
     # Drop legacy columns replaced by computed properties
     cur.execute("PRAGMA table_info(applications)")
     app_cols = {row[1] for row in cur.fetchall()}
+    if "status" in app_cols:
+        cur.execute("ALTER TABLE applications DROP COLUMN status")
     if "abgesagt" in app_cols:
         cur.execute("ALTER TABLE applications DROP COLUMN abgesagt")
     if "ghosting" in app_cols:
