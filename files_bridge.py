@@ -6,10 +6,11 @@ Run on your Mac: python3 files_bridge.py
 Endpoints:
   GET /health
   GET /files?folder=/path/to/folder[&since=unix_timestamp]
-      Returns: [{name, path, text, modified}]
-
-Supported formats: .pdf, .docx, .txt, .md, .rtf
-Text extraction requires: pip install pdfplumber python-docx
+      Returns: [{name, path, text, modified, subfolder}]
+  GET /browse?folder=/path/to/folder[&subfolder=Name]
+      Returns: [{name, path, type, modified}]  (no text extraction)
+  GET /file?path=/absolute/path/to/file
+      Returns: {name, path, text, modified}
 """
 from __future__ import annotations
 
@@ -37,7 +38,6 @@ def extract_text(path: str) -> str:
             import docx
             doc = docx.Document(path)
             return " ".join(p.text for p in doc.paragraphs)[:MAX_TEXT_CHARS]
-        # Plain text fallbacks
         with open(path, "r", errors="ignore", encoding="utf-8") as f:
             return f.read()[:MAX_TEXT_CHARS]
     except Exception as e:
@@ -47,13 +47,13 @@ def extract_text(path: str) -> str:
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
 
         if parsed.path == "/health":
             self._json({"status": "ok"})
             return
 
         if parsed.path == "/files":
-            params = parse_qs(parsed.query)
             folder = params.get("folder", [""])[0]
             since_raw = params.get("since", [""])[0]
 
@@ -67,27 +67,79 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 pass
 
+            root = pathlib.Path(folder).resolve()
             results = []
-            for root, _dirs, files in os.walk(folder):
-                for fname in files:
-                    fpath = os.path.join(root, fname)
-                    ext = pathlib.Path(fname).suffix.lower()
-                    if ext not in SUPPORTED_EXTS:
-                        continue
-                    try:
-                        mtime = os.path.getmtime(fpath)
-                    except OSError:
-                        continue
-                    if since is not None and mtime <= since:
-                        continue
-                    text = extract_text(fpath)
-                    results.append({
-                        "name": fname,
-                        "path": fpath,
-                        "text": text,
-                        "modified": mtime,
-                    })
+            for fpath_obj in root.rglob("*"):
+                if not fpath_obj.is_file():
+                    continue
+                if fpath_obj.suffix.lower() not in SUPPORTED_EXTS:
+                    continue
+                fpath = str(fpath_obj)
+                try:
+                    mtime = os.path.getmtime(fpath)
+                except OSError:
+                    continue
+                if since is not None and mtime <= since:
+                    continue
+
+                # First-level subfolder relative to root (for firm matching)
+                rel = fpath_obj.relative_to(root)
+                subfolder = rel.parts[0] if len(rel.parts) > 1 else ""
+
+                text = extract_text(fpath)
+                results.append({
+                    "name": fpath_obj.name,
+                    "path": fpath,
+                    "text": text,
+                    "modified": mtime,
+                    "subfolder": subfolder,
+                })
             self._json(results)
+            return
+
+        if parsed.path == "/browse":
+            folder = params.get("folder", [""])[0]
+            subfolder = params.get("subfolder", [""])[0]
+
+            if not folder or not os.path.isdir(folder):
+                self._json({"error": f"Ordner nicht gefunden: {folder}"}, 400)
+                return
+
+            root = pathlib.Path(folder).resolve()
+            search_root = (root / subfolder) if subfolder else root
+
+            if not search_root.exists():
+                self._json({"error": f"Unterordner nicht gefunden: {subfolder}"}, 400)
+                return
+
+            results = []
+            try:
+                for item in sorted(search_root.iterdir(), key=lambda p: (p.is_file(), p.name.lower())):
+                    try:
+                        mtime = item.stat().st_mtime
+                    except OSError:
+                        mtime = 0
+                    if item.is_dir():
+                        results.append({"name": item.name, "path": str(item), "type": "folder", "modified": mtime})
+                    elif item.is_file() and item.suffix.lower() in SUPPORTED_EXTS:
+                        results.append({"name": item.name, "path": str(item), "type": "file", "modified": mtime})
+            except PermissionError as e:
+                self._json({"error": str(e)}, 403)
+                return
+            self._json(results)
+            return
+
+        if parsed.path == "/file":
+            path = params.get("path", [""])[0]
+            if not path or not os.path.isfile(path):
+                self._json({"error": f"Datei nicht gefunden: {path}"}, 404)
+                return
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                mtime = 0
+            text = extract_text(path)
+            self._json({"name": os.path.basename(path), "path": path, "text": text, "modified": mtime})
             return
 
         self._json({"error": "not found"}, 404)
@@ -101,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        pass  # suppress per-request logs
+        pass
 
 
 if __name__ == "__main__":

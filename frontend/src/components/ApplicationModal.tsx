@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
   SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE,
-  type Application, type MainStatus, type Contact, type Event, type ManualCandidate,
+  type Application, type MainStatus, type Contact, type Event, type ManualCandidate, type FileBrowseItem,
 } from '../types'
 
 interface Props {
@@ -38,6 +38,12 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
   const [manualCandidates, setManualCandidates] = useState<ManualCandidate[]>([])
   const [manualLoading, setManualLoading] = useState(false)
   const [manualConflict, setManualConflict] = useState<{ candidate: ManualCandidate; conflict_app_firma: string } | null>(null)
+  const [docBrowseOpen, setDocBrowseOpen] = useState(false)
+  const [docBrowseSub, setDocBrowseSub] = useState('')
+  const [docBrowseItems, setDocBrowseItems] = useState<FileBrowseItem[]>([])
+  const [docBrowseLoading, setDocBrowseLoading] = useState(false)
+  const [docBrowseError, setDocBrowseError] = useState<string | null>(null)
+  const [docAttaching, setDocAttaching] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>({})
@@ -199,6 +205,51 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     setManualConflict(null)
     setManualOpen(false)
     await refreshContacts()
+  }
+
+  async function openDocBrowse() {
+    setSyncMenuOpen(false)
+    setDocBrowseSub('')
+    setDocBrowseItems([])
+    setDocBrowseError(null)
+    setDocBrowseOpen(true)
+    setDocBrowseLoading(true)
+    try {
+      const items = await api.files.browse()
+      setDocBrowseItems(items)
+    } catch (e: unknown) {
+      setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Laden')
+    } finally {
+      setDocBrowseLoading(false)
+    }
+  }
+
+  async function browseInto(subfolder: string) {
+    setDocBrowseSub(subfolder)
+    setDocBrowseLoading(true)
+    setDocBrowseError(null)
+    try {
+      const items = await api.files.browse(subfolder || undefined)
+      setDocBrowseItems(items)
+    } catch (e: unknown) {
+      setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Laden')
+    } finally {
+      setDocBrowseLoading(false)
+    }
+  }
+
+  async function attachDoc(item: FileBrowseItem) {
+    if (!appId) return
+    setDocAttaching(item.path)
+    try {
+      await api.files.attach(appId, item.path, item.name)
+      setDocBrowseOpen(false)
+      await refreshContacts()
+    } catch (e: unknown) {
+      setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Anhängen')
+    } finally {
+      setDocAttaching(null)
+    }
   }
 
   async function saveBewerbung() {
@@ -372,6 +423,16 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                     <span>
                       Manuell zuordnen
                       <span className="block text-[10px] text-gray-400">Direkt aus Sync-Quellen</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={openDocBrowse}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 text-amber-500" />
+                    <span>
+                      Dokument hinzufügen
+                      <span className="block text-[10px] text-gray-400">Aus Dokumentenordner</span>
                     </span>
                   </button>
                 </div>
@@ -1010,6 +1071,84 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
               </div>
             </>
           )}
+        </div>
+      </div>
+    )}
+
+    {/* Document browser dialog */}
+    {docBrowseOpen && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) setDocBrowseOpen(false) }}>
+        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[80vh]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h3 className="font-semibold text-gray-900 text-sm">Dokument hinzufügen</h3>
+            <button onClick={() => setDocBrowseOpen(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Breadcrumb */}
+          <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-1 text-xs text-gray-500 overflow-x-auto">
+            <button
+              onClick={() => browseInto('')}
+              className="hover:text-indigo-600 whitespace-nowrap"
+            >
+              Dokumente
+            </button>
+            {docBrowseSub.split('/').filter(Boolean).map((part, i, arr) => (
+              <span key={i} className="flex items-center gap-1">
+                <ChevronRight className="h-3 w-3 flex-shrink-0" />
+                <button
+                  onClick={() => browseInto(arr.slice(0, i + 1).join('/'))}
+                  className="hover:text-indigo-600 whitespace-nowrap"
+                >
+                  {part}
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <div className="overflow-y-auto flex-1 p-3 space-y-1">
+            {docBrowseLoading && <p className="text-sm text-gray-400 text-center py-6">Lädt…</p>}
+            {docBrowseError && <p className="text-sm text-red-500 text-center py-4">{docBrowseError}</p>}
+            {!docBrowseLoading && !docBrowseError && docBrowseItems.length === 0 && (
+              <p className="text-sm text-gray-400 italic text-center py-6">Keine Dateien gefunden</p>
+            )}
+            {!docBrowseLoading && docBrowseItems.map(item => (
+              <button
+                key={item.path}
+                disabled={docAttaching !== null}
+                onClick={() => {
+                  if (item.type === 'folder') {
+                    browseInto(docBrowseSub ? `${docBrowseSub}/${item.name}` : item.name)
+                  } else {
+                    attachDoc(item)
+                  }
+                }}
+                className="w-full text-left flex items-center gap-3 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 px-3 py-2.5 transition-colors disabled:opacity-50"
+              >
+                {item.type === 'folder' ? (
+                  <Folder className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                ) : (
+                  <FileText className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                  {item.type === 'file' && item.modified && (
+                    <p className="text-[10px] text-gray-400">
+                      {new Date(item.modified * 1000).toLocaleDateString('de-DE')}
+                    </p>
+                  )}
+                </div>
+                {item.type === 'folder' && <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />}
+                {item.type === 'file' && docAttaching === item.path && (
+                  <span className="text-[10px] text-indigo-500">Anhängen…</span>
+                )}
+                {item.type === 'file' && docAttaching !== item.path && (
+                  <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">Anhängen</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     )}

@@ -123,6 +123,13 @@ export interface Event {
   attachments?: Attachment[]
 }
 
+export interface FileBrowseItem {
+  name: string
+  path: string
+  type: 'folder' | 'file'
+  modified: number
+}
+
 export interface ManualCandidate {
   id: number
   source: string
