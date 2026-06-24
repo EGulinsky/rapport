@@ -119,7 +119,6 @@ async def import_excel(
                 wurde_besetzt_von=besetzt,
                 datum_bewerbung=datum_bew,
                 letztes_update=letztes,
-                abgesagt=abgesagt,
                 ghosting=ghosting,
                 kommentar=kommentar,
                 gespraech_1=g1,

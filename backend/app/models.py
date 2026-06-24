@@ -123,7 +123,6 @@ class Application(Base):
     datum_bewerbung     = Column(Date, nullable=True)
     letztes_update      = Column(Date, nullable=True)
 
-    abgesagt            = Column(Boolean, default=False)
     ghosting            = Column(Boolean, default=False)
 
     kommentar           = Column(Text, nullable=True)
@@ -140,6 +139,10 @@ class Application(Base):
 
     contacts            = relationship("Contact", secondary="contact_application", back_populates="applications")
     events              = relationship("Event", back_populates="application", cascade="all, delete-orphan")
+
+    @property
+    def abgesagt(self) -> bool:
+        return self.main_status == "rejected"
 
     def __repr__(self):
         return f"<Application {self.firma} | {self.rolle}>"

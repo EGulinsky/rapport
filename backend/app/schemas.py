@@ -104,7 +104,6 @@ class ApplicationBase(BaseModel):
     wurde_besetzt_von: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
-    abgesagt: bool = False
     ghosting: bool = False
     kommentar: Optional[str] = None
     gespraech_1: Optional[str] = None
@@ -129,7 +128,6 @@ class ApplicationUpdate(BaseModel):
     wurde_besetzt_von: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
-    abgesagt: Optional[bool] = None
     ghosting: Optional[bool] = None
     kommentar: Optional[str] = None
     gespraech_1: Optional[str] = None
@@ -141,6 +139,7 @@ class ApplicationUpdate(BaseModel):
 
 class ApplicationRead(ApplicationBase):
     id: int
+    abgesagt: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     contacts: List[ContactRead] = []

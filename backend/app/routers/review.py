@@ -108,10 +108,6 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
                 app.sub_status = new_sub
             elif new_main not in ("hr", "fb"):
                 app.sub_status = None
-            if new_main == "rejected":
-                app.abgesagt = True
-            else:
-                app.abgesagt = False
             app.letztes_update = date.today()
             status_event = Event(
                 application_id=app.id,

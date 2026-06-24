@@ -515,7 +515,6 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
                         ...d,
                         main_status: s,
                         sub_status: (s === 'hr' || s === 'fb') ? (d.sub_status ?? '1_scheduled') : undefined,
-                        abgesagt: s === 'rejected' ? true : d.abgesagt,
                       }))}
                       className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
                         draft.main_status === s
@@ -554,7 +553,7 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
           {/* Flags */}
           {editing && (
             <div className="flex gap-4">
-              {([['abgesagt', 'Abgesagt'], ['ghosting', 'Ghosting'], ['is_headhunter', 'Headhunter']] as const).map(([key, label]) => (
+              {([['ghosting', 'Ghosting'], ['is_headhunter', 'Headhunter']] as const).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"

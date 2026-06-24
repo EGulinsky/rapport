@@ -451,7 +451,7 @@ def term_variants(raw_term: str) -> list[str]:
 
 def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
     """Build a search-term clause and reverse index term→apps from all applications."""
-    active = db.query(models.Application).filter_by(abgesagt=False).all()
+    active = db.query(models.Application).filter(models.Application.main_status != "rejected").all()
     term_to_apps: dict[str, list[dict]] = {}
     for a in active:
         app_dict = {"id": a.id, "firma": a.firma, "rolle": a.rolle}
@@ -744,7 +744,7 @@ async def process_item(
     # ── AI fallback (only for ambiguous multi-firm cases) ───────────────────
     # Send only active apps to AI to conserve tokens.
     # Rejected hint_apps are appended so they can still be matched (e.g. follow-up mails).
-    active = db.query(models.Application).filter_by(abgesagt=False).all()
+    active = db.query(models.Application).filter(models.Application.main_status != "rejected").all()
     app_list = [
         {
             "id": a.id,
