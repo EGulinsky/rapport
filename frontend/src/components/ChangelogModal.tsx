@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.3',
+    date: '2026-06-24',
+    changes: [
+      'Audit-Log: SQLite-Trigger fängt jede main_status-Änderung auf DB-Ebene ab — auch wenn der Python-Codepfad keinen Eintrag erzeugt (Eintrag erscheint dann mit source="db_trigger")',
+      'Modal: Speichern überträgt nur tatsächlich geänderte Felder, verhindert ungewolltes Überschreiben des Status durch veralteten Modal-Zustand',
+      'Merge: Statusänderung durch field_overrides wird jetzt explizit als status_change geloggt',
+    ],
+  },
+  {
     version: '2.5.2',
     date: '2026-06-24',
     changes: [
