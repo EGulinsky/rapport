@@ -181,8 +181,11 @@ async def _do_local_files() -> dict:
                 created += 1
 
         db.commit()
-        cfg.last_sync = datetime.now(timezone.utc)
-        db.commit()
+        # Only advance last_sync when files were actually created; otherwise
+        # the since-filter would permanently exclude unmatched files on future runs.
+        if created > 0:
+            cfg.last_sync = datetime.now(timezone.utc)
+            db.commit()
         finish_progress("local_files")
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
