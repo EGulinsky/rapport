@@ -14,8 +14,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import datetime, date as _date, timezone
 from typing import Optional
+
+
+def _rolle_in_name(rolle: str, name_lower: str) -> bool:
+    """True if the role (cleaned of m/w/d suffix) appears as substring in the folder name."""
+    if not rolle:
+        return False
+    cleaned = re.sub(r'\s*\(m[/\|]w[/\|]d\)\s*$', '', rolle, flags=re.IGNORECASE).strip().lower()
+    return bool(cleaned) and cleaned in name_lower
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
@@ -131,9 +140,18 @@ async def _do_local_files() -> dict:
 
             # Match subfolder name against firm index
             hint_apps = find_hint_apps(subfolder_name, term_to_apps)
-            if len(hint_apps) != 1:
+            if not hint_apps:
                 skipped += len(subfolder_files)
                 continue
+
+            if len(hint_apps) > 1:
+                # Multiple apps for same firm — try to disambiguate via role in folder name
+                name_lower = subfolder_name.lower()
+                by_role = [a for a in hint_apps if _rolle_in_name(a.get("rolle", ""), name_lower)]
+                if len(by_role) != 1:
+                    skipped += len(subfolder_files)
+                    continue
+                hint_apps = by_role
 
             app_id = hint_apps[0]["id"]
             processed += 1
