@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.4.3',
+    date: '2026-06-24',
+    changes: [
+      'Fix: Checkboxen in Tabellenansicht konnten keine Einträge auswählen — TD-onClick und Input-onChange riefen beide onToggleSelect auf, Auswahl wurde sofort wieder aufgehoben',
+    ],
+  },
+  {
     version: '2.4.2',
     date: '2026-06-24',
     changes: [
