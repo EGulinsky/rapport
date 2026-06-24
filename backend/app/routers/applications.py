@@ -163,6 +163,10 @@ def list_applications(
                 if eb:
                     app.datum_bewerbung = eb
                     fixed_any = True
+            # Compute ghosting from DB letztes_update BEFORE overwriting it in-memory.
+            # A "Bewerbung eingereicht" event with datum=today (set by sync) would
+            # otherwise push letztes_update to today and suppress ghosting.
+            app._ghosting_override = app.ghosting
             md = max_event_dates.get(app.id)
             if md and (app.letztes_update is None or md > app.letztes_update):
                 app.letztes_update = md
