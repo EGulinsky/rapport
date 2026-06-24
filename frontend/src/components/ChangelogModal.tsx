@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.2',
+    date: '2026-06-24',
+    changes: [
+      'Dokumentensync: Auto-Sync gleicht Dateien jetzt anhand des direkten Unterordners im Dokumenten-Stammordner ab (nicht mehr anhand des unmittelbaren Elternordners)',
+      'Dokumentensync: Manueller Sync — neuer "Dokument hinzufügen"-Button im Sync-Menü jeder Bewerbung öffnet einen Datei-Browser mit Ordnernavigation unterhalb des konfigurierten Stammordners',
+      'Files Bridge: neue Endpoints /browse (Ordner-/Dateiliste ohne Textextraktion) und /file (einzelne Datei mit Textinhalt)',
+    ],
+  },
+  {
     version: '2.5.1',
     date: '2026-06-24',
     changes: [

@@ -4,18 +4,21 @@ Local-files sync: indexes documents from a configured folder on the host Mac.
 Requires files_bridge.py running on the host:
   python3 files_bridge.py          # port 9998
 
-GET  /api/sync/files/status  — bridge reachability + last sync info
-POST /api/sync/files         — trigger background sync
-POST /api/sync/files/reset   — clear synced-items for local_files source
+GET  /api/sync/files/status       — bridge reachability + last sync info
+POST /api/sync/files              — trigger background sync
+POST /api/sync/files/reset        — clear synced-items for local_files source
+GET  /api/sync/files/browse       — browse folders/files under root (manual sync)
+POST /api/sync/files/attach       — attach a specific file to an application
 """
 from __future__ import annotations
 
 import hashlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime, date as _date, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
@@ -134,8 +137,8 @@ async def _do_local_files() -> dict:
                 skipped += 1
                 continue
 
-            # Build searchable text: filename + parent folder name + content preview
-            folder_name = os.path.basename(os.path.dirname(path))
+            # Use first-level subfolder under root (bridge provides this directly)
+            folder_name = file_info.get("subfolder") or os.path.basename(os.path.dirname(path))
             raw = f"Datei: {name}\nOrdner: {folder_name}\n\n{text[:2000]}"
 
             hint_apps = find_hint_apps(raw, term_to_apps)
@@ -216,3 +219,57 @@ async def sync_files(background_tasks: BackgroundTasks, db: Session = Depends(ge
 
     background_tasks.add_task(_bg)
     return {"processed": 0, "created": 0, "skipped": 0, "errors": []}
+
+
+@router.get("/browse")
+async def browse_files(subfolder: str = "", db: Session = Depends(get_db)):
+    """List subfolders and files under the configured root (or a subfolder of it)."""
+    import httpx
+    cfg = _get_cfg(db)
+    if not cfg or not cfg.folder_path:
+        raise HTTPException(status_code=400, detail="Kein Dokumentenordner konfiguriert.")
+    params: dict = {"folder": cfg.folder_path}
+    if subfolder:
+        params["subfolder"] = subfolder
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{FILES_BRIDGE_URL}/browse", params=params)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=resp.json().get("error", "Bridge-Fehler"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Files Bridge nicht erreichbar: {e}")
+
+
+class AttachRequest(BaseModel):
+    app_id: int
+    path: str
+    name: Optional[str] = None
+
+
+@router.post("/attach")
+async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
+    """Manually attach a file from the host to an application."""
+    app = db.query(models.Application).filter_by(id=req.app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+
+    name = req.name or os.path.basename(req.path)
+    file_id = hashlib.md5(req.path.encode()).hexdigest()[:20]
+
+    ev = models.Event(
+        application_id=req.app_id,
+        source="local_files",
+        external_id=file_id,
+        typ="file",
+        datum=_date.today(),
+        titel=name,
+        notiz=req.path,
+    )
+    db.add(ev)
+    mark_synced(db, "local_files", file_id)
+    db.commit()
+    db.refresh(ev)
+    return {"event_id": ev.id, "titel": name}
