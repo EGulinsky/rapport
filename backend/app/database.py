@@ -537,6 +537,31 @@ def _migrate_audit_log():
         cur.execute("CREATE INDEX ix_audit_log_app_id ON audit_log (app_id)")
         cur.execute("CREATE INDEX ix_audit_log_timestamp ON audit_log (timestamp)")
 
+    # DB-level trigger: catches every main_status change regardless of Python code path.
+    # Uses source='db_trigger' so it's distinguishable from Python-written entries.
+    # Skips if Python already logged the same change within 2 seconds (avoids duplicates).
+    cur.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_main_status_change
+        AFTER UPDATE OF main_status ON applications
+        FOR EACH ROW
+        WHEN OLD.main_status IS NOT NEW.main_status
+          AND NOT EXISTS (
+            SELECT 1 FROM audit_log
+            WHERE app_id    = NEW.id
+              AND action    = 'status_change'
+              AND old_value = OLD.main_status
+              AND new_value = NEW.main_status
+              AND (julianday(strftime('%Y-%m-%dT%H:%M:%fZ','now')) - julianday(timestamp)) * 86400 < 2
+          )
+        BEGIN
+          INSERT INTO audit_log (action, field, old_value, new_value, app_id, source, reason)
+          VALUES (
+            'status_change', 'main_status', OLD.main_status, NEW.main_status,
+            NEW.id, 'db_trigger', 'Nicht via Python-Audit-Pfad erfasst'
+          );
+        END
+    """)
+
     conn.commit()
     conn.close()
 

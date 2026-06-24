@@ -121,11 +121,25 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
   if (!appId) return null
 
   async function save() {
-    if (!appId) return
+    if (!appId || !app) return
     setSaving(true)
     try {
-      const updated = await api.applications.update(appId, draft)
+      // Only send fields that changed from the loaded app state.
+      // This prevents the modal from accidentally overwriting concurrent changes
+      // (e.g. a status change via Kanban) with stale draft data.
+      const payload: Partial<Application> = {}
+      for (const key of Object.keys(draft) as (keyof Application)[]) {
+        if (draft[key] !== app[key]) {
+          (payload as Record<string, unknown>)[key] = draft[key]
+        }
+      }
+      if (Object.keys(payload).length === 0) {
+        setEditing(false)
+        return
+      }
+      const updated = await api.applications.update(appId, payload)
       setApp(updated)
+      setDraft(updated)
       setEditing(false)
       onSaved()
     } finally {
