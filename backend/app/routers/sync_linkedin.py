@@ -41,11 +41,13 @@ _state: dict = {
     "status": "idle",      # idle | running | done | error | needs_login | needs_2fa
     "step": "",
     "processed": 0,
+    "total": 0,
     "created": 0,
     "updated": 0,
     "skipped": 0,
     "errors": [],
     "log": [],             # per-application action log
+    "category_counts": [], # per-category scrape results (grows during scraping)
     "pagination_log": [],  # debug: pagination events per category (persists after sync)
     "raw_jobs": [],        # all scraped jobs (debug)
     "started_at": None,
@@ -63,11 +65,13 @@ def _reset_state():
         "status": "idle",
         "step": "",
         "processed": 0,
+        "total": 0,
         "created": 0,
         "updated": 0,
         "skipped": 0,
         "errors": [],
         "log": [],
+        "category_counts": [],
         "pagination_log": [],
         "started_at": None,
         "finished_at": None,
@@ -630,7 +634,7 @@ def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str,
     return new_jobs, len(anchor_indices)
 
 
-async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "") -> list[dict]:
+async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "", label: str = "") -> list[dict]:
     """Read one LinkedIn job-tracker tab via page text and 'Add note' delimiters.
 
     Pagination strategy:
@@ -682,6 +686,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
 
         new_jobs, chunk_count = _extract_jobs_from_text(text, seen_keys, default_status, raw_links)
         jobs.extend(new_jobs)
+        _state["step"] = f"{label or card_type}: Seite {page_num + 1} — {len(jobs)} gefunden"
 
         # Log pagination hints found in text
         has_next_text = bool(re.search(r'\bNext\b', text[-2000:], re.IGNORECASE))
@@ -916,27 +921,26 @@ async def _async_sync(cfg_id: int):
             # over APPLIED even if the same job ID appeared earlier.
             # Dedup by firma|title — later categories (higher priority) overwrite earlier ones
             all_jobs_by_key: dict[str, dict] = {}
-            category_counts: list[dict] = []
+            _state["category_counts"] = []
             for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
-                _state["step"] = f"Lade Kategorie: {label}…"
-                cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url)
+                _state["step"] = f"{label}: Seite 1 — lade…"
+                cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label)
                 for j in cat_jobs:
                     j["_card_type"] = card_type
                     j["_label"] = label
                     dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
                     all_jobs_by_key[dedup_key] = j
-                category_counts.append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
+                _state["category_counts"].append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
                 _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_key)})"
             all_jobs = list(all_jobs_by_key.values())
-
-            _state["category_counts"] = category_counts
             await browser.close()
 
         if not all_jobs and _state["status"] != "needs_login":
             _state["step"] = "Keine Jobs gefunden — LinkedIn-Layout evtl. geändert"
 
         _state["raw_jobs"] = all_jobs  # keep for debug export
-        _state["step"] = f"Verarbeite {len(all_jobs)} Einträge…"
+        _state["total"] = len(all_jobs)
+        _state["step"] = f"Verarbeite 0/{len(all_jobs)}…"
         created = updated = skipped = 0
         errors: list[str] = []
         action_log: list[dict] = []
@@ -944,6 +948,7 @@ async def _async_sync(cfg_id: int):
 
         for i, job in enumerate(all_jobs):
             _state["processed"] = i + 1
+            _state["step"] = f"Verarbeite {i + 1}/{len(all_jobs)}"
             raw = {
                 "li_job_id":      job.get("id", ""),
                 "firma_li":       job.get("company", ""),

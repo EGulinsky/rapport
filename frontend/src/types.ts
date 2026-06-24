@@ -324,15 +324,23 @@ export interface LinkedInSyncLogEntry {
   status?: string
 }
 
+export interface LinkedInSyncCategoryCount {
+  card_type: string
+  label: string
+  count: number
+}
+
 export interface LinkedInSyncStatus {
   status: 'idle' | 'running' | 'done' | 'error' | 'needs_login' | 'needs_2fa'
   step: string
   processed: number
+  total: number
   created: number
   updated: number
   skipped: number
   errors: string[]
   log: LinkedInSyncLogEntry[]
+  category_counts: LinkedInSyncCategoryCount[]
   started_at: string | null
   finished_at: string | null
 }
