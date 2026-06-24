@@ -104,7 +104,6 @@ class ApplicationBase(BaseModel):
     wurde_besetzt_von: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
-    ghosting: bool = False
     kommentar: Optional[str] = None
     gespraech_1: Optional[str] = None
     gespraech_2: Optional[str] = None
@@ -128,7 +127,6 @@ class ApplicationUpdate(BaseModel):
     wurde_besetzt_von: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
-    ghosting: Optional[bool] = None
     kommentar: Optional[str] = None
     gespraech_1: Optional[str] = None
     gespraech_2: Optional[str] = None

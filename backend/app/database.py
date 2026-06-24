@@ -58,11 +58,13 @@ def _migrate_status_fields():
             (main, sub, old_val),
         )
 
-    # Drop legacy abgesagt column (now a computed property: main_status == 'rejected')
+    # Drop legacy columns replaced by computed properties
     cur.execute("PRAGMA table_info(applications)")
     app_cols = {row[1] for row in cur.fetchall()}
     if "abgesagt" in app_cols:
         cur.execute("ALTER TABLE applications DROP COLUMN abgesagt")
+    if "ghosting" in app_cols:
+        cur.execute("ALTER TABLE applications DROP COLUMN ghosting")
 
     # Add source column to events if missing
     cur.execute("PRAGMA table_info(events)")

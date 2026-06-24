@@ -34,6 +34,7 @@ export default function App() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<MainStatus | 'all'>('all')
   const [showRejected, setShowRejected] = useState(false)
+  const [showGhostingOnly, setShowGhostingOnly] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [mainView, setMainView] = useState<MainView>('applications')
@@ -78,10 +79,11 @@ export default function App() {
 
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
 
+  const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
   const kanbanColumns: MainStatus[] = showRejected ? [...MAIN_PIPELINE, 'rejected'] : MAIN_PIPELINE
   const kanbanByStatus = kanbanColumns.map(s => ({
     status: s,
-    items: apps
+    items: visibleApps
       .filter(a => a.main_status === s)
       .sort((a, b) => {
         const da = a.letztes_update ?? a.datum_bewerbung ?? ''
@@ -230,6 +232,15 @@ export default function App() {
             <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
               <input
                 type="checkbox"
+                checked={showGhostingOnly}
+                onChange={e => setShowGhostingOnly(e.target.checked)}
+                className="rounded border-gray-300 text-orange-500"
+              />
+              👻 Nur Ghosting
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
                 checked={showRejected}
                 onChange={e => setShowRejected(e.target.checked)}
                 className="rounded border-gray-300 text-indigo-600"
@@ -257,7 +268,7 @@ export default function App() {
 
         {/* Main content */}
         {viewMode === 'table' ? (
-          <ApplicationTable applications={apps} onSelect={setSelectedId} onStatusChanged={load} />
+          <ApplicationTable applications={visibleApps} onSelect={setSelectedId} onStatusChanged={load} />
         ) : (
           <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} />
         )}
