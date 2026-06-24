@@ -4,16 +4,21 @@ files_bridge.py — serves local documents to JobTracker
 Run on your Mac: python3 files_bridge.py
 
 Endpoints:
-  GET /health
-  GET /files?folder=/path/to/folder[&since=unix_timestamp]
-      Returns: [{name, path, text, modified, subfolder}]
-  GET /browse?folder=/path/to/folder[&subfolder=Name]
-      Returns: [{name, path, type, modified}]  (no text extraction)
-  GET /file?path=/absolute/path/to/file
-      Returns: {name, path, text, modified}
+  GET  /health
+  GET  /files?folder=/path/to/folder[&since=unix_timestamp]
+       Returns: [{name, path, text, modified, subfolder}]
+  GET  /browse?folder=/path/to/folder[&subfolder=Name]
+       Returns: [{name, path, type, modified}]  (no text extraction)
+  GET  /file?path=/absolute/path/to/file
+       Returns: {name, path, text, modified}
+  GET  /backups?folder=/path/to/backups
+       Returns: [{name, path, modified, size}]  (only .db files)
+  POST /backup-write   body: {folder, filename, data_b64, keep_count}
+       Writes backup file; deletes oldest if count exceeds keep_count
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import pathlib
@@ -45,6 +50,41 @@ def extract_text(path: str) -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/backup-write":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length))
+            folder = body.get("folder", "")
+            filename = body.get("filename", "")
+            data_b64 = body.get("data_b64", "")
+            keep_count = int(body.get("keep_count", 7))
+
+            if not folder or not filename or not data_b64:
+                self._json({"error": "folder, filename und data_b64 erforderlich"}, 400)
+                return
+
+            target_dir = pathlib.Path(folder)
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+                data = base64.b64decode(data_b64)
+                (target_dir / filename).write_bytes(data)
+
+                # Cleanup: keep only the newest keep_count .db files
+                backups = sorted(
+                    [f for f in target_dir.iterdir() if f.suffix == ".db" and f.is_file()],
+                    key=lambda f: f.stat().st_mtime,
+                )
+                for old in backups[:-keep_count]:
+                    old.unlink(missing_ok=True)
+
+                self._json({"success": True, "filename": filename})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+            return
+
+        self._json({"error": "not found"}, 404)
+
     def do_GET(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
@@ -140,6 +180,25 @@ class Handler(BaseHTTPRequestHandler):
                 mtime = 0
             text = extract_text(path)
             self._json({"name": os.path.basename(path), "path": path, "text": text, "modified": mtime})
+            return
+
+        if parsed.path == "/backups":
+            folder = params.get("folder", [""])[0]
+            if not folder or not os.path.isdir(folder):
+                self._json([])
+                return
+            target_dir = pathlib.Path(folder)
+            backups = []
+            for f in sorted(target_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                if f.is_file() and f.suffix == ".db":
+                    st = f.stat()
+                    backups.append({
+                        "name": f.name,
+                        "path": str(f),
+                        "modified": st.st_mtime,
+                        "size": st.st_size,
+                    })
+            self._json(backups)
             return
 
         self._json({"error": "not found"}, 404)
