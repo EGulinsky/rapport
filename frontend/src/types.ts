@@ -335,6 +335,22 @@ export interface FilesConfig {
   bridge_reachable?: boolean
 }
 
+export interface BackupEntry {
+  name: string
+  path: string
+  modified: number
+  size: number
+}
+
+export interface BackupStatus {
+  enabled: boolean
+  backup_folder?: string
+  frequency_hours: number
+  keep_count: number
+  last_backup?: string
+  backups: BackupEntry[]
+}
+
 export interface CalendarEvent {
   id: number
   application_id: number

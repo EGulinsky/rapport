@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2 } from 'lucide-react'
+import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save } from 'lucide-react'
 import { api } from '../api/client'
-import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry } from '../types'
+import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void }
@@ -1323,7 +1323,185 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin'
+function BackupPanel() {
+  const [status, setStatus] = useState<BackupStatus | null>(null)
+  const [folder, setFolder] = useState('')
+  const [frequencyHours, setFrequencyHours] = useState(24)
+  const [keepCount, setKeepCount] = useState(7)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [runResult, setRunResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.backup.status().then(s => {
+      setStatus(s)
+      setFolder(s.backup_folder ?? '')
+      setFrequencyHours(s.frequency_hours)
+      setKeepCount(s.keep_count)
+    }).catch(() => {})
+  }, [])
+
+  async function save(enabled?: boolean) {
+    setSaving(true); setSaved(false); setError(null)
+    try {
+      const s = await api.backup.saveSettings({
+        enabled: enabled ?? status?.enabled ?? false,
+        backup_folder: folder.trim() || undefined,
+        frequency_hours: frequencyHours,
+        keep_count: keepCount,
+      })
+      setStatus(prev => prev ? { ...prev, ...s } : { ...s, backups: [] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setSaving(false) }
+  }
+
+  async function toggleEnabled() {
+    const next = !(status?.enabled ?? false)
+    setStatus(s => s ? { ...s, enabled: next } : null)
+    await save(next)
+  }
+
+  async function runNow() {
+    setRunning(true); setRunResult(null); setError(null)
+    try {
+      const r = await api.backup.run()
+      setRunResult(r.filename)
+      const s = await api.backup.status()
+      setStatus(s)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setRunning(false) }
+  }
+
+  const fmtDate = (ts?: string | number) => {
+    if (!ts) return 'noch nie'
+    const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
+    return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
+  const fmtSize = (bytes: number) =>
+    bytes > 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`
+
+  const FREQUENCY_OPTIONS = [
+    { value: 1,   label: 'Stündlich' },
+    { value: 6,   label: 'Alle 6 Stunden' },
+    { value: 12,  label: 'Alle 12 Stunden' },
+    { value: 24,  label: 'Täglich' },
+    { value: 168, label: 'Wöchentlich' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-1.5 text-xs text-gray-600">
+        <div className="flex items-center gap-2 font-semibold text-gray-800">
+          <Database className="h-4 w-4 text-indigo-500" />
+          Datenbank-Backup
+        </div>
+        <p>Erstellt regelmäßige Kopien der SQLite-Datenbank (enthält alle Bewerbungen und Einstellungen) in einem konfigurierbaren Ordner auf deinem Mac.</p>
+      </div>
+
+      {/* Enable toggle */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">Automatisches Backup</span>
+        <button onClick={toggleEnabled}
+          className={clsx('relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+            status?.enabled ? 'bg-indigo-600' : 'bg-gray-200')}>
+          <span className={clsx('inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
+            status?.enabled ? 'translate-x-4.5' : 'translate-x-0.5')} />
+        </button>
+      </div>
+
+      {/* Backup folder */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-gray-700">Backup-Ordner (Mac-Pfad)</label>
+        <input
+          type="text"
+          value={folder}
+          onChange={e => setFolder(e.target.value)}
+          placeholder="/Users/…/Backups/JobTracker"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        />
+      </div>
+
+      {/* Frequency + Keep count */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-gray-700">Frequenz</label>
+          <select value={frequencyHours} onChange={e => setFrequencyHours(Number(e.target.value))}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            {FREQUENCY_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-gray-700">Backups behalten</label>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={keepCount}
+            onChange={e => setKeepCount(Number(e.target.value))}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button onClick={() => save()} disabled={saving}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          {saved ? 'Gespeichert' : 'Speichern'}
+        </button>
+        <button onClick={runNow} disabled={running || !folder.trim()}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">
+          {running ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+          Jetzt sichern
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
+      {runResult && (
+        <div className="flex items-center gap-2 text-xs text-green-700">
+          <CheckCircle className="h-3.5 w-3.5" />
+          Backup erstellt: {runResult}
+        </div>
+      )}
+
+      {/* Existing backups */}
+      {status && status.backups.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-gray-700">Vorhandene Backups ({status.backups.length})</div>
+          <div className="rounded-lg border border-gray-100 divide-y divide-gray-50 max-h-48 overflow-y-auto">
+            {status.backups.map(b => (
+              <div key={b.name} className="flex items-center justify-between px-3 py-2 text-xs">
+                <span className="text-gray-700 font-mono truncate">{b.name}</span>
+                <span className="text-gray-400 shrink-0 ml-2">{fmtDate(b.modified)} · {fmtSize(b.size)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status?.last_backup && (
+        <div className="text-xs text-gray-400">Letztes Backup: {fmtDate(status.last_backup)}</div>
+      )}
+    </div>
+  )
+}
+
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup'
 
 const TABS: [Tab, string][] = [
   ['sync',     'Sync'],
@@ -1333,6 +1511,7 @@ const TABS: [Tab, string][] = [
   ['calls',    'Anrufe'],
   ['files',    'Dokumente'],
   ['linkedin', 'LinkedIn'],
+  ['backup',   'Backup'],
 ]
 
 export function SettingsModal({ onClose }: Props) {
@@ -1377,6 +1556,7 @@ export function SettingsModal({ onClose }: Props) {
             {tab === 'calls'    && <CallsPanel />}
             {tab === 'files'    && <FilesPanel />}
             {tab === 'linkedin' && <LinkedInPanel onSynced={onClose} />}
+            {tab === 'backup'   && <BackupPanel />}
           </div>
         </div>
       </div>

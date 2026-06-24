@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.6.0',
+    date: '2026-06-24',
+    changes: [
+      'Backup: automatische und manuelle DB-Sicherung in einen konfigurierbaren Mac-Ordner',
+      'Einstellungen › Backup: Ordner, Frequenz (stündlich bis wöchentlich), Anzahl zu behaltender Backups, "Jetzt sichern"-Button, Liste vorhandener Backups',
+      'Scheduler: Backup läuft automatisch im Hintergrund wenn aktiviert und fällig',
+    ],
+  },
+  {
     version: '2.5.8',
     date: '2026-06-24',
     changes: [

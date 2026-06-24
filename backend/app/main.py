@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -8,7 +9,7 @@ from app.database import init_db
 from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
-    review, cleanup, calendar, attachments, merge, audit_log,
+    review, cleanup, calendar, attachments, merge, audit_log, backup,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,32 @@ async def _background_sync_loop():
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
+            # Backup: run if enabled and due
+            try:
+                from app.routers.backup import do_backup
+                from app.database import SessionLocal
+                from app import models as _models
+                _db = SessionLocal()
+                try:
+                    _bcfg = _db.query(_models.BackupConfig).first()
+                    if _bcfg and _bcfg.enabled and _bcfg.backup_folder:
+                        from datetime import timedelta
+                        due = (
+                            _bcfg.last_backup is None
+                            or (datetime.now(timezone.utc) - _bcfg.last_backup)
+                            >= timedelta(hours=_bcfg.frequency_hours)
+                        )
+                        if due and "backup" not in _RUNNING_SOURCES:
+                            _RUNNING_SOURCES.add("backup")
+                            try:
+                                await do_backup()
+                            finally:
+                                _RUNNING_SOURCES.discard("backup")
+                finally:
+                    _db.close()
+            except Exception as e:
+                logger.warning("Backup error: %s", e)
+
         except Exception as e:
             logger.warning("Background sync loop error: %s", e)
 
@@ -125,6 +152,7 @@ app.include_router(cleanup.router)
 app.include_router(calendar.router)
 app.include_router(merge.router)
 app.include_router(audit_log.router)
+app.include_router(backup.router)
 
 
 @app.get("/health")

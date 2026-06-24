@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus } from '../types'
 
 const BASE = '/api'
 
@@ -293,6 +293,13 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(req),
       }),
+  },
+
+  backup: {
+    status: () => request<BackupStatus>('/backup/status'),
+    saveSettings: (data: { enabled: boolean; backup_folder?: string; frequency_hours: number; keep_count: number }) =>
+      request<BackupStatus>('/backup/settings', { method: 'POST', body: JSON.stringify(data) }),
+    run: () => request<{ success: boolean; filename: string }>('/backup/run', { method: 'POST' }),
   },
 
   audit: {

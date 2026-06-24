@@ -393,3 +393,16 @@ class FilesConfig(Base):
     last_sync    = Column(DateTime(timezone=True), nullable=True)
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
     updated_at   = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class BackupConfig(Base):
+    __tablename__ = "backup_config"
+
+    id              = Column(Integer, primary_key=True)
+    enabled         = Column(Boolean, default=False, nullable=False)
+    backup_folder   = Column(String, nullable=True)   # absolute path on host Mac
+    frequency_hours = Column(Integer, default=24, nullable=False)
+    keep_count      = Column(Integer, default=7, nullable=False)
+    last_backup     = Column(DateTime(timezone=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
