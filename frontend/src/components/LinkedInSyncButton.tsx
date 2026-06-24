@@ -242,10 +242,38 @@ export function LinkedInSyncButton({ onSynced }: Props) {
                     </div>
                   )}
 
-                  {(isDone || isError) && syncState.processed > 0 && (
+                  {/* Per-category scrape counts (grows during scraping phase) */}
+                  {(isRunning || isDone || isError) && syncState.category_counts && syncState.category_counts.length > 0 && (
+                    <div className="rounded-lg border border-gray-100 overflow-hidden text-xs">
+                      {syncState.category_counts.map(cat => (
+                        <div key={cat.card_type} className="flex justify-between px-3 py-1.5 even:bg-gray-50 text-gray-600">
+                          <span>{cat.label}</span>
+                          <span className="font-mono font-semibold text-gray-800">{cat.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* X/Y processing progress bar */}
+                  {isRunning && syncState.total > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Verarbeite</span>
+                        <span className="font-mono">{syncState.processed} / {syncState.total}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5">
+                        <div
+                          className="bg-[#0077B5] h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.round((syncState.processed / syncState.total) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {(isDone || isError) && syncState.total > 0 && (
                     <div className="flex gap-2 flex-wrap">
                       <div className="flex flex-col items-center px-3 py-1.5 rounded-lg bg-gray-50 text-gray-600">
-                        <span className="text-lg font-bold leading-tight">{syncState.processed}</span>
+                        <span className="text-lg font-bold leading-tight">{syncState.total}</span>
                         <span className="text-[10px] font-medium">Gefunden</span>
                       </div>
                       {syncState.created > 0 && (

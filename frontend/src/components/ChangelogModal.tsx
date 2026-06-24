@@ -9,9 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '2.3.3',
+    version: '2.3.4',
     date: '2026-06-24',
     changes: [
+      'LinkedIn-Sync: Fortschrittsanzeige pro Stufe — während Scraping: Seite X — Y gefunden pro Kategorie; nach jeder Kategorie: Treffer-Tabelle mit Zählern; während Verarbeitung: Fortschrittsbalken X/Y',
       'Fix Duplikaterkennung: Firma + Stelle müssen normalisiert gleich sein (nicht Substring) — GmbH/AG/SE etc. werden ignoriert, Gendermarker (m/w/d) aus Stelle entfernt; gilt für LI-Sync und Excel-Import',
       'Ghosting bei Abgesagten: auch abgesagte Bewerbungen mit >= 14 Tagen Lücke zwischen Bewerbung und Absage werden als Ghosting markiert; "Nur Ghosting"-Filter lädt jetzt auch abgesagte',
       'Fix: Ghosting-Filter zeigte keine Einträge — letztes_update wurde in-memory durch Sync-Event (Bewerbung eingereicht, datum=heute) überschrieben bevor Ghosting serialisiert wurde',
