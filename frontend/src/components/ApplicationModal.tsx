@@ -612,6 +612,32 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
             </dl>
           )}
 
+          {/* Stellenanzeige */}
+          <div>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Stellenanzeige</p>
+            {editing ? (
+              <input
+                type="url"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={draft.stellenanzeige_url ?? ''}
+                onChange={e => setDraft(d => ({ ...d, stellenanzeige_url: e.target.value || undefined }))}
+                placeholder="https://…"
+              />
+            ) : app?.stellenanzeige_url ? (
+              <a
+                href={app.stellenanzeige_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 hover:underline break-all"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                {app.stellenanzeige_url}
+              </a>
+            ) : (
+              <span className="text-gray-400 italic text-sm">Kein Link</span>
+            )}
+          </div>
+
           {/* Kommentar */}
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Kommentar</p>
