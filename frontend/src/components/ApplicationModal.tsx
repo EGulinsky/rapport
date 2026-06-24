@@ -8,6 +8,12 @@ import {
   type Application, type MainStatus, type Contact, type Event, type ManualCandidate, type FileBrowseItem,
 } from '../types'
 
+function parentPath(p: string): string {
+  const parts = p.replace(/\/$/, '').split('/')
+  if (parts.length <= 1) return '/'
+  return parts.slice(0, -1).join('/') || '/'
+}
+
 interface Props {
   appId: number | null
   onClose: () => void
@@ -39,7 +45,8 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
   const [manualLoading, setManualLoading] = useState(false)
   const [manualConflict, setManualConflict] = useState<{ candidate: ManualCandidate; conflict_app_firma: string } | null>(null)
   const [docBrowseOpen, setDocBrowseOpen] = useState(false)
-  const [docBrowseSub, setDocBrowseSub] = useState('')
+  const [docBrowsePath, setDocBrowsePath] = useState('')
+  const [docBrowseRoot, setDocBrowseRoot] = useState('')
   const [docBrowseItems, setDocBrowseItems] = useState<FileBrowseItem[]>([])
   const [docBrowseLoading, setDocBrowseLoading] = useState(false)
   const [docBrowseError, setDocBrowseError] = useState<string | null>(null)
@@ -223,14 +230,15 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
 
   async function openDocBrowse() {
     setSyncMenuOpen(false)
-    setDocBrowseSub('')
     setDocBrowseItems([])
     setDocBrowseError(null)
     setDocBrowseOpen(true)
     setDocBrowseLoading(true)
     try {
-      const items = await api.files.browse()
-      setDocBrowseItems(items)
+      const result = await api.files.browse()
+      setDocBrowsePath(result.path)
+      setDocBrowseRoot(result.default_root)
+      setDocBrowseItems(result.items)
     } catch (e: unknown) {
       setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -238,13 +246,13 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     }
   }
 
-  async function browseInto(subfolder: string) {
-    setDocBrowseSub(subfolder)
+  async function browseInto(path: string) {
     setDocBrowseLoading(true)
     setDocBrowseError(null)
     try {
-      const items = await api.files.browse(subfolder || undefined)
-      setDocBrowseItems(items)
+      const result = await api.files.browse(path)
+      setDocBrowsePath(result.path)
+      setDocBrowseItems(result.items)
     } catch (e: unknown) {
       setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -256,7 +264,7 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     if (!appId) return
     setDocAttaching(item.path)
     try {
-      await api.files.attach(appId, item.path, item.name)
+      await api.files.attach(appId, item.path, item.name, item.type === 'folder')
       setDocBrowseOpen(false)
       await refreshContacts()
     } catch (e: unknown) {
@@ -1090,35 +1098,51 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
     )}
 
     {/* Document browser dialog */}
-    {docBrowseOpen && (
+    {docBrowseOpen && (() => {
+      const pathParts = docBrowsePath.split('/').filter(Boolean)
+      const isAtRoot = docBrowsePath === docBrowseRoot || docBrowsePath === '/'
+      return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) setDocBrowseOpen(false) }}>
         <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[80vh]">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900 text-sm">Dokument hinzufügen</h3>
+            <h3 className="font-semibold text-gray-900 text-sm">Dokument / Ordner hinzufügen</h3>
             <button onClick={() => setDocBrowseOpen(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Breadcrumb */}
-          <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-1 text-xs text-gray-500 overflow-x-auto">
-            <button
-              onClick={() => browseInto('')}
-              className="hover:text-indigo-600 whitespace-nowrap"
-            >
-              Dokumente
-            </button>
-            {docBrowseSub.split('/').filter(Boolean).map((part, i, arr) => (
-              <span key={i} className="flex items-center gap-1">
-                <ChevronRight className="h-3 w-3 flex-shrink-0" />
-                <button
-                  onClick={() => browseInto(arr.slice(0, i + 1).join('/'))}
-                  className="hover:text-indigo-600 whitespace-nowrap"
-                >
-                  {part}
-                </button>
-              </span>
-            ))}
+          {/* Path bar */}
+          <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1 min-w-0 overflow-x-auto">
+            {!isAtRoot && (
+              <button
+                onClick={() => browseInto(parentPath(docBrowsePath))}
+                className="flex-shrink-0 p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                title="Nach oben"
+              >
+                <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+              </button>
+            )}
+            <div className="flex items-center gap-0.5 text-xs text-gray-500 min-w-0 overflow-x-auto">
+              {pathParts.map((part, i) => (
+                <span key={i} className="flex items-center gap-0.5 flex-shrink-0">
+                  {i > 0 && <ChevronRight className="h-3 w-3 text-gray-300" />}
+                  <button
+                    onClick={() => browseInto('/' + pathParts.slice(0, i + 1).join('/'))}
+                    className={`hover:text-indigo-600 truncate max-w-[120px] ${i === pathParts.length - 1 ? 'text-gray-800 font-medium' : ''}`}
+                  >
+                    {part}
+                  </button>
+                </span>
+              ))}
+            </div>
+            {docBrowseRoot && docBrowsePath !== docBrowseRoot && (
+              <button
+                onClick={() => browseInto(docBrowseRoot)}
+                className="flex-shrink-0 ml-auto text-[10px] text-indigo-500 hover:text-indigo-700 whitespace-nowrap pl-2"
+              >
+                ↩ Startordner
+              </button>
+            )}
           </div>
 
           <div className="overflow-y-auto flex-1 p-3 space-y-1">
@@ -1128,44 +1152,48 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
               <p className="text-sm text-gray-400 italic text-center py-6">Keine Dateien gefunden</p>
             )}
             {!docBrowseLoading && docBrowseItems.map(item => (
-              <button
-                key={item.path}
-                disabled={docAttaching !== null}
-                onClick={() => {
-                  if (item.type === 'folder') {
-                    browseInto(docBrowseSub ? `${docBrowseSub}/${item.name}` : item.name)
-                  } else {
-                    attachDoc(item)
-                  }
-                }}
-                className="w-full text-left flex items-center gap-3 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 px-3 py-2.5 transition-colors disabled:opacity-50"
-              >
-                {item.type === 'folder' ? (
-                  <Folder className="h-4 w-4 text-amber-400 flex-shrink-0" />
-                ) : (
-                  <FileText className="h-4 w-4 text-indigo-400 flex-shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                  {item.type === 'file' && item.modified && (
-                    <p className="text-[10px] text-gray-400">
-                      {new Date(item.modified * 1000).toLocaleDateString('de-DE')}
-                    </p>
+              <div key={item.path} className="flex items-center gap-2 group">
+                <button
+                  disabled={docAttaching !== null}
+                  onClick={() => item.type === 'folder' ? browseInto(item.path) : attachDoc(item)}
+                  className="flex-1 min-w-0 text-left flex items-center gap-3 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 px-3 py-2.5 transition-colors disabled:opacity-50"
+                >
+                  {item.type === 'folder' ? (
+                    <Folder className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                  ) : (
+                    <FileText className="h-4 w-4 text-indigo-400 flex-shrink-0" />
                   )}
-                </div>
-                {item.type === 'folder' && <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />}
-                {item.type === 'file' && docAttaching === item.path && (
-                  <span className="text-[10px] text-indigo-500">Anhängen…</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                    {item.type === 'file' && item.modified > 0 && (
+                      <p className="text-[10px] text-gray-400">
+                        {new Date(item.modified * 1000).toLocaleDateString('de-DE')}
+                      </p>
+                    )}
+                  </div>
+                  {item.type === 'folder' && <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />}
+                  {item.type === 'file' && docAttaching === item.path && (
+                    <span className="text-[10px] text-indigo-500 flex-shrink-0">Anhängen…</span>
+                  )}
+                </button>
+                {/* "Hinzufügen"-Button für Ordner */}
+                {item.type === 'folder' && (
+                  <button
+                    disabled={docAttaching !== null}
+                    onClick={() => attachDoc(item)}
+                    title="Ordner hinzufügen"
+                    className="flex-shrink-0 p-2 rounded-lg border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
                 )}
-                {item.type === 'file' && docAttaching !== item.path && (
-                  <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">Anhängen</span>
-                )}
-              </button>
+              </div>
             ))}
           </div>
         </div>
       </div>
-    )}
+      )
+    })()}
     </>
   )
 }

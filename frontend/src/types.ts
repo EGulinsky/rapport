@@ -130,6 +130,12 @@ export interface FileBrowseItem {
   modified: number
 }
 
+export interface FileBrowseResult {
+  path: string
+  default_root: string
+  items: FileBrowseItem[]
+}
+
 export interface ManualCandidate {
   id: number
   source: string

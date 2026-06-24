@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseItem } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult } from '../types'
 
 const BASE = '/api'
 
@@ -159,14 +159,14 @@ export const api = {
     status: () => request<FilesConfig>('/sync/files/status'),
     sync: () => request<SyncResult>('/sync/files', { method: 'POST' }),
     reset: () => fetch(`${BASE}/sync/files/reset`, { method: 'POST' }),
-    browse: (subfolder?: string) => {
-      const qs = subfolder ? `?subfolder=${encodeURIComponent(subfolder)}` : ''
-      return request<FileBrowseItem[]>(`/sync/files/browse${qs}`)
+    browse: (path?: string) => {
+      const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+      return request<FileBrowseResult>(`/sync/files/browse${qs}`)
     },
-    attach: (appId: number, path: string, name: string) =>
-      request<{ event_id: number; titel: string }>('/sync/files/attach', {
+    attach: (appId: number, path: string, name: string, isFolder = false) =>
+      request<{ event_id?: number; created: number; titel: string }>('/sync/files/attach', {
         method: 'POST',
-        body: JSON.stringify({ app_id: appId, path, name }),
+        body: JSON.stringify({ app_id: appId, path, name, is_folder: isFolder }),
       }),
   },
 

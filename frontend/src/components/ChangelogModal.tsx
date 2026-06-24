@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.4',
+    date: '2026-06-24',
+    changes: [
+      'Dokumentensync manuell: Browser startet im konfigurierten Stammordner, erlaubt aber freie Navigation im gesamten Dateisystem (Pfadleiste mit Klick-Navigation, "nach oben"-Pfeil, "↩ Startordner"-Taste)',
+      'Ordner komplett hinzufügen: + Button neben jedem Ordner hängt alle Dateien darin rekursiv an die Bewerbung an',
+    ],
+  },
+  {
     version: '2.5.3',
     date: '2026-06-24',
     changes: [
