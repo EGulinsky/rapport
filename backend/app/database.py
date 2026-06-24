@@ -458,7 +458,7 @@ def _migrate_linkedin_job_id():
 
 
 def _migrate_pre_rejection_status():
-    """Add pre_rejection_status column to applications if missing."""
+    """Add pre_rejection_status column and backfill it from status events."""
     import sqlite3
 
     db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
@@ -471,6 +471,34 @@ def _migrate_pre_rejection_status():
     cols = {row[1] for row in cur.fetchall()}
     if "pre_rejection_status" not in cols:
         cur.execute("ALTER TABLE applications ADD COLUMN pre_rejection_status TEXT")
+        conn.commit()
+
+    # Backfill for existing rejected apps: derive from event history via bulk SQL UPDATEs.
+    # Priority (highest wins): negotiating > waiting > fb > hr > NULL (→ "applied" fallback)
+
+    # Any gespräch-type event → at least HR stage
+    cur.execute("""
+        UPDATE applications SET pre_rejection_status = 'hr'
+        WHERE main_status = 'rejected'
+          AND (pre_rejection_status IS NULL OR pre_rejection_status = '')
+          AND id IN (SELECT DISTINCT application_id FROM events WHERE typ = 'gespräch')
+    """)
+
+    # Canonical status labels — overwrite with higher stage if found
+    for label_prefix, status in [
+        ("Gespräch FB", "fb"),
+        ("Warten auf Entscheidung", "waiting"),
+        ("Angebotsverhandlung", "negotiating"),
+    ]:
+        cur.execute(f"""
+            UPDATE applications SET pre_rejection_status = ?
+            WHERE main_status = 'rejected'
+              AND id IN (
+                SELECT DISTINCT application_id FROM events
+                WHERE typ = 'status' AND titel LIKE ?
+              )
+        """, (status, f"{label_prefix}%"))
+
     conn.commit()
     conn.close()
 
