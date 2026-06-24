@@ -13,11 +13,13 @@ interface Props {
   applications: Application[]
   onSelect: (id: number) => void
   onStatusChanged: () => void
+  selectedIds?: Set<number>
+  onToggleSelect?: (id: number) => void
 }
 
 type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
 
-export function ApplicationTable({ applications, onSelect, onStatusChanged }: Props) {
+export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('datum_bewerbung')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [popoverId, setPopoverId] = useState<number | null>(null)
@@ -82,6 +84,25 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged }: Pr
       <table className="w-full text-sm">
         <thead className="border-b border-gray-100 bg-gray-50">
           <tr>
+            {onToggleSelect && (
+              <th className="pl-4 pr-2 py-3 w-8">
+                <input
+                  type="checkbox"
+                  checked={selectedIds ? applications.length > 0 && selectedIds.size === applications.length : false}
+                  ref={el => {
+                    if (el) el.indeterminate = !!(selectedIds && selectedIds.size > 0 && selectedIds.size < applications.length)
+                  }}
+                  onChange={() => {
+                    if (!selectedIds || !onToggleSelect) return
+                    const allSelected = selectedIds.size === applications.length
+                    applications.forEach(a => {
+                      if (allSelected ? selectedIds.has(a.id) : !selectedIds.has(a.id)) onToggleSelect(a.id)
+                    })
+                  }}
+                  className="rounded border-gray-300 text-indigo-600 cursor-pointer"
+                />
+              </th>
+            )}
             <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide w-10">#</th>
             <Th k="firma" label="Firma / Rolle" />
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Quelle</th>
@@ -109,7 +130,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged }: Pr
               <>
                 {groupLabel && (
                   <tr key={`grp-${app.main_status}-${app.sub_status ?? 'none'}`} className="bg-gray-50/80">
-                    <td colSpan={8} className="px-4 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                    <td colSpan={onToggleSelect ? 9 : 8} className="px-4 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
                       {groupLabel}
                     </td>
                   </tr>
@@ -119,9 +140,20 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged }: Pr
                   onClick={() => onSelect(app.id)}
               className={clsx(
                 'cursor-pointer hover:bg-indigo-50/40 transition-colors',
-                app.abgesagt && 'opacity-50'
+                app.abgesagt && 'opacity-50',
+                selectedIds?.has(app.id) && 'bg-indigo-50/60'
               )}
             >
+              {onToggleSelect && (
+                <td className="pl-4 pr-2 py-3 w-8" onClick={e => { e.stopPropagation(); onToggleSelect(app.id) }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds?.has(app.id) ?? false}
+                    onChange={() => onToggleSelect(app.id)}
+                    className="rounded border-gray-300 text-indigo-600 cursor-pointer"
+                  />
+                </td>
+              )}
               <td className="px-3 py-3 text-xs text-gray-400 font-mono whitespace-nowrap select-all align-top">{app.id}</td>
               <td className="px-4 py-3">
                 <div>

@@ -190,6 +190,23 @@ class Contact(Base):
     applications    = relationship("Application", secondary="contact_application", back_populates="contacts")
 
 
+class MergeAlias(Base):
+    """Tracks original identifiers of merged entities so future syncs find the canonical."""
+    __tablename__ = "merge_aliases"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    entity_type     = Column(String, nullable=False)   # "application" | "contact"
+    canonical_id    = Column(Integer, nullable=False, index=True)
+    # Application alias fields
+    alias_firma     = Column(String, nullable=True)
+    alias_rolle     = Column(String, nullable=True)
+    alias_li_job_id = Column(String, nullable=True, index=True)
+    # Contact alias fields
+    alias_name      = Column(String, nullable=True)
+    alias_email     = Column(String, nullable=True, index=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Event(Base):
     __tablename__ = "events"
 

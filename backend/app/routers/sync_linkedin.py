@@ -780,6 +780,29 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.rolle = clean_title
             return app, False
 
+    # 2.5 Check merge aliases: after a manual merge the loser's identifiers are stored here
+    alias = None
+    if li_job_id:
+        alias = db.query(models.MergeAlias).filter(
+            models.MergeAlias.entity_type == "application",
+            models.MergeAlias.alias_li_job_id == li_job_id,
+        ).first()
+    if not alias:
+        for a in db.query(models.MergeAlias).filter(
+            models.MergeAlias.entity_type == "application",
+            models.MergeAlias.alias_firma.isnot(None),
+        ).all():
+            if (norm_firma(a.alias_firma or "") == job_firma
+                    and norm_rolle(a.alias_rolle or "") == job_rolle):
+                alias = a
+                break
+    if alias:
+        canonical = db.get(models.Application, alias.canonical_id)
+        if canonical:
+            if li_job_id and not canonical.linkedin_job_id:
+                canonical.linkedin_job_id = li_job_id
+            return canonical, False
+
     # 3. Create new application
     initial_status = job.get("default_status", "applied")
     if job.get("status_hint"):
