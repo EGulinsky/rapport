@@ -26,7 +26,6 @@ from app import models
 from app.routers.sync_common import (
     is_synced, mark_synced, purge_source,
     build_firm_index, find_hint_apps,
-    _classify_deterministic, _save_deterministic_event,
     init_progress, update_progress, finish_progress,
     set_batch_result,
 )
@@ -116,81 +115,55 @@ async def _do_local_files() -> dict:
                 f"Files Bridge nicht erreichbar ({e}). Starte files_bridge.py auf deinem Mac."
             ]}
 
-        total = len(files)
-        update_progress("local_files", 0, total, f"{total} Dateien gefunden")
+        # Group files by first-level subfolder under root
+        from collections import defaultdict
+        by_subfolder: dict[str, list[dict]] = defaultdict(list)
+        for file_info in files:
+            sf = file_info.get("subfolder", "")
+            if sf:
+                by_subfolder[sf].append(file_info)
 
-        for i, file_info in enumerate(files):
-            update_progress("local_files", i, total, f"Datei {i + 1}/{total}: {file_info.get('name', '')}")
+        total = len(by_subfolder)
+        update_progress("local_files", 0, total, f"{total} Ordner gefunden")
 
-            path: str = file_info.get("path", "")
-            name: str = file_info.get("name", os.path.basename(path))
-            text: str = file_info.get("text", "")
-            modified: Optional[float] = file_info.get("modified")
+        for folder_idx, (subfolder_name, subfolder_files) in enumerate(by_subfolder.items()):
+            update_progress("local_files", folder_idx, total, f"Ordner {folder_idx + 1}/{total}: {subfolder_name}")
 
-            if not path:
-                skipped += 1
+            # Match subfolder name against firm index
+            hint_apps = find_hint_apps(subfolder_name, term_to_apps)
+            if len(hint_apps) != 1:
+                skipped += len(subfolder_files)
                 continue
 
-            # Stable ID from file path
-            file_id = hashlib.md5(path.encode()).hexdigest()[:20]
-            if is_synced(db, "local_files", file_id):
-                skipped += 1
-                continue
-
-            # Use first-level subfolder under root (bridge provides this directly)
-            folder_name = file_info.get("subfolder") or os.path.basename(os.path.dirname(path))
-            raw = f"Datei: {name}\nOrdner: {folder_name}\n\n{text[:2000]}"
-
-            hint_apps = find_hint_apps(raw, term_to_apps)
-            if not hint_apps:
-                # No firm match — don't mark as synced (may match later if apps added)
-                skipped += 1
-                continue
-
-            det = _classify_deterministic("local_files", raw, None, hint_apps)
-            if det is None:
-                # Multiple matches — skip files (can't disambiguate without AI)
-                mark_synced(db, "local_files", file_id)
-                skipped += 1
-                continue
-
-            # Set notiz to relative file path for traceability
-            det["notiz"] = path
-
-            date_hint = datetime.fromtimestamp(modified, tz=timezone.utc) if modified else None
-            ok = _save_deterministic_event(db, "local_files", file_id, det, raw, date_hint)
+            app_id = hint_apps[0]["id"]
             processed += 1
-            if ok:
+
+            for file_info in subfolder_files:
+                path: str = file_info.get("path", "")
+                name: str = file_info.get("name", "") or os.path.basename(path)
+                modified: Optional[float] = file_info.get("modified")
+
+                if not path:
+                    skipped += 1
+                    continue
+
+                file_id = hashlib.md5(path.encode()).hexdigest()[:20]
+                if is_synced(db, "local_files", file_id):
+                    skipped += 1
+                    continue
+
+                date_hint = datetime.fromtimestamp(modified, tz=timezone.utc) if modified else None
+                db.add(models.Event(
+                    application_id=app_id,
+                    source="local_files",
+                    external_id=file_id,
+                    typ="file",
+                    datum=date_hint.date() if date_hint else None,
+                    titel=name,
+                    notiz=path,
+                ))
+                mark_synced(db, "local_files", file_id)
                 created += 1
-                # Store file as attachment if bridge provides raw content
-                raw_bytes_b64: Optional[str] = file_info.get("raw_bytes")
-                if raw_bytes_b64:
-                    try:
-                        import base64
-                        from app.routers.attachments import store_attachment
-                        raw_bytes = base64.b64decode(raw_bytes_b64)
-                        # Find the event we just created
-                        ev = db.query(models.Event).filter_by(
-                            source="local_files", external_id=file_id
-                        ).order_by(models.Event.id.desc()).first()
-                        if ev:
-                            size_mb = len(raw_bytes) / 1024 / 1024
-                            if size_mb > 100:
-                                from datetime import date as _date
-                                db.add(models.PendingMatch(
-                                    source="attachment",
-                                    external_id=f"attachment_{file_id}",
-                                    confidence=99,
-                                    event_type="large_attachment",
-                                    datum=_date.today(),
-                                    titel=f"Großer Anhang: {name}",
-                                    extract=f"Datei {name} ({size_mb:.1f} MB) ist zu groß.",
-                                    suggested_app_id=ev.application_id,
-                                ))
-                            else:
-                                store_attachment(db, ev.id, name, raw_bytes, source="local_files", external_id=file_id)
-                    except Exception:
-                        pass
 
         db.commit()
         cfg.last_sync = datetime.now(timezone.utc)
