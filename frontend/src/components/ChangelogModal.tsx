@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.0',
+    date: '2026-06-24',
+    changes: [
+      'Audit-Log: vollständiges Änderungsprotokoll für alle Bewerbungen — wann, durch wen (Quelle) und warum wurde was geändert',
+      'Erfasst: Statusänderungen (manuell + via PendingMatch), Anlegen, Löschen, Zusammenführen, Excel-Import, LI-Sync-Neuanlage',
+      'Log-Stufe in den Einstellungen wählbar: Aus / Normal (Standardwert) / Ausführlich (+ alle Feldänderungen)',
+      'Audit-Log-Button im Header (Klemmbrett-Symbol) öffnet globale Ansicht mit Filtern nach Bewerbung und Pagination',
+    ],
+  },
+  {
     version: '2.4.7',
     date: '2026-06-24',
     changes: [

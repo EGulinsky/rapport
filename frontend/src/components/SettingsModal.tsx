@@ -942,6 +942,7 @@ const DEFAULT_SYNC: SyncSettings = {
   icloud_contacts_enabled: true, icloud_calls_enabled: true,
   linkedin_enabled: true,
   files_enabled: true,
+  audit_log_level: 'normal',
 }
 
 function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -992,9 +993,9 @@ function SyncControlPanel() {
 
   useEffect(() => { api.settings.getSync().then(setSettings).catch(() => {}) }, [])
 
-  async function toggle(key: keyof SyncSettings, val: boolean) {
+  async function toggle(key: keyof SyncSettings, val: boolean | string) {
     const next = { ...settings, [key]: val }
-    setSettings(next)
+    setSettings(next as SyncSettings)
     setSaving(true)
     try {
       await api.settings.saveSync({ [key]: val })
@@ -1032,6 +1033,27 @@ function SyncControlPanel() {
       <SyncGroup label="Lokale Dokumente" enabled={settings.files_enabled} onToggle={v => toggle('files_enabled', v)}>
         <div className="px-4 py-2.5 text-xs text-gray-400">Ordner-Konfiguration im Tab „Dokumente"</div>
       </SyncGroup>
+
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+          <span className="text-sm font-semibold text-gray-800">Audit-Log</span>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <span className="text-sm text-gray-700">Log-Stufe</span>
+            <p className="text-xs text-gray-400 mt-0.5">Normal: Status, Erstellen, Löschen, Merge, Import · Ausführlich: + alle Feldänderungen</p>
+          </div>
+          <select
+            value={settings.audit_log_level}
+            onChange={e => toggle('audit_log_level', e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+          >
+            <option value="off">Aus</option>
+            <option value="normal">Normal</option>
+            <option value="verbose">Ausführlich</option>
+          </select>
+        </div>
+      </div>
 
       {(saving || saved) && (
         <p className="text-xs text-center text-indigo-500">{saving ? 'Speichert…' : '✓ Gespeichert'}</p>

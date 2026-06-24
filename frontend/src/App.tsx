@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge } from 'lucide-react'
+import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList } from 'lucide-react'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
@@ -17,6 +17,7 @@ import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
 import { ChangelogModal, CURRENT_VERSION } from './components/ChangelogModal'
 import { AppMergeDialog } from './components/MergeDialog'
+import AuditLogModal from './components/AuditLogModal'
 import { BUILD_NUMBER } from './version'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
@@ -43,6 +44,7 @@ export default function App() {
   const [mainView, setMainView] = useState<MainView>('applications')
   const [loading, setLoading] = useState(false)
   const [showAiSettings, setShowAiSettings] = useState(false)
+  const [showAuditLog, setShowAuditLog] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
@@ -179,6 +181,13 @@ export default function App() {
                     {reviewCount}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => setShowAuditLog(true)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+                title="Audit-Log"
+              >
+                <ClipboardList className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setShowAiSettings(true)}
@@ -326,6 +335,7 @@ export default function App() {
       )}
 
       {showAiSettings && <SettingsModal onClose={() => setShowAiSettings(false)} />}
+      {showAuditLog && <AuditLogModal onClose={() => setShowAuditLog(false)} />}
       {showCleanup && (
         <CleanupModal
           onClose={() => setShowCleanup(false)}

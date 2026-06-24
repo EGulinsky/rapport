@@ -362,6 +362,26 @@ class SyncSettings(Base):
     icloud_calls_enabled     = Column(Boolean, default=True, nullable=False)
     linkedin_enabled         = Column(Boolean, default=True, nullable=False)
     files_enabled            = Column(Boolean, default=True, nullable=False)
+    # "off" | "normal" | "verbose"
+    audit_log_level          = Column(String, default="normal", nullable=False, server_default="normal")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    app_id      = Column(Integer, ForeignKey("applications.id", ondelete="SET NULL"), nullable=True, index=True)
+    timestamp   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    # create | update | delete | status_change | merge | import
+    action      = Column(String, nullable=False)
+    field       = Column(String, nullable=True)   # which field changed (verbose mode)
+    old_value   = Column(Text, nullable=True)
+    new_value   = Column(Text, nullable=True)
+    # user | gmail | icloud_mail | linkedin | import | merge | …
+    source      = Column(String, nullable=False, default="user")
+    reason      = Column(Text, nullable=True)     # free-text explanation
+
+    application = relationship("Application", foreign_keys=[app_id])
 
 
 class FilesConfig(Base):

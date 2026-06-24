@@ -503,6 +503,44 @@ def _migrate_pre_rejection_status():
     conn.close()
 
 
+def _migrate_audit_log():
+    """Add audit_log table and audit_log_level column to sync_settings."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    cur.execute("PRAGMA table_info(sync_settings)")
+    sync_cols = {row[1] for row in cur.fetchall()}
+    if "audit_log_level" not in sync_cols:
+        cur.execute("ALTER TABLE sync_settings ADD COLUMN audit_log_level TEXT NOT NULL DEFAULT 'normal'")
+
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'")
+    if not cur.fetchone():
+        cur.execute("""
+            CREATE TABLE audit_log (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_id    INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+                timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                action    TEXT NOT NULL,
+                field     TEXT,
+                old_value TEXT,
+                new_value TEXT,
+                source    TEXT NOT NULL DEFAULT 'user',
+                reason    TEXT
+            )
+        """)
+        cur.execute("CREATE INDEX ix_audit_log_app_id ON audit_log (app_id)")
+        cur.execute("CREATE INDEX ix_audit_log_timestamp ON audit_log (timestamp)")
+
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -516,6 +554,7 @@ def init_db():
     _migrate_event_external_id()
     _migrate_linkedin_job_id()
     _migrate_pre_rejection_status()
+    _migrate_audit_log()
     Base.metadata.create_all(bind=engine)
     _backfill_events()
     _migrate_gespraeche_to_events()

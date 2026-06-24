@@ -839,6 +839,10 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     db.add(new_app)
     db.flush()
 
+    from app.audit import add_audit
+    add_audit(db, "create", "linkedin", app_id=new_app.id,
+              new_value=f"{job['company']} – {job['title']}")
+
     event_typ = "bewerbung" if initial_status not in ("prospecting", "rejected") else "notiz"
     event_titel = {
         "prospecting": "Gespeichert auf LinkedIn",

@@ -89,6 +89,7 @@ def get_sync_settings(db: Session = Depends(get_db)):
         "icloud_calls_enabled": cfg.icloud_calls_enabled,
         "linkedin_enabled": cfg.linkedin_enabled,
         "files_enabled": cfg.files_enabled,
+        "audit_log_level": cfg.audit_log_level or "normal",
     }
 
 
@@ -101,6 +102,8 @@ def save_sync_settings(payload: dict, db: Session = Depends(get_db)):
     for key, val in payload.items():
         if hasattr(cfg, key) and isinstance(val, bool):
             setattr(cfg, key, val)
+    if "audit_log_level" in payload and payload["audit_log_level"] in ("off", "normal", "verbose"):
+        cfg.audit_log_level = payload["audit_log_level"]
     db.commit()
     db.refresh(cfg)
     return get_sync_settings(db)

@@ -8,6 +8,7 @@ from app.database import get_db
 from app import models, schemas
 from app.models import EXCEL_IMPORT_MAP, MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.dedup import dedup_key as _dedup_key
+from app.audit import add_audit
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -158,6 +159,8 @@ async def import_excel(
                     notiz=kommentar,
                 ))
 
+            add_audit(db, "import", "import", app_id=app.id,
+                      new_value=f"{firma} – {rolle}")
             existing_keys.add(dedup_key)
             imported += 1
 
