@@ -35,11 +35,22 @@ from app.ai.tasks import classify_batch_for_app, BATCH_SIZE
 router = APIRouter(prefix="/api/sync/targeted", tags=["sync"])
 
 
-def _search_terms(app: models.Application) -> list[str]:
-    """All unique search terms for this application (firm + zielfirma variants)."""
+def _search_terms(app: models.Application, db: Session) -> list[str]:
+    """All unique search terms for this application (firm + zielfirma variants).
+
+    Also includes alias_firma names from merged duplicates so that e-mails
+    referencing the old company name are still found after a merge.
+    """
     seen: set[str] = set()
     result: list[str] = []
-    for raw in [app.firma, app.zielfirma_bei_hh, app.wurde_besetzt_von]:
+    raws = [app.firma, app.zielfirma_bei_hh, app.wurde_besetzt_von]
+    aliases = db.query(models.MergeAlias).filter(
+        models.MergeAlias.entity_type == "application",
+        models.MergeAlias.canonical_id == app.id,
+        models.MergeAlias.alias_firma.isnot(None),
+    ).all()
+    raws += [a.alias_firma for a in aliases]
+    for raw in raws:
         if raw and len(raw.strip()) >= 3:
             for v in term_variants(raw):
                 vl = v.lower()
@@ -919,7 +930,7 @@ async def _do_sync(app_id: int) -> dict:
         if not app:
             return {"created": 0, "processed": 0, "errors": [f"App {app_id} nicht gefunden"]}
 
-        terms = _search_terms(app)
+        terms = _search_terms(app, db)
         app_dict = _app_dict(app)
         total_created = 0
         total_processed = 0
@@ -993,7 +1004,7 @@ async def sync_for_app(app_id: int, background_tasks: BackgroundTasks, db: Sessi
     app = db.query(models.Application).get(app_id)
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
-    if not _search_terms(app):
+    if not _search_terms(app, db):
         raise HTTPException(400, "Keine Suchbegriffe für diese Bewerbung ableitbar.")
 
     _task_results.pop(str(app_id), None)
@@ -1035,7 +1046,7 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
         raise HTTPException(404, "Bewerbung nicht gefunden.")
 
     q_lower = q.strip().lower()
-    terms = _search_terms(app)
+    terms = _search_terms(app, db)
 
     def _matches(haystack: str) -> bool:
         h = haystack.lower()

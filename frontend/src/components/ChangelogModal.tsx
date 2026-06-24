@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.4.4',
+    date: '2026-06-24',
+    changes: [
+      'Fix: Gezielter Sync (Sync-Button im Modal) berücksichtigt jetzt Merge-Aliases — E-Mails mit dem alten Firmennamen zusammengeführter Bewerbungen werden korrekt gefunden',
+    ],
+  },
+  {
     version: '2.4.3',
     date: '2026-06-24',
     changes: [
