@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.4.6',
+    date: '2026-06-24',
+    changes: [
+      'Fix: LI-Sync legte neue Bewerbungen aus der Archiviert-Kategorie direkt als "Abgesagt" an — jetzt werden sie als "Beworben" angelegt und ein Review-Vorschlag erstellt (betrifft auch status_hint="rejected" bei Neu-Anlage)',
+    ],
+  },
+  {
     version: '2.4.5',
     date: '2026-06-24',
     changes: [
