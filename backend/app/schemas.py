@@ -105,6 +105,7 @@ class ApplicationBase(BaseModel):
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
     kommentar: Optional[str] = None
+    stellenanzeige_url: Optional[str] = None
     gespraech_1: Optional[str] = None
     gespraech_2: Optional[str] = None
     gespraech_3: Optional[str] = None
@@ -128,6 +129,7 @@ class ApplicationUpdate(BaseModel):
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
     kommentar: Optional[str] = None
+    stellenanzeige_url: Optional[str] = None
     gespraech_1: Optional[str] = None
     gespraech_2: Optional[str] = None
     gespraech_3: Optional[str] = None

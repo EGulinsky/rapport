@@ -72,6 +72,7 @@ export interface Application {
   abgesagt: boolean
   ghosting: boolean
   kommentar?: string
+  stellenanzeige_url?: string
   gespraech_1?: string
   gespraech_2?: string
   gespraech_3?: string

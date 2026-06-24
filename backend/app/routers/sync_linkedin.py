@@ -547,7 +547,7 @@ async def _accept_consent(page) -> None:
             continue
 
 
-def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str) -> tuple[list[dict], int]:
+def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str, job_urls: list[str] | None = None) -> tuple[list[dict], int]:
     """Parse all job entries from page inner_text using 'Firma · Ort' anchor scanning.
 
     Each line containing '·' is treated as a potential Firma · Ort anchor. Navigation
@@ -610,6 +610,9 @@ def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str)
                 mapped_status = mapping
                 break
 
+        # Assign job URL by position within the deduplicated entries seen so far
+        job_url = job_urls[len(new_jobs)] if job_urls and len(new_jobs) < len(job_urls) else None
+
         new_jobs.append({
             "id": "",
             "title": title,
@@ -619,6 +622,7 @@ def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str)
             "default_status": default_status,
             "status_hint": mapped_status,
             "hinweis": hinweis,
+            "stellenanzeige_url": job_url,
             "_raw_context": f"{firma} · {ort} | {beworben_text} | {hinweis}",
         })
 
@@ -665,7 +669,17 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         await asyncio.sleep(2)
 
         text = await page.inner_text("body")
-        new_jobs, chunk_count = _extract_jobs_from_text(text, seen_keys, default_status)
+
+        # Extract unique job-listing URLs (desktop+mobile renders each link twice)
+        try:
+            raw_links: list[str] = await page.evaluate(
+                "() => [...new Set([...document.querySelectorAll('a[href*=\"/jobs/view/\"]')]"
+                ".map(a => a.href.split('?')[0].replace(/\\/$/, '')))]"
+            )
+        except Exception:
+            raw_links = []
+
+        new_jobs, chunk_count = _extract_jobs_from_text(text, seen_keys, default_status, raw_links)
         jobs.extend(new_jobs)
 
         # Log pagination hints found in text
@@ -791,6 +805,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         quelle="LinkedIn",
         main_status=initial_status,
         linkedin_job_id=li_job_id or None,
+        stellenanzeige_url=job.get("stellenanzeige_url") or None,
     )
     db.add(new_app)
     db.flush()

@@ -65,6 +65,8 @@ def _migrate_status_fields():
         cur.execute("ALTER TABLE applications DROP COLUMN abgesagt")
     if "ghosting" in app_cols:
         cur.execute("ALTER TABLE applications DROP COLUMN ghosting")
+    if "stellenanzeige_url" not in app_cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN stellenanzeige_url TEXT")
 
     # Add source column to events if missing
     cur.execute("PRAGMA table_info(events)")
