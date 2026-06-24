@@ -734,8 +734,12 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     return jobs
 
 
-def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool]:
-    """Match job to existing application or create new. Returns (app, created)."""
+def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None]:
+    """Match job to existing application or create new. Returns (app, created, pending_status).
+
+    pending_status is set when a new app was created but the LI source implies a status
+    that should go through review (currently: 'rejected'). Caller must create PendingMatch.
+    """
     li_job_id = job.get("id", "")
 
     clean_title = job.get("title", "")
@@ -753,7 +757,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         if app:
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
-            return app, False
+            return app, False, None
 
     # 2. Normalized-equality match: both company AND role must match after
     # stripping corporate suffixes and gender markers.
@@ -778,7 +782,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
-            return app, False
+            return app, False, None
 
     # 2.5 Check merge aliases: after a manual merge the loser's identifiers are stored here
     alias = None
@@ -801,12 +805,14 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         if canonical:
             if li_job_id and not canonical.linkedin_job_id:
                 canonical.linkedin_job_id = li_job_id
-            return canonical, False
+            return canonical, False, None
 
     # 3. Create new application
-    initial_status = job.get("default_status", "applied")
+    intended_status = job.get("default_status", "applied")
     if job.get("status_hint"):
-        initial_status = job["status_hint"][0]
+        intended_status = job["status_hint"][0]
+    # Never create with rejected — goes through review queue instead (like existing apps)
+    initial_status = "applied" if intended_status == "rejected" else intended_status
 
     def _to_date(val):
         if val is None:
@@ -848,7 +854,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         titel=event_titel,
         source="linkedin",
     ))
-    return new_app, True
+    return new_app, True, intended_status
 
 
 def _run_sync_task(cfg_id: int):
@@ -982,10 +988,27 @@ async def _async_sync(cfg_id: int):
                 "_raw_context":   job.get("_raw_context", ""),
             }
             try:
-                app, was_created = _find_or_create_application(db, job)
+                app, was_created, pending_status = _find_or_create_application(db, job)
                 if was_created:
                     created += 1
-                    action_log.append({**raw, "aktion": "neu", "status_db": app.main_status})
+                    if pending_status:
+                        # LI shows this as archived/rejected — queue for review
+                        li_job_id_val = job.get("id", "")
+                        pm_ext_id = f"linkedin_{li_job_id_val}__status__{pending_status}"
+                        db.add(models.PendingMatch(
+                            source="linkedin",
+                            external_id=pm_ext_id,
+                            confidence=90,
+                            event_type="status_change",
+                            datum=date.today(),
+                            titel=f"Neu (LI Archiv): applied → {pending_status}",
+                            suggested_app_id=app.id,
+                            suggested_main_status=pending_status,
+                            status_only=True,
+                        ))
+                        action_log.append({**raw, "aktion": "zur Überprüfung (neu)", "status_db": f"applied → {pending_status}?"})
+                    else:
+                        action_log.append({**raw, "aktion": "neu", "status_db": app.main_status})
                 else:
                     target_status = job.get("default_status", "applied")
                     if job.get("status_hint"):
