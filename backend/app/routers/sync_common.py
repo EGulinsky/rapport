@@ -705,7 +705,12 @@ def _save_deterministic_event(
         exists = db.query(models.PendingMatch).filter_by(
             source=source, external_id=f"{external_id}__status"
         ).first()
-        if not exists:
+        already_reviewed = db.query(models.PendingMatch).filter(
+            models.PendingMatch.suggested_app_id == det['app_id'],
+            models.PendingMatch.suggested_main_status == status,
+            models.PendingMatch.review_status.in_(["approved", "rejected"]),
+        ).first()
+        if not exists and not already_reviewed:
             db.add(models.PendingMatch(
                 source=source,
                 external_id=f"{external_id}__status",
@@ -846,20 +851,26 @@ async def process_item(
     # Calendar events are appointments, not status-changing communications
     if new_main and source not in ('gcal', 'icloud_cal'):
         if app and app.main_status != new_main:
-            db.add(models.PendingMatch(
-                source=source,
-                external_id=f"{external_id}__status",
-                confidence=int(confidence * 100),
-                event_type="status_change",
-                datum=datum,
-                titel=f"Status: {app.main_status} → {new_main}",
-                extract=result.get("extract"),
-                raw_content=raw_text,
-                suggested_app_id=app_id,
-                suggested_main_status=new_main,
-                suggested_sub_status=new_sub,
-                status_only=True,
-            ))
+            ai_already_reviewed = db.query(models.PendingMatch).filter(
+                models.PendingMatch.suggested_app_id == app_id,
+                models.PendingMatch.suggested_main_status == new_main,
+                models.PendingMatch.review_status.in_(["approved", "rejected"]),
+            ).first()
+            if not ai_already_reviewed:
+                db.add(models.PendingMatch(
+                    source=source,
+                    external_id=f"{external_id}__status",
+                    confidence=int(confidence * 100),
+                    event_type="status_change",
+                    datum=datum,
+                    titel=f"Status: {app.main_status} → {new_main}",
+                    extract=result.get("extract"),
+                    raw_content=raw_text,
+                    suggested_app_id=app_id,
+                    suggested_main_status=new_main,
+                    suggested_sub_status=new_sub,
+                    status_only=True,
+                ))
 
     return True
 
@@ -944,7 +955,12 @@ def save_classified_event(
         already = db.query(models.PendingMatch).filter_by(
             source=source, external_id=f"{external_id}__status"
         ).first()
-        if not already:
+        already_reviewed = db.query(models.PendingMatch).filter(
+            models.PendingMatch.suggested_app_id == target_app["id"],
+            models.PendingMatch.suggested_main_status == new_main,
+            models.PendingMatch.review_status.in_(["approved", "rejected"]),
+        ).first()
+        if not already and not already_reviewed:
             db.add(models.PendingMatch(
                 source=source,
                 external_id=f"{external_id}__status",
