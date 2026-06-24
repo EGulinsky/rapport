@@ -9,9 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '2.3.2',
+    version: '2.3.3',
     date: '2026-06-24',
     changes: [
+      'Fix Duplikaterkennung: Firma + Stelle müssen normalisiert gleich sein (nicht Substring) — GmbH/AG/SE etc. werden ignoriert, Gendermarker (m/w/d) aus Stelle entfernt; gilt für LI-Sync und Excel-Import',
       'Ghosting bei Abgesagten: auch abgesagte Bewerbungen mit >= 14 Tagen Lücke zwischen Bewerbung und Absage werden als Ghosting markiert; "Nur Ghosting"-Filter lädt jetzt auch abgesagte',
       'Fix: Ghosting-Filter zeigte keine Einträge — letztes_update wurde in-memory durch Sync-Event (Bewerbung eingereicht, datum=heute) überschrieben bevor Ghosting serialisiert wurde',
       'Stellenanzeige-URL: neues Feld in Bewerbungsmaske — Link zur Ausschreibung, manuell editierbar; LinkedIn-Sync befüllt es automatisch',
