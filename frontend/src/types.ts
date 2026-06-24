@@ -293,6 +293,26 @@ export interface SyncSettings {
   icloud_calls_enabled: boolean
   linkedin_enabled: boolean
   files_enabled: boolean
+  audit_log_level: 'off' | 'normal' | 'verbose'
+}
+
+export interface AuditEntry {
+  id: number
+  app_id: number | null
+  app_firma: string | null
+  app_rolle: string | null
+  timestamp: string
+  action: string
+  field: string | null
+  old_value: string | null
+  new_value: string | null
+  source: string
+  reason: string | null
+}
+
+export interface AuditLogResponse {
+  total: number
+  items: AuditEntry[]
 }
 
 export interface FilesConfig {

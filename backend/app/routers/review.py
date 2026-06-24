@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import PendingMatch, Event, Application, Contact
 from app.routers.applications import _status_label
 from app.schemas import PendingMatchRead, ApproveMatch
+from app.audit import add_audit
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -103,6 +104,7 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
         new_main = match.suggested_main_status
         new_sub  = match.suggested_sub_status
         if new_main:
+            old_main = app.main_status
             if new_main == "rejected" and app.main_status != "rejected":
                 app.pre_rejection_status = app.main_status
             app.main_status = new_main
@@ -119,6 +121,10 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
                 source=match.source,
             )
             db.add(status_event)
+            add_audit(db, "status_change", match.source or "user",
+                      app_id=app.id, field="main_status",
+                      old_value=old_main, new_value=new_main,
+                      reason="PendingMatch genehmigt")
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": status_event.id if new_main else None}

@@ -7,6 +7,7 @@ from datetime import date
 from app.database import get_db
 from app import models, schemas
 from app.models import MAIN_STATUS_LABELS, SUB_STATUS_LABELS
+from app.audit import add_audit
 
 
 def _status_label(main: str, sub: str | None) -> str:
@@ -224,6 +225,8 @@ def create_application(payload: schemas.ApplicationCreate, db: Session = Depends
         titel="Bewerbung eingereicht",
     )
     db.add(event)
+    add_audit(db, "create", "user", app_id=app.id,
+              new_value=f"{app.firma} – {app.rolle}")
     db.commit()
     db.refresh(app)
     return app
@@ -248,6 +251,16 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
     if update_data.get("main_status") == "rejected" and old_main != "rejected":
         update_data["pre_rejection_status"] = old_main
 
+    # Capture field-level changes before applying them (verbose mode)
+    AUDIT_FIELDS = {"firma", "rolle", "zielfirma_bei_hh", "wurde_besetzt_von", "quelle",
+                    "datum_bewerbung", "kommentar", "stellenanzeige_url"}
+    for f, v in update_data.items():
+        if f in AUDIT_FIELDS:
+            old_v = getattr(app, f, None)
+            if str(old_v or "") != str(v or ""):
+                add_audit(db, "update", "user", app_id=app_id,
+                          field=f, old_value=str(old_v or ""), new_value=str(v or ""))
+
     for field, value in update_data.items():
         setattr(app, field, value)
     app.letztes_update = date.today()
@@ -261,6 +274,9 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
             datum=date.today(),
             titel=_status_label(new_main, new_sub),
         ))
+        add_audit(db, "status_change", "user", app_id=app_id,
+                  field="main_status", old_value=old_main, new_value=new_main,
+                  reason="manuell geändert")
 
     db.commit()
     db.refresh(app)
@@ -272,6 +288,8 @@ def delete_application(app_id: int, db: Session = Depends(get_db)):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+    add_audit(db, "delete", "user", app_id=app_id,
+              old_value=f"{app.firma} – {app.rolle}")
     db.delete(app)
     db.commit()
 

@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse } from '../types'
 
 const BASE = '/api'
 
@@ -284,5 +284,15 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(req),
       }),
+  },
+
+  audit: {
+    list: (params?: { app_id?: number; limit?: number; offset?: number }) => {
+      const qs = params ? '?' + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+      ).toString() : ''
+      return request<AuditLogResponse>(`/audit/${qs}`)
+    },
+    clear: () => fetch(`${BASE}/audit/`, { method: 'DELETE' }).then(r => r.json()),
   },
 }

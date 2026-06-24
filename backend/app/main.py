@@ -8,7 +8,7 @@ from app.database import init_db
 from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
-    review, cleanup, calendar, attachments, merge,
+    review, cleanup, calendar, attachments, merge, audit_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,7 @@ app.include_router(attachments.router)
 app.include_router(cleanup.router)
 app.include_router(calendar.router)
 app.include_router(merge.router)
+app.include_router(audit_log.router)
 
 
 @app.get("/health")

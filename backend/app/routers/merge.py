@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models
+from app.audit import add_audit
 
 router = APIRouter(prefix="/api/merge", tags=["merge"])
 
@@ -68,6 +69,10 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
             models.PendingMatch.suggested_app_id == loser.id
         ).update({"suggested_app_id": winner.id})
 
+        add_audit(db, "merge", "user", app_id=winner.id,
+                  old_value=f"{loser.firma} – {loser.rolle} (#{loser.id})",
+                  new_value=f"{winner.firma} – {winner.rolle} (#{winner.id})",
+                  reason="Zusammengeführt")
         db.delete(loser)
 
     db.commit()
