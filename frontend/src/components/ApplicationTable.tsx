@@ -147,7 +147,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
               )}
             >
               {onToggleSelect && (
-                <td className="pl-4 pr-2 py-3 w-8" onClick={e => { e.stopPropagation(); onToggleSelect(app.id) }}>
+                <td className="pl-4 pr-2 py-3 w-8" onClick={e => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selectedIds?.has(app.id) ?? false}
