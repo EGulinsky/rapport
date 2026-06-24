@@ -294,11 +294,11 @@ CATEGORIES: list[tuple[str, str, str, int, str]] = [
 ]
 
 # LinkedIn status footer text → override main_status
+# Note: "no longer accepting applications" is intentionally excluded —
+# it reflects the job posting status, not the applicant's tracker status.
 _STATUS_MAP = {
     "application viewed":          ("hr",           None),
     "bewerbung gesehen":           ("hr",           None),
-    "no longer accepting":         ("rejected",     None),
-    "stelle nicht mehr verfügbar": ("rejected",     None),
     "offer":                       ("negotiating",  None),
     "angebot":                     ("negotiating",  None),
     "interview":                   ("hr",           "1_scheduled"),
@@ -534,7 +534,7 @@ _CONSENT_SELECTORS = [
 
 _HINT_KW = [
     "not moving forward", "application viewed", "resume downloaded",
-    "no longer accepting", "offer", "interview scheduled",
+    "offer", "interview scheduled",
 ]
 
 
