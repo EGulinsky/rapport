@@ -222,21 +222,20 @@ async def sync_files(background_tasks: BackgroundTasks, db: Session = Depends(ge
 
 
 @router.get("/browse")
-async def browse_files(subfolder: str = "", db: Session = Depends(get_db)):
-    """List subfolders and files under the configured root (or a subfolder of it)."""
+async def browse_files(path: str = "", db: Session = Depends(get_db)):
+    """List items at a given absolute host path. Defaults to configured root."""
     import httpx
     cfg = _get_cfg(db)
-    if not cfg or not cfg.folder_path:
-        raise HTTPException(status_code=400, detail="Kein Dokumentenordner konfiguriert.")
-    params: dict = {"folder": cfg.folder_path}
-    if subfolder:
-        params["subfolder"] = subfolder
+    target = path or (cfg.folder_path if cfg else "")
+    if not target:
+        raise HTTPException(status_code=400, detail="Kein Pfad angegeben und kein Dokumentenordner konfiguriert.")
+    default_root = cfg.folder_path if cfg else ""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/browse", params=params)
+            resp = await client.get(f"{FILES_BRIDGE_URL}/browse", params={"folder": target})
             if resp.status_code != 200:
                 raise HTTPException(status_code=502, detail=resp.json().get("error", "Bridge-Fehler"))
-            return resp.json()
+            return {"path": target, "default_root": default_root, "items": resp.json()}
     except HTTPException:
         raise
     except Exception as e:
@@ -247,18 +246,52 @@ class AttachRequest(BaseModel):
     app_id: int
     path: str
     name: Optional[str] = None
+    is_folder: bool = False
 
 
 @router.post("/attach")
 async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
-    """Manually attach a file from the host to an application."""
-    app = db.query(models.Application).filter_by(id=req.app_id).first()
-    if not app:
+    """Manually attach a file or folder from the host to an application."""
+    import httpx
+    app_obj = db.query(models.Application).filter_by(id=req.app_id).first()
+    if not app_obj:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
 
     name = req.name or os.path.basename(req.path)
-    file_id = hashlib.md5(req.path.encode()).hexdigest()[:20]
 
+    if req.is_folder:
+        # Attach all files in the folder (recursive via bridge)
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(f"{FILES_BRIDGE_URL}/files", params={"folder": req.path})
+                files = resp.json() if resp.status_code == 200 else []
+        except Exception:
+            files = []
+
+        created = 0
+        for file_info in files:
+            fpath = file_info.get("path", "")
+            fname = file_info.get("name", os.path.basename(fpath))
+            if not fpath:
+                continue
+            file_id = hashlib.md5(fpath.encode()).hexdigest()[:20]
+            if db.query(models.SyncedItem).filter_by(source="local_files", external_id=file_id).first():
+                continue
+            db.add(models.Event(
+                application_id=req.app_id,
+                source="local_files",
+                external_id=file_id,
+                typ="file",
+                datum=_date.today(),
+                titel=fname,
+                notiz=fpath,
+            ))
+            mark_synced(db, "local_files", file_id)
+            created += 1
+        db.commit()
+        return {"created": created, "titel": name}
+
+    file_id = hashlib.md5(req.path.encode()).hexdigest()[:20]
     ev = models.Event(
         application_id=req.app_id,
         source="local_files",
@@ -272,4 +305,4 @@ async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
     mark_synced(db, "local_files", file_id)
     db.commit()
     db.refresh(ev)
-    return {"event_id": ev.id, "titel": name}
+    return {"event_id": ev.id, "created": 1, "titel": name}
