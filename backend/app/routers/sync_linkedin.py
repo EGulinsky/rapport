@@ -1009,7 +1009,15 @@ async def _async_sync(cfg_id: int):
                             models.PendingMatch.external_id == pm_ext_id,
                             models.PendingMatch.review_status == "pending",
                         ).first()
-                        if not already_pending:
+                        # Don't re-queue if this app+status was already reviewed (approved or
+                        # rejected). Without this check, each sync creates a new match after
+                        # the previous one is reviewed, causing infinite rejection cycles.
+                        already_reviewed = db.query(models.PendingMatch).filter(
+                            models.PendingMatch.suggested_app_id == app.id,
+                            models.PendingMatch.suggested_main_status == target_status,
+                            models.PendingMatch.review_status.in_(["approved", "rejected"]),
+                        ).first()
+                        if not already_pending and not already_reviewed:
                             sub_hint = job["status_hint"][1] if job.get("status_hint") else None
                             db.add(models.PendingMatch(
                                 source="linkedin",

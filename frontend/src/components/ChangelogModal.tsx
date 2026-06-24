@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.4.2',
+    date: '2026-06-24',
+    changes: [
+      'Fix: Bewerbung wurde nach jedem LI-Sync erneut als "Abgesagt" vorgeschlagen, obwohl der Vorschlag bereits abgelehnt/genehmigt war — jetzt werden bereits reviewte Vorschläge (approved/rejected) pro App+Zielstatus nicht mehr neu angelegt (behebt Rohde+Schwarz #119)',
+    ],
+  },
+  {
     version: '2.4.1',
     date: '2026-06-24',
     changes: [
