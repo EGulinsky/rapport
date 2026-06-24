@@ -123,7 +123,6 @@ class Application(Base):
     datum_bewerbung     = Column(Date, nullable=True)
     letztes_update      = Column(Date, nullable=True)
 
-    ghosting            = Column(Boolean, default=False)
 
     kommentar           = Column(Text, nullable=True)
     linkedin_job_id     = Column(String, nullable=True, index=True)
@@ -143,6 +142,16 @@ class Application(Base):
     @property
     def abgesagt(self) -> bool:
         return self.main_status == "rejected"
+
+    @property
+    def ghosting(self) -> bool:
+        from datetime import date, timedelta
+        if self.main_status in ("rejected", "signed", "negotiating", "prospecting"):
+            return False
+        last = self.letztes_update or self.datum_bewerbung
+        if last is None:
+            return False
+        return (date.today() - last).days > 14
 
     def __repr__(self):
         return f"<Application {self.firma} | {self.rolle}>"

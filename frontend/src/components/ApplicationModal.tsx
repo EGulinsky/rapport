@@ -553,7 +553,7 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
           {/* Flags */}
           {editing && (
             <div className="flex gap-4">
-              {([['ghosting', 'Ghosting'], ['is_headhunter', 'Headhunter']] as const).map(([key, label]) => (
+              {([['is_headhunter', 'Headhunter']] as const).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
