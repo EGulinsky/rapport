@@ -109,4 +109,4 @@ if __name__ == "__main__":
     print(f"Files Bridge läuft auf http://localhost:{port}")
     print(f"Unterstützte Formate: {', '.join(sorted(SUPPORTED_EXTS))}")
     print("Für PDF/DOCX-Unterstützung: pip install pdfplumber python-docx")
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()

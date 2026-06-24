@@ -70,4 +70,4 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     print(f'Notes Bridge läuft auf http://localhost:{PORT}/notes')
     print('Beende mit Ctrl+C')
-    HTTPServer(('127.0.0.1', PORT), Handler).serve_forever()
+    HTTPServer(('0.0.0.0', PORT), Handler).serve_forever()
