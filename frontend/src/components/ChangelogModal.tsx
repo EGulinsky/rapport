@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.1',
+    date: '2026-06-24',
+    changes: [
+      'LI-Sync: "No longer accepting applications" und "Stelle nicht mehr verfügbar" werden ignoriert — diese Meldungen betreffen den Status der Stellenanzeige, nicht den eigenen Bewerberstatus im Tracker',
+    ],
+  },
+  {
     version: '2.5.0',
     date: '2026-06-24',
     changes: [
