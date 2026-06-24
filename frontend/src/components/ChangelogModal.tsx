@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.5.8',
+    date: '2026-06-24',
+    changes: [
+      'Fix: last_sync wurde nach jedem Sync-Lauf gesetzt, auch wenn 0 Dateien angelegt wurden — dadurch wurden alle Dateien beim nächsten Sync via since-Filter permanent übersprungen. last_sync wird jetzt nur noch gesetzt wenn mindestens eine Datei neu angelegt wurde.',
+    ],
+  },
+  {
     version: '2.5.7',
     date: '2026-06-24',
     changes: [
