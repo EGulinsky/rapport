@@ -56,6 +56,7 @@ const PROVIDERS = [
     keyPlaceholder: '',
     keyUrl: 'https://ollama.com',
     needsUrl: true,
+    defaultUrl: 'http://host.docker.internal:11434',
   },
 ] as const
 
@@ -85,6 +86,7 @@ export function AiSettingsModal({ onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Ollama model picker state
@@ -112,7 +114,7 @@ export function AiSettingsModal({ onClose }: Props) {
   const loadOllamaModels = useCallback(async (baseUrl: string) => {
     setLoadingModels(true)
     try {
-      const r = await api.settings.listOllamaModels(baseUrl || 'http://localhost:11434')
+      const r = await api.settings.listOllamaModels(baseUrl || 'http://host.docker.internal:11434')
       setOllamaReachable(r.reachable)
       setOllamaInstalled(r.installed)
       setOllamaPopular(r.popular)
@@ -125,13 +127,15 @@ export function AiSettingsModal({ onClose }: Props) {
 
   useEffect(() => {
     if (form.provider === 'ollama' && !loading) {
-      loadOllamaModels(form.base_url || 'http://localhost:11434')
+      loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
     }
   }, [form.provider, loading, loadOllamaModels, form.base_url])
 
   function selectProvider(p: typeof PROVIDERS[number]) {
-    setForm(f => ({ ...f, provider: p.id, model: p.model, base_url: p.needsUrl ? (f.base_url || 'http://localhost:11434') : '' }))
+    const defaultUrl = 'defaultUrl' in p ? p.defaultUrl : 'http://host.docker.internal:11434'
+    setForm(f => ({ ...f, provider: p.id, model: p.model, base_url: p.needsUrl ? (f.base_url || defaultUrl) : '' }))
     setTestResult(null)
+    setSaveResult(null)
   }
 
   function selectOllamaModel(name: string) {
@@ -140,7 +144,7 @@ export function AiSettingsModal({ onClose }: Props) {
 
   async function pullModel(modelName: string) {
     setPulling({ model: modelName, status: 'Starte Download…', pct: null })
-    const url = api.settings.pullOllamaModel(modelName, form.base_url || 'http://localhost:11434')
+    const url = api.settings.pullOllamaModel(modelName, form.base_url || 'http://host.docker.internal:11434')
     try {
       const resp = await fetch(url)
       if (!resp.body) throw new Error('Kein Stream')
@@ -163,7 +167,7 @@ export function AiSettingsModal({ onClose }: Props) {
             }
             if (d.status === 'done' || d.status === 'success') {
               setPulling(null)
-              loadOllamaModels(form.base_url || 'http://localhost:11434')
+              loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
               // Auto-select newly downloaded model
               setForm(f => ({ ...f, model: `ollama/${modelName}` }))
               return
@@ -182,6 +186,7 @@ export function AiSettingsModal({ onClose }: Props) {
 
   async function save() {
     setSaving(true)
+    setSaveResult(null)
     try {
       const payload: AiSettingsWrite = {
         ...form,
@@ -191,6 +196,9 @@ export function AiSettingsModal({ onClose }: Props) {
       const updated = await api.settings.saveAi(payload)
       setHasStoredKey(updated.has_key)
       setForm(f => ({ ...f, api_key: '' }))
+      setSaveResult({ ok: true, msg: `Gespeichert: ${updated.provider} / ${updated.model}` })
+    } catch (e) {
+      setSaveResult({ ok: false, msg: e instanceof Error ? e.message : String(e) })
     } finally {
       setSaving(false)
     }
@@ -293,12 +301,12 @@ export function AiSettingsModal({ onClose }: Props) {
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Base URL</p>
                   <input
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="http://localhost:11434"
+                    placeholder="http://host.docker.internal:11434"
                     value={form.base_url ?? ''}
                     onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
-                    onBlur={() => loadOllamaModels(form.base_url || 'http://localhost:11434')}
+                    onBlur={() => loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')}
                   />
-                  <p className="mt-1 text-xs text-gray-400">Ollama muss lokal laufen: <code className="bg-gray-100 px-1 rounded">ollama serve</code></p>
+                  <p className="mt-1 text-xs text-gray-400">Mac-Host aus Docker: <code className="bg-gray-100 px-1 rounded">host.docker.internal:11434</code></p>
                 </div>
 
                 {/* Ollama model picker */}
@@ -465,6 +473,19 @@ export function AiSettingsModal({ onClose }: Props) {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Save result */}
+            {saveResult && (
+              <div className={clsx(
+                'flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm',
+                saveResult.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+              )}>
+                {saveResult.ok
+                  ? <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  : <XCircle className="h-4 w-4 mt-0.5 shrink-0" />}
+                <span>{saveResult.msg}</span>
               </div>
             )}
 

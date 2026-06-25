@@ -147,13 +147,14 @@ async def test_ai(payload: Optional[schemas.AiSettingsWrite] = None, db: Session
     # If form values are passed, test against them directly (without saving)
     if payload:
         try:
-            # Resolve api_key: use provided key, or fall back to stored one
+            # Resolve api_key: use provided key, or fall back to stored key only if
+            # the same provider is being tested (prevents Groq key leaking into Ollama tests)
             api_key: Optional[str] = None
             if payload.api_key and payload.api_key.strip():
                 api_key = payload.api_key.strip()
             else:
                 cfg = db.query(models.AiSettings).first()
-                if cfg and cfg.api_key_enc:
+                if cfg and cfg.api_key_enc and cfg.provider == payload.provider:
                     api_key = decrypt_api_key(cfg.api_key_enc)
 
             kwargs: dict = {
