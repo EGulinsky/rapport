@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.8',
+    date: '2026-06-25',
+    changes: [
+      'Neu: Backup-Ordner per Ordner-Picker (nativer macOS-Dialog) auswählen.',
+      'Neu: Restore-Button pro Backup — stellt die gesamte Datenbank aus einem Snapshot wieder her.',
+    ],
+  },
+  {
     version: '3.3.7',
     date: '2026-06-25',
     changes: [
