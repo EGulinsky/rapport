@@ -993,6 +993,7 @@ async def _async_sync(cfg_id: int):
             }
             try:
                 app, was_created, pending_status = _find_or_create_application(db, job)
+                app_info = {"firma": app.firma or "", "rolle": app.rolle or ""}
                 if was_created:
                     created += 1
                     if pending_status:
@@ -1010,9 +1011,9 @@ async def _async_sync(cfg_id: int):
                             suggested_main_status=pending_status,
                             status_only=True,
                         ))
-                        action_log.append({**raw, "aktion": "zur Überprüfung (neu)", "status_db": f"applied → {pending_status}?"})
+                        action_log.append({**raw, **app_info, "aktion": "zur Überprüfung (neu)", "status_db": f"applied → {pending_status}?"})
                     else:
-                        action_log.append({**raw, "aktion": "neu", "status_db": app.main_status})
+                        action_log.append({**raw, **app_info, "aktion": "neu", "status_db": app.main_status})
                 else:
                     job_url = job.get("stellenanzeige_url") or None
                     if job_url and not app.stellenanzeige_url:
@@ -1064,13 +1065,13 @@ async def _async_sync(cfg_id: int):
                                 status_only=True,
                             ))
                         updated += 1
-                        action_log.append({**raw, "aktion": "zur Überprüfung", "status_db": f"{old_status} → {target_status}?"})
+                        action_log.append({**raw, **app_info, "aktion": "zur Überprüfung", "status_db": f"{old_status} → {target_status}?"})
                     else:
                         skipped += 1
-                        action_log.append({**raw, "aktion": "unverändert", "status_db": old_status})
+                        action_log.append({**raw, **app_info, "aktion": "unverändert", "status_db": old_status})
             except Exception as e:
                 errors.append(f"{job.get('company', '?')}: {e}")
-                action_log.append({**raw, "aktion": "fehler", "status_db": str(e)})
+                action_log.append({**raw, "firma": job.get("company", ""), "rolle": job.get("title", ""), "aktion": "fehler", "status_db": str(e)})
 
         cfg.last_sync = datetime.now(timezone.utc)
         _commit_with_retry(db)
