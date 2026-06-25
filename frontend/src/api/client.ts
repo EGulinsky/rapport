@@ -168,6 +168,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ app_id: appId, path, name, is_folder: isFolder }),
       }),
+    openFile: (path: string) =>
+      request<{ success: boolean }>('/sync/files/open', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      }),
   },
 
   schedule: {

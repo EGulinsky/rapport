@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.6.1',
+    date: '2026-06-24',
+    changes: [
+      'Dokumente als eigener Bereich unterhalb der Timeline — nicht mehr als Timeline-Ereignisse',
+      'Klick auf Datei öffnet sie direkt in der zugehörigen Mac-Anwendung (PDF → Vorschau, DOCX → Word, …)',
+      'Datei-Zeile zeigt Dateiname, Erweiterung und Löschen-Button (erscheint beim Hover)',
+    ],
+  },
+  {
     version: '2.6.0',
     date: '2026-06-24',
     changes: [

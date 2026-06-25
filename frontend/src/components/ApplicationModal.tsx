@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import {
@@ -816,18 +816,40 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
               </div>
             )}
 
-            {(app?.events ?? []).length === 0 && !addingNote ? (
-              <p className="text-sm text-gray-400 italic">Noch keine Einträge</p>
-            ) : (
-              <div className="relative">
-                <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200" />
-                <div className="space-y-3 pl-7">
-                  {[...(app?.events ?? [])].sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? '')).map(ev => (
-                    <TimelineEvent key={ev.id} event={ev} appId={appId!} onUpdated={refreshContacts} />
-                  ))}
-                </div>
-              </div>
-            )}
+            {(() => {
+              const allEvents = app?.events ?? []
+              const timelineEvents = allEvents.filter(ev => ev.typ !== 'file')
+              const fileEvents = allEvents.filter(ev => ev.typ === 'file')
+              return (
+                <>
+                  {timelineEvents.length === 0 && !addingNote ? (
+                    <p className="text-sm text-gray-400 italic">Noch keine Einträge</p>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200" />
+                      <div className="space-y-3 pl-7">
+                        {[...timelineEvents].sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? '')).map(ev => (
+                          <TimelineEvent key={ev.id} event={ev} appId={appId!} onUpdated={refreshContacts} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {fileEvents.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                        <File className="h-3.5 w-3.5" /> Dokumente ({fileEvents.length})
+                      </p>
+                      <div className="space-y-1">
+                        {fileEvents.map(ev => (
+                          <FileRow key={ev.id} event={ev} appId={appId!} onDeleted={refreshContacts} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
 
           {/* Kontakte */}
@@ -1272,6 +1294,51 @@ function SourceBadge({ source, external_id }: { source?: string; external_id?: s
 }
 
 const EVENT_TYPES = ['bewerbung', 'status', 'notiz', 'gespräch'] as const
+
+function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onDeleted: () => void }) {
+  const [opening, setOpening] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const path = event.notiz ?? ''
+  const ext = path.split('.').pop()?.toLowerCase() ?? ''
+
+  async function openFile() {
+    if (!path) return
+    setOpening(true)
+    try { await api.files.openFile(path) } catch { /* bridge may be off */ }
+    finally { setOpening(false) }
+  }
+
+  async function deleteFile() {
+    setDeleting(true)
+    try {
+      await api.applications.deleteEvent(appId, event.id)
+      onDeleted()
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 group hover:border-gray-200">
+      <FileText className="h-4 w-4 text-gray-400 shrink-0" />
+      <button
+        onClick={openFile}
+        disabled={opening || !path}
+        className="flex-1 min-w-0 text-left text-sm text-gray-800 hover:text-indigo-600 truncate disabled:opacity-50"
+        title={path}
+      >
+        {event.titel ?? path.split('/').pop()}
+      </button>
+      {ext && <span className="text-[10px] uppercase font-medium text-gray-400 shrink-0">{ext}</span>}
+      <button
+        onClick={deleteFile}
+        disabled={deleting}
+        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-400 hover:text-red-500 shrink-0 transition-opacity"
+        title="Entfernen"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
 
 function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: number; onUpdated: () => void }) {
   const [editing, setEditing] = useState(false)
