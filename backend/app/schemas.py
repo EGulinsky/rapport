@@ -165,6 +165,8 @@ class ApplicationListItem(BaseModel):
     ghosting: bool
     kommentar: Optional[str] = None
     naechster_schritt: Optional[str] = None
+    company_profile_id: Optional[int] = None
+    target_company_profile_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

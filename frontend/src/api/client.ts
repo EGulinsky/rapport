@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
 
 const BASE = '/api'
 
@@ -352,5 +352,11 @@ export const api = {
       return request<AuditLogResponse>(`/audit/${qs}`)
     },
     clear: () => fetch(`${BASE}/audit/`, { method: 'DELETE' }).then(r => r.json()),
+  },
+
+  companies: {
+    list: (params?: { search?: string; sort?: string; order?: string }) =>
+      request<CompanyProfile[]>(`/companies${params ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString() : ''}`),
+    get: (id: number) => request<CompanyProfile>(`/companies/${id}`),
   },
 }
