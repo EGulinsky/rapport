@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.1.0',
+    date: '2026-06-25',
+    changes: [
+      'Vorbereitung Auswertungen: Neue DB-Tabelle company_profiles (HQ, Branche, Unternehmenstyp, Mitarbeiterzahl, Gründungsjahr, LinkedIn-URL) für Background-Sync von Firmendaten.',
+      'Applications erhalten company_profile_id und target_company_profile_id (bei HH-Bewerbungen) als FK.',
+    ],
+  },
+  {
     version: '3.0.4',
     date: '2026-06-25',
     changes: [
