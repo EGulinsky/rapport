@@ -588,6 +588,54 @@ def _migrate_company_profiles():
     conn.close()
 
 
+def _backfill_company_profiles():
+    """Create pending CompanyProfile entries for all existing applications that lack one."""
+    import sqlite3
+    from app.dedup import norm_firma
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    # Check table exists (create_all must have run first)
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='company_profiles'")
+    if not cur.fetchone():
+        conn.close()
+        return
+
+    cur.execute("SELECT id, firma, is_headhunter, zielfirma_bei_hh, company_profile_id, target_company_profile_id FROM applications")
+    apps = cur.fetchall()
+
+    def _get_or_create_profile(name: str) -> int:
+        nname = norm_firma(name)
+        cur.execute("SELECT id FROM company_profiles WHERE name_norm=?", (nname,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        cur.execute(
+            "INSERT INTO company_profiles (name_norm, name_display, sync_status, created_at) VALUES (?,?,'pending',datetime('now'))",
+            (nname, name),
+        )
+        return cur.lastrowid
+
+    changed = 0
+    for app in apps:
+        updates = {}
+        if not app["company_profile_id"] and app["firma"]:
+            updates["company_profile_id"] = _get_or_create_profile(app["firma"])
+        if not app["target_company_profile_id"] and app["is_headhunter"] and app["zielfirma_bei_hh"]:
+            updates["target_company_profile_id"] = _get_or_create_profile(app["zielfirma_bei_hh"])
+        if updates:
+            set_clause = ", ".join(f"{k}=?" for k in updates)
+            cur.execute(f"UPDATE applications SET {set_clause} WHERE id=?", (*updates.values(), app["id"]))
+            changed += 1
+
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -604,5 +652,6 @@ def init_db():
     _migrate_audit_log()
     Base.metadata.create_all(bind=engine)
     _migrate_company_profiles()
+    _backfill_company_profiles()
     _backfill_events()
     _migrate_gespraeche_to_events()
