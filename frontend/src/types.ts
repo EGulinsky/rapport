@@ -497,4 +497,3 @@ export interface CompanySyncStatus {
     last_synced_at: string | null
   }>
 }
-}
