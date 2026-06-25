@@ -1425,8 +1425,11 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           )}
           {needs2fa && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
-              <p className="text-xs font-semibold text-amber-800">LinkedIn Bestätigungscode</p>
-              <p className="text-xs text-amber-700">Prüfe deine E-Mail oder SMS von LinkedIn und gib den 6-stelligen Code ein.</p>
+              <p className="text-xs font-semibold text-amber-800">LinkedIn Bestätigung erforderlich</p>
+              <p className="text-xs text-amber-700">
+                <strong>Option A:</strong> LinkedIn-App auf dem Handy öffnen und die Anmeldeanfrage bestätigen — der Sync läuft danach automatisch weiter.<br />
+                <strong>Option B:</strong> 6-stelligen Code aus E-Mail oder SMS eingeben:
+              </p>
               <div className="flex gap-2">
                 <input
                   className="flex-1 rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -1435,11 +1438,10 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
                   value={twoFaCode}
                   onChange={e => setTwoFaCode(e.target.value.replace(/\D/g, ''))}
                   onKeyDown={e => e.key === 'Enter' && handleSubmit2fa()}
-                  autoFocus
                 />
                 <button onClick={handleSubmit2fa} disabled={submitting2fa || twoFaCode.length < 6}
                   className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
-                  {submitting2fa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Bestätigen'}
+                  {submitting2fa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Code senden'}
                 </button>
               </div>
             </div>
