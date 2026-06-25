@@ -8,7 +8,6 @@ POST /api/backup/run       — trigger backup now
 from __future__ import annotations
 
 import base64
-import io
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -65,7 +64,6 @@ async def do_backup() -> dict:
             return {"success": False, "error": "Backup nicht konfiguriert oder deaktiviert"}
 
         # Read DB via sqlite3 backup API (safe even while in use)
-        buf = io.BytesIO()
         src = sqlite3.connect(DB_PATH)
         tmp = sqlite3.connect(":memory:")
         src.backup(tmp)
