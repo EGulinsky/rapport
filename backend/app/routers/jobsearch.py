@@ -143,62 +143,107 @@ def _portal_out(p: models.JobPortal) -> dict:
 # ── LinkedIn job search ───────────────────────────────────────────────────────
 
 def _build_search_url(query: str, location: str) -> str:
+    # No date filter (f_TPR removed) so we match LI's default behaviour
     return (
         f"https://www.linkedin.com/jobs/search/"
         f"?keywords={quote(query)}"
         f"&location={quote(location)}"
-        f"&f_TPR=r2592000"   # last 30 days
-        f"&sortBy=DD"         # most recent
+        f"&sortBy=DD"
     )
 
 
+# Extract job cards from LI search results list (left panel).
+# Targets list items with data-occludable-job-id or href-based job IDs.
+# Falls back through multiple selector strategies for different LI UI versions.
 _EXTRACT_JS = """() => {
-    // Collect unique job view URLs
     const seen = new Set();
+    const results = [];
+
+    // Strategy 1: cards with data-occludable-job-id (2024-2025 LI UI)
+    document.querySelectorAll('[data-occludable-job-id]').forEach(card => {
+        const jobId = card.getAttribute('data-occludable-job-id') || '';
+        if (!jobId || seen.has(jobId)) return;
+        seen.add(jobId);
+        const url = 'https://www.linkedin.com/jobs/view/' + jobId + '/';
+
+        const titleEl = card.querySelector(
+            'a[aria-label], .job-card-list__title--link, [class*="job-card-list__title"], h3 a, h2 a'
+        );
+        const title = (titleEl?.getAttribute('aria-label') || titleEl?.innerText || '').replace(/\\n/g, ' ').trim();
+
+        const companyEl = card.querySelector(
+            '.artdeco-entity-lockup__subtitle span, .job-card-container__primary-description, [class*="subtitle"] span, h4'
+        );
+        const company = (companyEl?.innerText || '').trim();
+
+        const locationEl = card.querySelector(
+            '.job-card-container__metadata-item, [class*="metadata-item"], li[class*="caption"]'
+        );
+        const location = (locationEl?.innerText || '').trim();
+
+        const easyApply = !!(card.querySelector('[class*="easy-apply"]') ||
+            card.querySelector('[aria-label*="Easy Apply"]'));
+
+        if (title) results.push({ id: jobId, title, company, location, url, easy_apply: easyApply });
+    });
+
+    if (results.length > 0) return results.slice(0, 30);
+
+    // Strategy 2: fallback via href-based dedup
     const links = [...document.querySelectorAll('a[href*="/jobs/view/"]')]
-        .map(a => a.href.split('?')[0].replace(/\\/$/, ''))
-        .filter(h => { if (seen.has(h)) return false; seen.add(h); return true; });
+        .map(a => ({ a, url: a.href.split('?')[0].replace(/\\/$/, '') }))
+        .filter(({ url }) => {
+            const m = url.match(/\\/jobs\\/view\\/(\\d+)/);
+            if (!m) return false;
+            if (seen.has(m[1])) return false;
+            seen.add(m[1]);
+            return true;
+        });
 
-    return links.slice(0, 30).map(url => {
-        const id = (url.match(/jobs\\/view\\/(\\d+)/) || [])[1] || '';
-        const a = document.querySelector('a[href*="' + id + '"]');
-        const card = a && (a.closest('li') || a.closest('article') || a.parentElement);
+    links.slice(0, 30).forEach(({ a, url }) => {
+        const id = (url.match(/\\/jobs\\/view\\/(\\d+)/) || [])[1] || '';
+        const card = a.closest('li') || a.closest('[data-job-id]') || a.parentElement?.parentElement;
+        const titleEl = card?.querySelector('h3, h2, [class*="title"]');
+        const title = (titleEl?.innerText || a.innerText || '').replace(/\\n/g, ' ').trim();
+        const companyEl = card?.querySelector('h4, [class*="subtitle"], [class*="company"], [class*="primary-description"]');
+        const company = (companyEl?.innerText || '').trim();
+        const locationEl = card?.querySelector('[class*="metadata-item"], [class*="location"]');
+        const location = (locationEl?.innerText || '').trim();
+        if (id && title) results.push({ id, title, company, location, url, easy_apply: false });
+    });
 
-        const getText = (el, ...sels) => {
-            for (const s of sels) {
-                const node = el && el.querySelector(s);
-                if (node && node.innerText.trim()) return node.innerText.trim();
-            }
-            return '';
-        };
+    return results.slice(0, 30);
+}"""
 
-        const title = getText(card,
-            'h3', 'h2',
-            '.job-card-list__title',
-            '.artdeco-entity-lockup__title',
-            '[class*="job-card-list__title"]'
-        ) || (a && a.innerText.trim()) || '';
 
-        const company = getText(card,
-            'h4',
-            '.job-card-container__primary-description',
-            '.artdeco-entity-lockup__subtitle',
-            '[class*="primary-description"]'
-        );
-
-        const location = getText(card,
-            '.job-card-container__metadata-item',
-            '.artdeco-entity-lockup__caption',
-            '[class*="metadata-item"]',
-            '[class*="location"]'
-        );
-
-        const easyApply = !!(card && card.querySelector(
-            '[class*="easy-apply"], [aria-label*="Easy Apply"], [aria-label*="Easy apply"]'
-        ));
-
-        return { id, title, company, location, url, easy_apply: easyApply };
-    }).filter(j => j.id && j.title);
+# Extract full job description from a LI job detail page
+_DESCRIPTION_JS = """() => {
+    // New LI UI: #job-details or article with description
+    const selectors = [
+        '#job-details',
+        '.jobs-description__content',
+        '.jobs-description-content__text',
+        'article.jobs-description',
+        '[class*="jobs-description__container"]',
+        '.description__text',
+    ];
+    for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && el.innerText.trim().length > 100) return el.innerText.trim();
+    }
+    // Fallback: find "About the job" section
+    const headings = [...document.querySelectorAll('h2, h3')];
+    const about = headings.find(h => /about the job|über die stelle|über die position|job description/i.test(h.innerText));
+    if (about) {
+        let text = '';
+        let el = about.nextElementSibling;
+        while (el && !/^H[23]$/.test(el.tagName)) {
+            text += el.innerText + '\\n';
+            el = el.nextElementSibling;
+        }
+        if (text.trim().length > 50) return text.trim();
+    }
+    return '';
 }"""
 
 
@@ -265,8 +310,15 @@ async def _linkedin_search(query: str, location: str, db: Session) -> list[dict]
             await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
             await _accept_consent(page)
 
-        # Wait for SPA to render job cards
-        await asyncio.sleep(4)
+        # Wait for the job list cards to appear (up to 10 s)
+        try:
+            await page.wait_for_selector(
+                '[data-occludable-job-id], a[href*="/jobs/view/"]',
+                timeout=10000,
+            )
+        except Exception:
+            pass
+        # Extra scroll to trigger lazy-load
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await asyncio.sleep(2)
 
@@ -274,20 +326,6 @@ async def _linkedin_search(query: str, location: str, db: Session) -> list[dict]
             jobs = await page.evaluate(_EXTRACT_JS)
         except Exception:
             jobs = []
-
-        # Fallback: if JS extraction failed, use URL-only extraction
-        if not jobs:
-            try:
-                raw_links = await page.evaluate(
-                    "() => [...new Set([...document.querySelectorAll('a[href*=\"/jobs/view/\"]')]"
-                    ".map(a => a.href.split('?')[0].replace(/\\/$/, '')))]"
-                )
-                for url in raw_links[:30]:
-                    m = re.search(r'/jobs/view/(\d+)', url)
-                    if m:
-                        jobs.append({"id": m.group(1), "title": "", "company": "", "location": "", "url": url, "easy_apply": False})
-            except Exception:
-                pass
 
         await browser.close()
 
@@ -347,6 +385,96 @@ async def search_jobs(
         "portals": link_portals,
         "linkedin_error": li_error,
     }
+
+
+# ── Description endpoint ──────────────────────────────────────────────────────
+
+async def _load_description(job_url: str, db: Session) -> str:
+    """Load full job description from a LinkedIn job page."""
+    cfg = db.query(models.LinkedInSync).first()
+    if not cfg or not cfg.email or not cfg.password_enc:
+        raise ValueError("LinkedIn nicht konfiguriert")
+
+    from app.ai.provider import decrypt_api_key
+    from app.routers.sync_linkedin import _login, _accept_consent
+
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        raise ValueError("Playwright nicht installiert")
+
+    password = decrypt_api_key(cfg.password_enc)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                  "--disable-blink-features=AutomationControlled"],
+        )
+        context = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 900},
+            locale="de-DE",
+        )
+        await context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
+        if cfg.session_cookies:
+            try:
+                await context.add_cookies(json.loads(cfg.session_cookies))
+            except Exception:
+                pass
+
+        page = await context.new_page()
+        try:
+            await page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            await browser.close()
+            raise ValueError(f"Seite nicht erreichbar: {e}")
+
+        await _accept_consent(page)
+
+        if "login" in page.url or "authwall" in page.url:
+            logged_in = await _login(page, cfg.email, password)
+            if not logged_in:
+                await browser.close()
+                raise ValueError("LinkedIn Login fehlgeschlagen")
+            await page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+            await _accept_consent(page)
+
+        # Wait for description to load
+        try:
+            await page.wait_for_selector(
+                '#job-details, .jobs-description__content, .description__text',
+                timeout=8000,
+            )
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+
+        description = ""
+        try:
+            description = await page.evaluate(_DESCRIPTION_JS)
+        except Exception:
+            pass
+
+        await browser.close()
+
+    return description or ""
+
+
+@router.get("/description")
+async def get_description(url: str, db: Session = Depends(get_db)):
+    if not url or "/jobs/view/" not in url:
+        raise HTTPException(400, "Ungültige Job-URL")
+    try:
+        text = await _load_description(url, db)
+        return {"description": text}
+    except ValueError as e:
+        raise HTTPException(500, str(e))
 
 
 # ── Import endpoint ───────────────────────────────────────────────────────────

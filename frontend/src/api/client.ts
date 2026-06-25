@@ -323,6 +323,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ jobs }),
       }),
+    description: (url: string) =>
+      request<{ description: string }>(`/jobsearch/description?url=${encodeURIComponent(url)}`),
   },
 
   audit: {

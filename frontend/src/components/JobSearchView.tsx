@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Search, MapPin, ExternalLink, Check, Loader2, AlertCircle, Plus, ChevronRight } from 'lucide-react'
 import { api } from '../api/client'
 import type { JobResult, LinkPortal, JobPortal } from '../types'
@@ -73,6 +73,23 @@ function JobCard({
 }
 
 function DescriptionPanel({ job }: { job: JobResult }) {
+  const [desc, setDesc] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const prevUrl = useRef<string>('')
+
+  useEffect(() => {
+    if (!job.url || job.url === prevUrl.current) return
+    prevUrl.current = job.url
+    setDesc(null)
+    setError(null)
+    setLoading(true)
+    api.jobsearch.description(job.url)
+      .then(r => setDesc(r.description || null))
+      .catch(() => setError('Beschreibung konnte nicht geladen werden.'))
+      .finally(() => setLoading(false))
+  }, [job.url])
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-gray-100">
@@ -90,12 +107,30 @@ function DescriptionPanel({ job }: { job: JobResult }) {
           </p>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        <p className="text-sm text-gray-500 italic">
-          Vollständige Stellenbeschreibung auf dem Jobportal verfügbar.
-        </p>
+
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Stellenbeschreibung wird geladen…
+          </div>
+        )}
+        {error && !loading && (
+          <p className="text-sm text-amber-600 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />{error}
+          </p>
+        )}
+        {desc && !loading && (
+          <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+            {desc}
+          </div>
+        )}
+        {!loading && !desc && !error && (
+          <p className="text-sm text-gray-400 italic">Beschreibung wird geladen…</p>
+        )}
       </div>
-      <div className="p-4 border-t border-gray-100">
+
+      <div className="p-4 border-t border-gray-100 shrink-0">
         <a
           href={job.url}
           target="_blank"
