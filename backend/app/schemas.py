@@ -143,6 +143,8 @@ class ApplicationRead(ApplicationBase):
     abgesagt: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    company_profile_id: Optional[int] = None
+    target_company_profile_id: Optional[int] = None
     contacts: List[ContactRead] = []
     events: List[EventRead] = []
 
