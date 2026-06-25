@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.2',
+    date: '2026-06-25',
+    changes: [
+      'Interview-Rate aus der Bewerbungsseite entfernt — steht jetzt im Auswertungen-Tab.',
+    ],
+  },
+  {
     version: '3.2.1',
     date: '2026-06-25',
     changes: [
