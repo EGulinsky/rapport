@@ -104,12 +104,51 @@ EXCEL_EXPORT_MAP: dict[tuple[str, str | None], str] = {
 }
 
 
+class CompanyProfile(Base):
+    """Background data about a company or headhunter, populated by async web sync."""
+    __tablename__ = "company_profiles"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    name_norm            = Column(String, unique=True, nullable=False, index=True)  # normalised key for dedup
+    name_display         = Column(String, nullable=True)
+
+    # Location
+    hq_city              = Column(String, nullable=True)
+    hq_country           = Column(String, nullable=True)
+
+    # Classification
+    industry             = Column(String, nullable=True)   # free text, e.g. "Automotive Software"
+    company_type         = Column(String, nullable=True)   # startup|kmu|konzern|beratung|headhunter|nonprofit|public|other
+    employee_range       = Column(String, nullable=True)   # "1-10"|"11-50"|"51-200"|"201-500"|"501-1000"|"1001-5000"|"5001-10000"|"10001+"
+    employee_count       = Column(Integer, nullable=True)  # exact number if available
+    founded_year         = Column(Integer, nullable=True)
+
+    # Online presence
+    website              = Column(String, nullable=True)
+    linkedin_company_url = Column(String, nullable=True)
+
+    # Free-text summary from sync source
+    description          = Column(Text, nullable=True)
+
+    # Sync bookkeeping
+    sync_source          = Column(String, nullable=True)   # "linkedin"|"web"|"manual"
+    sync_status          = Column(String, default="pending", nullable=False)  # pending|done|failed
+    sync_error           = Column(Text, nullable=True)
+    last_synced_at       = Column(DateTime(timezone=True), nullable=True)
+
+    created_at           = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
+
+    applications         = relationship("Application", foreign_keys="Application.company_profile_id",    back_populates="company_profile")
+    hh_applications      = relationship("Application", foreign_keys="Application.target_company_profile_id", back_populates="target_company_profile")
+
+
 class Application(Base):
     __tablename__ = "applications"
 
-    id                  = Column(Integer, primary_key=True, index=True)
-    firma               = Column(String, nullable=False)
-    rolle               = Column(String, nullable=False)
+    id                   = Column(Integer, primary_key=True, index=True)
+    firma                = Column(String, nullable=False)
+    rolle                = Column(String, nullable=False)
 
     # New status model
     main_status         = Column(String, default="applied", nullable=False)
@@ -127,7 +166,11 @@ class Application(Base):
     kommentar           = Column(Text, nullable=True)
     linkedin_job_id     = Column(String, nullable=True, index=True)
     stellenanzeige_url  = Column(String, nullable=True)
-    pre_rejection_status = Column(String, nullable=True)  # last active status before rejection
+    pre_rejection_status = Column(String, nullable=True)
+
+    # Company background data (populated by background sync)
+    company_profile_id        = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
+    target_company_profile_id = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
 
     gespraech_1         = Column(Text, nullable=True)
     gespraech_2         = Column(Text, nullable=True)
@@ -138,8 +181,10 @@ class Application(Base):
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 
-    contacts            = relationship("Contact", secondary="contact_application", back_populates="applications")
-    events              = relationship("Event", back_populates="application", cascade="all, delete-orphan")
+    contacts                = relationship("Contact", secondary="contact_application", back_populates="applications")
+    events                  = relationship("Event", back_populates="application", cascade="all, delete-orphan")
+    company_profile         = relationship("CompanyProfile", foreign_keys=[company_profile_id],        back_populates="applications")
+    target_company_profile  = relationship("CompanyProfile", foreign_keys=[target_company_profile_id], back_populates="hh_applications")
 
     @property
     def abgesagt(self) -> bool:
