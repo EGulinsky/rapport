@@ -181,13 +181,13 @@ async def _sync_one_company(db: Session, profile: models.CompanyProfile):
             await asyncio.sleep(2)
 
             # Find first company link in search results (structural, no class-name dependency)
-            company_url = await page.evaluate(f"""() => {{
+            company_url = await page.evaluate("""() => {
                 // Look for links to /company/ pages in search results
                 const links = [...document.querySelectorAll('a[href*="/company/"]')];
                 // Filter out nav links (short hrefs like /company/about)
                 const result = links.find(a => /\\/company\\/[\\w-]+\\/?($|\\?|#)/.test(a.href));
                 return result ? result.href.split('?')[0] : null;
-            }}""")
+            }""")
 
             if not company_url:
                 profile.sync_status = "failed"
