@@ -482,3 +482,19 @@ export interface AnalyticsSummary {
   rejection_by_status: Array<{ status: string; label: string; count: number }>
   company_sync: { total: number; pending: number; done: number; failed: number }
 }
+
+export interface CompanySyncStatus {
+  running: boolean
+  current_company: string | null
+  pending: number
+  done: number
+  failed: number
+  profiles: Array<{
+    id: number
+    name_display: string | null
+    sync_status: string
+    sync_error: string | null
+    last_synced_at: string | null
+  }>
+}
+}

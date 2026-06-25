@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.5',
+    date: '2026-06-25',
+    changes: [
+      'Firmendaten-Sync jetzt via KI (statt LinkedIn-Scraping) — kein Login nötig, funktioniert mit jedem konfigurierten AI-Anbieter.',
+      'Live-Fortschritt: Fortschrittsbalken und aktuell synchronisierte Firma werden während des Sync angezeigt (Polling alle 1,5 s).',
+    ],
+  },
+  {
     version: '3.2.4',
     date: '2026-06-25',
     changes: [
