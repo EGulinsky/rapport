@@ -9,10 +9,31 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '3.0.1',
+    version: '3.0.4',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Stellenbeschreibung LI — TreeWalker findet "About the job"/"Stellenbeschreibung"-Abschnitt direkt, kein Klassen-Matching mehr nötig.',
+    ],
+  },
+  {
+    version: '3.0.3',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Beschreibungsextraktor schließt Elemente mit Nav/Header/Footer-Kindknoten aus — verhindert dass Seiten-Chrome als Beschreibung zurückgegeben wird.',
+    ],
+  },
+  {
+    version: '3.0.2',
     date: '2026-06-25',
     changes: [
       'Fix: Stellenbeschreibung in Jobsuche — strukturbasierte DOM-Erkennung statt Klassenname (LI hasht alle CSS-Klassen). Findet den reichsten Inhaltsblock außerhalb von Nav/Header/Footer.',
+    ],
+  },
+  {
+    version: '3.0.1',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Stellenbeschreibung als HTML rendern — innerHTML statt innerText, dangerouslySetInnerHTML mit Prose-Styling im Frontend.',
     ],
   },
   {
