@@ -139,6 +139,12 @@ export const api = {
       body: JSON.stringify(data),
     }),
     clearAiKey: () => request<AiSettings>('/settings/ai/key', { method: 'DELETE' }),
+    listOllamaModels: (baseUrl: string) =>
+      request<{ reachable: boolean; installed: string[]; popular: Array<{ name: string; display: string; params: string; size_gb: number }> }>(
+        `/settings/ollama/models?base_url=${encodeURIComponent(baseUrl)}`
+      ),
+    pullOllamaModel: (model: string, baseUrl: string) =>
+      `${BASE}/settings/ollama/pull?model=${encodeURIComponent(model)}&base_url=${encodeURIComponent(baseUrl)}`,
     testAi: (data?: AiSettingsWrite) => request<{ status: string; message: string }>('/settings/ai/test', {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
