@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.2',
+    date: '2026-06-25',
+    changes: [
+      'UX: LinkedIn-Sync in den Sync-Dropdown integriert — kein separater Button mehr im Header.',
+      'UX: Excel-Export, PDF-Export und Excel-Import in ein "Im/Export"-Dropdown zusammengefasst.',
+    ],
+  },
+  {
     version: '3.3.1',
     date: '2026-06-25',
     changes: [

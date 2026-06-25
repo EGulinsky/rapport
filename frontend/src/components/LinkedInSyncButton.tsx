@@ -5,11 +5,12 @@ import type { LinkedInSyncStatus, LinkedInSyncLogEntry } from '../types'
 
 interface Props {
   onSynced: () => void
+  triggerCount?: number
 }
 
 type View = 'config' | 'running'
 
-export function LinkedInSyncButton({ onSynced }: Props) {
+export function LinkedInSyncButton({ onSynced, triggerCount }: Props) {
   const [showModal, setShowModal] = useState(false)
   const [view, setView] = useState<View>('config')
   const [config, setConfig] = useState<{ configured: boolean; email?: string; has_session: boolean; last_sync?: string } | null>(null)
@@ -36,6 +37,10 @@ export function LinkedInSyncButton({ onSynced }: Props) {
     loadConfig()
     return () => stopPolling()
   }, [])
+
+  useEffect(() => {
+    if (triggerCount && triggerCount > 0) openModal()
+  }, [triggerCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function openModal() {
     await loadConfig()

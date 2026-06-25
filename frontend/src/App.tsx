@@ -5,11 +5,9 @@ import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
 import { ApplicationModal } from './components/ApplicationModal'
 import { StatsBar } from './components/StatsBar'
-import { ImportButton } from './components/ImportButton'
-import { ExportButton } from './components/ExportButton'
-import { PdfExportButton } from './components/PdfExportButton'
 import { SyncButton } from './components/SyncButton'
 import { LinkedInSyncButton } from './components/LinkedInSyncButton'
+import { ImportExportMenu } from './components/ImportExportMenu'
 import { ContactsView } from './components/ContactsView'
 import { CompaniesView } from './components/CompaniesView'
 import { CompanyModal } from './components/CompanyModal'
@@ -54,6 +52,7 @@ export default function App() {
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
+  const [liTrigger, setLiTrigger] = useState(0)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -173,11 +172,8 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-<LinkedInSyncButton onSynced={load} />
-<SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} />
-              <ExportButton />
-              <PdfExportButton />
-              <ImportButton onImported={load} />
+              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} onLinkedIn={() => setLiTrigger(t => t + 1)} />
+              <ImportExportMenu onImported={load} />
               <button
                 onClick={() => setShowCleanup(true)}
                 title="Duplikate in Bewerbungen, Kontakten und Timeline bereinigen"
@@ -382,6 +378,7 @@ export default function App() {
         />
       )}
 
+      <LinkedInSyncButton onSynced={load} triggerCount={liTrigger} />
       {showAiSettings && <SettingsModal onClose={() => setShowAiSettings(false)} />}
       {showAuditLog && <AuditLogModal onClose={() => setShowAuditLog(false)} />}
       {showCleanup && (
