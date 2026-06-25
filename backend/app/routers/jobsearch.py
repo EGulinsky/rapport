@@ -217,6 +217,10 @@ _EXTRACT_JS = """() => {
 
 # Extract full job description from a LI job detail page
 _DESCRIPTION_JS = """() => {
+    function isNavJunk(el) {
+        const t = (el.innerText || '').trim();
+        return /skip to (search|main|content|footer|aside)/i.test(t);
+    }
     const selectors = [
         '#job-details',
         '.jobs-description__content',
@@ -224,36 +228,23 @@ _DESCRIPTION_JS = """() => {
         'article.jobs-description',
         '[class*="jobs-description__container"]',
         '.description__text',
-        // 2025 LI DOM
         '[data-view-name="job-view-description"]',
         'div[class*="show-more-less-html"]',
         'div[class*="jobs-box__html-content"]',
-        '[class*="description__text"]',
         'section.jobs-view-layout__job-details',
     ];
     for (const sel of selectors) {
         const el = document.querySelector(sel);
-        if (el && el.innerText.trim().length > 100) return el.innerHTML;
+        if (el && el.innerText.trim().length > 100 && !isNavJunk(el)) return el.innerHTML;
     }
-    // Fallback: heading-based search
+    // Heading-based fallback: look for "About the job" section
     const headings = [...document.querySelectorAll('h2, h3')];
     const about = headings.find(h => /about the job|über die stelle|über die position|job description/i.test(h.innerText));
     if (about) {
         let html = '';
         let el = about.nextElementSibling;
-        while (el && !/^H[23]$/.test(el.tagName)) {
-            html += el.outerHTML;
-            el = el.nextElementSibling;
-        }
+        while (el && !/^H[23]$/.test(el.tagName)) { html += el.outerHTML; el = el.nextElementSibling; }
         if (html.trim().length > 50) return html;
-    }
-    // Last resort: longest text block between 300 and 30000 chars
-    const candidates = [...document.querySelectorAll('div, article, section')]
-        .map(el => ({ el, len: (el.innerText || '').trim().length }))
-        .filter(({ len }) => len > 300 && len < 30000)
-        .sort((a, b) => b.len - a.len);
-    for (const { el } of candidates.slice(0, 3)) {
-        if (el.innerText.trim().length > 300) return el.innerHTML;
     }
     return '';
 }"""
@@ -457,11 +448,17 @@ async def _load_description(job_url: str, db: Session) -> str:
             await page.goto(job_url, wait_until="load", timeout=30000)
             await _accept_consent(page)
 
+        # Let JS finish rendering
+        try:
+            await page.wait_for_load_state("networkidle", timeout=6000)
+        except Exception:
+            pass
+
         # Scroll to trigger lazy loading
         await page.evaluate("window.scrollBy(0, 600)")
         await asyncio.sleep(0.5)
 
-        # Try "See more" button to expand truncated description
+        # Try "See more" / "Mehr anzeigen" to expand truncated description
         try:
             btn = page.locator('button:has-text("See more"), button:has-text("Mehr anzeigen"), button[aria-label*="description"]').first
             if await btn.is_visible(timeout=2000):
@@ -474,11 +471,11 @@ async def _load_description(job_url: str, db: Session) -> str:
         try:
             await page.wait_for_selector(
                 '#job-details, .jobs-description__content, .description__text, [data-view-name="job-view-description"], div[class*="show-more-less-html"]',
-                timeout=10000,
+                timeout=8000,
             )
         except Exception:
             pass
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
         description = ""
         try:
