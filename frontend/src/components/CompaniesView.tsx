@@ -182,7 +182,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         {loading && <span className="text-xs text-gray-400">Laden…</span>}
         <button
           onClick={startSync}
-          disabled={syncing || pending === 0}
+          disabled={syncing}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           {syncing
