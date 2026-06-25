@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.10',
+    date: '2026-06-25',
+    changes: [
+      'Fix: LinkedIn-Sync erkennt abgelaufene Sessions korrekt — wenn LI auf die Startseite statt /login oder /authwall umleitet, wird jetzt trotzdem neu eingeloggt.',
+    ],
+  },
+  {
     version: '3.2.9',
     date: '2026-06-25',
     changes: [
