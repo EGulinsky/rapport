@@ -242,12 +242,14 @@ _DESCRIPTION_JS = """() => {
         if (el && el.innerText.trim().length > 200 && !insideNavOrChrome(el)) return el.innerHTML;
     }
 
-    // Structural fallback: find the richest content block outside chrome
+    // Structural fallback: find the richest content block that is pure content
     const candidates = [...document.querySelectorAll('div, article, section')]
         .filter(el => {
             if (insideNavOrChrome(el)) return false;
+            // Exclude containers that themselves contain navigation chrome
+            if (el.querySelector('nav, header, footer, [role="navigation"], [role="banner"]')) return false;
             const t = (el.innerText || '').trim();
-            if (t.length < 400 || t.length > 20000) return false;
+            if (t.length < 400 || t.length > 15000) return false;
             if (/skip to (search|main|content)/i.test(t)) return false;
             return true;
         })
