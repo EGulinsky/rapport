@@ -307,6 +307,24 @@ export const api = {
     run: () => request<{ success: boolean; filename: string }>('/backup/run', { method: 'POST' }),
   },
 
+  jobsearch: {
+    portals: () => request<import('../types').JobPortal[]>('/jobsearch/portals'),
+    addPortal: (data: { name: string; url_template?: string; color?: string; enabled?: boolean }) =>
+      request<import('../types').JobPortal>('/jobsearch/portals', { method: 'POST', body: JSON.stringify(data) }),
+    updatePortal: (id: number, data: Partial<{ name: string; url_template: string; color: string; enabled: boolean; sort_order: number }>) =>
+      request<import('../types').JobPortal>(`/jobsearch/portals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deletePortal: (id: number) => fetch(`${BASE}/jobsearch/portals/${id}`, { method: 'DELETE' }),
+    search: (q: string, location: string) => {
+      const qs = new URLSearchParams({ q, location })
+      return request<import('../types').JobSearchResponse>(`/jobsearch/search?${qs}`)
+    },
+    importJobs: (jobs: import('../types').JobResult[]) =>
+      request<{ created: number; skipped: number; ids: number[] }>('/jobsearch/import', {
+        method: 'POST',
+        body: JSON.stringify({ jobs }),
+      }),
+  },
+
   audit: {
     list: (params?: { app_id?: number; limit?: number; offset?: number }) => {
       const qs = params ? '?' + new URLSearchParams(
