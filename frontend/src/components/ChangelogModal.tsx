@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.1',
+    date: '2026-06-25',
+    changes: [
+      'Backfill: Beim Containerstart werden für alle bestehenden Bewerbungen automatisch CompanyProfile-Einträge (pending) angelegt — Firmennamen werden dedupliziert.',
+    ],
+  },
+  {
     version: '3.2.0',
     date: '2026-06-25',
     changes: [
