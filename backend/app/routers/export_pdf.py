@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import os
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -23,6 +23,11 @@ STATUS_LABEL = {
     "negotiating":  "Angebotsverhandlung",
     "signed":       "Vertrag unterschrieben",
     "rejected":     "Absage",
+}
+
+TYP_LABEL = {
+    "gespräch": "Gespräch",
+    "anruf":    "Anruf",
 }
 
 # macOS Arial → Linux Liberation Sans (metric-compatible Arial substitute, ships in fonts-liberation)
@@ -46,8 +51,19 @@ def _pick_fonts() -> tuple[str, str, str]:
 
 _FONT_PATH, _FONT_BOLD_PATH, _FONT_IT_PATH = _pick_fonts()
 
+# Landscape A4: 297 × 210 mm, margins 12 mm → usable width = 273 mm
+_PAGE_W = 297
+_MARGIN  = 12
+_USABLE  = _PAGE_W - 2 * _MARGIN  # 273 mm
 
-def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
+
+def _trunc(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars - 1] + "…"
+
+
+def _build_pdf(apps: list, appointments: list, since: Optional[date], name: str) -> bytes:
     from fpdf import FPDF
     from fpdf.enums import XPos, YPos
 
@@ -69,11 +85,11 @@ def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
             self.set_font("A", "B", 10)
             self.set_fill_color(30, 64, 120)
             self.set_text_color(255, 255, 255)
-            self.rect(0, 0, 210, 14, "F")
+            self.rect(0, 0, _PAGE_W, 14, "F")
             self.set_xy(10, 3)
-            self.cell(140, 8, "Nachweis der Eigenbemühungen – Bundesagentur für Arbeit")
-            self.set_xy(150, 3)
-            self.cell(50, 8, f"Stand: {today.strftime('%d.%m.%Y')}", align="R")
+            self.cell(200, 8, "Nachweis der Eigenbemühungen – Bundesagentur für Arbeit")
+            self.set_xy(220, 3)
+            self.cell(67, 8, f"Stand: {today.strftime('%d.%m.%Y')}", align="R")
             self.set_text_color(0, 0, 0)
             self.ln(14)
 
@@ -84,10 +100,10 @@ def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
             self.cell(0, 8, f"Seite {self.page_no()} | Erstellt: {today.strftime('%d.%m.%Y')} | {name}", align="C")
             self.set_text_color(0, 0, 0)
 
-    pdf = PDF(orientation="P", unit="mm", format="A4")
+    pdf = PDF(orientation="L", unit="mm", format="A4")
     pdf.setup()
     pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_margins(12, 18, 12)
+    pdf.set_margins(_MARGIN, 18, _MARGIN)
     pdf.add_page()
 
     # ── Listenüberschrift ─────────────────────────────────────────────────────
@@ -106,8 +122,10 @@ def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
     pdf.set_text_color(0, 0, 0)
     pdf.ln(3)
 
-    # ── Tabellen-Header ───────────────────────────────────────────────────────
-    cw = [8, 22, 62, 62, 24, 12]
+    # ── Bewerbungs-Tabelle ────────────────────────────────────────────────────
+    # Cols: # | Datum | Unternehmen | Position | Status | Quelle
+    # Total must equal _USABLE = 273 mm
+    cw = [8, 26, 82, 92, 43, 22]
     ch = ["#", "Datum", "Unternehmen", "Position", "Status", "Quelle"]
 
     def table_header():
@@ -126,13 +144,13 @@ def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
         datum = a.datum_bewerbung.strftime("%d.%m.%Y") if a.datum_bewerbung else "—"
 
         if a.is_headhunter and a.zielfirma_bei_hh:
-            firma = f"{a.zielfirma_bei_hh[:28]} ({a.firma[:16]})"
+            firma_raw = f"{a.zielfirma_bei_hh} ({a.firma})"
         else:
-            firma = (a.firma or "")[:38]
-
-        rolle  = (a.rolle or "")[:40]
+            firma_raw = a.firma or ""
+        firma  = _trunc(firma_raw, 46)
+        rolle  = _trunc(a.rolle or "", 52)
         status = STATUS_LABEL.get(a.main_status, a.main_status)
-        quelle = (a.quelle or "—")[:10]
+        quelle = _trunc(a.quelle or "—", 14)
 
         bg = (245, 248, 255) if fill else (255, 255, 255)
         pdf.set_fill_color(*bg)
@@ -147,10 +165,57 @@ def _build_pdf(apps: list, since: Optional[date], name: str) -> bytes:
         pdf.ln()
         fill = not fill
 
-        if i % 48 == 0 and i < len(dated):
+        if i % 58 == 0 and i < len(dated):
             pdf.add_page()
             table_header()
             fill = False
+
+    # ── Terminübersicht (letzte 4 Wochen) ────────────────────────────────────
+    if appointments:
+        pdf.ln(6)
+        pdf.set_font("A", "B", 13)
+        pdf.set_text_color(30, 64, 120)
+        four_weeks_ago = (today - timedelta(weeks=4)).strftime("%d.%m.%Y")
+        pdf.cell(0, 9, f"Termine der letzten 4 Wochen ({four_weeks_ago} – {today.strftime('%d.%m.%Y')})",
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
+        # Cols: Datum | Art | Unternehmen | Position | Thema/Titel
+        # Total = 273 mm
+        aw = [26, 24, 72, 82, 69]
+        ah = ["Datum", "Art", "Unternehmen", "Position", "Thema / Titel"]
+
+        def appt_header():
+            pdf.set_fill_color(30, 64, 120)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("A", "B", 8)
+            for h, w in zip(ah, aw):
+                pdf.cell(w, 7, h, border=1, fill=True, align="C")
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+
+        appt_header()
+        fill2 = False
+
+        for appt in appointments:
+            datum  = appt.datum.strftime("%d.%m.%Y") if appt.datum else "—"
+            art    = TYP_LABEL.get(appt.typ or "", appt.typ or "—")
+            firma  = _trunc(appt.application.firma or "", 40) if appt.application else "—"
+            rolle  = _trunc(appt.application.rolle or "", 46) if appt.application else "—"
+            titel  = _trunc(appt.titel or "", 40)
+
+            bg = (245, 248, 255) if fill2 else (255, 255, 255)
+            pdf.set_fill_color(*bg)
+            pdf.set_font("A", "", 7)
+            row_h = 5
+            pdf.cell(aw[0], row_h, datum,  border="LRB", fill=True)
+            pdf.cell(aw[1], row_h, art,    border="LRB", fill=True)
+            pdf.cell(aw[2], row_h, firma,  border="LRB", fill=True)
+            pdf.cell(aw[3], row_h, rolle,  border="LRB", fill=True)
+            pdf.cell(aw[4], row_h, titel,  border="LRB", fill=True)
+            pdf.ln()
+            fill2 = not fill2
 
     buf = io.BytesIO()
     pdf.output(buf)
@@ -164,7 +229,20 @@ def export_pdf(
     db: Session = Depends(get_db),
 ):
     apps = db.query(models.Application).all()
-    pdf_bytes = _build_pdf(apps, since, name)
+
+    cutoff = date.today() - timedelta(weeks=4)
+    appointments = (
+        db.query(models.Event)
+        .join(models.Application, models.Event.application_id == models.Application.id)
+        .filter(
+            models.Event.typ.in_(["gespräch", "anruf"]),
+            models.Event.datum >= cutoff,
+        )
+        .order_by(models.Event.datum)
+        .all()
+    )
+
+    pdf_bytes = _build_pdf(apps, appointments, since, name)
 
     today = date.today().strftime("%Y-%m-%d")
     since_str = since.strftime("%Y-%m-%d") + "_" if since else ""
