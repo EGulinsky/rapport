@@ -51,15 +51,19 @@ async def company_sync_run(
     if _SYNC_RUNNING:
         return {"started": False, "count": 0, "message": "Sync already running"}
 
-    # Reset done profiles so every manual trigger re-syncs everything
-    db.query(models.CompanyProfile).filter(
-        models.CompanyProfile.sync_status == "done"
-    ).update({"sync_status": "pending"})
-    db.commit()
-
     pending = db.query(models.CompanyProfile).filter(
         models.CompanyProfile.sync_status == "pending"
     ).limit(10).all()
+
+    # No pending left → fresh trigger: reset all done profiles and start over
+    if not pending:
+        db.query(models.CompanyProfile).filter(
+            models.CompanyProfile.sync_status == "done"
+        ).update({"sync_status": "pending"})
+        db.commit()
+        pending = db.query(models.CompanyProfile).filter(
+            models.CompanyProfile.sync_status == "pending"
+        ).limit(10).all()
 
     count = len(pending)
     if count == 0:
