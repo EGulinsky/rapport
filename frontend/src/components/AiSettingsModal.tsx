@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, Download, Check } from 'lucide-react'
 import { api } from '../api/client'
 import type { AiSettingsWrite } from '../types'
 import clsx from 'clsx'
@@ -59,6 +59,19 @@ const PROVIDERS = [
   },
 ] as const
 
+interface OllamaModel {
+  name: string
+  display: string
+  params: string
+  size_gb: number
+}
+
+interface PullProgress {
+  model: string
+  status: string
+  pct: number | null
+}
+
 export function AiSettingsModal({ onClose }: Props) {
   const [form, setForm] = useState<AiSettingsWrite>({
     provider: 'groq',
@@ -73,6 +86,13 @@ export function AiSettingsModal({ onClose }: Props) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Ollama model picker state
+  const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null)
+  const [ollamaInstalled, setOllamaInstalled] = useState<string[]>([])
+  const [ollamaPopular, setOllamaPopular] = useState<OllamaModel[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [pulling, setPulling] = useState<PullProgress | null>(null)
 
   useEffect(() => {
     api.settings.getAi().then(data => {
@@ -89,9 +109,75 @@ export function AiSettingsModal({ onClose }: Props) {
 
   const provider = PROVIDERS.find(p => p.id === form.provider) ?? PROVIDERS[0]
 
+  const loadOllamaModels = useCallback(async (baseUrl: string) => {
+    setLoadingModels(true)
+    try {
+      const r = await api.settings.listOllamaModels(baseUrl || 'http://localhost:11434')
+      setOllamaReachable(r.reachable)
+      setOllamaInstalled(r.installed)
+      setOllamaPopular(r.popular)
+    } catch {
+      setOllamaReachable(false)
+    } finally {
+      setLoadingModels(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (form.provider === 'ollama' && !loading) {
+      loadOllamaModels(form.base_url || 'http://localhost:11434')
+    }
+  }, [form.provider, loading, loadOllamaModels, form.base_url])
+
   function selectProvider(p: typeof PROVIDERS[number]) {
     setForm(f => ({ ...f, provider: p.id, model: p.model, base_url: p.needsUrl ? (f.base_url || 'http://localhost:11434') : '' }))
     setTestResult(null)
+  }
+
+  function selectOllamaModel(name: string) {
+    setForm(f => ({ ...f, model: `ollama/${name}` }))
+  }
+
+  async function pullModel(modelName: string) {
+    setPulling({ model: modelName, status: 'Starte Download…', pct: null })
+    const url = api.settings.pullOllamaModel(modelName, form.base_url || 'http://localhost:11434')
+    try {
+      const resp = await fetch(url)
+      if (!resp.body) throw new Error('Kein Stream')
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const d = JSON.parse(line.slice(6))
+            if (d.status === 'error') {
+              setPulling({ model: modelName, status: `Fehler: ${d.error}`, pct: null })
+              return
+            }
+            if (d.status === 'done' || d.status === 'success') {
+              setPulling(null)
+              loadOllamaModels(form.base_url || 'http://localhost:11434')
+              // Auto-select newly downloaded model
+              setForm(f => ({ ...f, model: `ollama/${modelName}` }))
+              return
+            }
+            const pct = d.total ? d.completed / d.total : null
+            setPulling({ model: modelName, status: d.status ?? 'Lädt…', pct })
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch (e) {
+      setPulling({ model: modelName, status: `Fehler: ${e instanceof Error ? e.message : String(e)}`, pct: null })
+    } finally {
+      if (pulling?.model === modelName) setPulling(null)
+    }
   }
 
   async function save() {
@@ -133,6 +219,8 @@ export function AiSettingsModal({ onClose }: Props) {
     await api.settings.clearAiKey()
     setHasStoredKey(false)
   }
+
+  const selectedModelBase = form.model.replace(/^ollama\//, '')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -198,16 +286,143 @@ export function AiSettingsModal({ onClose }: Props) {
               </div>
             </div>
 
-            {/* Model */}
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Modell</p>
-              <input
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={form.model}
-                onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                placeholder="z.B. groq/llama-3.3-70b-versatile"
-              />
-            </div>
+            {/* Ollama: Base URL + Model Picker */}
+            {provider.needsUrl && (
+              <>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Base URL</p>
+                  <input
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="http://localhost:11434"
+                    value={form.base_url ?? ''}
+                    onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
+                    onBlur={() => loadOllamaModels(form.base_url || 'http://localhost:11434')}
+                  />
+                  <p className="mt-1 text-xs text-gray-400">Ollama muss lokal laufen: <code className="bg-gray-100 px-1 rounded">ollama serve</code></p>
+                </div>
+
+                {/* Ollama model picker */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modell</p>
+                    {ollamaReachable === false && (
+                      <span className="text-xs text-red-500">Ollama nicht erreichbar</span>
+                    )}
+                    {loadingModels && (
+                      <Loader className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                    )}
+                  </div>
+
+                  {/* Installed models */}
+                  {ollamaInstalled.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-400 mb-1.5">Installiert</p>
+                      <div className="flex flex-wrap gap-2">
+                        {ollamaInstalled.map(name => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => selectOllamaModel(name)}
+                            className={clsx(
+                              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all',
+                              selectedModelBase === name
+                                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200'
+                                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                            )}
+                          >
+                            {selectedModelBase === name && <Check className="h-3.5 w-3.5" />}
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Popular models to download */}
+                  {ollamaPopular.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1.5">Verfügbar zum Download</p>
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {ollamaPopular
+                          .filter(m => !ollamaInstalled.some(i => i === m.name || i.startsWith(m.name + ':')))
+                          .map(m => {
+                            const isPulling = pulling?.model === m.name
+                            return (
+                              <div
+                                key={m.name}
+                                className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 gap-3"
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-gray-800">{m.display}</span>
+                                    <span className="text-xs text-gray-400 font-mono">{m.params}</span>
+                                    <span className="text-xs text-gray-400">{m.size_gb} GB</span>
+                                  </div>
+                                  {isPulling && (
+                                    <div className="mt-1.5 space-y-1">
+                                      <p className="text-xs text-indigo-500 truncate">{pulling.status}</p>
+                                      {pulling.pct !== null && (
+                                        <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                          <div
+                                            className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                                            style={{ width: `${(pulling.pct * 100).toFixed(0)}%` }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={!!pulling}
+                                  onClick={() => pullModel(m.name)}
+                                  className={clsx(
+                                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors shrink-0',
+                                    isPulling
+                                      ? 'bg-indigo-100 text-indigo-500 cursor-wait'
+                                      : pulling
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                  )}
+                                >
+                                  {isPulling
+                                    ? <Loader className="h-3 w-3 animate-spin" />
+                                    : <Download className="h-3 w-3" />}
+                                  {isPulling ? 'Lädt…' : 'Herunterladen'}
+                                </button>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Manual model input always shown */}
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>
+                    <input
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={form.model}
+                      onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                      placeholder="ollama/llama3.2"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Model (non-Ollama providers) */}
+            {!provider.needsUrl && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Modell</p>
+                <input
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={form.model}
+                  onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                  placeholder="z.B. groq/llama-3.3-70b-versatile"
+                />
+              </div>
+            )}
 
             {/* API Key (not for Ollama) */}
             {!provider.needsUrl && (
@@ -250,20 +465,6 @@ export function AiSettingsModal({ onClose }: Props) {
                     </button>
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Base URL (Ollama / custom) */}
-            {provider.needsUrl && (
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Base URL</p>
-                <input
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="http://localhost:11434"
-                  value={form.base_url ?? ''}
-                  onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
-                />
-                <p className="mt-1 text-xs text-gray-400">Ollama muss lokal laufen: <code className="bg-gray-100 px-1 rounded">ollama serve</code></p>
               </div>
             )}
 

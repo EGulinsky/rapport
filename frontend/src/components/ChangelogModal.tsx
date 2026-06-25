@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.6',
+    date: '2026-06-25',
+    changes: [
+      'Ollama-Modell-Picker: installierte Modelle als klickbare Chips, populäre Modelle mit Download-Button und Fortschrittsbalken.',
+      'Neu: GET /api/settings/ollama/models (Modellliste) + GET /api/settings/ollama/pull (SSE-Stream für Download-Fortschritt).',
+    ],
+  },
+  {
     version: '3.2.5',
     date: '2026-06-25',
     changes: [

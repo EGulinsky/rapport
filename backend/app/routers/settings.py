@@ -1,8 +1,10 @@
 import json
 from typing import Optional
 
+import httpx
 import litellm
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -180,3 +182,58 @@ async def test_ai(payload: Optional[schemas.AiSettingsWrite] = None, db: Session
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(502, f"Provider-Fehler: {e}")
+
+
+_POPULAR_OLLAMA_MODELS = [
+    {"name": "llama3.2",       "display": "Llama 3.2",     "params": "3B",   "size_gb": 2.0},
+    {"name": "llama3.2:1b",    "display": "Llama 3.2",     "params": "1B",   "size_gb": 0.8},
+    {"name": "llama3.1:8b",    "display": "Llama 3.1",     "params": "8B",   "size_gb": 4.7},
+    {"name": "qwen2.5:7b",     "display": "Qwen 2.5",      "params": "7B",   "size_gb": 4.4},
+    {"name": "qwen2.5:14b",    "display": "Qwen 2.5",      "params": "14B",  "size_gb": 9.0},
+    {"name": "mistral",        "display": "Mistral",        "params": "7B",   "size_gb": 4.1},
+    {"name": "mistral-nemo",   "display": "Mistral Nemo",   "params": "12B",  "size_gb": 7.1},
+    {"name": "phi4-mini",      "display": "Phi-4 Mini",     "params": "3.8B", "size_gb": 2.5},
+    {"name": "phi4",           "display": "Phi-4",          "params": "14B",  "size_gb": 9.1},
+    {"name": "gemma3:4b",      "display": "Gemma 3",        "params": "4B",   "size_gb": 3.3},
+    {"name": "gemma3:12b",     "display": "Gemma 3",        "params": "12B",  "size_gb": 8.1},
+    {"name": "deepseek-r1:7b", "display": "DeepSeek-R1",   "params": "7B",   "size_gb": 4.7},
+]
+
+
+@router.get("/ollama/models")
+async def list_ollama_models(base_url: str = "http://localhost:11434"):
+    installed: list[str] = []
+    reachable = False
+    try:
+        async with httpx.AsyncClient(timeout=4) as client:
+            r = await client.get(f"{base_url.rstrip('/')}/api/tags")
+            if r.status_code == 200:
+                reachable = True
+                installed = [m["name"] for m in r.json().get("models", [])]
+    except Exception:
+        pass
+    return {
+        "reachable": reachable,
+        "installed": installed,
+        "popular": _POPULAR_OLLAMA_MODELS,
+    }
+
+
+@router.get("/ollama/pull")
+async def pull_ollama_model(model: str, base_url: str = "http://localhost:11434"):
+    async def _stream():
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "POST",
+                    f"{base_url.rstrip('/')}/api/pull",
+                    json={"name": model},
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line:
+                            yield f"data: {line}\n\n"
+        except Exception as e:
+            yield f'data: {{"status":"error","error":{json.dumps(str(e))}}}\n\n'
+        yield 'data: {"status":"done"}\n\n'
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
