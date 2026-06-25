@@ -1,9 +1,7 @@
-"""Company profile background sync — LinkedIn scraping via Playwright."""
+"""Company profile background sync via AI."""
 import asyncio
-import json
 import logging
 from datetime import datetime, timezone
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -16,6 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sync/company", tags=["sync_company"])
 
 _SYNC_RUNNING = False
+_CURRENT_COMPANY: str | None = None
 
 
 @router.get("/status")
@@ -25,6 +24,8 @@ def company_sync_status(db: Session = Depends(get_db)):
     done = [p for p in profiles if p.sync_status == "done"]
     failed = [p for p in profiles if p.sync_status == "failed"]
     return {
+        "running": _SYNC_RUNNING,
+        "current_company": _CURRENT_COMPANY,
         "pending": len(pending),
         "done": len(done),
         "failed": len(failed),
@@ -65,8 +66,9 @@ async def company_sync_run(
 
 @router.post("/reset-lock")
 def reset_lock():
-    global _SYNC_RUNNING
+    global _SYNC_RUNNING, _CURRENT_COMPANY
     _SYNC_RUNNING = False
+    _CURRENT_COMPANY = None
     return {"ok": True}
 
 
@@ -96,8 +98,9 @@ def reset_profile(profile_id: int, db: Session = Depends(get_db)):
 
 
 async def _run_sync_batch(profile_ids: list[int]):
-    global _SYNC_RUNNING
+    global _SYNC_RUNNING, _CURRENT_COMPANY
     _SYNC_RUNNING = True
+    _CURRENT_COMPANY = None
     try:
         for pid in profile_ids:
             db = SessionLocal()
@@ -105,196 +108,92 @@ async def _run_sync_batch(profile_ids: list[int]):
                 profile = db.query(models.CompanyProfile).filter(models.CompanyProfile.id == pid).first()
                 if not profile:
                     continue
+                _CURRENT_COMPANY = profile.name_display or profile.name_norm
                 await _sync_one_company(db, profile)
             except Exception as e:
                 logger.error("Sync error for profile %s: %s", pid, e)
             finally:
                 db.close()
-            # Brief pause to avoid rate limiting
-            await asyncio.sleep(3)
+            await asyncio.sleep(0.5)
     finally:
         _SYNC_RUNNING = False
+        _CURRENT_COMPANY = None
 
 
 async def _sync_one_company(db: Session, profile: models.CompanyProfile):
-    """Scrape LinkedIn company page and update profile fields."""
+    """Fetch company data via AI and update profile fields."""
     try:
-        from playwright.async_api import async_playwright
-        from app.routers.sync_linkedin import _login, _accept_consent
-
-        li_sync = db.query(models.LinkedInSync).first()
-        if not li_sync or not li_sync.email or not li_sync.password_enc:
-            profile.sync_status = "failed"
-            profile.sync_error = "LinkedIn nicht konfiguriert"
-            db.commit()
-            return
-
-        from app.ai.provider import decrypt_api_key
-        password = decrypt_api_key(li_sync.password_enc)
-
-        cookies = []
-        if li_sync.session_cookies:
-            try:
-                cookies = json.loads(li_sync.session_cookies)
-            except Exception:
-                pass
+        from app.ai.provider import complete, AINotConfigured
 
         name = profile.name_display or profile.name_norm
-        search_url = f"https://www.linkedin.com/search/results/companies/?keywords={quote(name)}"
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-                      "--disable-blink-features=AutomationControlled"],
-            )
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 900},
-                locale="de-DE",
-            )
-            await context.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
-            if cookies:
-                await context.add_cookies(cookies)
+        result = await complete(
+            db,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Du bist ein Firmendaten-Lookup-Service. "
+                        "Gib bekannte Fakten über Unternehmen als JSON zurück. "
+                        "Wenn du ein Feld nicht kennst, gib null zurück. Erfinde keine Daten."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f'Gib Firmendaten für "{name}" als JSON zurück:\n'
+                        "{\n"
+                        '  "hq_city": "Hauptsitz-Stadt oder null",\n'
+                        '  "hq_country": "Land auf Deutsch (z.B. Deutschland, USA) oder null",\n'
+                        '  "industry": "Branche auf Deutsch (z.B. Softwareentwicklung, Maschinenbau) oder null",\n'
+                        '  "company_type": "eines von: startup|kmu|konzern|beratung|headhunter|nonprofit|public|other oder null",\n'
+                        '  "employee_range": "z.B. 1001-5000 oder 10001-50000 oder null",\n'
+                        '  "founded_year": "Gründungsjahr als Zahl oder null",\n'
+                        '  "website": "Haupt-Website-URL oder null",\n'
+                        '  "description": "2-3 Sätze Beschreibung auf Deutsch oder null"\n'
+                        "}"
+                    ),
+                },
+            ],
+            json_mode=True,
+            max_tokens=512,
+        )
 
-            page = await context.new_page()
-
-            await page.goto(search_url, wait_until="load", timeout=30000)
-            await _accept_consent(page)
-
-            if "login" in page.url or "authwall" in page.url:
-                logged_in = await _login(page, li_sync.email, password)
-                if not logged_in:
-                    await browser.close()
-                    profile.sync_status = "failed"
-                    profile.sync_error = "LinkedIn Login fehlgeschlagen"
-                    db.commit()
-                    return
-                await page.goto(search_url, wait_until="load", timeout=30000)
-                await _accept_consent(page)
-
-            await asyncio.sleep(2)
-
-            # Find first company link in search results (structural, no class-name dependency)
-            company_url = await page.evaluate("""() => {
-                // Look for links to /company/ pages in search results
-                const links = [...document.querySelectorAll('a[href*="/company/"]')];
-                // Filter out nav links (short hrefs like /company/about)
-                const result = links.find(a => /\\/company\\/[\\w-]+\\/?($|\\?|#)/.test(a.href));
-                return result ? result.href.split('?')[0] : null;
-            }""")
-
-            if not company_url:
-                profile.sync_status = "failed"
-                profile.sync_error = "Kein LI-Firmenprofil in Suchergebnissen gefunden"
-                db.commit()
-                await browser.close()
-                return
-
-            # Navigate directly to /about page
-            about_url = company_url.rstrip("/") + "/about/"
-            await page.goto(about_url, wait_until="load", timeout=30000)
-            await asyncio.sleep(2)
-
-            linkedin_url = about_url
-
-            # Extract data via JS — LI uses hashed class names, use dt/dd structure
-            extracted = await page.evaluate("""
-                () => {
-                    // Description: find the overview text block
-                    const descCandidates = [...document.querySelectorAll('p, div, section')]
-                        .filter(el => {
-                            const t = (el.innerText||'').trim();
-                            return t.length > 80 && t.length < 3000 && !el.querySelector('nav,header,footer,ul,ol');
-                        })
-                        .sort((a,b) => b.innerText.trim().length - a.innerText.trim().length);
-                    const desc = descCandidates.length > 0 ? descCandidates[0].innerText.trim() : null;
-
-                    // Structured data: LI /about uses dt/dd pairs
-                    const pairs = {};
-                    document.querySelectorAll('dt').forEach(dt => {
-                        const dd = dt.nextElementSibling;
-                        if (dd && dd.tagName === 'DD') {
-                            pairs[dt.innerText.trim().toLowerCase()] = dd.innerText.trim();
-                        }
-                    });
-
-                    // Fallback: scan body text for labelled lines
-                    const findInText = (...labels) => {
-                        for (const label of labels) {
-                            const key = Object.keys(pairs).find(k => k.includes(label.toLowerCase()));
-                            if (key) return pairs[key];
-                        }
-                        const text = document.body.innerText;
-                        for (const label of labels) {
-                            const m = text.match(new RegExp(label + '[:\\\\s]+([^\\\\n]{2,80})', 'i'));
-                            if (m) return m[1].trim();
-                        }
-                        return null;
-                    };
-
-                    return {
-                        description: desc,
-                        employee_range: findInText('employees', 'Mitarbeiter'),
-                        hq: findInText('Headquarters', 'Hauptsitz'),
-                        industry: findInText('Industry', 'Branche'),
-                        founded_year: findInText('Founded', 'Gegründet'),
-                        website: findInText('Website'),
-                        company_type: findInText('Company type', 'Unternehmensform', 'Unternehmenstyp'),
-                    };
-                }
-            """)
-
-            await browser.close()
-
-        # Update profile fields
-        if extracted.get("description"):
-            profile.description = extracted["description"][:2000]
-
-        if extracted.get("hq"):
-            hq = extracted["hq"].strip()
-            parts = [p.strip() for p in hq.split(",")]
-            if len(parts) >= 2:
-                profile.hq_city = parts[0]
-                profile.hq_country = parts[-1]
-            else:
-                profile.hq_city = hq
-
-        if extracted.get("industry"):
-            profile.industry = extracted["industry"].strip()[:200]
-
-        if extracted.get("company_type"):
-            profile.company_type = extracted["company_type"].strip()[:100]
-
-        if extracted.get("website"):
-            profile.website = extracted["website"].strip()[:500]
-
-        if extracted.get("founded_year"):
+        if result.get("hq_city"):
+            profile.hq_city = str(result["hq_city"])[:200]
+        if result.get("hq_country"):
+            profile.hq_country = str(result["hq_country"])[:200]
+        if result.get("industry"):
+            profile.industry = str(result["industry"])[:200]
+        if result.get("company_type") and result["company_type"] in (
+            "startup", "kmu", "konzern", "beratung", "headhunter", "nonprofit", "public", "other"
+        ):
+            profile.company_type = result["company_type"]
+        if result.get("employee_range"):
+            profile.employee_range = str(result["employee_range"])[:100]
+        if result.get("founded_year"):
             try:
-                year_str = extracted["founded_year"].strip()
-                year = int("".join(c for c in year_str if c.isdigit())[:4])
+                year = int(result["founded_year"])
                 if 1800 <= year <= 2100:
                     profile.founded_year = year
-            except Exception:
+            except (TypeError, ValueError):
                 pass
+        if result.get("website"):
+            profile.website = str(result["website"])[:500]
+        if result.get("description"):
+            profile.description = str(result["description"])[:2000]
 
-        if extracted.get("employee_range"):
-            emp = extracted["employee_range"].strip()
-            profile.employee_range = emp[:100]
-
-        profile.linkedin_company_url = linkedin_url
-        profile.sync_source = "linkedin"
+        profile.sync_source = "ai"
         profile.sync_status = "done"
         profile.sync_error = None
         profile.last_synced_at = datetime.now(timezone.utc)
         db.commit()
-        logger.info("Synced company profile %s: %s", profile.id, profile.name_display)
+        logger.info("AI-synced company profile %s: %s", profile.id, profile.name_display)
 
+    except AINotConfigured as e:
+        profile.sync_status = "failed"
+        profile.sync_error = f"KI nicht konfiguriert: {e}"
+        db.commit()
     except Exception as e:
         logger.error("Failed to sync company %s: %s", profile.id, e)
         profile.sync_status = "failed"
