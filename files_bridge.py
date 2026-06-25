@@ -195,6 +195,35 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 500)
             return
 
+        if parsed.path == "/pick-folder":
+            try:
+                result = subprocess.run(
+                    ['osascript', '-e', 'POSIX path of (choose folder with prompt "Backup-Ordner wählen:")'],
+                    capture_output=True, text=True, timeout=60,
+                )
+                path = result.stdout.strip().rstrip('/')
+                if path:
+                    self._json({"path": path})
+                else:
+                    self._json({"error": "Kein Ordner ausgewählt"}, 400)
+            except subprocess.TimeoutExpired:
+                self._json({"error": "Timeout — kein Ordner ausgewählt"}, 400)
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+            return
+
+        if parsed.path == "/backup-read":
+            path = params.get("path", [""])[0]
+            if not path or not os.path.isfile(path):
+                self._json({"error": f"Datei nicht gefunden: {path}"}, 404)
+                return
+            try:
+                data = pathlib.Path(path).read_bytes()
+                self._json({"data_b64": base64.b64encode(data).decode(), "name": os.path.basename(path)})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+            return
+
         if parsed.path == "/backups":
             folder = params.get("folder", [""])[0]
             if not folder or not os.path.isdir(folder):
