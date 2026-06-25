@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { RefreshCw, ChevronDown, CheckCircle, AlertCircle, X, ArrowRight } from 'lucide-react'
+import { RefreshCw, ChevronDown, CheckCircle, AlertCircle, X, ArrowRight, Linkedin } from 'lucide-react'
 import { api } from '../api/client'
 import clsx from 'clsx'
 
 interface Props {
   onSynced: () => void
   onReviewOpen?: () => void
+  onLinkedIn?: () => void
 }
 
 interface SourceResult {
@@ -43,7 +44,7 @@ const SOURCE_CONFIGS: { key: string; label: string }[] = [
   { key: 'local_files',        label: 'Dokumente' },
 ]
 
-export function SyncButton({ onSynced, onReviewOpen }: Props) {
+export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
   const [syncing, setSyncing] = useState(false)
   const [open, setOpen] = useState(false)
   const [summary, setSummary] = useState<SyncSummary | null>(null)
@@ -212,16 +213,16 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
         </div>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 z-40 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+          <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
             <button
-              onClick={() => runSync(false)}
+              onClick={() => { setOpen(false); runSync(false) }}
               className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
             >
               <RefreshCw className="h-3.5 w-3.5 text-indigo-400" />
               Sync all
             </button>
             <button
-              onClick={() => runSync(true)}
+              onClick={() => { setOpen(false); runSync(true) }}
               className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
             >
               <RefreshCw className="h-3.5 w-3.5 text-amber-400" />
@@ -230,6 +231,18 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
                 <span className="block text-xs text-gray-400">Reset + neu einlesen</span>
               </span>
             </button>
+            {onLinkedIn && (
+              <>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  onClick={() => { setOpen(false); onLinkedIn() }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <Linkedin className="h-3.5 w-3.5 text-blue-600" />
+                  LinkedIn-Sync
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
