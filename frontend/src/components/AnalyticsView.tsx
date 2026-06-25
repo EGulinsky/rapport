@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend,
 } from 'recharts'
 import { api } from '../api/client'
-import type { AnalyticsSummary, CompanySyncStatus } from '../types'
+import type { AnalyticsSummary } from '../types'
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444']
 const INDIGO = '#6366f1'
@@ -36,10 +36,6 @@ export function AnalyticsView() {
   const [data, setData] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
-  const [syncLive, setSyncLive] = useState<CompanySyncStatus | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -55,68 +51,6 @@ export function AnalyticsView() {
   }, [])
 
   useEffect(() => { load() }, [load])
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
-
-  const startPolling = useCallback(() => {
-    stopPolling()
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await api.companySync.status()
-        setSyncLive(s)
-        if (!s.running) {
-          if (s.pending > 0) {
-            // Nächsten Batch starten
-            await api.companySync.run()
-          } else {
-            stopPolling()
-            setSyncing(false)
-            load()
-          }
-        }
-      } catch {
-        stopPolling()
-        setSyncing(false)
-      }
-    }, 1500)
-  }, [stopPolling, load])
-
-  useEffect(() => () => stopPolling(), [stopPolling])
-
-  async function startSync() {
-    setSyncing(true)
-    setSyncMsg(null)
-    setSyncLive(null)
-    try {
-      await api.companySync.resetLock()
-      const r = await api.companySync.run()
-      if (r.started) {
-        setSyncMsg(`${r.count} Firmenprofil(e) werden synchronisiert…`)
-        startPolling()
-      } else {
-        setSyncMsg(r.message || 'Kein Sync nötig.')
-        setSyncing(false)
-      }
-    } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : 'Fehler')
-      setSyncing(false)
-    }
-  }
-
-  async function resetFailed() {
-    try {
-      await api.companySync.resetFailed()
-      await load()
-      setSyncMsg('Fehlgeschlagene Profile zurückgesetzt.')
-    } catch {
-      setSyncMsg('Fehler beim Zurücksetzen.')
-    }
-  }
 
   if (loading) {
     return (
@@ -142,9 +76,7 @@ export function AnalyticsView() {
 
   if (!data) return null
 
-  const { kpis, funnel, by_month, by_source, hh_vs_direct, rejection_by_status, company_sync } = data
-  const liveSync = syncLive ?? company_sync
-  const liveTotal = (liveSync.done ?? 0) + (liveSync.pending ?? 0) + (liveSync.failed ?? 0)
+  const { kpis, funnel, by_month, by_source, hh_vs_direct, rejection_by_status } = data
 
   // HH vs Direct chart data
   const hhDirectData = [
@@ -296,69 +228,6 @@ export function AnalyticsView() {
           </ResponsiveContainer>
         </div>
       )}
-
-      {/* Company Sync */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">Firmendaten-Sync (KI)</h2>
-            <p className="text-xs text-gray-400 mb-3">
-              {liveTotal} Profile gesamt · {liveSync.done} synchronisiert · {liveSync.pending} ausstehend · {liveSync.failed} fehlgeschlagen
-            </p>
-            <div className="flex flex-wrap gap-2 text-sm">
-              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">
-                {liveSync.pending} ausstehend
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
-                {liveSync.done} fertig
-              </span>
-              {liveSync.failed > 0 && (
-                <button
-                  onClick={resetFailed}
-                  className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
-                >
-                  {liveSync.failed} fehlgeschlagen — zurücksetzen
-                </button>
-              )}
-            </div>
-            {syncing && syncLive?.current_company && (
-              <p className="text-xs text-indigo-500 mt-2 flex items-center gap-1.5">
-                <span className="animate-spin inline-block h-3 w-3 border-b-2 border-indigo-400 rounded-full shrink-0" />
-                <span className="truncate">{syncLive.current_company}</span>
-              </p>
-            )}
-            {syncMsg && !syncing && (
-              <p className="text-xs text-indigo-600 mt-2">{syncMsg}</p>
-            )}
-          </div>
-          <button
-            onClick={startSync}
-            disabled={syncing || company_sync.pending === 0}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-          >
-            {syncing ? (
-              <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
-            ) : null}
-            Firmendaten aktualisieren
-          </button>
-        </div>
-        {/* Progress bar */}
-        {liveTotal > 0 && (
-          <div className="mt-4 space-y-1">
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                style={{ width: `${(liveSync.done / liveTotal) * 100}%` }}
-              />
-            </div>
-            {syncing && (
-              <p className="text-xs text-gray-400 text-right">
-                {liveSync.done} / {liveTotal}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Additional KPIs row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

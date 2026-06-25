@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
-import type { CompanyProfile } from '../types'
+import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
 
 type SortKey = 'name' | 'industry' | 'apps' | 'sync_status'
@@ -40,6 +40,11 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [syncLive, setSyncLive] = useState<CompanySyncStatus | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -54,6 +59,69 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
   }, [load])
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }, [])
+
+  const startPolling = useCallback(() => {
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await api.companySync.status()
+        setSyncLive(s)
+        if (!s.running) {
+          if (s.pending > 0) {
+            await api.companySync.run()
+          } else {
+            stopPolling()
+            setSyncing(false)
+            load()
+          }
+        }
+      } catch {
+        stopPolling()
+        setSyncing(false)
+      }
+    }, 1500)
+  }, [stopPolling, load])
+
+  useEffect(() => () => stopPolling(), [stopPolling])
+
+  async function startSync() {
+    setSyncing(true)
+    setSyncMsg(null)
+    setSyncLive(null)
+    try {
+      await api.companySync.resetLock()
+      const r = await api.companySync.run()
+      if (r.started) {
+        setSyncMsg(`${r.count} Firmenprofil(e) werden synchronisiert…`)
+        startPolling()
+      } else {
+        setSyncMsg(r.message || 'Kein Sync nötig.')
+        setSyncing(false)
+      }
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : 'Fehler')
+      setSyncing(false)
+    }
+  }
+
+  async function resetFailed() {
+    try {
+      await api.companySync.resetFailed()
+      await load()
+      setSyncMsg('Fehlgeschlagene Profile zurückgesetzt.')
+    } catch {
+      setSyncMsg('Fehler beim Zurücksetzen.')
+    }
+  }
+
+  const pending = syncLive?.pending ?? companies.filter(c => c.sync_status === 'pending').length
+  const done = syncLive?.done ?? companies.filter(c => c.sync_status === 'done').length
+  const failed = syncLive?.failed ?? companies.filter(c => c.sync_status === 'failed').length
+  const total = pending + done + failed
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -100,7 +168,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
@@ -111,7 +180,52 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           />
         </div>
         {loading && <span className="text-xs text-gray-400">Laden…</span>}
+        <button
+          onClick={startSync}
+          disabled={syncing || pending === 0}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+        >
+          {syncing
+            ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
+            : <RefreshCw className="h-3.5 w-3.5" />}
+          Firmendaten aktualisieren
+        </button>
+        {failed > 0 && (
+          <button
+            onClick={resetFailed}
+            className="rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
+          >
+            {failed} fehlgeschlagen — zurücksetzen
+          </button>
+        )}
       </div>
+
+      {/* Sync status bar */}
+      {(syncing || total > 0) && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>
+              {done} synchronisiert · {pending} ausstehend · {failed} fehlgeschlagen
+            </span>
+            {syncing && syncLive?.current_company && (
+              <span className="flex items-center gap-1.5 text-indigo-500 truncate max-w-xs">
+                <span className="animate-spin inline-block h-3 w-3 border-b-2 border-indigo-400 rounded-full shrink-0" />
+                {syncLive.current_company}
+              </span>
+            )}
+          </div>
+          {total > 0 && (
+            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
+              />
+            </div>
+          )}
+          {syncMsg && <p className="text-xs text-indigo-600">{syncMsg}</p>}
+        </div>
+      )}
+
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="w-full text-sm">
