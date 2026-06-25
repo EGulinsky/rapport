@@ -67,6 +67,21 @@ interface OllamaModel {
   size_gb: number
 }
 
+const POPULAR_OLLAMA_MODELS: OllamaModel[] = [
+  { name: 'llama3.2',       display: 'Llama 3.2',    params: '3B',   size_gb: 2.0 },
+  { name: 'llama3.2:1b',   display: 'Llama 3.2',    params: '1B',   size_gb: 0.8 },
+  { name: 'llama3.1:8b',   display: 'Llama 3.1',    params: '8B',   size_gb: 4.7 },
+  { name: 'qwen2.5:7b',    display: 'Qwen 2.5',     params: '7B',   size_gb: 4.4 },
+  { name: 'qwen2.5:14b',   display: 'Qwen 2.5',     params: '14B',  size_gb: 9.0 },
+  { name: 'mistral',        display: 'Mistral',       params: '7B',   size_gb: 4.1 },
+  { name: 'mistral-nemo',  display: 'Mistral Nemo',  params: '12B',  size_gb: 7.1 },
+  { name: 'phi4-mini',     display: 'Phi-4 Mini',    params: '3.8B', size_gb: 2.5 },
+  { name: 'phi4',           display: 'Phi-4',         params: '14B',  size_gb: 9.1 },
+  { name: 'gemma3:4b',     display: 'Gemma 3',       params: '4B',   size_gb: 3.3 },
+  { name: 'gemma3:12b',    display: 'Gemma 3',       params: '12B',  size_gb: 8.1 },
+  { name: 'deepseek-r1:7b', display: 'DeepSeek-R1', params: '7B',   size_gb: 4.7 },
+]
+
 interface PullProgress {
   model: string
   status: string
@@ -92,7 +107,6 @@ export function AiSettingsModal({ onClose }: Props) {
   // Ollama model picker state
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null)
   const [ollamaInstalled, setOllamaInstalled] = useState<string[]>([])
-  const [ollamaPopular, setOllamaPopular] = useState<OllamaModel[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [pulling, setPulling] = useState<PullProgress | null>(null)
 
@@ -117,19 +131,20 @@ export function AiSettingsModal({ onClose }: Props) {
       const r = await api.settings.listOllamaModels(baseUrl || 'http://host.docker.internal:11434')
       setOllamaReachable(r.reachable)
       setOllamaInstalled(r.installed)
-      setOllamaPopular(r.popular)
     } catch {
       setOllamaReachable(false)
+      setOllamaInstalled([])
     } finally {
       setLoadingModels(false)
     }
   }, [])
 
+  // Load installed models when modal opens with Ollama selected
   useEffect(() => {
     if (form.provider === 'ollama' && !loading) {
       loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
     }
-  }, [form.provider, loading, loadOllamaModels, form.base_url])
+  }, [loading]) // only on initial load — selectProvider handles the rest
 
   async function autoSave(patch: Partial<AiSettingsWrite>, currentForm = form) {
     const merged = { ...currentForm, ...patch }
@@ -150,10 +165,14 @@ export function AiSettingsModal({ onClose }: Props) {
 
   function selectProvider(p: typeof PROVIDERS[number]) {
     const defaultUrl = 'defaultUrl' in p ? p.defaultUrl : 'http://host.docker.internal:11434'
-    const patch = { provider: p.id, model: p.model, base_url: p.needsUrl ? (form.base_url || defaultUrl) : '' }
+    const baseUrl = p.needsUrl ? (form.base_url || defaultUrl) : ''
+    const patch = { provider: p.id, model: p.model, base_url: baseUrl }
     setForm(f => ({ ...f, ...patch }))
     setTestResult(null)
     autoSave(patch)
+    if (p.needsUrl) {
+      loadOllamaModels(baseUrl)
+    }
   }
 
   function selectOllamaModel(name: string) {
@@ -369,11 +388,11 @@ export function AiSettingsModal({ onClose }: Props) {
                   )}
 
                   {/* Popular models to download */}
-                  {ollamaPopular.length > 0 && (
+                  {POPULAR_OLLAMA_MODELS.length > 0 && (
                     <div>
                       <p className="text-xs text-gray-400 mb-1.5">Verfügbar zum Download</p>
                       <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                        {ollamaPopular
+                        {POPULAR_OLLAMA_MODELS
                           .filter(m => !ollamaInstalled.some(i => i === m.name || i.startsWith(m.name + ':')))
                           .map(m => {
                             const isPulling = pulling?.model === m.name
