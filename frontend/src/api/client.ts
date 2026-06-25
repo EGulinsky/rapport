@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary } from '../types'
 
 const BASE = '/api'
 
@@ -325,6 +325,15 @@ export const api = {
       }),
     description: (url: string) =>
       request<{ description: string }>(`/jobsearch/description?url=${encodeURIComponent(url)}`),
+  },
+
+  analytics: {
+    summary: () => request<AnalyticsSummary>('/analytics/summary'),
+  },
+
+  companySync: {
+    status: () => request<{ pending: number; done: number; failed: number; profiles: unknown[] }>('/sync/company/status'),
+    run: () => request<{ started: boolean; count: number }>('/sync/company/run', { method: 'POST' }),
   },
 
   audit: {

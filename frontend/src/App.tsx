@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList } from 'lucide-react'
+import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2 } from 'lucide-react'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
@@ -13,6 +13,7 @@ import { LinkedInSyncButton } from './components/LinkedInSyncButton'
 import { ContactsView } from './components/ContactsView'
 import { CalendarView } from './components/CalendarView'
 import { JobSearchView } from './components/JobSearchView'
+import { AnalyticsView } from './components/AnalyticsView'
 import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
@@ -28,7 +29,7 @@ import { Calendar, Telescope } from 'lucide-react'
 import clsx from 'clsx'
 
 type ViewMode = 'table' | 'kanban'
-type MainView = 'jobsearch' | 'applications' | 'contacts' | 'calendar'
+type MainView = 'jobsearch' | 'applications' | 'contacts' | 'calendar' | 'analytics'
 
 export default function App() {
   const [apps, setApps] = useState<Application[]>([])
@@ -153,6 +154,12 @@ export default function App() {
                 >
                   <Calendar className="h-3.5 w-3.5" /> Kalender
                 </button>
+                <button
+                  onClick={() => setMainView('analytics')}
+                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'analytics' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                >
+                  <BarChart2 className="h-3.5 w-3.5" /> Auswertungen
+                </button>
               </div>
             </div>
 
@@ -217,6 +224,9 @@ export default function App() {
         )}
         {mainView === 'calendar' && (
           <CalendarView onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }} />
+        )}
+        {mainView === 'analytics' && (
+          <AnalyticsView />
         )}
         {mainView === 'applications' && (<>
         {/* Stats */}
