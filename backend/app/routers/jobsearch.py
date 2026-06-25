@@ -207,7 +207,7 @@ async def _linkedin_search(query: str, location: str, db: Session) -> list[dict]
     if not cfg or not cfg.email or not cfg.password_enc:
         raise ValueError("LinkedIn nicht konfiguriert — bitte unter Einstellungen einrichten")
 
-    from app.security import decrypt_api_key
+    from app.ai.provider import decrypt_api_key
     from app.routers.sync_linkedin import _login, _accept_consent
 
     try:
