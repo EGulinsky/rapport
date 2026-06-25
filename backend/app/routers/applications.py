@@ -8,6 +8,7 @@ from app.database import get_db
 from app import models, schemas
 from app.models import MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.audit import add_audit
+from app.dedup import norm_firma
 
 
 def _status_label(main: str, sub: str | None) -> str:
@@ -69,6 +70,39 @@ def _compute_naechster_schritt(
         return "Bewerbung vorbereiten"
 
     return ""
+
+def _ensure_company_profile(db: Session, app: models.Application) -> None:
+    """Create or link CompanyProfile for the application's firma (and zielfirma if HH)."""
+    if app.firma:
+        key = norm_firma(app.firma)
+        profile = db.query(models.CompanyProfile).filter(
+            models.CompanyProfile.name_norm == key
+        ).first()
+        if not profile:
+            profile = models.CompanyProfile(
+                name_norm=key,
+                name_display=app.firma,
+                sync_status="pending",
+            )
+            db.add(profile)
+            db.flush()
+        app.company_profile_id = profile.id
+
+    if app.is_headhunter and app.zielfirma_bei_hh:
+        zkey = norm_firma(app.zielfirma_bei_hh)
+        zprofile = db.query(models.CompanyProfile).filter(
+            models.CompanyProfile.name_norm == zkey
+        ).first()
+        if not zprofile:
+            zprofile = models.CompanyProfile(
+                name_norm=zkey,
+                name_display=app.zielfirma_bei_hh,
+                sync_status="pending",
+            )
+            db.add(zprofile)
+            db.flush()
+        app.target_company_profile_id = zprofile.id
+
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
@@ -218,6 +252,7 @@ def create_application(payload: schemas.ApplicationCreate, db: Session = Depends
     app.letztes_update = date.today()
     db.add(app)
     db.flush()  # get app.id before creating event
+    _ensure_company_profile(db, app)
     event = models.Event(
         application_id=app.id,
         typ="bewerbung",
@@ -261,9 +296,13 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
                 add_audit(db, "update", "user", app_id=app_id,
                           field=f, old_value=str(old_v or ""), new_value=str(v or ""))
 
+    firma_changed = "firma" in update_data or "zielfirma_bei_hh" in update_data or "is_headhunter" in update_data
     for field, value in update_data.items():
         setattr(app, field, value)
     app.letztes_update = date.today()
+
+    if firma_changed:
+        _ensure_company_profile(db, app)
 
     new_main = app.main_status
     new_sub  = app.sub_status

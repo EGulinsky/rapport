@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.0',
+    date: '2026-06-25',
+    changes: [
+      'Neu: Auswertungen-Tab — KPI-Kacheln, Conversion-Funnel, Pipeline-Donut, Quellen-Balken, HH-vs-Direkt-Vergleich, Bewerbungen über Zeit, Absagen nach Phase.',
+      'Backend: GET /api/analytics/summary — berechnet alle KPIs, Funnel, Monatsverteilung und Firmenprofil-Sync-Status direkt aus der DB.',
+      'Firmendaten-Sync: POST /api/sync/company/run — startet LinkedIn-Scraping für ausstehende CompanyProfile im Hintergrund (max. 10 pro Run).',
+      'Auto-CompanyProfile: Beim Anlegen/Aktualisieren von Bewerbungen werden Firmennamen automatisch normalisiert und in company_profiles eingetragen (sync_status=pending).',
+    ],
+  },
+  {
     version: '3.1.0',
     date: '2026-06-25',
     changes: [

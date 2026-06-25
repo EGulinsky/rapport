@@ -439,3 +439,46 @@ export interface JobSearchResponse {
   portals: LinkPortal[]
   linkedin_error?: string
 }
+
+export interface AnalyticsFunnelItem {
+  status: string
+  label: string
+  count: number
+  pct: number
+}
+
+export interface AnalyticsByMonth {
+  month: string
+  label: string
+  count: number
+}
+
+export interface AnalyticsHHGroup {
+  total: number
+  gespräch: number
+  offer: number
+}
+
+export interface AnalyticsSummary {
+  kpis: {
+    total: number
+    active: number
+    rejected: number
+    signed: number
+    ghosting_count: number
+    ghosting_rate: number
+    hh_count: number
+    direct_count: number
+    hh_pct: number
+    conversion_gespräch: number
+    conversion_offer: number
+    avg_days_to_gespräch: number | null
+    avg_days_applied_to_rejected: number | null
+  }
+  funnel: AnalyticsFunnelItem[]
+  by_month: AnalyticsByMonth[]
+  by_source: Array<{ source: string; count: number }>
+  hh_vs_direct: { hh: AnalyticsHHGroup; direct: AnalyticsHHGroup }
+  rejection_by_status: Array<{ status: string; label: string; count: number }>
+  company_sync: { total: number; pending: number; done: number; failed: number }
+}
