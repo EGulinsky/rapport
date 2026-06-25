@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.1',
+    date: '2026-06-25',
+    changes: [
+      'Firmensynchronisation von Analytics auf die Firmen-Seite verschoben — Sync-Button, Fortschrittsbalken und Fehler-Reset direkt in der Firmentabelle.',
+    ],
+  },
+  {
     version: '3.3.0',
     date: '2026-06-25',
     changes: [
