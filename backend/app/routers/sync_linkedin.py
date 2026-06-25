@@ -284,7 +284,6 @@ LOGIN_URL = "https://www.linkedin.com/login"
 _TRACKER  = "https://www.linkedin.com/jobs-tracker/?stage="
 
 # (card_type, label, default_status, max_pages, url)
-# Alle Tabs über jobs-tracker/?stage= — vollständige Pagination für alle.
 CATEGORIES: list[tuple[str, str, str, int, str]] = [
     ("SAVED",       "Gespeichert",    "prospecting", 99, _TRACKER + "saved"),
     ("IN_PROGRESS", "In Bearbeitung", "applied",     99, _TRACKER + "in-progress"),
@@ -651,7 +650,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     except Exception:
         return []
 
-    if "login" in page.url or "authwall" in page.url or "jobs-tracker" not in page.url:
+    landed_url = page.url
+    if "login" in landed_url or "authwall" in landed_url or "jobs-tracker" not in landed_url:
+        _state["errors"].append(f"[DEBUG] {card_type}: goto {base_url!r} → landed on {landed_url!r} — skip")
         return []
 
     await _accept_consent(page)
@@ -926,9 +927,9 @@ async def _async_sync(cfg_id: int):
 
             page = await context.new_page()
 
-            # Check session validity
+            # Check session validity — /feed redirects to uas/login when session expired
             _state["step"] = "Session prüfen: öffne LinkedIn…"
-            check_url = _TRACKER + "applied"
+            check_url = "https://www.linkedin.com/feed/"
             try:
                 await page.goto(check_url, wait_until="domcontentloaded", timeout=20000)
                 _state["step"] = f"Session prüfen: geladen ({page.url[:60]})"
@@ -936,10 +937,10 @@ async def _async_sync(cfg_id: int):
                 _state["step"] = f"Session prüfen: Fallback auf Startseite ({nav_err})"
                 await page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=20000)
 
-            # Session invalid if redirected to login, authwall, or any non-tracker page
-            _not_on_tracker = "jobs-tracker" not in page.url
-            if "login" in page.url or "authwall" in page.url or "uas/login" in page.url or _not_on_tracker:
-                if _not_on_tracker:
+            # Session invalid if redirected away from feed (to login/authwall)
+            _not_on_feed = "linkedin.com/feed" not in page.url
+            if "login" in page.url or "authwall" in page.url or "uas/login" in page.url or _not_on_feed:
+                if _not_on_feed:
                     _state["step"] = f"Session abgelaufen (Redirect auf {page.url[:60]}) — neu einloggen…"
                 logged_in = await _login(page, email, password)
                 if not logged_in:
@@ -947,7 +948,6 @@ async def _async_sync(cfg_id: int):
                     if _state["status"] != "needs_login":
                         _state["status"] = "error"
                     return
-
             # Save fresh session cookies
             cookies = await context.cookies()
             cfg.session_cookies = json.dumps(cookies)
