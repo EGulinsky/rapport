@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.6.4',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Generische Abteilungs-Mailadressen (career@, jobs@, recruiting@, bewerbung@, hr@ u.a.) werden nicht mehr als Kontakte angelegt und nicht an mehrere Bewerbungen angehängt.',
+    ],
+  },
+  {
     version: '2.6.3',
     date: '2026-06-25',
     changes: [

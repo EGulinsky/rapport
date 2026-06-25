@@ -54,7 +54,21 @@ _SKIP_CONTACT_LOCALS = frozenset({
     "noreply", "no-reply", "donotreply", "notifications", "notification",
     "mailer-daemon", "postmaster", "support", "hello", "info", "contact",
     "newsletter", "automatisch", "automated", "reply", "bounce",
+    # Generic HR / department mailboxes — not a real person
+    "career", "careers", "jobs", "job", "apply", "application", "applications",
+    "recruiting", "recruitment", "recruiter", "talent", "talentacquisition",
+    "hr", "humanresources", "personalwesen", "personal",
+    "bewerbung", "bewerbungen", "bewerber", "bewerbungsmanagement",
+    "stellenangebot", "stellenangebote", "jobangebot", "jobangebote",
+    "work", "hiring", "jobapplication",
 })
+
+# Substrings that mark a local part as a generic mailbox even when combined
+# e.g. "career-jobs", "recruiting-team", "hr.europe"
+_SKIP_CONTACT_SUBSTRINGS = (
+    "noreply", "no-reply", "donotreply",
+    "career", "recruiting", "recruitment", "bewerbung", "bewerber",
+)
 
 # ATS systems use per-message tracking addresses — the email is not the person's real address.
 _ATS_TRACKING_DOMAINS = frozenset({
@@ -194,7 +208,7 @@ def _upsert_contact(
     if not email_addr or "@" not in email_addr:
         return
     local = email_addr.split("@")[0].lower().strip(".-_+")
-    if local in _SKIP_CONTACT_LOCALS or any(s in local for s in ("noreply", "no-reply", "donotreply")):
+    if local in _SKIP_CONTACT_LOCALS or any(s in local for s in _SKIP_CONTACT_SUBSTRINGS):
         return
     if email_addr in _get_owner_emails(db):
         return
