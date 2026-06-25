@@ -651,7 +651,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     except Exception:
         return []
 
-    if "login" in page.url or "authwall" in page.url:
+    if "login" in page.url or "authwall" in page.url or "jobs-tracker" not in page.url:
         return []
 
     await _accept_consent(page)
@@ -936,7 +936,11 @@ async def _async_sync(cfg_id: int):
                 _state["step"] = f"Session prüfen: Fallback auf Startseite ({nav_err})"
                 await page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=20000)
 
-            if "login" in page.url or "authwall" in page.url or "uas/login" in page.url:
+            # Session invalid if redirected to login, authwall, or any non-tracker page
+            _not_on_tracker = "jobs-tracker" not in page.url
+            if "login" in page.url or "authwall" in page.url or "uas/login" in page.url or _not_on_tracker:
+                if _not_on_tracker:
+                    _state["step"] = f"Session abgelaufen (Redirect auf {page.url[:60]}) — neu einloggen…"
                 logged_in = await _login(page, email, password)
                 if not logged_in:
                     await browser.close()
