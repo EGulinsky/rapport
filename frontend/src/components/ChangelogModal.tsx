@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.7',
+    date: '2026-06-25',
+    changes: [
+      'Neu: Firmenlogos in der Firmenliste — wird automatisch via Clearbit geladen, Initialen als Fallback.',
+      'Fix: Firmenprofil-Button im Bewerbungsmodal war nie klickbar (company_profile_id fehlte im Detail-Endpoint).',
+      'Fix: "Firmendaten aktualisieren" war nach erstem Sync dauerhaft deaktiviert.',
+    ],
+  },
+  {
     version: '3.3.6',
     date: '2026-06-25',
     changes: [
