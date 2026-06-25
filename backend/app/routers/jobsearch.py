@@ -217,35 +217,49 @@ _EXTRACT_JS = """() => {
 
 # Extract full job description from a LI job detail page
 _DESCRIPTION_JS = """() => {
-    function isNavJunk(el) {
-        const t = (el.innerText || '').trim();
-        return /skip to (search|main|content|footer|aside)/i.test(t);
+    // LI hashes all CSS class names — use structural heuristics instead
+    function insideNavOrChrome(el) {
+        let n = el;
+        while (n) {
+            const tag = n.tagName;
+            if (tag === 'NAV' || tag === 'HEADER' || tag === 'FOOTER') return true;
+            const role = n.getAttribute && n.getAttribute('role');
+            if (role === 'navigation' || role === 'banner') return true;
+            n = n.parentElement;
+        }
+        return false;
     }
-    const selectors = [
+
+    // Try known stable selectors first (future-proofing)
+    const stableSelectors = [
         '#job-details',
-        '.jobs-description__content',
-        '.jobs-description-content__text',
-        'article.jobs-description',
-        '[class*="jobs-description__container"]',
-        '.description__text',
         '[data-view-name="job-view-description"]',
+        'article.jobs-description',
         'div[class*="show-more-less-html"]',
-        'div[class*="jobs-box__html-content"]',
-        'section.jobs-view-layout__job-details',
     ];
-    for (const sel of selectors) {
+    for (const sel of stableSelectors) {
         const el = document.querySelector(sel);
-        if (el && el.innerText.trim().length > 100 && !isNavJunk(el)) return el.innerHTML;
+        if (el && el.innerText.trim().length > 200 && !insideNavOrChrome(el)) return el.innerHTML;
     }
-    // Heading-based fallback: look for "About the job" section
-    const headings = [...document.querySelectorAll('h2, h3')];
-    const about = headings.find(h => /about the job|über die stelle|über die position|job description/i.test(h.innerText));
-    if (about) {
-        let html = '';
-        let el = about.nextElementSibling;
-        while (el && !/^H[23]$/.test(el.tagName)) { html += el.outerHTML; el = el.nextElementSibling; }
-        if (html.trim().length > 50) return html;
-    }
+
+    // Structural fallback: find the richest content block outside chrome
+    const candidates = [...document.querySelectorAll('div, article, section')]
+        .filter(el => {
+            if (insideNavOrChrome(el)) return false;
+            const t = (el.innerText || '').trim();
+            if (t.length < 400 || t.length > 20000) return false;
+            if (/skip to (search|main|content)/i.test(t)) return false;
+            return true;
+        })
+        .map(el => ({
+            el,
+            richness: el.querySelectorAll('p, li, h1, h2, h3, h4, strong, em, ul, ol').length,
+            len: el.innerText.trim().length,
+        }))
+        .filter(c => c.richness >= 3)
+        .sort((a, b) => b.richness - a.richness);
+
+    if (candidates.length > 0) return candidates[0].el.innerHTML;
     return '';
 }"""
 
@@ -476,26 +490,6 @@ async def _load_description(job_url: str, db: Session) -> str:
         except Exception:
             pass
         await asyncio.sleep(0.5)
-
-        # Debug: dump classes of all divs with substantial text
-        debug_info = ""
-        try:
-            debug_info = await page.evaluate("""() => {
-                const items = [...document.querySelectorAll('div, article, section')]
-                    .filter(el => (el.innerText||'').trim().length > 200 && (el.innerText||'').trim().length < 5000)
-                    .map(el => ({
-                        tag: el.tagName,
-                        cls: el.className?.toString().slice(0,120) || '',
-                        id: el.id || '',
-                        len: (el.innerText||'').trim().length,
-                        dataView: el.getAttribute('data-view-name') || '',
-                    }));
-                return JSON.stringify(items.slice(0, 30));
-            }""")
-        except Exception as e:
-            debug_info = str(e)
-        import logging
-        logging.getLogger("jobsearch").warning("DOM DUMP url=%s\n%s", job_url, debug_info)
 
         description = ""
         try:

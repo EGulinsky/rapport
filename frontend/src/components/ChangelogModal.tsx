@@ -12,7 +12,7 @@ const CHANGELOG: Release[] = [
     version: '3.0.1',
     date: '2026-06-25',
     changes: [
-      'Fix: Stellenbeschreibung in Jobsuche wird jetzt korrekt geladen — aktualisierte LI-DOM-Selektoren, Scroll-Trigger und "Mehr anzeigen"-Klick für vollständige Beschreibungen.',
+      'Fix: Stellenbeschreibung in Jobsuche — strukturbasierte DOM-Erkennung statt Klassenname (LI hasht alle CSS-Klassen). Findet den reichsten Inhaltsblock außerhalb von Nav/Header/Footer.',
     ],
   },
   {
