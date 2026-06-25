@@ -477,6 +477,26 @@ async def _load_description(job_url: str, db: Session) -> str:
             pass
         await asyncio.sleep(0.5)
 
+        # Debug: dump classes of all divs with substantial text
+        debug_info = ""
+        try:
+            debug_info = await page.evaluate("""() => {
+                const items = [...document.querySelectorAll('div, article, section')]
+                    .filter(el => (el.innerText||'').trim().length > 200 && (el.innerText||'').trim().length < 5000)
+                    .map(el => ({
+                        tag: el.tagName,
+                        cls: el.className?.toString().slice(0,120) || '',
+                        id: el.id || '',
+                        len: (el.innerText||'').trim().length,
+                        dataView: el.getAttribute('data-view-name') || '',
+                    }));
+                return JSON.stringify(items.slice(0, 30));
+            }""")
+        except Exception as e:
+            debug_info = str(e)
+        import logging
+        logging.getLogger("jobsearch").warning("DOM DUMP url=%s\n%s", job_url, debug_info)
+
         description = ""
         try:
             description = await page.evaluate(_DESCRIPTION_JS)
