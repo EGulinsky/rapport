@@ -211,10 +211,19 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
                       <button
                         key={app.id}
                         onClick={() => onOpenApplication?.(app.id)}
-                        className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors"
+                        className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors flex items-center justify-between gap-2"
                       >
-                        <p className="text-sm font-medium text-gray-900 truncate">{app.firma}</p>
-                        <p className="text-xs text-gray-500 truncate">{app.rolle}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{app.rolle}</p>
+                          {app.datum_bewerbung && (
+                            <p className="text-xs text-gray-400">
+                              {new Date(app.datum_bewerbung).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </p>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+                          {app.main_status}
+                        </span>
                       </button>
                     ))}
                   </div>

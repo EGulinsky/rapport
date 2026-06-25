@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 
 from app.database import get_db
 from app.models import CompanyProfile
@@ -31,6 +31,7 @@ class CompanyApplicationRef(BaseModel):
     firma: str
     rolle: str
     main_status: str
+    datum_bewerbung: Optional[date] = None
 
     model_config = {"from_attributes": True}
 
@@ -129,6 +130,7 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
                 firma=a.firma,
                 rolle=a.rolle,
                 main_status=a.main_status,
+                datum_bewerbung=a.datum_bewerbung,
             ))
 
     ids = {a.id for a in profile.applications} | {a.id for a in profile.hh_applications}
