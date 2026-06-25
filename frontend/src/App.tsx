@@ -306,8 +306,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* Main content */}
-        {viewMode === 'table' ? (
+        {/* Table (only in table mode — Kanban is rendered outside max-w-7xl below) */}
+        {viewMode === 'table' && (
           <ApplicationTable
             applications={visibleApps}
             onSelect={setSelectedId}
@@ -319,11 +319,14 @@ export default function App() {
               return next
             })}
           />
-        ) : (
-          <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} />
         )}
         </>)}
       </main>
+
+      {/* Kanban: full viewport width, outside max-w-7xl */}
+      {mainView === 'applications' && viewMode === 'kanban' && (
+        <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} />
+      )}
 
       {/* Modal */}
       {selectedId !== null && selectedId > 0 && (
