@@ -217,7 +217,6 @@ _EXTRACT_JS = """() => {
 
 # Extract full job description from a LI job detail page
 _DESCRIPTION_JS = """() => {
-    // New LI UI: #job-details or article with description
     const selectors = [
         '#job-details',
         '.jobs-description__content',
@@ -225,12 +224,18 @@ _DESCRIPTION_JS = """() => {
         'article.jobs-description',
         '[class*="jobs-description__container"]',
         '.description__text',
+        // 2025 LI DOM
+        '[data-view-name="job-view-description"]',
+        'div[class*="show-more-less-html"]',
+        'div[class*="jobs-box__html-content"]',
+        '[class*="description__text"]',
+        'section.jobs-view-layout__job-details',
     ];
     for (const sel of selectors) {
         const el = document.querySelector(sel);
         if (el && el.innerText.trim().length > 100) return el.innerText.trim();
     }
-    // Fallback: find "About the job" section
+    // Fallback: heading-based search
     const headings = [...document.querySelectorAll('h2, h3')];
     const about = headings.find(h => /about the job|über die stelle|über die position|job description/i.test(h.innerText));
     if (about) {
@@ -241,6 +246,15 @@ _DESCRIPTION_JS = """() => {
             el = el.nextElementSibling;
         }
         if (text.trim().length > 50) return text.trim();
+    }
+    // Last resort: longest text block between 300 and 30000 chars
+    const candidates = [...document.querySelectorAll('div, article, section')]
+        .map(el => ({ el, len: (el.innerText || '').trim().length }))
+        .filter(({ len }) => len > 300 && len < 30000)
+        .sort((a, b) => b.len - a.len);
+    for (const { el } of candidates.slice(0, 3)) {
+        const text = el.innerText.trim();
+        if (text.length > 300) return text;
     }
     return '';
 }"""
@@ -429,7 +443,7 @@ async def _load_description(job_url: str, db: Session) -> str:
 
         page = await context.new_page()
         try:
-            await page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(job_url, wait_until="load", timeout=30000)
         except Exception as e:
             await browser.close()
             raise ValueError(f"Seite nicht erreichbar: {e}")
@@ -441,14 +455,27 @@ async def _load_description(job_url: str, db: Session) -> str:
             if not logged_in:
                 await browser.close()
                 raise ValueError("LinkedIn Login fehlgeschlagen")
-            await page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(job_url, wait_until="load", timeout=30000)
             await _accept_consent(page)
 
-        # Wait for description to load
+        # Scroll to trigger lazy loading
+        await page.evaluate("window.scrollBy(0, 600)")
+        await asyncio.sleep(0.5)
+
+        # Try "See more" button to expand truncated description
+        try:
+            btn = page.locator('button:has-text("See more"), button:has-text("Mehr anzeigen"), button[aria-label*="description"]').first
+            if await btn.is_visible(timeout=2000):
+                await btn.click()
+                await asyncio.sleep(0.5)
+        except Exception:
+            pass
+
+        # Wait for any known description container
         try:
             await page.wait_for_selector(
-                '#job-details, .jobs-description__content, .description__text',
-                timeout=8000,
+                '#job-details, .jobs-description__content, .description__text, [data-view-name="job-view-description"], div[class*="show-more-less-html"]',
+                timeout=10000,
             )
         except Exception:
             pass
