@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.6',
+    date: '2026-06-25',
+    changes: [
+      'Fix: LI-Sync Session-Erkennung — nutzt jetzt /feed statt jobs-tracker als Check-URL, damit abgelaufene Sessions zuverlässig erkannt und neu eingeloggt werden.',
+      'UX: 2FA-Dialog erklärt jetzt App-Bestätigung als primäre Option; Code-Eingabe bleibt als Fallback.',
+    ],
+  },
+  {
     version: '3.3.5',
     date: '2026-06-25',
     changes: [
