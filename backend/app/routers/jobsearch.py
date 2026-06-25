@@ -233,19 +233,19 @@ _DESCRIPTION_JS = """() => {
     ];
     for (const sel of selectors) {
         const el = document.querySelector(sel);
-        if (el && el.innerText.trim().length > 100) return el.innerText.trim();
+        if (el && el.innerText.trim().length > 100) return el.innerHTML;
     }
     // Fallback: heading-based search
     const headings = [...document.querySelectorAll('h2, h3')];
     const about = headings.find(h => /about the job|über die stelle|über die position|job description/i.test(h.innerText));
     if (about) {
-        let text = '';
+        let html = '';
         let el = about.nextElementSibling;
         while (el && !/^H[23]$/.test(el.tagName)) {
-            text += el.innerText + '\\n';
+            html += el.outerHTML;
             el = el.nextElementSibling;
         }
-        if (text.trim().length > 50) return text.trim();
+        if (html.trim().length > 50) return html;
     }
     // Last resort: longest text block between 300 and 30000 chars
     const candidates = [...document.querySelectorAll('div, article, section')]
@@ -253,8 +253,7 @@ _DESCRIPTION_JS = """() => {
         .filter(({ len }) => len > 300 && len < 30000)
         .sort((a, b) => b.len - a.len);
     for (const { el } of candidates.slice(0, 3)) {
-        const text = el.innerText.trim();
-        if (text.length > 300) return text;
+        if (el.innerText.trim().length > 300) return el.innerHTML;
     }
     return '';
 }"""

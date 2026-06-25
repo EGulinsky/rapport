@@ -121,9 +121,10 @@ function DescriptionPanel({ job }: { job: JobResult }) {
           </p>
         )}
         {desc && !loading && (
-          <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {desc}
-          </div>
+          <div
+            className="prose prose-sm max-w-none text-gray-700 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_strong]:font-semibold [&_p]:my-1.5"
+            dangerouslySetInnerHTML={{ __html: desc }}
+          />
         )}
         {!loading && !desc && !error && (
           <p className="text-sm text-gray-400 italic">Beschreibung wird geladen…</p>
