@@ -63,6 +63,26 @@ async def company_sync_run(
     return {"started": True, "count": count}
 
 
+@router.post("/reset-lock")
+def reset_lock():
+    global _SYNC_RUNNING
+    _SYNC_RUNNING = False
+    return {"ok": True}
+
+
+@router.post("/reset-failed")
+def reset_failed(db: Session = Depends(get_db)):
+    """Reset all failed profiles back to pending."""
+    updated = db.query(models.CompanyProfile).filter(
+        models.CompanyProfile.sync_status == "failed"
+    ).all()
+    for p in updated:
+        p.sync_status = "pending"
+        p.sync_error = None
+    db.commit()
+    return {"reset": len(updated)}
+
+
 @router.post("/profiles/{profile_id}/reset")
 def reset_profile(profile_id: int, db: Session = Depends(get_db)):
     profile = db.query(models.CompanyProfile).filter(models.CompanyProfile.id == profile_id).first()
@@ -100,122 +120,132 @@ async def _sync_one_company(db: Session, profile: models.CompanyProfile):
     """Scrape LinkedIn company page and update profile fields."""
     try:
         from playwright.async_api import async_playwright
+        from app.routers.sync_linkedin import _login, _accept_consent
 
         li_sync = db.query(models.LinkedInSync).first()
+        if not li_sync or not li_sync.email or not li_sync.password_enc:
+            profile.sync_status = "failed"
+            profile.sync_error = "LinkedIn nicht konfiguriert"
+            db.commit()
+            return
+
+        from app.ai.provider import decrypt_api_key
+        password = decrypt_api_key(li_sync.password_enc)
+
         cookies = []
-        if li_sync and li_sync.session_cookies:
+        if li_sync.session_cookies:
             try:
                 cookies = json.loads(li_sync.session_cookies)
             except Exception:
-                cookies = []
+                pass
 
         name = profile.name_display or profile.name_norm
         search_url = f"https://www.linkedin.com/search/results/companies/?keywords={quote(name)}"
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                      "--disable-blink-features=AutomationControlled"],
             )
-
+            context = await browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1280, "height": 900},
+                locale="de-DE",
+            )
+            await context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
             if cookies:
                 await context.add_cookies(cookies)
 
             page = await context.new_page()
 
-            # Accept consent if shown
-            try:
-                await page.goto("https://www.linkedin.com", timeout=15000)
-                consent = page.locator("button[action-type='ACCEPT']")
-                if await consent.count() > 0:
-                    await consent.first.click()
-                    await page.wait_for_timeout(1000)
-            except Exception:
-                pass
+            await page.goto(search_url, wait_until="load", timeout=30000)
+            await _accept_consent(page)
 
-            # Navigate to company search
-            await page.goto(search_url, timeout=20000)
-            await page.wait_for_timeout(3000)
+            if "login" in page.url or "authwall" in page.url:
+                logged_in = await _login(page, li_sync.email, password)
+                if not logged_in:
+                    await browser.close()
+                    profile.sync_status = "failed"
+                    profile.sync_error = "LinkedIn Login fehlgeschlagen"
+                    db.commit()
+                    return
+                await page.goto(search_url, wait_until="load", timeout=30000)
+                await _accept_consent(page)
 
-            # Find first company result
-            card_selector = "[data-view-name='search-entity-result-universal-template']"
-            try:
-                await page.wait_for_selector(card_selector, timeout=10000)
-            except Exception:
+            await asyncio.sleep(2)
+
+            # Find first company link in search results (structural, no class-name dependency)
+            company_url = await page.evaluate(f"""() => {{
+                // Look for links to /company/ pages in search results
+                const links = [...document.querySelectorAll('a[href*="/company/"]')];
+                // Filter out nav links (short hrefs like /company/about)
+                const result = links.find(a => /\\/company\\/[\\w-]+\\/?($|\\?|#)/.test(a.href));
+                return result ? result.href.split('?')[0] : null;
+            }}""")
+
+            if not company_url:
                 profile.sync_status = "failed"
-                profile.sync_error = "No company results found on LinkedIn"
+                profile.sync_error = "Kein LI-Firmenprofil in Suchergebnissen gefunden"
                 db.commit()
                 await browser.close()
                 return
 
-            cards = page.locator(card_selector)
-            if await cards.count() == 0:
-                profile.sync_status = "failed"
-                profile.sync_error = "No company results found"
-                db.commit()
-                await browser.close()
-                return
+            # Navigate directly to /about page
+            about_url = company_url.rstrip("/") + "/about/"
+            await page.goto(about_url, wait_until="load", timeout=30000)
+            await asyncio.sleep(2)
 
-            # Click first result
-            await cards.first.click()
-            await page.wait_for_timeout(2000)
+            linkedin_url = about_url
 
-            # Navigate to /about tab
-            try:
-                about_link = page.locator("a[href*='/about']").first
-                if await about_link.count() > 0:
-                    await about_link.click()
-                    await page.wait_for_timeout(2000)
-                else:
-                    about_url = page.url.rstrip("/") + "/about"
-                    await page.goto(about_url, timeout=15000)
-                    await page.wait_for_timeout(2000)
-            except Exception:
-                pass
-
-            linkedin_url = page.url
-
-            # Extract data via JS
+            # Extract data via JS — LI uses hashed class names, use dt/dd structure
             extracted = await page.evaluate("""
                 () => {
-                    const getText = (selector) => {
-                        const el = document.querySelector(selector);
-                        return el ? el.innerText.trim() : null;
-                    };
+                    // Description: find the overview text block
+                    const descCandidates = [...document.querySelectorAll('p, div, section')]
+                        .filter(el => {
+                            const t = (el.innerText||'').trim();
+                            return t.length > 80 && t.length < 3000 && !el.querySelector('nav,header,footer,ul,ol');
+                        })
+                        .sort((a,b) => b.innerText.trim().length - a.innerText.trim().length);
+                    const desc = descCandidates.length > 0 ? descCandidates[0].innerText.trim() : null;
 
-                    // Description
-                    const desc = getText('.org-about-us-organization-description__text')
-                        || getText('[data-view-name="about-module"]');
-
-                    // Helper: find value near a label text
-                    const findNear = (labelText) => {
-                        const items = document.querySelectorAll('dt, .org-page-details__definition-term, [class*="label"], [class*="detail"]');
-                        for (const item of items) {
-                            if (item.innerText && item.innerText.includes(labelText)) {
-                                const next = item.nextElementSibling;
-                                if (next) return next.innerText.trim();
-                                const parent = item.parentElement;
-                                if (parent) {
-                                    const dd = parent.querySelector('dd');
-                                    if (dd) return dd.innerText.trim();
-                                }
-                            }
+                    // Structured data: LI /about uses dt/dd pairs
+                    const pairs = {};
+                    document.querySelectorAll('dt').forEach(dt => {
+                        const dd = dt.nextElementSibling;
+                        if (dd && dd.tagName === 'DD') {
+                            pairs[dt.innerText.trim().toLowerCase()] = dd.innerText.trim();
                         }
-                        // Fallback: scan all text for label pattern
-                        const allText = document.body.innerText;
-                        const regex = new RegExp(labelText + '[\\\\s\\\\n]+([^\\\\n]+)', 'i');
-                        const m = allText.match(regex);
-                        return m ? m[1].trim() : null;
+                    });
+
+                    // Fallback: scan body text for labelled lines
+                    const findInText = (...labels) => {
+                        for (const label of labels) {
+                            const key = Object.keys(pairs).find(k => k.includes(label.toLowerCase()));
+                            if (key) return pairs[key];
+                        }
+                        const text = document.body.innerText;
+                        for (const label of labels) {
+                            const m = text.match(new RegExp(label + '[:\\\\s]+([^\\\\n]{2,80})', 'i'));
+                            if (m) return m[1].trim();
+                        }
+                        return null;
                     };
 
                     return {
                         description: desc,
-                        employee_range: findNear('employee'),
-                        hq: findNear('Headquarters') || findNear('Hauptsitz'),
-                        industry: findNear('Industry') || findNear('Branche'),
-                        founded_year: findNear('Founded') || findNear('Gegründet'),
-                        website: findNear('Website'),
-                        company_type: findNear('Company type') || findNear('Unternehmensform'),
+                        employee_range: findInText('employees', 'Mitarbeiter'),
+                        hq: findInText('Headquarters', 'Hauptsitz'),
+                        industry: findInText('Industry', 'Branche'),
+                        founded_year: findInText('Founded', 'Gegründet'),
+                        website: findInText('Website'),
+                        company_type: findInText('Company type', 'Unternehmensform', 'Unternehmenstyp'),
                     };
                 }
             """)

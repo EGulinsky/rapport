@@ -333,7 +333,9 @@ export const api = {
 
   companySync: {
     status: () => request<{ pending: number; done: number; failed: number; profiles: unknown[] }>('/sync/company/status'),
-    run: () => request<{ started: boolean; count: number }>('/sync/company/run', { method: 'POST' }),
+    run: () => request<{ started: boolean; count: number; message?: string }>('/sync/company/run', { method: 'POST' }),
+    resetLock: () => request<{ ok: boolean }>('/sync/company/reset-lock', { method: 'POST' }),
+    resetFailed: () => request<{ reset: number }>('/sync/company/reset-failed', { method: 'POST' }),
   },
 
   audit: {
