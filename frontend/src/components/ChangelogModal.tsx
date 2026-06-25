@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.9',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Firmenlogos in der Firmenliste — Clearbit (abgeschaltet) ersetzt durch Google Favicons.',
+    ],
+  },
+  {
     version: '3.3.8',
     date: '2026-06-25',
     changes: [
