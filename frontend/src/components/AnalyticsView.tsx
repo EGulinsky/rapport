@@ -70,9 +70,14 @@ export function AnalyticsView() {
         const s = await api.companySync.status()
         setSyncLive(s)
         if (!s.running) {
-          stopPolling()
-          setSyncing(false)
-          load()
+          if (s.pending > 0) {
+            // Nächsten Batch starten
+            await api.companySync.run()
+          } else {
+            stopPolling()
+            setSyncing(false)
+            load()
+          }
         }
       } catch {
         stopPolling()
