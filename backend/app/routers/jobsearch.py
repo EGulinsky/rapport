@@ -242,23 +242,35 @@ _DESCRIPTION_JS = """() => {
         if (el && el.innerText.trim().length > 200 && !insideNavOrChrome(el)) return el.innerHTML;
     }
 
-    // Structural fallback: find the richest content block that is pure content
+    // Structural fallback: find "About the job" / Stellenbeschreibung section
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let tnode;
+    while (tnode = walker.nextNode()) {
+        if (/^\\s*(about the job|über die stelle|stellenbeschreibung)\\s*$/i.test(tnode.textContent)) {
+            let el = tnode.parentElement;
+            for (let i = 0; i < 6; i++) {
+                if (!el) break;
+                const sib = el.nextElementSibling;
+                if (sib && (sib.innerText || '').trim().length > 200) return sib.innerHTML;
+                el = el.parentElement;
+            }
+        }
+    }
+    // Last resort: element with 3-40 p/li descendants, no chrome children, 400-8000 chars
     const candidates = [...document.querySelectorAll('div, article, section')]
         .filter(el => {
             if (insideNavOrChrome(el)) return false;
-            // Exclude containers that themselves contain navigation chrome
-            if (el.querySelector('nav, header, footer, [role="navigation"], [role="banner"]')) return false;
+            if (el.querySelector('nav, header, footer, [role="navigation"]')) return false;
             const t = (el.innerText || '').trim();
-            if (t.length < 400 || t.length > 15000) return false;
+            if (t.length < 400 || t.length > 8000) return false;
             if (/skip to (search|main|content)/i.test(t)) return false;
             return true;
         })
         .map(el => ({
             el,
-            richness: el.querySelectorAll('p, li, h1, h2, h3, h4, strong, em, ul, ol').length,
-            len: el.innerText.trim().length,
+            richness: el.querySelectorAll('p, li, ul, ol, h2, h3, strong').length,
         }))
-        .filter(c => c.richness >= 3)
+        .filter(c => c.richness >= 3 && c.richness <= 60)
         .sort((a, b) => b.richness - a.richness);
 
     if (candidates.length > 0) return candidates[0].el.innerHTML;
