@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.7',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Groq-API-Key nicht mehr als Fallback in Ollama-Test-Requests injiziert — Provider-Wechsel testet jetzt den richtigen Anbieter.',
+      'Fix: Ollama-URL-Default ist jetzt host.docker.internal:11434 (statt localhost, das aus dem Container nicht erreichbar ist).',
+      'UX: Speichern-Bestätigung zeigt gespeicherten Anbieter + Modell, Fehler werden sichtbar angezeigt.',
+    ],
+  },
+  {
     version: '3.2.6',
     date: '2026-06-25',
     changes: [
