@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.3',
+    date: '2026-06-25',
+    changes: [
+      'Firmenprofil: Bewerbungsliste zeigt jetzt Rolle, Bewerbungsdatum und Status — Firmenname wurde entfernt (redundant).',
+    ],
+  },
+  {
     version: '3.3.2',
     date: '2026-06-25',
     changes: [

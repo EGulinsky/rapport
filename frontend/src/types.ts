@@ -104,7 +104,7 @@ export interface CompanyProfile {
   sync_error: string | null
   last_synced_at: string | null
   app_count?: number
-  applications?: { id: number; firma: string; rolle: string; main_status: string }[]
+  applications?: { id: number; firma: string; rolle: string; main_status: string; datum_bewerbung?: string | null }[]
 }
 
 export interface Contact {
