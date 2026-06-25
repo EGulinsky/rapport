@@ -13,6 +13,7 @@ const CHANGELOG: Release[] = [
     date: '2026-06-25',
     changes: [
       'Fix: LI-Sync hat stellenanzeige_url bei bestehenden Bewerbungen nicht nachgetragen — wird jetzt beim nächsten Sync befüllt, falls noch leer.',
+      'Fix: LI-Sync Aktionslog zeigte keine Firma/Rolle — werden jetzt korrekt aus der DB-Bewerbung übernommen.',
     ],
   },
   {
