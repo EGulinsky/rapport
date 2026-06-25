@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.9',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Ollama-Modell-Picker, Auto-Save und host.docker.internal-URL in die KI/API-Einstellungen (SettingsModal) portiert — war zuvor nur im standalone AiSettingsModal implementiert.',
+      'Ollama: Modellauswahl als Chips (installiert) + Download-Liste mit Fortschrittsanzeige. Kein globaler Speichern-Button mehr.',
+    ],
+  },
+  {
     version: '3.2.8',
     date: '2026-06-25',
     changes: [
