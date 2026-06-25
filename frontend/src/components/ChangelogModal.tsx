@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.3',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Firmendaten-Sync — Browser-Flags (--no-sandbox), strukturbasierte LI-Firmenerkennung statt gehashter Klassen, Login-Fallback.',
+      'Firmendaten-Sync: Lock-Reset vor jedem Run (kein "already running" mehr), "fehlgeschlagen zurücksetzen"-Button im Auswertungen-Tab.',
+    ],
+  },
+  {
     version: '3.2.2',
     date: '2026-06-25',
     changes: [

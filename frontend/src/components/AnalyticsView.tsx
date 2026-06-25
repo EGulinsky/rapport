@@ -58,17 +58,29 @@ export function AnalyticsView() {
     setSyncing(true)
     setSyncMsg(null)
     try {
+      // Reset lock in case a previous run got stuck
+      await api.companySync.resetLock()
       const r = await api.companySync.run()
       if (r.started) {
         setSyncMsg(`${r.count} Firmenprofil(e) werden im Hintergrund synchronisiert.`)
       } else {
-        setSyncMsg('Kein Sync nötig oder läuft bereits.')
+        setSyncMsg(r.message || 'Kein Sync nötig.')
       }
       await load()
     } catch (e) {
       setSyncMsg(e instanceof Error ? e.message : 'Fehler')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function resetFailed() {
+    try {
+      await api.companySync.resetFailed()
+      await load()
+      setSyncMsg('Fehlgeschlagene Profile zurückgesetzt.')
+    } catch {
+      setSyncMsg('Fehler beim Zurücksetzen.')
     }
   }
 
@@ -265,9 +277,12 @@ export function AnalyticsView() {
                 {company_sync.done} done
               </span>
               {company_sync.failed > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium">
-                  {company_sync.failed} failed
-                </span>
+                <button
+                  onClick={resetFailed}
+                  className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
+                >
+                  {company_sync.failed} fehlgeschlagen — zurücksetzen
+                </button>
               )}
             </div>
             {syncMsg && (
