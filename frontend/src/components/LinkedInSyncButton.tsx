@@ -121,14 +121,16 @@ export function LinkedInSyncButton({ onSynced, triggerCount }: Props) {
 
   return (
     <>
-      <button
-        onClick={openModal}
-        title="LinkedIn-Bewerbungen synchronisieren"
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-      >
-        <Linkedin className="h-4 w-4 text-[#0077B5]" />
-        LinkedIn
-      </button>
+      {triggerCount === undefined && (
+        <button
+          onClick={openModal}
+          title="LinkedIn-Bewerbungen synchronisieren"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+        >
+          <Linkedin className="h-4 w-4 text-[#0077B5]" />
+          LinkedIn
+        </button>
+      )}
 
       {showModal && (
         <div
