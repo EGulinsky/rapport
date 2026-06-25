@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check } from 'lucide-react'
+import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw } from 'lucide-react'
 import { api } from '../api/client'
 import { JobPortalSettings } from './JobSearchView'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus } from '../types'
@@ -1536,8 +1536,12 @@ function BackupPanel() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [running, setRunning] = useState(false)
+  const [pickingFolder, setPickingFolder] = useState(false)
   const [runResult, setRunResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState<string | null>(null)
+  const [restoreConfirm, setRestoreConfirm] = useState<string | null>(null)
+  const [restoreResult, setRestoreResult] = useState<string | null>(null)
 
   useEffect(() => {
     api.backup.status().then(s => {
@@ -1583,6 +1587,27 @@ function BackupPanel() {
     } finally { setRunning(false) }
   }
 
+  async function pickFolder() {
+    setPickingFolder(true); setError(null)
+    try {
+      const r = await api.backup.pickFolder()
+      setFolder(r.path)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setPickingFolder(false) }
+  }
+
+  async function doRestore(filename: string) {
+    if (!status?.backup_folder) return
+    setRestoring(filename); setRestoreConfirm(null); setError(null); setRestoreResult(null)
+    try {
+      await api.backup.restore(filename, status.backup_folder)
+      setRestoreResult(filename)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setRestoring(null) }
+  }
+
   const fmtDate = (ts?: string | number) => {
     if (!ts) return 'noch nie'
     const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
@@ -1623,14 +1648,25 @@ function BackupPanel() {
 
       {/* Backup folder */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-gray-700">Backup-Ordner (Mac-Pfad)</label>
-        <input
-          type="text"
-          value={folder}
-          onChange={e => setFolder(e.target.value)}
-          placeholder="/Users/…/Backups/JobTracker"
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-        />
+        <label className="text-xs font-medium text-gray-700">Backup-Ordner</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={folder}
+            onChange={e => setFolder(e.target.value)}
+            placeholder="/Users/…/Backups/JobTracker"
+            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+          <button
+            onClick={pickFolder}
+            disabled={pickingFolder}
+            title="Ordner auswählen"
+            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {pickingFolder ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5 text-indigo-500" />}
+            Wählen
+          </button>
+        </div>
       </div>
 
       {/* Frequency + Keep count */}
@@ -1684,15 +1720,51 @@ function BackupPanel() {
         </div>
       )}
 
+      {restoreResult && (
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
+          <span>Wiederhergestellt aus <strong>{restoreResult}</strong> — bitte Seite neu laden.</span>
+        </div>
+      )}
+
+      {restoreConfirm && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
+          <p className="text-xs font-semibold text-red-800">Backup wirklich wiederherstellen?</p>
+          <p className="text-xs text-red-700">Alle aktuellen Daten werden durch <strong>{restoreConfirm}</strong> ersetzt. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+          <div className="flex gap-2">
+            <button onClick={() => doRestore(restoreConfirm)}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
+              Ja, wiederherstellen
+            </button>
+            <button onClick={() => setRestoreConfirm(null)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Existing backups */}
       {status && status.backups.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-gray-700">Vorhandene Backups ({status.backups.length})</div>
-          <div className="rounded-lg border border-gray-100 divide-y divide-gray-50 max-h-48 overflow-y-auto">
+          <div className="rounded-lg border border-gray-100 divide-y divide-gray-50 max-h-56 overflow-y-auto">
             {status.backups.map(b => (
-              <div key={b.name} className="flex items-center justify-between px-3 py-2 text-xs">
-                <span className="text-gray-700 font-mono truncate">{b.name}</span>
-                <span className="text-gray-400 shrink-0 ml-2">{fmtDate(b.modified)} · {fmtSize(b.size)}</span>
+              <div key={b.name} className="flex items-center justify-between px-3 py-2 text-xs gap-2">
+                <div className="min-w-0">
+                  <p className="text-gray-700 font-mono truncate">{b.name}</p>
+                  <p className="text-gray-400">{fmtDate(b.modified)} · {fmtSize(b.size)}</p>
+                </div>
+                <button
+                  onClick={() => setRestoreConfirm(b.name)}
+                  disabled={restoring === b.name}
+                  className="shrink-0 flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:border-red-200 hover:text-red-700 disabled:opacity-50"
+                >
+                  {restoring === b.name
+                    ? <Loader className="h-3 w-3 animate-spin" />
+                    : <RotateCcw className="h-3 w-3" />}
+                  Restore
+                </button>
               </div>
             ))}
           </div>

@@ -143,3 +143,59 @@ async def run_backup():
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Backup fehlgeschlagen"))
     return result
+
+
+@router.get("/pick-folder")
+async def pick_folder():
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=65) as client:
+            resp = await client.get(f"{FILES_BRIDGE_URL}/pick-folder")
+        data = resp.json()
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=data.get("error", "Kein Ordner ausgewählt"))
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"files_bridge nicht erreichbar: {e}")
+
+
+class RestoreRequest(BaseModel):
+    filename: str
+    folder: str
+
+
+@router.post("/restore")
+async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
+    import httpx
+    from app.database import engine
+
+    backups = await _list_backups(body.folder)
+    target = next((b for b in backups if b["name"] == body.filename), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Backup-Datei nicht gefunden")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(f"{FILES_BRIDGE_URL}/backup-read", params={"path": target["path"]})
+    if resp.status_code != 200:
+        raise HTTPException(status_code=500, detail="Backup-Datei konnte nicht gelesen werden")
+
+    data = base64.b64decode(resp.json()["data_b64"])
+
+    tmp_path = "/tmp/_jobtracker_restore.db"
+    with open(tmp_path, "wb") as f:
+        f.write(data)
+
+    # Copy backup into live DB via sqlite3 backup API
+    src = sqlite3.connect(tmp_path)
+    dst = sqlite3.connect(DB_PATH)
+    src.backup(dst)
+    src.close()
+    dst.close()
+    os.unlink(tmp_path)
+
+    # Reset SQLAlchemy connection pool so next requests use restored data
+    engine.dispose()
+
+    return {"success": True, "filename": body.filename}

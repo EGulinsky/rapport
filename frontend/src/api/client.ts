@@ -311,6 +311,8 @@ export const api = {
     saveSettings: (data: { enabled: boolean; backup_folder?: string; frequency_hours: number; keep_count: number }) =>
       request<BackupStatus>('/backup/settings', { method: 'POST', body: JSON.stringify(data) }),
     run: () => request<{ success: boolean; filename: string }>('/backup/run', { method: 'POST' }),
+    pickFolder: () => request<{ path: string }>('/backup/pick-folder'),
+    restore: (filename: string, folder: string) => request<{ success: boolean; filename: string }>('/backup/restore', { method: 'POST', body: JSON.stringify({ filename, folder }) }),
   },
 
   jobsearch: {
