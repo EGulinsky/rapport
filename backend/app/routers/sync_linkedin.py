@@ -1014,6 +1014,11 @@ async def _async_sync(cfg_id: int):
                     else:
                         action_log.append({**raw, "aktion": "neu", "status_db": app.main_status})
                 else:
+                    job_url = job.get("stellenanzeige_url") or None
+                    if job_url and not app.stellenanzeige_url:
+                        app.stellenanzeige_url = job_url
+                        db.flush()
+
                     target_status = job.get("default_status", "applied")
                     if job.get("status_hint"):
                         target_status = job["status_hint"][0]

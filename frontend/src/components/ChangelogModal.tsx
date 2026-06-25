@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '2.6.2',
+    date: '2026-06-25',
+    changes: [
+      'Fix: LI-Sync hat stellenanzeige_url bei bestehenden Bewerbungen nicht nachgetragen — wird jetzt beim nächsten Sync befüllt, falls noch leer.',
+    ],
+  },
+  {
     version: '2.6.1',
     date: '2026-06-24',
     changes: [
