@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.5',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Status-Badge im Firmenprofil nutzt jetzt dieselbe StatusBadge-Komponente wie die Bewerbungsübersicht — identische Farben und Bezeichnungen.',
+    ],
+  },
+  {
     version: '3.3.4',
     date: '2026-06-25',
     changes: [
