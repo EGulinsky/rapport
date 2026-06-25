@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.4',
+    date: '2026-06-25',
+    changes: [
+      'Fix: Letztes Update zeigt jetzt immer das Datum des letzten Timeline-Eintrags — nicht mehr das Datum der letzten Bearbeitung.',
+    ],
+  },
+  {
     version: '3.2.3',
     date: '2026-06-25',
     changes: [

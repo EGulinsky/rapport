@@ -203,7 +203,7 @@ def list_applications(
             # otherwise push letztes_update to today and suppress ghosting.
             app._ghosting_override = app.ghosting
             md = max_event_dates.get(app.id)
-            if md and (app.letztes_update is None or md > app.letztes_update):
+            if md:
                 app.letztes_update = md
             app.naechster_schritt = _compute_naechster_schritt(
                 app,
@@ -249,7 +249,7 @@ def get_application(app_id: int, db: Session = Depends(get_db)):
 def create_application(payload: schemas.ApplicationCreate, db: Session = Depends(get_db)):
     data = payload.model_dump()
     app = models.Application(**data)
-    app.letztes_update = date.today()
+    app.letztes_update = data.get("datum_bewerbung") or date.today()
     db.add(app)
     db.flush()  # get app.id before creating event
     _ensure_company_profile(db, app)
@@ -299,7 +299,6 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
     firma_changed = "firma" in update_data or "zielfirma_bei_hh" in update_data or "is_headhunter" in update_data
     for field, value in update_data.items():
         setattr(app, field, value)
-    app.letztes_update = date.today()
 
     if firma_changed:
         _ensure_company_profile(db, app)
