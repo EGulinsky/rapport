@@ -395,6 +395,20 @@ class FilesConfig(Base):
     updated_at   = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class JobPortal(Base):
+    __tablename__ = "job_portals"
+
+    id           = Column(Integer, primary_key=True)
+    name         = Column(String, nullable=False)
+    portal_type  = Column(String, default="link", nullable=False)  # "linkedin" | "link"
+    url_template = Column(String, nullable=True)    # {q} and {location} placeholders for link portals
+    color        = Column(String, nullable=True)    # hex color for source badge
+    enabled      = Column(Boolean, default=True, nullable=False)
+    is_builtin   = Column(Boolean, default=False, nullable=False)
+    sort_order   = Column(Integer, default=0, nullable=False)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class BackupConfig(Base):
     __tablename__ = "backup_config"
 

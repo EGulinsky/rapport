@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save } from 'lucide-react'
 import { api } from '../api/client'
+import { JobPortalSettings } from './JobSearchView'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus } from '../types'
 import clsx from 'clsx'
 
@@ -1501,17 +1502,18 @@ function BackupPanel() {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup'
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'jobportals'
 
 const TABS: [Tab, string][] = [
-  ['sync',     'Sync'],
-  ['ai',       'KI / API'],
-  ['google',   'Google'],
-  ['icloud',   'iCloud'],
-  ['calls',    'Anrufe'],
-  ['files',    'Dokumente'],
-  ['linkedin', 'LinkedIn'],
-  ['backup',   'Backup'],
+  ['sync',       'Sync'],
+  ['ai',         'KI / API'],
+  ['google',     'Google'],
+  ['icloud',     'iCloud'],
+  ['calls',      'Anrufe'],
+  ['files',      'Dokumente'],
+  ['linkedin',   'LinkedIn'],
+  ['backup',     'Backup'],
+  ['jobportals', 'Jobportale'],
 ]
 
 export function SettingsModal({ onClose }: Props) {
@@ -1556,7 +1558,14 @@ export function SettingsModal({ onClose }: Props) {
             {tab === 'calls'    && <CallsPanel />}
             {tab === 'files'    && <FilesPanel />}
             {tab === 'linkedin' && <LinkedInPanel onSynced={onClose} />}
-            {tab === 'backup'   && <BackupPanel />}
+            {tab === 'backup'     && <BackupPanel />}
+            {tab === 'jobportals' && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">Jobportale</h3>
+                <p className="text-xs text-gray-400 mb-4">Portale für die Jobsuche konfigurieren. LinkedIn wird direkt durchsucht, alle anderen öffnen mit dem passenden Suchbegriff im Browser.</p>
+                <JobPortalSettings />
+              </div>
+            )}
           </div>
         </div>
       </div>

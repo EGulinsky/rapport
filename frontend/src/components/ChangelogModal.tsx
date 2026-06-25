@@ -9,6 +9,17 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.0.0',
+    date: '2026-06-25',
+    changes: [
+      'Neu: Jobsuche — eigener Tab zum Durchsuchen von Jobportalen direkt aus JobTracker',
+      'LinkedIn-Integration: Suche direkt über die bestehende LI-Session, Ergebnisse mit Firma, Stelle, Ort und Easy-Apply-Kennzeichnung',
+      'Weitere Portale (StepStone, Indeed, Xing, Experteer, Headhunter24, Jobware) per Klick im Browser öffnen — Suchanfrage wird automatisch übertragen',
+      'Mehrere Ergebnisse auswählen und mit einem Klick als Anbahnung in den Jobtracker übernehmen — Duplikate werden erkannt und übersprungen',
+      'Einstellungen › Jobportale: eigene Portale hinzufügen, bearbeiten und aktivieren/deaktivieren',
+    ],
+  },
+  {
     version: '2.6.5',
     date: '2026-06-25',
     changes: [
