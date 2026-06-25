@@ -297,3 +297,22 @@ async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(ev)
     return {"event_id": ev.id, "created": 1, "titel": name}
+
+
+@router.post("/open")
+async def open_file(body: dict):
+    """Ask the host bridge to open a file with the default Mac application."""
+    import httpx
+    path = body.get("path", "")
+    if not path:
+        raise HTTPException(status_code=400, detail="path erforderlich")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{FILES_BRIDGE_URL}/open", params={"path": path})
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=resp.text)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"success": True}

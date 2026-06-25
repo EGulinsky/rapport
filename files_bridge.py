@@ -22,6 +22,7 @@ import base64
 import json
 import os
 import pathlib
+import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -180,6 +181,18 @@ class Handler(BaseHTTPRequestHandler):
                 mtime = 0
             text = extract_text(path)
             self._json({"name": os.path.basename(path), "path": path, "text": text, "modified": mtime})
+            return
+
+        if parsed.path == "/open":
+            path = params.get("path", [""])[0]
+            if not path or not os.path.isfile(path):
+                self._json({"error": f"Datei nicht gefunden: {path}"}, 404)
+                return
+            try:
+                subprocess.Popen(["open", path])
+                self._json({"success": True})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
             return
 
         if parsed.path == "/backups":
