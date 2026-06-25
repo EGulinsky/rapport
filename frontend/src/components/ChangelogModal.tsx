@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.2.8',
+    date: '2026-06-25',
+    changes: [
+      'UX: KI-Einstellungen speichern automatisch — Provider-Wechsel, Modell-Auswahl, Toggle und Textfelder (onBlur) triggern sofort einen Save.',
+      'Kein globaler Speichern-Button mehr; API-Key hat einen eigenen OK-Button. Speicher-Status als Icon im Header.',
+    ],
+  },
+  {
     version: '3.2.7',
     date: '2026-06-25',
     changes: [
