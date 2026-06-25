@@ -15,10 +15,10 @@ function CompanyLogo({ name, website }: { name: string; website?: string | null 
   if (domain && !err) {
     return (
       <img
-        src={`https://logo.clearbit.com/${domain}`}
+        src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
         alt={name}
         onError={() => setErr(true)}
-        className="h-8 w-8 rounded object-contain bg-white border border-gray-100"
+        className="h-8 w-8 rounded object-contain bg-white border border-gray-100 p-0.5"
       />
     )
   }
