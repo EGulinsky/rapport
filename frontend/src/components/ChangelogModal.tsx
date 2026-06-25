@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.4',
+    date: '2026-06-25',
+    changes: [
+      'Fix: LinkedIn-Button unten in der App war sichtbar — wird jetzt ausgeblendet, wenn er als reiner Dropdown-Trigger läuft.',
+    ],
+  },
+  {
     version: '3.3.3',
     date: '2026-06-25',
     changes: [
