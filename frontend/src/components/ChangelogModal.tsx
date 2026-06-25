@@ -9,9 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '2.6.4',
+    version: '2.6.5',
     date: '2026-06-25',
     changes: [
+      'Fix: Kanban-Board nutzt jetzt volle Viewport-Breite (außerhalb max-w-7xl) — Lanes werden nicht mehr abgeschnitten, horizontales Scrollen funktioniert über die ganze Bildschirmbreite.',
       'Fix: Generische Abteilungs-Mailadressen (career@, jobs@, recruiting@, bewerbung@, hr@ u.a.) werden nicht mehr als Kontakte angelegt und nicht an mehrere Bewerbungen angehängt.',
     ],
   },
