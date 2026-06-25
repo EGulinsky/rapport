@@ -86,7 +86,7 @@ export function AiSettingsModal({ onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
-  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [saveResult, setSaveResult] = useState<'saving' | 'saved' | 'error' | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Ollama model picker state
@@ -131,15 +131,35 @@ export function AiSettingsModal({ onClose }: Props) {
     }
   }, [form.provider, loading, loadOllamaModels, form.base_url])
 
+  async function autoSave(patch: Partial<AiSettingsWrite>, currentForm = form) {
+    const merged = { ...currentForm, ...patch }
+    setSaveResult('saving')
+    try {
+      const updated = await api.settings.saveAi({
+        ...merged,
+        api_key: merged.api_key?.trim() || undefined,
+        base_url: merged.base_url?.trim() || undefined,
+      })
+      setHasStoredKey(updated.has_key)
+      setSaveResult('saved')
+      setTimeout(() => setSaveResult(null), 2000)
+    } catch {
+      setSaveResult('error')
+    }
+  }
+
   function selectProvider(p: typeof PROVIDERS[number]) {
     const defaultUrl = 'defaultUrl' in p ? p.defaultUrl : 'http://host.docker.internal:11434'
-    setForm(f => ({ ...f, provider: p.id, model: p.model, base_url: p.needsUrl ? (f.base_url || defaultUrl) : '' }))
+    const patch = { provider: p.id, model: p.model, base_url: p.needsUrl ? (form.base_url || defaultUrl) : '' }
+    setForm(f => ({ ...f, ...patch }))
     setTestResult(null)
-    setSaveResult(null)
+    autoSave(patch)
   }
 
   function selectOllamaModel(name: string) {
-    setForm(f => ({ ...f, model: `ollama/${name}` }))
+    const patch = { model: `ollama/${name}` }
+    setForm(f => ({ ...f, ...patch }))
+    autoSave(patch)
   }
 
   async function pullModel(modelName: string) {
@@ -184,21 +204,11 @@ export function AiSettingsModal({ onClose }: Props) {
     }
   }
 
-  async function save() {
+  async function saveApiKey() {
     setSaving(true)
-    setSaveResult(null)
     try {
-      const payload: AiSettingsWrite = {
-        ...form,
-        api_key: form.api_key?.trim() || undefined,
-        base_url: form.base_url?.trim() || undefined,
-      }
-      const updated = await api.settings.saveAi(payload)
-      setHasStoredKey(updated.has_key)
+      await autoSave({}, form)
       setForm(f => ({ ...f, api_key: '' }))
-      setSaveResult({ ok: true, msg: `Gespeichert: ${updated.provider} / ${updated.model}` })
-    } catch (e) {
-      setSaveResult({ ok: false, msg: e instanceof Error ? e.message : String(e) })
     } finally {
       setSaving(false)
     }
@@ -239,11 +249,16 @@ export function AiSettingsModal({ onClose }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-semibold text-gray-900">KI-Einstellungen</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Vendor-agnostische AI-Anbindung via LiteLLM</p>
+            <p className="text-xs text-gray-500 mt-0.5">Änderungen werden automatisch gespeichert</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {saveResult === 'saving' && <Loader className="h-4 w-4 animate-spin text-gray-400" />}
+            {saveResult === 'saved' && <CheckCircle className="h-4 w-4 text-green-500" />}
+            {saveResult === 'error' && <XCircle className="h-4 w-4 text-red-500" />}
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -256,7 +271,11 @@ export function AiSettingsModal({ onClose }: Props) {
               <span className="text-sm font-medium text-gray-700">KI-Analyse aktiviert</span>
               <button
                 type="button"
-                onClick={() => setForm(f => ({ ...f, enabled: !f.enabled }))}
+                onClick={() => {
+                  const patch = { enabled: !form.enabled }
+                  setForm(f => ({ ...f, ...patch }))
+                  autoSave(patch)
+                }}
                 className={clsx(
                   'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500',
                   form.enabled ? 'bg-indigo-600' : 'bg-gray-200'
@@ -304,7 +323,10 @@ export function AiSettingsModal({ onClose }: Props) {
                     placeholder="http://host.docker.internal:11434"
                     value={form.base_url ?? ''}
                     onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
-                    onBlur={() => loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')}
+                    onBlur={() => {
+                      autoSave({ base_url: form.base_url })
+                      loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
+                    }}
                   />
                   <p className="mt-1 text-xs text-gray-400">Mac-Host aus Docker: <code className="bg-gray-100 px-1 rounded">host.docker.internal:11434</code></p>
                 </div>
@@ -412,6 +434,7 @@ export function AiSettingsModal({ onClose }: Props) {
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       value={form.model}
                       onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                      onBlur={() => autoSave({ model: form.model })}
                       placeholder="ollama/llama3.2"
                     />
                   </div>
@@ -427,6 +450,7 @@ export function AiSettingsModal({ onClose }: Props) {
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={form.model}
                   onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                  onBlur={() => autoSave({ model: form.model })}
                   placeholder="z.B. groq/llama-3.3-70b-versatile"
                 />
               </div>
@@ -459,33 +483,30 @@ export function AiSettingsModal({ onClose }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <input
-                      type={showKey ? 'text' : 'password'}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder={provider.keyPlaceholder || 'API Key'}
-                      value={form.api_key ?? ''}
-                      onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))}
-                    />
-                    <button type="button" onClick={() => setShowKey(s => !s)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showKey ? 'text' : 'password'}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder={provider.keyPlaceholder || 'API Key'}
+                        value={form.api_key ?? ''}
+                        onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))}
+                      />
+                      <button type="button" onClick={() => setShowKey(s => !s)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={saveApiKey}
+                      disabled={saving || !form.api_key?.trim()}
+                      className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 shrink-0"
+                    >
+                      {saving ? <Loader className="h-4 w-4 animate-spin" /> : 'OK'}
                     </button>
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Save result */}
-            {saveResult && (
-              <div className={clsx(
-                'flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm',
-                saveResult.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-              )}>
-                {saveResult.ok
-                  ? <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  : <XCircle className="h-4 w-4 mt-0.5 shrink-0" />}
-                <span>{saveResult.msg}</span>
               </div>
             )}
 
@@ -515,18 +536,9 @@ export function AiSettingsModal({ onClose }: Props) {
             {testing ? <Loader className="h-4 w-4 animate-spin" /> : null}
             Verbindung testen
           </button>
-          <div className="flex gap-3">
-            <button onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-              Schließen
-            </button>
-            <button
-              onClick={save}
-              disabled={saving || loading}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-            >
-              {saving ? 'Speichern…' : 'Speichern'}
-            </button>
-          </div>
+          <button onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+            Schließen
+          </button>
         </div>
       </div>
     </div>
