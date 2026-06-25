@@ -19,6 +19,7 @@ class CompanyProfileListItem(BaseModel):
     employee_range: Optional[str] = None
     hq_city: Optional[str] = None
     hq_country: Optional[str] = None
+    website: Optional[str] = None
     sync_status: str
     last_synced_at: Optional[datetime] = None
     app_count: int
@@ -105,6 +106,7 @@ def list_companies(
             employee_range=p.employee_range,
             hq_city=p.hq_city,
             hq_country=p.hq_country,
+            website=p.website,
             sync_status=p.sync_status,
             last_synced_at=p.last_synced_at,
             app_count=app_count(p),
