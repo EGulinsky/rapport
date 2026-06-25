@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, ExternalLink, Clock, CheckCircle, XCircle } from 'lucide-react'
 import { api } from '../api/client'
-import type { CompanyProfile } from '../types'
+import type { CompanyProfile, MainStatus } from '../types'
+import { StatusBadge } from './StatusBadge'
 import clsx from 'clsx'
 
 interface Props {
@@ -221,9 +222,7 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
                             </p>
                           )}
                         </div>
-                        <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
-                          {app.main_status}
-                        </span>
+                        <StatusBadge status={app.main_status as MainStatus} size="sm" />
                       </button>
                     ))}
                   </div>
