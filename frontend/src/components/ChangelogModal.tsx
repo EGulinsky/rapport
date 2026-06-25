@@ -9,9 +9,11 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '2.6.2',
+    version: '2.6.3',
     date: '2026-06-25',
     changes: [
+      'PDF-Export: Landscape-Format (A4 quer), breitere Spalten, Überlaufschutz mit Ellipsis',
+      'PDF-Export: Terminübersicht der letzten 4 Wochen (Gespräche & Anrufe) nach der Bewerbungsliste',
       'Fix: LI-Sync hat stellenanzeige_url bei bestehenden Bewerbungen nicht nachgetragen — wird jetzt beim nächsten Sync befüllt, falls noch leer.',
       'Fix: LI-Sync Aktionslog zeigte keine Firma/Rolle — werden jetzt korrekt aus der DB-Bewerbung übernommen.',
     ],
