@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.3.0',
+    date: '2026-06-25',
+    changes: [
+      'Neu: Firmen-Seite — alle Company Profiles tabellarisch mit Branche, Typ, Größe, Standort und Sync-Status.',
+      'Neu: Firmenprofil-Modal mit allen KI-sync\'ten Daten (Beschreibung, Website, LinkedIn, Gründungsjahr, Mitarbeiterzahl) und verlinkten Bewerbungen.',
+      'Firmennamen überall anklickbar: Tabelle, Kanban-Karten und Bewerbungsmodal öffnen jetzt das Firmenprofil.',
+    ],
+  },
+  {
     version: '3.2.10',
     date: '2026-06-25',
     changes: [

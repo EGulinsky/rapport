@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2 } from 'lucide-react'
+import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2 } from 'lucide-react'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
@@ -11,6 +11,8 @@ import { PdfExportButton } from './components/PdfExportButton'
 import { SyncButton } from './components/SyncButton'
 import { LinkedInSyncButton } from './components/LinkedInSyncButton'
 import { ContactsView } from './components/ContactsView'
+import { CompaniesView } from './components/CompaniesView'
+import { CompanyModal } from './components/CompanyModal'
 import { CalendarView } from './components/CalendarView'
 import { JobSearchView } from './components/JobSearchView'
 import { AnalyticsView } from './components/AnalyticsView'
@@ -29,7 +31,7 @@ import { Calendar, Telescope } from 'lucide-react'
 import clsx from 'clsx'
 
 type ViewMode = 'table' | 'kanban'
-type MainView = 'jobsearch' | 'applications' | 'contacts' | 'calendar' | 'analytics'
+type MainView = 'jobsearch' | 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
 
 export default function App() {
   const [apps, setApps] = useState<Application[]>([])
@@ -51,6 +53,7 @@ export default function App() {
   const [showCleanup, setShowCleanup] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
+  const [companyModalId, setCompanyModalId] = useState<number | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -149,6 +152,12 @@ export default function App() {
                   <Users className="h-3.5 w-3.5" /> Kontakte
                 </button>
                 <button
+                  onClick={() => setMainView('companies')}
+                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'companies' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                >
+                  <Building2 className="h-3.5 w-3.5" /> Firmen
+                </button>
+                <button
                   onClick={() => setMainView('calendar')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'calendar' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
@@ -221,6 +230,12 @@ export default function App() {
         )}
         {mainView === 'contacts' && (
           <ContactsView onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }} />
+        )}
+        {mainView === 'companies' && (
+          <CompaniesView
+            onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
+            onOpenCompany={id => setCompanyModalId(id)}
+          />
         )}
         {mainView === 'calendar' && (
           <CalendarView onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }} />
@@ -338,6 +353,7 @@ export default function App() {
               next.has(id) ? next.delete(id) : next.add(id)
               return next
             })}
+            onOpenCompany={id => setCompanyModalId(id)}
           />
         )}
         </>)}
@@ -345,7 +361,7 @@ export default function App() {
 
       {/* Kanban: full viewport width, outside max-w-7xl */}
       {mainView === 'applications' && viewMode === 'kanban' && (
-        <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} />
+        <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} onOpenCompany={id => setCompanyModalId(id)} />
       )}
 
       {/* Modal */}
@@ -354,6 +370,15 @@ export default function App() {
           appId={selectedId}
           onClose={() => setSelectedId(null)}
           onSaved={load}
+          onOpenCompany={id => setCompanyModalId(id)}
+        />
+      )}
+
+      {companyModalId !== null && (
+        <CompanyModal
+          id={companyModalId}
+          onClose={() => setCompanyModalId(null)}
+          onOpenApplication={id => { setCompanyModalId(null); setMainView('applications'); setSelectedId(id) }}
         />
       )}
 

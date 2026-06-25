@@ -81,6 +81,30 @@ export interface Application {
   gespraech_5?: string
   contacts?: Contact[]
   events?: Event[]
+  company_profile_id?: number | null
+  target_company_profile_id?: number | null
+}
+
+export interface CompanyProfile {
+  id: number
+  name_display: string | null
+  name_norm: string
+  industry: string | null
+  company_type: string | null
+  employee_range: string | null
+  employee_count: number | null
+  founded_year: number | null
+  hq_city: string | null
+  hq_country: string | null
+  website: string | null
+  linkedin_company_url: string | null
+  description: string | null
+  sync_source: string | null
+  sync_status: string
+  sync_error: string | null
+  last_synced_at: string | null
+  app_count?: number
+  applications?: { id: number; firma: string; rolle: string; main_status: string }[]
 }
 
 export interface Contact {

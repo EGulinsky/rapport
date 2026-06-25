@@ -18,12 +18,13 @@ interface Props {
   appId: number | null
   onClose: () => void
   onSaved: () => void
+  onOpenCompany?: (id: number) => void
 }
 
 const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
-export function ApplicationModal({ appId, onClose, onSaved }: Props) {
+export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Props) {
   const [app, setApp] = useState<Application | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Application>>({})
@@ -391,7 +392,14 @@ export function ApplicationModal({ appId, onClose, onSaved }: Props) {
             ) : (
               <>
                 <div className="flex items-baseline gap-2">
-                  <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}</h2>
+                  {app?.company_profile_id && onOpenCompany ? (
+                    <button
+                      onClick={() => onOpenCompany(app.company_profile_id!)}
+                      className="text-lg font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 hover:underline"
+                    >{app?.firma}</button>
+                  ) : (
+                    <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}</h2>
+                  )}
                   <span className="text-xs text-gray-300 shrink-0 select-all">#{app?.id}</span>
                 </div>
                 <p className="text-sm text-gray-500 truncate">{app?.rolle}</p>

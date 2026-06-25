@@ -17,9 +17,10 @@ interface Props {
   columns: { status: MainStatus; items: Application[] }[]
   onSelect: (id: number) => void
   onChanged: () => void
+  onOpenCompany?: (id: number) => void
 }
 
-function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolean }) {
+function KanbanCard({ app, isDragging, onOpenCompany }: { app: Application; isDragging?: boolean; onOpenCompany?: (id: number) => void }) {
   return (
     <div className={clsx(
       'w-full text-left rounded-xl border bg-white p-3 shadow-sm',
@@ -37,16 +38,39 @@ function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolea
         <>
           <div className="flex items-center gap-1 mb-0.5">
             <span className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-700 shrink-0">HH</span>
-            <span className="text-xs text-indigo-700 truncate leading-tight">{app.firma}</span>
+            {app.company_profile_id && onOpenCompany ? (
+              <button
+                onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
+                className="text-xs text-indigo-700 truncate leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+              >{app.firma}</button>
+            ) : (
+              <span className="text-xs text-indigo-700 truncate leading-tight">{app.firma}</span>
+            )}
           </div>
-          <p className="font-medium text-sm text-gray-900 leading-tight">
-            {app.zielfirma_bei_hh ?? <span className="text-gray-400 italic text-xs">Zielfirma unbekannt</span>}
-          </p>
+          {app.zielfirma_bei_hh ? (
+            app.target_company_profile_id && onOpenCompany ? (
+              <button
+                onClick={e => { e.stopPropagation(); onOpenCompany(app.target_company_profile_id!) }}
+                className="font-medium text-sm text-gray-900 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+              >{app.zielfirma_bei_hh}</button>
+            ) : (
+              <p className="font-medium text-sm text-gray-900 leading-tight">{app.zielfirma_bei_hh}</p>
+            )
+          ) : (
+            <span className="text-gray-400 italic text-xs">Zielfirma unbekannt</span>
+          )}
         </>
       ) : (
-        <p className={clsx('font-medium text-sm leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>
-          {app.firma}
-        </p>
+        app.company_profile_id && onOpenCompany ? (
+          <button
+            onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
+            className={clsx('font-medium text-sm leading-tight cursor-pointer hover:text-indigo-600 hover:underline', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}
+          >{app.firma}</button>
+        ) : (
+          <p className={clsx('font-medium text-sm leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>
+            {app.firma}
+          </p>
+        )
       )}
       <p className="text-xs text-gray-500 mt-0.5 leading-tight">{app.rolle}</p>
       <p className="text-[10px] text-gray-300 font-mono mt-0.5 select-all leading-tight">{app.id}</p>
@@ -75,7 +99,7 @@ function KanbanCard({ app, isDragging }: { app: Application; isDragging?: boolea
   )
 }
 
-function DraggableCard({ app, onSelect }: { app: Application; onSelect: (id: number) => void }) {
+function DraggableCard({ app, onSelect, onOpenCompany }: { app: Application; onSelect: (id: number) => void; onOpenCompany?: (id: number) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: app.id })
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined
 
@@ -84,15 +108,16 @@ function DraggableCard({ app, onSelect }: { app: Application; onSelect: (id: num
       onClick={() => onSelect(app.id)}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <KanbanCard app={app} isDragging={isDragging} />
+      <KanbanCard app={app} isDragging={isDragging} onOpenCompany={onOpenCompany} />
     </div>
   )
 }
 
-function DroppableColumn({ status, items, onSelect }: {
+function DroppableColumn({ status, items, onSelect, onOpenCompany }: {
   status: MainStatus
   items: Application[]
   onSelect: (id: number) => void
+  onOpenCompany?: (id: number) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
 
@@ -134,7 +159,7 @@ function DroppableColumn({ status, items, onSelect }: {
             )}
             <div className="space-y-2">
               {apps.map(app => (
-                <DraggableCard key={app.id} app={app} onSelect={onSelect} />
+                <DraggableCard key={app.id} app={app} onSelect={onSelect} onOpenCompany={onOpenCompany} />
               ))}
             </div>
           </div>
@@ -152,7 +177,7 @@ function DroppableColumn({ status, items, onSelect }: {
   )
 }
 
-export function KanbanBoard({ columns, onSelect, onChanged }: Props) {
+export function KanbanBoard({ columns, onSelect, onChanged, onOpenCompany }: Props) {
   const [draggingApp, setDraggingApp] = useState<Application | null>(null)
 
   const sensors = useSensors(
@@ -180,7 +205,7 @@ export function KanbanBoard({ columns, onSelect, onChanged }: Props) {
       <div className="overflow-x-auto w-screen pb-8" style={{ scrollbarGutter: 'stable' }}>
         <div className="flex gap-4 px-4 sm:px-6 lg:px-8 pb-4 w-max">
           {columns.map(({ status, items }) => (
-            <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} />
+            <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} onOpenCompany={onOpenCompany} />
           ))}
         </div>
       </div>

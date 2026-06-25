@@ -10,7 +10,7 @@ from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
     review, cleanup, calendar, attachments, merge, audit_log, backup, jobsearch,
-    analytics, sync_company,
+    analytics, sync_company, companies,
 )
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,7 @@ app.include_router(backup.router)
 app.include_router(jobsearch.router)
 app.include_router(analytics.router)
 app.include_router(sync_company.router)
+app.include_router(companies.router)
 
 
 @app.get("/health")

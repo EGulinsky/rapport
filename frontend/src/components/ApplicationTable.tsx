@@ -15,11 +15,12 @@ interface Props {
   onStatusChanged: () => void
   selectedIds?: Set<number>
   onToggleSelect?: (id: number) => void
+  onOpenCompany?: (id: number) => void
 }
 
 type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
 
-export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect }: Props) {
+export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('datum_bewerbung')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [popoverId, setPopoverId] = useState<number | null>(null)
@@ -163,16 +164,37 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                     <>
                       <div className="flex items-center gap-1.5 leading-tight">
                         <span className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-700 shrink-0">HH</span>
-                        <span className="text-xs text-indigo-700 font-medium truncate">{app.firma}</span>
+                        {app.company_profile_id && onOpenCompany ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
+                            className="text-xs text-indigo-700 font-medium truncate cursor-pointer hover:text-indigo-600 hover:underline"
+                          >{app.firma}</button>
+                        ) : (
+                          <span className="text-xs text-indigo-700 font-medium truncate">{app.firma}</span>
+                        )}
                       </div>
                       {app.zielfirma_bei_hh ? (
-                        <p className="font-medium text-gray-900 leading-tight mt-0.5">→ {app.zielfirma_bei_hh}</p>
+                        app.target_company_profile_id && onOpenCompany ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); onOpenCompany(app.target_company_profile_id!) }}
+                            className="font-medium text-gray-900 leading-tight mt-0.5 cursor-pointer hover:text-indigo-600 hover:underline"
+                          >→ {app.zielfirma_bei_hh}</button>
+                        ) : (
+                          <p className="font-medium text-gray-900 leading-tight mt-0.5">→ {app.zielfirma_bei_hh}</p>
+                        )
                       ) : (
                         <p className="text-xs text-gray-400 italic leading-tight mt-0.5">Zielfirma unbekannt</p>
                       )}
                     </>
                   ) : (
-                    <p className={clsx('font-medium leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>{app.firma}</p>
+                    app.company_profile_id && onOpenCompany ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
+                        className={clsx('font-medium leading-tight cursor-pointer hover:text-indigo-600 hover:underline', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}
+                      >{app.firma}</button>
+                    ) : (
+                      <p className={clsx('font-medium leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>{app.firma}</p>
+                    )
                   )}
                   <p className="text-xs text-gray-500 leading-tight mt-0.5">{app.rolle}</p>
                 </div>
