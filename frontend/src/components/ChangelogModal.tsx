@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.0',
+    date: '2026-06-26',
+    changes: [
+      'LinkedIn-Sync in den normalen Sync-Button integriert — läuft jetzt automatisch mit allen anderen Quellen.',
+      'Neue Datenquelle "linkedin_msg": LinkedIn-Nachrichten werden gescraped und als Timeline-Events (Typ: Mail) verknüpft.',
+      '2FA-Eingabe direkt im Sync-Progress-Overlay ohne separaten Dialog.',
+      '"LinkedIn einrichten" im Sync-Dropdown öffnet die Konfiguration (Zugangsdaten, Session-Reset).',
+    ],
+  },
+  {
     version: '3.13.1',
     date: '2026-06-26',
     changes: [

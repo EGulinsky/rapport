@@ -50,6 +50,8 @@ _state: dict = {
     "category_counts": [], # per-category scrape results (grows during scraping)
     "pagination_log": [],  # debug: pagination events per category (persists after sync)
     "raw_jobs": [],        # all scraped jobs (debug)
+    "msg_processed": 0,    # conversations scanned for messages
+    "msg_created": 0,      # message events created
     "started_at": None,
     "finished_at": None,
 }
@@ -73,6 +75,8 @@ def _reset_state():
         "log": [],
         "category_counts": [],
         "pagination_log": [],
+        "msg_processed": 0,
+        "msg_created": 0,
         "started_at": None,
         "finished_at": None,
     })
@@ -735,6 +739,130 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     return jobs
 
 
+async def _scrape_messages(page, db: Session, apps_list: list) -> int:
+    """Scrape LinkedIn inbox and create timeline events for application-related conversations."""
+    from app.routers.sync_common import load_synced_ids, mark_synced
+    from app.dedup import norm_firma
+
+    _state["step"] = "Nachrichten: Posteingang laden…"
+
+    # Build lookup: normalized company name → set of app_ids
+    company_map: dict[str, set[int]] = {}
+    for app in apps_list:
+        for name in filter(None, [app.firma, getattr(app, "zielfirma_bei_hh", None)]):
+            key = norm_firma(name)
+            if len(key) >= 3:
+                company_map.setdefault(key, set()).add(app.id)
+
+    if not company_map:
+        return 0
+
+    synced = load_synced_ids(db, "linkedin_msg")
+    created = 0
+
+    try:
+        await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(1)
+
+        # Extract conversation thread links + sidebar preview text
+        try:
+            conv_data: list[dict] = await page.evaluate("""
+                () => {
+                    const seen = new Set();
+                    const results = [];
+                    document.querySelectorAll('a[href*="/messaging/thread/"]').forEach(a => {
+                        const href = a.href.split('?')[0];
+                        if (seen.has(href)) return;
+                        seen.add(href);
+                        const item = a.closest('li') || a.closest('[data-control-name]') || a.parentElement;
+                        results.push({ href, text: item ? item.innerText : a.innerText });
+                    });
+                    return results;
+                }
+            """)
+        except Exception:
+            conv_data = []
+
+        _state["msg_processed"] = len(conv_data)
+
+        for conv in conv_data[:50]:
+            href = (conv.get("href") or "").strip()
+            sidebar_text = (conv.get("text") or "").lower()
+            if not href:
+                continue
+
+            m = re.search(r"/messaging/thread/([^/?#]+)", href)
+            if not m:
+                continue
+            thread_id = m.group(1)
+
+            if thread_id in synced:
+                continue
+
+            # Match company names against sidebar preview text
+            matched_ids: set[int] = set()
+            for key, ids in company_map.items():
+                if key in sidebar_text:
+                    matched_ids.update(ids)
+
+            if not matched_ids:
+                continue
+
+            # Open conversation for full content
+            _state["step"] = f"Nachrichten: öffne Thread {thread_id[:16]}…"
+            try:
+                await page.goto(href, wait_until="domcontentloaded", timeout=20000)
+                await asyncio.sleep(2)
+                full_text = await page.inner_text("body")
+            except Exception:
+                continue
+
+            # Extract participant name (first short substantial line)
+            lines = [ln.strip() for ln in full_text.split("\n") if 2 < len(ln.strip()) < 80]
+            skip = {"LinkedIn", "Messaging", "Nachrichten", "Messages"}
+            participant = next((ln for ln in lines if ln not in skip), "Unbekannt")
+
+            # Message preview: first long-ish line that looks like content
+            preview_lines = [ln for ln in (ln.strip() for ln in full_text.split("\n"))
+                             if len(ln) > 20 and ln not in skip and ln != participant]
+            preview = preview_lines[0][:300] if preview_lines else None
+
+            today = date.today()
+
+            for app_id in matched_ids:
+                existing = (
+                    db.query(models.Event)
+                    .filter_by(application_id=app_id, source="linkedin_msg", external_id=thread_id)
+                    .first()
+                )
+                if existing:
+                    continue
+                db.add(models.Event(
+                    application_id=app_id,
+                    typ="mail",
+                    datum=today,
+                    titel=f"LinkedIn-Nachricht: {participant[:80]}",
+                    notiz=preview,
+                    source="linkedin_msg",
+                    external_id=thread_id,
+                ))
+                created += 1
+
+            mark_synced(db, "linkedin_msg", thread_id)
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
+    except Exception as e:
+        _state["errors"].append(f"Messages-Scraper: {e}")
+
+    _state["msg_created"] = created
+    return created
+
+
 def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None]:
     """Match job to existing application or create new. Returns (app, created, pending_status).
 
@@ -970,6 +1098,12 @@ async def _async_sync(cfg_id: int):
                 _state["category_counts"].append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
                 _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_key)})"
             all_jobs = list(all_jobs_by_key.values())
+
+            # Scrape messages before closing the browser session
+            apps_for_msg = db.query(models.Application).all()
+            msg_created = await _scrape_messages(page, db, apps_for_msg)
+            _state["msg_created"] = msg_created
+
             await browser.close()
 
         if not all_jobs and _state["status"] != "needs_login":
@@ -1088,6 +1222,7 @@ async def _async_sync(cfg_id: int):
             "skipped": skipped,
             "errors": errors,
             "log": action_log,
+            "msg_created": _state.get("msg_created", 0),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         })
 

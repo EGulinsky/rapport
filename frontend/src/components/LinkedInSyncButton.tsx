@@ -5,12 +5,15 @@ import type { LinkedInSyncStatus, LinkedInSyncLogEntry } from '../types'
 
 interface Props {
   onSynced: () => void
+  /** When provided, the component is controlled externally — no standalone button rendered */
+  open?: boolean
+  onClose?: () => void
   triggerCount?: number
 }
 
 type View = 'config' | 'running'
 
-export function LinkedInSyncButton({ onSynced, triggerCount }: Props) {
+export function LinkedInSyncButton({ onSynced, open, onClose, triggerCount }: Props) {
   const [showModal, setShowModal] = useState(false)
   const [view, setView] = useState<View>('config')
   const [config, setConfig] = useState<{ configured: boolean; email?: string; has_session: boolean; last_sync?: string } | null>(null)
@@ -42,6 +45,19 @@ export function LinkedInSyncButton({ onSynced, triggerCount }: Props) {
     if (triggerCount && triggerCount > 0) openModal()
   }, [triggerCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Controlled-open mode: sync external `open` prop with internal modal state
+  useEffect(() => {
+    if (open === true) {
+      loadConfig()
+      setView('config')
+      setError(null)
+      setSyncState(null)
+      setShowModal(true)
+    } else if (open === false) {
+      setShowModal(false)
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function openModal() {
     await loadConfig()
     setView('config')
@@ -53,6 +69,7 @@ export function LinkedInSyncButton({ onSynced, triggerCount }: Props) {
   function closeModal() {
     stopPolling()
     setShowModal(false)
+    onClose?.()
   }
 
   async function handleSaveConfig() {
@@ -121,7 +138,7 @@ export function LinkedInSyncButton({ onSynced, triggerCount }: Props) {
 
   return (
     <>
-      {triggerCount === undefined && (
+      {triggerCount === undefined && open === undefined && (
         <button
           onClick={openModal}
           title="LinkedIn-Bewerbungen synchronisieren"

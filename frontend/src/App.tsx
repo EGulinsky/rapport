@@ -87,7 +87,7 @@ export default function App() {
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
   const [appsCompanyFilter, setAppsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
-  const [liTrigger, setLiTrigger] = useState(0)
+  const [showLinkedInConfig, setShowLinkedInConfig] = useState(false)
 
   const prevAppsRef = useRef<Map<number, string>>(new Map())
   const [updatedAppIds, setUpdatedAppIds] = useState<Set<number>>(new Set())
@@ -251,7 +251,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} onLinkedIn={() => setLiTrigger(t => t + 1)} />
+              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} onLinkedInConfig={() => setShowLinkedInConfig(true)} />
               <ImportExportMenu onImported={load} />
               <button
                 onClick={() => setShowCleanup(true)}
@@ -481,7 +481,7 @@ export default function App() {
         />
       )}
 
-      <LinkedInSyncButton onSynced={load} triggerCount={liTrigger} />
+      <LinkedInSyncButton onSynced={load} open={showLinkedInConfig} onClose={() => setShowLinkedInConfig(false)} />
       {showAiSettings && <SettingsModal onClose={() => setShowAiSettings(false)} />}
       {showAuditLog && <AuditLogModal onClose={() => setShowAuditLog(false)} />}
       {showCleanup && (
