@@ -3,6 +3,7 @@ import { X, ExternalLink, Clock, CheckCircle, XCircle } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus } from '../types'
 import { StatusBadge } from './StatusBadge'
+import { CompanyLogo } from './CompanyLogo'
 import clsx from 'clsx'
 
 interface Props {
@@ -78,9 +79,12 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
               <div className="h-6 w-48 bg-gray-100 rounded animate-pulse" />
             ) : (
               <>
-                <h2 className="text-lg font-semibold text-gray-900 truncate">
-                  {company?.name_display || company?.name_norm}
-                </h2>
+                <div className="flex items-center gap-2.5 mb-0.5">
+                  <CompanyLogo name={company?.name_display || company?.name_norm || ''} website={company?.website} />
+                  <h2 className="text-lg font-semibold text-gray-900 truncate">
+                    {company?.name_display || company?.name_norm}
+                  </h2>
+                </div>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {company?.sync_source && (
                     <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">
