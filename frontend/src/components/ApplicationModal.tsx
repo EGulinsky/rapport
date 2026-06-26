@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
+import { CompanyLogo } from './CompanyLogo'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
   SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE,
@@ -391,16 +392,22 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
               </div>
             ) : (
               <>
-                <div className="flex items-baseline gap-2">
-                  {app?.company_profile_id && onOpenCompany ? (
-                    <button
-                      onClick={() => onOpenCompany(app.company_profile_id!)}
-                      className="text-lg font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 hover:underline"
-                    >{app?.firma}</button>
-                  ) : (
-                    <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}</h2>
-                  )}
-                  <span className="text-xs text-gray-300 shrink-0 select-all">#{app?.id}</span>
+                <div className="flex items-center gap-2.5">
+                  <CompanyLogo
+                    name={app?.is_headhunter ? (app?.zielfirma_bei_hh || app?.firma || '') : (app?.firma || '')}
+                    website={app?.is_headhunter ? (app?.target_company_website ?? app?.company_website) : app?.company_website}
+                  />
+                  <div className="flex items-baseline gap-2 min-w-0">
+                    {app?.company_profile_id && onOpenCompany ? (
+                      <button
+                        onClick={() => onOpenCompany(app.company_profile_id!)}
+                        className="text-lg font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 hover:underline"
+                      >{app?.firma}</button>
+                    ) : (
+                      <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}</h2>
+                    )}
+                    <span className="text-xs text-gray-300 shrink-0 select-all">#{app?.id}</span>
+                  </div>
                 </div>
                 <p className="text-sm text-gray-500 truncate">{app?.rolle}</p>
               </>
