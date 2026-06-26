@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { X, ExternalLink, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus } from '../types'
 import { StatusBadge } from './StatusBadge'
@@ -10,6 +10,8 @@ interface Props {
   id: number
   onClose: () => void
   onOpenApplication?: (id: number) => void
+  onOpenContact?: (id: number) => void
+  onMergeRequest?: (ids: number[]) => void
 }
 
 const COMPANY_TYPE_COLORS: Record<string, string> = {
@@ -35,15 +37,52 @@ const COMPANY_TYPE_LABELS: Record<string, string> = {
 }
 
 const SYNC_SOURCE_LABELS: Record<string, string> = {
-  ai:       'KI',
-  linkedin: 'LinkedIn',
-  manual:   'Manuell',
+  ai: 'KI', linkedin: 'LinkedIn', manual: 'Manuell',
 }
 
-export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
+const COMPANY_TYPES = ['startup', 'konzern', 'kmu', 'beratung', 'headhunter', 'nonprofit', 'public', 'other']
+
+type Tab = 'info' | 'apps' | 'contacts'
+
+interface EditState {
+  name_display: string
+  industry: string
+  company_type: string
+  employee_range: string
+  employee_count: string
+  founded_year: string
+  hq_city: string
+  hq_country: string
+  website: string
+  linkedin_company_url: string
+  description: string
+}
+
+function toEditState(c: CompanyProfile): EditState {
+  return {
+    name_display: c.name_display ?? '',
+    industry: c.industry ?? '',
+    company_type: c.company_type ?? '',
+    employee_range: c.employee_range ?? '',
+    employee_count: c.employee_count != null ? String(c.employee_count) : '',
+    founded_year: c.founded_year != null ? String(c.founded_year) : '',
+    hq_city: c.hq_city ?? '',
+    hq_country: c.hq_country ?? '',
+    website: c.website ?? '',
+    linkedin_company_url: c.linkedin_company_url ?? '',
+    description: c.description ?? '',
+  }
+}
+
+export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onMergeRequest }: Props) {
   const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('info')
+  const [editing, setEditing] = useState(false)
+  const [editState, setEditState] = useState<EditState | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -60,6 +99,52 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
 
   useEffect(() => { load() }, [load])
 
+  function startEdit() {
+    if (!company) return
+    setEditState(toEditState(company))
+    setEditing(true)
+    setSaveError(null)
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+    setEditState(null)
+    setSaveError(null)
+  }
+
+  async function saveEdit() {
+    if (!editState || !company) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const updated = await api.companies.update(id, {
+        name_display: editState.name_display || null,
+        industry: editState.industry || null,
+        company_type: editState.company_type || null,
+        employee_range: editState.employee_range || null,
+        employee_count: editState.employee_count ? parseInt(editState.employee_count) : null,
+        founded_year: editState.founded_year ? parseInt(editState.founded_year) : null,
+        hq_city: editState.hq_city || null,
+        hq_country: editState.hq_country || null,
+        website: editState.website || null,
+        linkedin_company_url: editState.linkedin_company_url || null,
+        description: editState.description || null,
+      })
+      setCompany(updated)
+      setEditing(false)
+      setEditState(null)
+    } catch (e) {
+      setSaveError(String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function ef(field: keyof EditState) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setEditState(s => s ? { ...s, [field]: e.target.value } : s)
+  }
+
   function formatDate(s: string | null | undefined): string {
     if (!s) return '—'
     return new Date(s).toLocaleDateString('de-DE')
@@ -67,12 +152,20 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
 
   const location = [company?.hq_city, company?.hq_country].filter(Boolean).join(', ')
 
+  const tabs: [Tab, string, number | undefined][] = [
+    ['info', 'Profil', undefined],
+    ['apps', 'Bewerbungen', company?.app_count],
+    ['contacts', 'Kontakte', company?.contact_count],
+  ]
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+
+        {/* Header */}
         <div className="flex items-start justify-between gap-3 p-5 border-b border-gray-100">
           <div className="flex-1 min-w-0">
             {loading ? (
@@ -100,21 +193,86 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
               </>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {!loading && company && !editing && (
+              <>
+                {onMergeRequest && (
+                  <button
+                    onClick={() => onMergeRequest([id])}
+                    title="Mit anderer Firma zusammenführen"
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                  >
+                    <GitMerge className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  onClick={startEdit}
+                  title="Bearbeiten"
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </>
+            )}
+            {editing && (
+              <>
+                <button onClick={cancelEdit} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" title="Abbrechen">
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={saving}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saving ? 'Speichern…' : 'Speichern'}
+                </button>
+              </>
+            )}
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 px-5 gap-1">
+          {tabs.map(([t, label, count]) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors',
+                tab === t
+                  ? 'border-indigo-500 text-indigo-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              )}
+            >
+              {label}
+              {count != null && (
+                <span className={clsx(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                  tab === t ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                )}>
+                  {count}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
           )}
+          {saveError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{saveError}</div>
+          )}
 
-          {!loading && company && (
+          {/* ── Profil Tab ── */}
+          {tab === 'info' && !loading && company && (
             <>
+              {/* Sync status */}
               <div className="flex items-center gap-2">
                 {company.sync_status === 'pending' && (
                   <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-yellow-100 text-yellow-700">
@@ -127,10 +285,7 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
                   </span>
                 )}
                 {company.sync_status === 'failed' && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700"
-                    title={company.sync_error ?? undefined}
-                  >
+                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700" title={company.sync_error ?? undefined}>
                     <XCircle className="h-3 w-3" /> Fehler
                   </span>
                 )}
@@ -142,97 +297,149 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Branche</p>
-                  <p className="text-gray-900">{company.industry || '—'}</p>
+              {/* Fields — view or edit */}
+              {!editing ? (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  <Field label="Anzeigename">{company.name_display || <Dash />}</Field>
+                  <Field label="Branche">{company.industry || <Dash />}</Field>
+                  <Field label="Typ">
+                    {company.company_type ? (
+                      <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', COMPANY_TYPE_COLORS[company.company_type] ?? 'bg-gray-100 text-gray-600')}>
+                        {COMPANY_TYPE_LABELS[company.company_type] ?? company.company_type}
+                      </span>
+                    ) : <Dash />}
+                  </Field>
+                  <Field label="Mitarbeiter">{company.employee_range || (company.employee_count != null ? String(company.employee_count) : <Dash />)}</Field>
+                  <Field label="Gegründet">{company.founded_year ?? <Dash />}</Field>
+                  <Field label="Standort">{location || <Dash />}</Field>
+                  {company.website && (
+                    <Field label="Website">
+                      <a href={company.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs">
+                        <ExternalLink className="h-3 w-3" />
+                        {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                      </a>
+                    </Field>
+                  )}
+                  {company.linkedin_company_url && (
+                    <Field label="LinkedIn">
+                      <a href={company.linkedin_company_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs">
+                        <ExternalLink className="h-3 w-3" /> LinkedIn
+                      </a>
+                    </Field>
+                  )}
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Typ</p>
-                  {company.company_type ? (
-                    <span className={clsx(
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                      COMPANY_TYPE_COLORS[company.company_type] ?? 'bg-gray-100 text-gray-600'
-                    )}>
-                      {COMPANY_TYPE_LABELS[company.company_type] ?? company.company_type}
-                    </span>
-                  ) : <p className="text-gray-400">—</p>}
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Mitarbeiter</p>
-                  <p className="text-gray-900">{company.employee_range || (company.employee_count != null ? String(company.employee_count) : '—')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Gegründet</p>
-                  <p className="text-gray-900">{company.founded_year ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Standort</p>
-                  <p className="text-gray-900">{location || '—'}</p>
-                </div>
-                {company.website && (
+              ) : editState && (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <EditField label="Anzeigename" value={editState.name_display} onChange={ef('name_display')} />
+                  <EditField label="Branche" value={editState.industry} onChange={ef('industry')} />
                   <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Website</p>
-                    <a
-                      href={company.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                    </a>
+                    <label className="block text-xs text-gray-400 mb-1">Typ</label>
+                    <select value={editState.company_type} onChange={ef('company_type')}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="">—</option>
+                      {COMPANY_TYPES.map(t => <option key={t} value={t}>{COMPANY_TYPE_LABELS[t]}</option>)}
+                    </select>
                   </div>
-                )}
-                {company.linkedin_company_url && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">LinkedIn</p>
-                    <a
-                      href={company.linkedin_company_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      LinkedIn
-                    </a>
+                  <EditField label="Mitarbeiter (Range)" value={editState.employee_range} onChange={ef('employee_range')} placeholder="z.B. 50-200" />
+                  <EditField label="Mitarbeiteranzahl" value={editState.employee_count} onChange={ef('employee_count')} type="number" />
+                  <EditField label="Gegründet" value={editState.founded_year} onChange={ef('founded_year')} type="number" />
+                  <EditField label="Stadt" value={editState.hq_city} onChange={ef('hq_city')} />
+                  <EditField label="Land" value={editState.hq_country} onChange={ef('hq_country')} />
+                  <div className="col-span-2">
+                    <EditField label="Website" value={editState.website} onChange={ef('website')} placeholder="https://…" />
                   </div>
-                )}
-              </div>
+                  <div className="col-span-2">
+                    <EditField label="LinkedIn URL" value={editState.linkedin_company_url} onChange={ef('linkedin_company_url')} placeholder="https://linkedin.com/company/…" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-gray-400 mb-1">Beschreibung</label>
+                    <textarea
+                      value={editState.description}
+                      onChange={ef('description')}
+                      rows={4}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                </div>
+              )}
 
-              {company.description && (
+              {!editing && company.description && (
                 <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5 text-sm text-gray-700 whitespace-pre-wrap">
                   {company.description}
                 </div>
               )}
+            </>
+          )}
 
-              {company.applications && company.applications.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">
-                    Bewerbungen ({company.applications.length})
-                  </h3>
-                  <div className="space-y-1.5">
-                    {company.applications.map(app => (
-                      <button
-                        key={app.id}
-                        onClick={() => onOpenApplication?.(app.id)}
-                        className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors flex items-center justify-between gap-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{app.rolle}</p>
-                          {app.datum_bewerbung && (
-                            <p className="text-xs text-gray-400">
-                              {new Date(app.datum_bewerbung).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                            </p>
+          {/* ── Bewerbungen Tab ── */}
+          {tab === 'apps' && !loading && company && (
+            company.applications && company.applications.length > 0 ? (
+              <div className="space-y-1.5">
+                {company.applications.map(app => (
+                  <button
+                    key={app.id}
+                    onClick={() => onOpenApplication?.(app.id)}
+                    className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{app.rolle}</p>
+                      {app.datum_bewerbung && (
+                        <p className="text-xs text-gray-400">
+                          {new Date(app.datum_bewerbung).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                    <StatusBadge status={app.main_status as MainStatus} size="sm" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">Keine verknüpften Bewerbungen</p>
+            )
+          )}
+
+          {/* ── Kontakte Tab ── */}
+          {tab === 'contacts' && !loading && company && (
+            company.contacts && company.contacts.length > 0 ? (
+              <div className="space-y-1.5">
+                {company.contacts.map(contact => (
+                  <button
+                    key={contact.id}
+                    onClick={() => onOpenContact?.(contact.id)}
+                    className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2.5 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{contact.name}</p>
+                        {contact.rolle && <p className="text-xs text-gray-500 truncate">{contact.rolle}</p>}
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                          {contact.email && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                              <Mail className="h-3 w-3" />{contact.email}
+                            </span>
+                          )}
+                          {contact.telefon && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                              <Phone className="h-3 w-3" />{contact.telefon}
+                            </span>
+                          )}
+                          {contact.linkedin_url && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                              <Linkedin className="h-3 w-3" />LinkedIn
+                            </span>
                           )}
                         </div>
-                        <StatusBadge status={app.main_status as MainStatus} size="sm" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+                      </div>
+                      {contact.typ && (
+                        <span className="text-[10px] font-medium bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 shrink-0">{contact.typ}</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">Keine verknüpften Kontakte</p>
+            )
           )}
 
           {loading && (
@@ -247,6 +454,40 @@ export function CompanyModal({ id, onClose, onOpenApplication }: Props) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+      <div className="text-gray-900 text-sm">{children}</div>
+    </div>
+  )
+}
+
+function Dash() {
+  return <span className="text-gray-400">—</span>
+}
+
+function EditField({ label, value, onChange, type = 'text', placeholder }: {
+  label: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  type?: string
+  placeholder?: string
+}) {
+  return (
+    <div>
+      <label className="block text-xs text-gray-400 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
     </div>
   )
 }

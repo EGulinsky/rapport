@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.5.0',
+    date: '2026-06-26',
+    changes: [
+      'Neu: Firmenmodal mit Tabs (Profil / Bewerbungen / Kontakte) — Kontakte aus verknüpften Bewerbungen.',
+      'Neu: Firmen bearbeiten (Anzeigename, Branche, Typ, Mitarbeiter, Standort, Website, Beschreibung).',
+      'Neu: Firmen zusammenführen — analog Bewerbungen/Kontakte, Feld-für-Feld-Auswahl.',
+      'Neu: Kontaktanzahl in der Firmenliste, Multiselect für Merge.',
+    ],
+  },
+  {
     version: '3.4.1',
     date: '2026-06-26',
     changes: [

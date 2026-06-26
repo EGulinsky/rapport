@@ -18,7 +18,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
 import { ChangelogModal, CURRENT_VERSION } from './components/ChangelogModal'
-import { AppMergeDialog } from './components/MergeDialog'
+import { AppMergeDialog, CompanyMergeDialog } from './components/MergeDialog'
 import AuditLogModal from './components/AuditLogModal'
 import { BUILD_NUMBER } from './version'
 import {
@@ -53,6 +53,7 @@ export default function App() {
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
+  const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
   const [liTrigger, setLiTrigger] = useState(0)
 
   useEffect(() => {
@@ -233,6 +234,7 @@ export default function App() {
           <CompaniesView
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
+            onMergeRequest={ids => setCompanyMergeIds(ids)}
           />
         )}
         {mainView === 'calendar' && (
@@ -377,6 +379,16 @@ export default function App() {
           id={companyModalId}
           onClose={() => setCompanyModalId(null)}
           onOpenApplication={id => { setCompanyModalId(null); setMainView('applications'); setSelectedId(id) }}
+          onOpenContact={() => { setCompanyModalId(null); setMainView('contacts') }}
+          onMergeRequest={ids => { setCompanyModalId(null); setCompanyMergeIds(ids) }}
+        />
+      )}
+
+      {companyMergeIds && (
+        <CompanyMergeDialog
+          companyIds={companyMergeIds}
+          onMerged={winnerId => { setCompanyMergeIds(null); setCompanyModalId(winnerId) }}
+          onClose={() => setCompanyMergeIds(null)}
         />
       )}
 

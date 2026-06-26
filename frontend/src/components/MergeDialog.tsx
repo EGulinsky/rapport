@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, GitMerge } from 'lucide-react'
 import { api } from '../api/client'
-import type { Application, Contact } from '../types'
+import type { Application, Contact, CompanyProfile } from '../types'
 import { MAIN_STATUS_LABELS } from '../types'
 import clsx from 'clsx'
 
@@ -381,5 +381,192 @@ function FieldTable({
         </tbody>
       </table>
     </div>
+  )
+}
+
+// ── Company merge dialog ──────────────────────────────────────────────────────
+
+const COMPANY_FIELDS: FieldDef[] = [
+  { key: 'name_display', label: 'Anzeigename' },
+  { key: 'industry', label: 'Branche' },
+  { key: 'company_type', label: 'Typ' },
+  { key: 'employee_range', label: 'Mitarbeiter (Range)' },
+  { key: 'employee_count', label: 'Mitarbeiteranzahl' },
+  { key: 'founded_year', label: 'Gegründet' },
+  { key: 'hq_city', label: 'Stadt' },
+  { key: 'hq_country', label: 'Land' },
+  { key: 'website', label: 'Website' },
+  { key: 'linkedin_company_url', label: 'LinkedIn' },
+  { key: 'description', label: 'Beschreibung' },
+]
+
+interface CompanyMergeProps {
+  companyIds: number[]
+  onMerged: (winnerId: number) => void
+  onClose: () => void
+}
+
+export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMergeProps) {
+  const [allCompanyIds, setAllCompanyIds] = useState(companyIds)
+  const [companies, setCompanies] = useState<CompanyProfile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [winnerId, setWinnerId] = useState(companyIds[0])
+  const [fieldSources, setFieldSources] = useState<Record<string, number>>({})
+  const [merging, setMerging] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // Search for second company (single-ID mode)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<CompanyProfile[]>([])
+  const [searching, setSearching] = useState(false)
+  const needsPick = allCompanyIds.length < 2
+
+  useEffect(() => {
+    if (needsPick) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const loaded = await Promise.all(allCompanyIds.map(id => api.companies.get(id)))
+        setCompanies(loaded)
+        const init: Record<string, number> = {}
+        for (const f of COMPANY_FIELDS) init[f.key] = allCompanyIds[0]
+        setFieldSources(init)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [allCompanyIds])
+
+  useEffect(() => {
+    if (!searchQuery.trim() || !needsPick) { setSearchResults([]); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const results = await api.companies.list({ search: searchQuery })
+        setSearchResults(results.filter(c => !allCompanyIds.includes(c.id)).slice(0, 8))
+      } finally {
+        setSearching(false)
+      }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  if (needsPick) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b">
+            <div className="flex items-center gap-2">
+              <GitMerge className="h-4 w-4 text-indigo-600" />
+              <h2 className="text-base font-semibold text-gray-900">Firma zum Zusammenführen wählen</h2>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-xs text-gray-500">Mit welcher Firma soll zusammengeführt werden?</p>
+            <input
+              autoFocus
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Firmenname suchen…"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            {searching && <p className="text-xs text-gray-400">Suche…</p>}
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {searchResults.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setAllCompanyIds([...allCompanyIds, c.id])}
+                  className="w-full text-left rounded-lg border border-gray-100 px-3 py-2 text-sm hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                >
+                  <span className="font-medium text-gray-900">{c.name_display || c.name_norm}</span>
+                  {c.industry && <span className="text-gray-400 text-xs ml-2">{c.industry}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function changeWinner(id: number) {
+    setWinnerId(id)
+    const reset: Record<string, number> = {}
+    for (const f of COMPANY_FIELDS) reset[f.key] = id
+    setFieldSources(reset)
+  }
+
+  async function handleMerge() {
+    setMerging(true)
+    setError(null)
+    try {
+      const res = await api.merge.companies({
+        winner_id: winnerId,
+        loser_ids: allCompanyIds.filter(id => id !== winnerId),
+        field_overrides: fieldSources,
+      })
+      onMerged(res.winner_id)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+    } finally {
+      setMerging(false)
+    }
+  }
+
+  function companyLabel(c: Record<string, unknown>): string {
+    return String(c['name_display'] || c['name_norm'] || c['id'] || '?')
+  }
+
+  const records = companies as unknown as Record<string, unknown>[]
+  const visibleFields = COMPANY_FIELDS.filter(f =>
+    records.some(r => {
+      const v = r[f.key]
+      return v !== null && v !== undefined && v !== ''
+    })
+  )
+
+  return (
+    <MergeShell
+      title={`${companies.length} Firmen zusammenführen`}
+      loading={loading}
+      merging={merging}
+      error={error}
+      onClose={onClose}
+      onMerge={handleMerge}
+    >
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Basis-Eintrag (ID und Bewerbungen bleiben erhalten)
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {records.map(e => {
+            const eid = e['id'] as number
+            return (
+              <label
+                key={eid}
+                className={clsx(
+                  'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors text-sm',
+                  winnerId === eid ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                )}
+              >
+                <input type="radio" checked={winnerId === eid} onChange={() => changeWinner(eid)} className="text-indigo-600 shrink-0" />
+                <span className="font-medium">{companyLabel(e)}</span>
+                <span className="text-xs text-gray-400">#{eid}</span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+      <FieldTable
+        fields={visibleFields}
+        entities={records}
+        fieldSources={fieldSources}
+        onSelect={(key, id) => setFieldSources(p => ({ ...p, [key]: id }))}
+      />
+      <p className="text-xs text-gray-500">
+        Alle Bewerbungen der nicht-Basis-Firmen werden auf die Basis-Firma übertragen. Die nicht-Basis-Einträge werden danach gelöscht.
+      </p>
+    </MergeShell>
   )
 }

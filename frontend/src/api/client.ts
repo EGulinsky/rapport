@@ -309,6 +309,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(req),
       }),
+    companies: (req: { winner_id: number; loser_ids: number[]; field_overrides?: Record<string, number> }) =>
+      request<MergeResult>('/merge/companies', {
+        method: 'POST',
+        body: JSON.stringify(req),
+      }),
   },
 
   backup: {
@@ -365,5 +370,7 @@ export const api = {
     list: (params?: { search?: string; sort?: string; order?: string }) =>
       request<CompanyProfile[]>(`/companies${params ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString() : ''}`),
     get: (id: number) => request<CompanyProfile>(`/companies/${id}`),
+    update: (id: number, data: Partial<CompanyProfile>) =>
+      request<CompanyProfile>(`/companies/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
 }

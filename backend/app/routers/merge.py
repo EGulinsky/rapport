@@ -84,6 +84,51 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
     return {"success": True, "winner_id": winner.id}
 
 
+MERGEABLE_COMPANY_FIELDS = {
+    "name_display", "industry", "company_type", "employee_range", "employee_count",
+    "founded_year", "hq_city", "hq_country", "website", "linkedin_company_url", "description",
+}
+
+
+class SimpleMergeRequest(BaseModel):
+    winner_id: int
+    loser_ids: list[int]
+    field_overrides: dict[str, int] = {}
+
+
+@router.post("/companies")
+def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
+    if not req.loser_ids:
+        raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+    all_ids = [req.winner_id] + req.loser_ids
+    companies = {c.id: c for c in db.query(models.CompanyProfile).filter(models.CompanyProfile.id.in_(all_ids)).all()}
+    if len(companies) != len(all_ids):
+        raise HTTPException(404, "Eine oder mehrere Firmen nicht gefunden")
+
+    winner = companies[req.winner_id]
+    losers = [companies[i] for i in req.loser_ids if i in companies]
+
+    for field, source_id in req.field_overrides.items():
+        if field in MERGEABLE_COMPANY_FIELDS and source_id in companies:
+            setattr(winner, field, getattr(companies[source_id], field))
+
+    for loser in losers:
+        for app in list(loser.applications):
+            app.company_profile_id = winner.id
+        for app in list(loser.hh_applications):
+            app.target_company_profile_id = winner.id
+        db.flush()
+
+        add_audit(db, "merge", "user", app_id=None,
+                  old_value=f"{loser.name_display or loser.name_norm} (#{loser.id})",
+                  new_value=f"{winner.name_display or winner.name_norm} (#{winner.id})",
+                  reason="Firmen zusammengeführt")
+        db.delete(loser)
+
+    db.commit()
+    return {"success": True, "winner_id": winner.id}
+
+
 @router.post("/contacts")
 def merge_contacts(req: MergeRequest, db: Session = Depends(get_db)):
     if not req.loser_ids:
