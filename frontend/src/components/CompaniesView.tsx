@@ -41,8 +41,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortKey, setSortKey] = useState<SortKey>('apps')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   function toggleSelect(id: number, e: React.MouseEvent) {
