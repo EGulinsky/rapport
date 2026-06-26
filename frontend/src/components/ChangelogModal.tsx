@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.13.0',
+    date: '2026-06-26',
+    changes: [
+      'Sync-Indikator: Neue oder geänderte Bewerbungen werden nach jedem Sync mit einem pulsierenden Punkt markiert.',
+      'Automatisches Öffnen des Prüf-Dialogs wenn nach einem Sync manuelle Aufgaben anfallen.',
+      'Review-Zähler: Wird jetzt nach allen Sync-Arten aktualisiert (Einzel-Sync, Firmen-Sync) + 30s-Polling.',
+    ],
+  },
+  {
     version: '3.12.0',
     date: '2026-06-26',
     changes: [

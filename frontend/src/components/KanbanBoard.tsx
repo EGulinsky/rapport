@@ -19,17 +19,21 @@ interface Props {
   onSelect: (id: number) => void
   onChanged: () => void
   onOpenCompany?: (id: number) => void
+  updatedIds?: Set<number>
 }
 
-function KanbanCard({ app, isDragging, onOpenCompany }: { app: Application; isDragging?: boolean; onOpenCompany?: (id: number) => void }) {
+function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Application; isDragging?: boolean; onOpenCompany?: (id: number) => void; isUpdated?: boolean }) {
   return (
     <div className={clsx(
-      'w-full text-left rounded-xl border bg-white p-3 shadow-sm',
+      'relative w-full text-left rounded-xl border bg-white p-3 shadow-sm',
       app.abgesagt
         ? 'border-l-4 border-l-red-300 border-gray-200 opacity-60 bg-rose-50/20'
         : 'border-gray-200',
       isDragging ? 'opacity-50 shadow-lg rotate-1' : (!app.abgesagt && 'hover:border-indigo-300 hover:shadow-md transition-all')
     )}>
+      {isUpdated && (
+        <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white animate-pulse" />
+      )}
       {app.abgesagt && (
         <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600 mb-1.5">
           Abgesagt
@@ -111,7 +115,7 @@ function KanbanCard({ app, isDragging, onOpenCompany }: { app: Application; isDr
   )
 }
 
-function DraggableCard({ app, onSelect, onOpenCompany }: { app: Application; onSelect: (id: number) => void; onOpenCompany?: (id: number) => void }) {
+function DraggableCard({ app, onSelect, onOpenCompany, updatedIds }: { app: Application; onSelect: (id: number) => void; onOpenCompany?: (id: number) => void; updatedIds?: Set<number> }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: app.id })
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined
 
@@ -120,16 +124,17 @@ function DraggableCard({ app, onSelect, onOpenCompany }: { app: Application; onS
       onClick={() => onSelect(app.id)}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <KanbanCard app={app} isDragging={isDragging} onOpenCompany={onOpenCompany} />
+      <KanbanCard app={app} isDragging={isDragging} onOpenCompany={onOpenCompany} isUpdated={updatedIds?.has(app.id)} />
     </div>
   )
 }
 
-function DroppableColumn({ status, items, onSelect, onOpenCompany }: {
+function DroppableColumn({ status, items, onSelect, onOpenCompany, updatedIds }: {
   status: MainStatus
   items: Application[]
   onSelect: (id: number) => void
   onOpenCompany?: (id: number) => void
+  updatedIds?: Set<number>
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
 
@@ -171,7 +176,7 @@ function DroppableColumn({ status, items, onSelect, onOpenCompany }: {
             )}
             <div className="space-y-2">
               {apps.map(app => (
-                <DraggableCard key={app.id} app={app} onSelect={onSelect} onOpenCompany={onOpenCompany} />
+                <DraggableCard key={app.id} app={app} onSelect={onSelect} onOpenCompany={onOpenCompany} updatedIds={updatedIds} />
               ))}
             </div>
           </div>
@@ -189,7 +194,7 @@ function DroppableColumn({ status, items, onSelect, onOpenCompany }: {
   )
 }
 
-export function KanbanBoard({ columns, onSelect, onChanged, onOpenCompany }: Props) {
+export function KanbanBoard({ columns, onSelect, onChanged, onOpenCompany, updatedIds }: Props) {
   const [draggingApp, setDraggingApp] = useState<Application | null>(null)
 
   const sensors = useSensors(
@@ -217,7 +222,7 @@ export function KanbanBoard({ columns, onSelect, onChanged, onOpenCompany }: Pro
       <div className="overflow-x-auto w-screen pb-8" style={{ scrollbarGutter: 'stable' }}>
         <div className="flex gap-4 px-4 sm:px-6 lg:px-8 pb-4 w-max">
           {columns.map(({ status, items }) => (
-            <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} onOpenCompany={onOpenCompany} />
+            <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} onOpenCompany={onOpenCompany} updatedIds={updatedIds} />
           ))}
         </div>
       </div>

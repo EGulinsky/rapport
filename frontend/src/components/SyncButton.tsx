@@ -173,7 +173,11 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
       const totalErrors = sources.reduce((s, r) => s + r.errors.length, 0)
 
       onSynced()
-      setSummary({ sources, totalCreated, newPending, totalErrors })
+      if (newPending > 0 && onReviewOpen) {
+        onReviewOpen()
+      } else {
+        setSummary({ sources, totalCreated, newPending, totalErrors })
+      }
     } catch {
       setSummary({
         sources: [],
