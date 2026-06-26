@@ -250,8 +250,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
       )}
 
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full min-w-[900px] text-sm">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="w-8 px-3" />
@@ -261,14 +261,12 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Größe</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Standort</th>
               <Th k="sync_status" label="Status" />
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-20">Bew.</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-20">Kontak.</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 && !loading && (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
                   Keine Firmen gefunden
                 </td>
               </tr>
@@ -293,9 +291,31 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <CompanyLogo name={company.name_display || company.name_norm} website={company.website} />
-                      <p className="font-medium text-gray-900 truncate max-w-[180px]">
-                        {company.name_display || company.name_norm}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate max-w-[180px]">
+                          {company.name_display || company.name_norm}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {(company.app_count ?? 0) > 0 && (
+                            <button
+                              onClick={e => { e.stopPropagation(); onNavigateToApps?.(company.name_display || company.name_norm) }}
+                              className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                            >
+                              <Briefcase className="h-2.5 w-2.5" />
+                              {company.app_count}
+                            </button>
+                          )}
+                          {(company.contact_count ?? 0) > 0 && (
+                            <button
+                              onClick={e => { e.stopPropagation(); onNavigateToContacts?.(company.name_display || company.name_norm) }}
+                              className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors"
+                            >
+                              <Users className="h-2.5 w-2.5" />
+                              {company.contact_count}
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500 truncate max-w-[160px]">
@@ -335,32 +355,6 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                       >
                         <XCircle className="h-3 w-3" /> Fehler
                       </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {(company.app_count ?? 0) > 0 ? (
-                      <button
-                        onClick={e => { e.stopPropagation(); onNavigateToApps?.(company.name_display || company.name_norm) }}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
-                      >
-                        <Briefcase className="h-3 w-3" />
-                        {company.app_count}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-gray-300">0</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {(company.contact_count ?? 0) > 0 ? (
-                      <button
-                        onClick={e => { e.stopPropagation(); onNavigateToContacts?.(company.name_display || company.name_norm) }}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
-                      >
-                        <Users className="h-3 w-3" />
-                        {company.contact_count}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-gray-300">0</span>
                     )}
                   </td>
                 </tr>
