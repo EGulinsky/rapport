@@ -144,6 +144,7 @@ class CompanyProfile(Base):
 
     applications         = relationship("Application", foreign_keys="Application.company_profile_id",    back_populates="company_profile")
     hh_applications      = relationship("Application", foreign_keys="Application.target_company_profile_id", back_populates="target_company_profile")
+    direct_contacts      = relationship("Contact", foreign_keys="Contact.company_profile_id", back_populates="company_profile")
 
 
 class Application(Base):
@@ -237,7 +238,7 @@ class Contact(Base):
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     company_profile_id = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
-    company_profile    = relationship("CompanyProfile", foreign_keys=[company_profile_id])
+    company_profile    = relationship("CompanyProfile", foreign_keys=[company_profile_id], back_populates="direct_contacts")
 
     applications    = relationship("Application", secondary="contact_application", back_populates="contacts")
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import List, Optional
@@ -43,6 +43,29 @@ def list_all_contacts(
                     break
 
     return contacts
+
+
+class ContactPatch(BaseModel):
+    company_profile_id: Optional[int] = None
+    firma: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    telefon: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    rolle: Optional[str] = None
+    typ: Optional[str] = None
+    notizen: Optional[str] = None
+
+
+@router.patch("/{contact_id}")
+def patch_contact(contact_id: int, body: ContactPatch, db: Session = Depends(get_db)):
+    contact = db.get(models.Contact, contact_id)
+    if not contact:
+        raise HTTPException(404)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(contact, field, value)
+    db.commit()
+    return {"ok": True}
 
 
 class BulkDeleteBody(BaseModel):
