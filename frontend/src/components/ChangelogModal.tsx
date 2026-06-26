@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.8.0',
+    date: '2026-06-26',
+    changes: [
+      'Neu: Bulk-Zuweisung von Muttergesellschaft in der Firmenliste — mehrere Firmen auswählen, Muttergesellschaft suchen und zuordnen.',
+    ],
+  },
+  {
     version: '3.7.0',
     date: '2026-06-26',
     changes: [
