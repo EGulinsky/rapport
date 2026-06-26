@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge } from 'lucide-react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -11,6 +11,8 @@ interface Props {
   onOpenApplication: (id: number) => void
   onOpenCompany: (id: number) => void
   onMergeRequest?: (ids: number[]) => void
+  onNavigateToApps?: (name: string) => void
+  onNavigateToContacts?: (name: string) => void
 }
 
 const COMPANY_TYPE_COLORS: Record<string, string> = {
@@ -35,7 +37,7 @@ const COMPANY_TYPE_LABELS: Record<string, string> = {
   other:       'Sonstiges',
 }
 
-export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest }: Props) {
+export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts }: Props) {
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -335,11 +337,31 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right text-gray-700 font-medium tabular-nums">
-                    {company.app_count ?? 0}
+                  <td className="px-4 py-3 text-right">
+                    {(company.app_count ?? 0) > 0 ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); onNavigateToApps?.(company.name_display || company.name_norm) }}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        <Briefcase className="h-3 w-3" />
+                        {company.app_count}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300">0</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-right text-gray-500 tabular-nums text-xs">
-                    {company.contact_count ?? 0}
+                  <td className="px-4 py-3 text-right">
+                    {(company.contact_count ?? 0) > 0 ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); onNavigateToContacts?.(company.name_display || company.name_norm) }}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                      >
+                        <Users className="h-3 w-3" />
+                        {company.contact_count}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300">0</span>
+                    )}
                   </td>
                 </tr>
               )

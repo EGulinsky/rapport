@@ -18,11 +18,12 @@ type SortKey = 'name' | 'firma' | 'typ' | 'letzter_kontakt'
 
 interface Props {
   onOpenApplication: (id: number) => void
+  initialSearch?: string
 }
 
-export function ContactsView({ onOpenApplication }: Props) {
+export function ContactsView({ onOpenApplication, initialSearch = '' }: Props) {
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [deleting, setDeleting] = useState(false)
