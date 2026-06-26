@@ -160,8 +160,9 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
   const sorted = useMemo(() => {
     let list = contacts
     if (companyFilter) {
+      const ids = new Set([companyFilter.id, ...(companyFilter.subsidiaryIds ?? [])])
       list = contacts.filter(c =>
-        c.company_profile_id === companyFilter.id ||
+        ids.has(c.company_profile_id!) ||
         c.firma === companyFilter.name ||
         c.firma?.toLowerCase() === companyFilter.name.toLowerCase()
       )
