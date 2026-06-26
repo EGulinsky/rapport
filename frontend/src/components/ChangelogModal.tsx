@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.7.0',
+    date: '2026-06-26',
+    changes: [
+      'Neu: Hierarchische Firmenstruktur — Muttergesellschaft und Tochterunternehmen verknüpfen.',
+      'Firmenprofil: Muttergesellschaft im Bearbeitungsmodus per Suche zuordnen (Zyklenerkennung).',
+      'Firmenprofil: Anzeige von Muttergesellschaft und Tochterunternehmen als klickbare Links.',
+      'Firmenliste: Kleiner "↑ Konzernname"-Hinweis bei Tochterunternehmen.',
+    ],
+  },
+  {
     version: '3.6.0',
     date: '2026-06-26',
     changes: [

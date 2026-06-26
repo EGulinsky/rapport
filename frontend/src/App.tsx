@@ -433,6 +433,7 @@ export default function App() {
           onClose={() => setCompanyModalId(null)}
           onOpenApplication={id => { setCompanyModalId(null); setMainView('applications'); setSelectedId(id) }}
           onOpenContact={() => { setCompanyModalId(null); setMainView('contacts') }}
+          onOpenCompany={id => setCompanyModalId(id)}
           onMergeRequest={ids => { setCompanyModalId(null); setCompanyMergeIds(ids) }}
         />
       )}

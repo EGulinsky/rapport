@@ -142,9 +142,13 @@ class CompanyProfile(Base):
     created_at           = Column(DateTime(timezone=True), server_default=func.now())
     updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
 
+    parent_company_id    = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
+
     applications         = relationship("Application", foreign_keys="Application.company_profile_id",    back_populates="company_profile")
     hh_applications      = relationship("Application", foreign_keys="Application.target_company_profile_id", back_populates="target_company_profile")
     direct_contacts      = relationship("Contact", foreign_keys="Contact.company_profile_id", back_populates="company_profile")
+    parent               = relationship("CompanyProfile", foreign_keys=[parent_company_id], remote_side="CompanyProfile.id", back_populates="subsidiaries")
+    subsidiaries         = relationship("CompanyProfile", foreign_keys="CompanyProfile.parent_company_id", back_populates="parent")
 
 
 class Application(Base):

@@ -666,6 +666,21 @@ def _migrate_company_logo():
     conn.close()
 
 
+def _migrate_company_parent():
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(company_profiles)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "parent_company_id" not in cols:
+        cur.execute("ALTER TABLE company_profiles ADD COLUMN parent_company_id INTEGER REFERENCES company_profiles(id)")
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -682,6 +697,7 @@ def init_db():
     _migrate_audit_log()
     _migrate_contact_company_profile()
     _migrate_company_logo()
+    _migrate_company_parent()
     Base.metadata.create_all(bind=engine)
     _migrate_company_profiles()
     _backfill_company_profiles()
