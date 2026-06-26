@@ -27,6 +27,7 @@ import {
 } from './types'
 import { Calendar, Telescope } from 'lucide-react'
 import clsx from 'clsx'
+import { LogoProvider } from './context/LogoContext'
 
 type ViewMode = 'table' | 'kanban'
 type MainView = 'jobsearch' | 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
@@ -113,6 +114,7 @@ export default function App() {
   })).filter(col => col.items.length > 0 || filterStatus === col.status)
 
   return (
+    <LogoProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="border-b border-gray-200 bg-white shadow-sm sticky top-0 z-30">
@@ -504,5 +506,6 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
         </div>
       </form>
     </div>
+    </LogoProvider>
   )
 }
