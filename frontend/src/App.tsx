@@ -54,6 +54,7 @@ export default function App() {
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
+  const [contactsInitialSearch, setContactsInitialSearch] = useState('')
   const [liTrigger, setLiTrigger] = useState(0)
 
   useEffect(() => {
@@ -228,13 +229,18 @@ export default function App() {
           <JobSearchView onImported={load} />
         )}
         {mainView === 'contacts' && (
-          <ContactsView onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }} />
+          <ContactsView
+            initialSearch={contactsInitialSearch}
+            onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
+          />
         )}
         {mainView === 'companies' && (
           <CompaniesView
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
             onMergeRequest={ids => setCompanyMergeIds(ids)}
+            onNavigateToApps={name => { setSearch(name); setMainView('applications') }}
+            onNavigateToContacts={name => { setContactsInitialSearch(name); setMainView('contacts') }}
           />
         )}
         {mainView === 'calendar' && (
