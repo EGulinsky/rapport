@@ -357,7 +357,7 @@ export const api = {
 
   companySync: {
     status: () => request<import('../types').CompanySyncStatus>('/sync/company/status'),
-    run: () => request<{ started: boolean; count: number; message?: string }>('/sync/company/run', { method: 'POST' }),
+    run: (force = false) => request<{ started: boolean; count: number; message?: string }>(`/sync/company/run${force ? '?force=true' : ''}`, { method: 'POST' }),
     resetLock: () => request<{ ok: boolean }>('/sync/company/reset-lock', { method: 'POST' }),
     resetFailed: () => request<{ reset: number }>('/sync/company/reset-failed', { method: 'POST' }),
   },

@@ -46,28 +46,41 @@ def company_sync_status(db: Session = Depends(get_db)):
 async def company_sync_run(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    force: bool = False,
 ):
     global _SYNC_RUNNING
     if _SYNC_RUNNING:
         return {"started": False, "count": 0, "message": "Sync already running"}
 
+    if force:
+        db.query(models.CompanyProfile).update({"sync_status": "pending", "sync_error": None})
+        db.commit()
+
     pending = db.query(models.CompanyProfile).filter(
         models.CompanyProfile.sync_status == "pending"
-    ).limit(10).all()
+    ).all()
 
-    # No pending left → fresh trigger: reset all done profiles and start over
-    if not pending:
-        db.query(models.CompanyProfile).filter(
-            models.CompanyProfile.sync_status == "done"
-        ).update({"sync_status": "pending"})
-        db.commit()
-        pending = db.query(models.CompanyProfile).filter(
-            models.CompanyProfile.sync_status == "pending"
-        ).limit(10).all()
+    if not force:
+        # Also include done profiles that still have empty key fields
+        incomplete = db.query(models.CompanyProfile).filter(
+            models.CompanyProfile.sync_status == "done",
+            (
+                models.CompanyProfile.hq_city.is_(None) |
+                models.CompanyProfile.industry.is_(None) |
+                models.CompanyProfile.description.is_(None)
+            ),
+        ).all()
+        seen = {p.id for p in pending}
+        for p in incomplete:
+            if p.id not in seen:
+                p.sync_status = "pending"
+                pending.append(p)
+        if incomplete:
+            db.commit()
 
     count = len(pending)
     if count == 0:
-        return {"started": False, "count": 0, "message": "No pending profiles"}
+        return {"started": False, "count": 0, "message": "Kein Sync nötig."}
 
     ids = [p.id for p in pending]
     background_tasks.add_task(_run_sync_batch, ids)

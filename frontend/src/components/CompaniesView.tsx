@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp, Network } from 'lucide-react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp, Network, ChevronDown } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -98,6 +98,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [syncLive, setSyncLive] = useState<CompanySyncStatus | null>(null)
+  const [syncMenuOpen, setSyncMenuOpen] = useState(false)
+  const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const load = useCallback(async () => {
@@ -144,13 +146,23 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
   useEffect(() => () => stopPolling(), [stopPolling])
 
-  async function startSync() {
+  useEffect(() => {
+    if (!syncMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node)) setSyncMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [syncMenuOpen])
+
+  async function startSync(force = false) {
+    setSyncMenuOpen(false)
     setSyncing(true)
     setSyncMsg(null)
     setSyncLive(null)
     try {
       await api.companySync.resetLock()
-      const r = await api.companySync.run()
+      const r = await api.companySync.run(force)
       if (r.started) {
         setSyncMsg(`${r.count} Firmenprofil(e) werden synchronisiert…`)
         startPolling()
@@ -250,16 +262,50 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           />
         </div>
         {loading && <span className="text-xs text-gray-400">Laden…</span>}
-        <button
-          onClick={startSync}
-          disabled={syncing}
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-        >
-          {syncing
-            ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
-            : <RefreshCw className="h-3.5 w-3.5" />}
-          Firmendaten aktualisieren
-        </button>
+        {/* Sync dropdown */}
+        <div className="relative shrink-0" ref={syncMenuRef}>
+          <button
+            onClick={() => !syncing && setSyncMenuOpen(o => !o)}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {syncing
+              ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
+              : <RefreshCw className="h-3.5 w-3.5" />}
+            Sync
+            {!syncing && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
+          </button>
+          {syncMenuOpen && (
+            <div className="absolute z-50 top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+              <button
+                onClick={() => startSync(false)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              >
+                <div className="font-medium">Sync</div>
+                <div className="text-xs text-gray-400">Ausstehende + leere Felder</div>
+              </button>
+              <button
+                onClick={() => startSync(true)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              >
+                <div className="font-medium">Re-Sync</div>
+                <div className="text-xs text-gray-400">Alle Firmen neu synchronisieren</div>
+              </button>
+              {failed > 0 && (
+                <>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => { setSyncMenuOpen(false); resetFailed() }}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <div className="font-medium">{failed} fehlgeschlagen zurücksetzen</div>
+                    <div className="text-xs text-red-400">Status auf ausstehend zurücksetzen</div>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <button
           onClick={handleLinkContacts}
           disabled={linking}
@@ -271,14 +317,6 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           {linking ? 'Verknüpfe…' : 'Kontakte verknüpfen'}
         </button>
         {linkMsg && <span className="text-xs text-violet-600">{linkMsg}</span>}
-        {failed > 0 && (
-          <button
-            onClick={resetFailed}
-            className="rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
-          >
-            {failed} fehlgeschlagen — zurücksetzen
-          </button>
-        )}
         {selectedIds.size >= 1 && (
           <div className="relative" ref={parentPickerRef}>
             <button

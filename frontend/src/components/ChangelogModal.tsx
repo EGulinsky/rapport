@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.10.0',
+    date: '2026-06-26',
+    changes: [
+      'Firmensync: Sync-Aktionen in einem Dropdown zusammengefasst.',
+      'Sync: aktualisiert nur ausstehende Firmen und solche mit leeren Feldern.',
+      'Re-Sync: setzt alle Firmen zurück und holt alle Daten neu.',
+      '"Fehlgeschlagen zurücksetzen" ist jetzt Teil des Sync-Dropdowns.',
+    ],
+  },
+  {
     version: '3.9.0',
     date: '2026-06-26',
     changes: [
