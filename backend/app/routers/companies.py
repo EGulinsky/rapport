@@ -246,16 +246,21 @@ def link_contacts_to_companies(db: Session = Depends(get_db)):
     from app.dedup import norm_firma
     from app import models
     contacts = db.query(models.Contact).all()
-    linked = 0; created = 0
+    linked = 0
+    created = 0
     for c in contacts:
-        if not c.firma: continue
+        if not c.firma:
+            continue
         nname = norm_firma(c.firma)
         profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
         if not profile:
             profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending")
-            db.add(profile); db.flush(); created += 1
+            db.add(profile)
+            db.flush()
+            created += 1
         if c.company_profile_id != profile.id:
-            c.company_profile_id = profile.id; linked += 1
+            c.company_profile_id = profile.id
+            linked += 1
     db.commit()
     return {"linked": linked, "created": created}
 
@@ -263,7 +268,8 @@ def link_contacts_to_companies(db: Session = Depends(get_db)):
 @router.post("/{company_id}/logo")
 async def upload_company_logo(company_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     profile = db.get(CompanyProfile, company_id)
-    if not profile: raise HTTPException(404)
+    if not profile:
+        raise HTTPException(404)
     data = await file.read()
     mime = file.content_type or "image/png"
     b64 = base64.b64encode(data).decode()
@@ -275,7 +281,8 @@ async def upload_company_logo(company_id: int, file: UploadFile = File(...), db:
 @router.delete("/{company_id}/logo")
 def delete_company_logo(company_id: int, db: Session = Depends(get_db)):
     profile = db.get(CompanyProfile, company_id)
-    if not profile: raise HTTPException(404)
+    if not profile:
+        raise HTTPException(404)
     profile.logo_data = None
     db.commit()
     return {"ok": True}
