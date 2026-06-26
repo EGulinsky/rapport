@@ -87,6 +87,17 @@ export interface Application {
   target_company_website?: string | null
 }
 
+export interface CompanyContactRef {
+  id: number
+  name: string
+  email?: string | null
+  telefon?: string | null
+  linkedin_url?: string | null
+  firma?: string | null
+  rolle?: string | null
+  typ?: string | null
+}
+
 export interface CompanyProfile {
   id: number
   name_display: string | null
@@ -106,7 +117,9 @@ export interface CompanyProfile {
   sync_error: string | null
   last_synced_at: string | null
   app_count?: number
+  contact_count?: number
   applications?: { id: number; firma: string; rolle: string; main_status: string; datum_bewerbung?: string | null }[]
+  contacts?: CompanyContactRef[]
 }
 
 export interface Contact {

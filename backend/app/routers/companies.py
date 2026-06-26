@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ class CompanyProfileListItem(BaseModel):
     sync_status: str
     last_synced_at: Optional[datetime] = None
     app_count: int
+    contact_count: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -33,6 +34,19 @@ class CompanyApplicationRef(BaseModel):
     rolle: str
     main_status: str
     datum_bewerbung: Optional[date] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CompanyContactRef(BaseModel):
+    id: int
+    name: str
+    email: Optional[str] = None
+    telefon: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    firma: Optional[str] = None
+    rolle: Optional[str] = None
+    typ: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -56,9 +70,42 @@ class CompanyProfileDetail(BaseModel):
     sync_error: Optional[str] = None
     last_synced_at: Optional[datetime] = None
     app_count: int
+    contact_count: int = 0
     applications: List[CompanyApplicationRef] = []
+    contacts: List[CompanyContactRef] = []
 
     model_config = {"from_attributes": True}
+
+
+class CompanyUpdateRequest(BaseModel):
+    name_display: Optional[str] = None
+    industry: Optional[str] = None
+    company_type: Optional[str] = None
+    employee_range: Optional[str] = None
+    employee_count: Optional[int] = None
+    founded_year: Optional[int] = None
+    hq_city: Optional[str] = None
+    hq_country: Optional[str] = None
+    website: Optional[str] = None
+    linkedin_company_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+def _app_count(p: CompanyProfile) -> int:
+    ids = {a.id for a in p.applications} | {a.id for a in p.hh_applications}
+    return len(ids)
+
+
+def _collect_contacts(p: CompanyProfile) -> list:
+    all_apps = list(p.applications) + list(p.hh_applications)
+    seen_contact_ids = set()
+    contacts = []
+    for a in all_apps:
+        for c in a.contacts:
+            if c.id not in seen_contact_ids:
+                seen_contact_ids.add(c.id)
+                contacts.append(c)
+    return contacts
 
 
 @router.get("", response_model=List[CompanyProfileListItem])
@@ -81,15 +128,11 @@ def list_companies(
             or q in (p.hq_country or "").lower()
         ]
 
-    def app_count(p: CompanyProfile) -> int:
-        ids = {a.id for a in p.applications} | {a.id for a in p.hh_applications}
-        return len(ids)
-
     def sort_key(p: CompanyProfile):
         if sort == "industry":
             return (p.industry or "").lower()
         if sort == "apps":
-            return app_count(p)
+            return _app_count(p)
         if sort == "sync_status":
             return p.sync_status or ""
         return (p.name_display or p.name_norm or "").lower()
@@ -109,7 +152,8 @@ def list_companies(
             website=p.website,
             sync_status=p.sync_status,
             last_synced_at=p.last_synced_at,
-            app_count=app_count(p),
+            app_count=_app_count(p),
+            contact_count=len(_collect_contacts(p)),
         )
         for p in profiles
     ]
@@ -117,7 +161,6 @@ def list_companies(
 
 @router.get("/{company_id}", response_model=CompanyProfileDetail)
 def get_company(company_id: int, db: Session = Depends(get_db)):
-    from fastapi import HTTPException
     profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -134,6 +177,21 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
                 main_status=a.main_status,
                 datum_bewerbung=a.datum_bewerbung,
             ))
+
+    contacts_raw = _collect_contacts(profile)
+    contacts = [
+        CompanyContactRef(
+            id=c.id,
+            name=c.name,
+            email=c.email,
+            telefon=c.telefon,
+            linkedin_url=c.linkedin_url,
+            firma=c.firma,
+            rolle=c.rolle,
+            typ=c.typ,
+        )
+        for c in contacts_raw
+    ]
 
     ids = {a.id for a in profile.applications} | {a.id for a in profile.hh_applications}
 
@@ -156,5 +214,23 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
         sync_error=profile.sync_error,
         last_synced_at=profile.last_synced_at,
         app_count=len(ids),
+        contact_count=len(contacts),
         applications=apps,
+        contacts=contacts,
     )
+
+
+@router.patch("/{company_id}", response_model=CompanyProfileDetail)
+def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = Depends(get_db)):
+    profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(profile, field, value or None)
+
+    db.commit()
+    db.refresh(profile)
+
+    # Re-use get_company logic
+    return get_company(company_id, db)

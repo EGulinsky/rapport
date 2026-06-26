@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -10,6 +10,7 @@ type SortKey = 'name' | 'industry' | 'apps' | 'sync_status'
 interface Props {
   onOpenApplication: (id: number) => void
   onOpenCompany: (id: number) => void
+  onMergeRequest?: (ids: number[]) => void
 }
 
 const COMPANY_TYPE_COLORS: Record<string, string> = {
@@ -34,12 +35,22 @@ const COMPANY_TYPE_LABELS: Record<string, string> = {
   other:       'Sonstiges',
 }
 
-export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany }: Props) {
+export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest }: Props) {
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  function toggleSelect(id: number, e: React.MouseEvent) {
+    e.stopPropagation()
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
@@ -199,6 +210,15 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             {failed} fehlgeschlagen — zurücksetzen
           </button>
         )}
+        {selectedIds.size >= 2 && onMergeRequest && (
+          <button
+            onClick={() => onMergeRequest([...selectedIds])}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors shrink-0"
+          >
+            <GitMerge className="h-3.5 w-3.5" />
+            {selectedIds.size} zusammenführen
+          </button>
+        )}
       </div>
 
       {/* Sync status bar */}
@@ -232,31 +252,42 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
+              <th className="w-8 px-3" />
               <Th k="name" label="Name" />
               <Th k="industry" label="Branche" />
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Typ</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Größe</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Standort</th>
               <Th k="sync_status" label="Status" />
-              <Th k="apps" label="Bewerbungen" className="text-right" />
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Bew.</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Kontak.</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 && !loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-gray-400">
                   Keine Firmen gefunden
                 </td>
               </tr>
             )}
             {sorted.map(company => {
               const location = [company.hq_city, company.hq_country].filter(Boolean).join(', ')
+              const selected = selectedIds.has(company.id)
               return (
                 <tr
                   key={company.id}
                   onClick={() => onOpenCompany(company.id)}
-                  className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  className={clsx('cursor-pointer transition-colors', selected ? 'bg-violet-50' : 'hover:bg-gray-50')}
                 >
+                  <td className="px-3" onClick={e => toggleSelect(company.id, e)}>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => {}}
+                      className="rounded border-gray-300 text-violet-600 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <CompanyLogo name={company.name_display || company.name_norm} website={company.website} />
@@ -306,6 +337,9 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700 font-medium tabular-nums">
                     {company.app_count ?? 0}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-500 tabular-nums text-xs">
+                    {company.contact_count ?? 0}
                   </td>
                 </tr>
               )
