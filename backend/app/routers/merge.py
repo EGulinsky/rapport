@@ -117,6 +117,8 @@ def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
             app.company_profile_id = winner.id
         for app in list(loser.hh_applications):
             app.target_company_profile_id = winner.id
+        for contact in list(loser.direct_contacts):
+            contact.company_profile_id = winner.id
         db.flush()
 
         add_audit(db, "merge", "user", app_id=None,
