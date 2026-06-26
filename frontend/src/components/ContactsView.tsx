@@ -3,6 +3,7 @@ import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge } from 'lu
 import { api } from '../api/client'
 import type { ContactWithApp } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
+import { CompanyLogo } from './CompanyLogo'
 import clsx from 'clsx'
 
 const TYPE_COLORS: Record<string, string> = {
@@ -195,7 +196,12 @@ export function ContactsView({ onOpenApplication }: Props) {
                   {c.rolle && <p className="text-xs text-gray-500">{c.rolle}</p>}
                 </td>
                 <td className="px-4 py-3">
-                  <p className="text-sm text-gray-700">{c.firma ?? <span className="text-gray-300">—</span>}</p>
+                  {c.firma ? (
+                    <div className="flex items-center gap-2">
+                      <CompanyLogo name={c.firma} website={c.company_website} size="sm" />
+                      <span className="text-sm text-gray-700">{c.firma}</span>
+                    </div>
+                  ) : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3">
                   {c.typ ? (

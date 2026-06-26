@@ -48,6 +48,7 @@ class ApplicationBrief(BaseModel):
 
 class ContactWithApp(ContactRead):
     applications: List[ApplicationBrief] = []
+    company_website: Optional[str] = None
 
 
 class AttachmentRead(BaseModel):

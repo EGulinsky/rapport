@@ -133,6 +133,7 @@ export interface Contact {
   typ?: string
   notizen?: string
   letzter_kontakt?: string
+  company_website?: string | null
 }
 
 export interface ContactWithApp extends Contact {
