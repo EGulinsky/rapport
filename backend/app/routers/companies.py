@@ -248,12 +248,13 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
 def link_contacts_to_companies(db: Session = Depends(get_db)):
     from app.dedup import norm_firma
     from app import models
-    contacts = db.query(models.Contact).all()
+    contacts = db.query(models.Contact).filter(
+        models.Contact.company_profile_id.is_(None),
+        models.Contact.firma.isnot(None),
+    ).all()
     linked = 0
     created = 0
     for c in contacts:
-        if not c.firma:
-            continue
         nname = norm_firma(c.firma)
         profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
         if not profile:
