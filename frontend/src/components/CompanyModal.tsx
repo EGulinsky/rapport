@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2 } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus } from '../types'
 import { StatusBadge } from './StatusBadge'
@@ -83,6 +83,9 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   const [editState, setEditState] = useState<EditState | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -140,6 +143,45 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
     }
   }
 
+  async function uploadLogo(file: File) {
+    if (!company) return
+    setLogoUploading(true)
+    try {
+      // Show preview immediately
+      const reader = new FileReader()
+      reader.onload = e => setLogoPreview(e.target?.result as string)
+      reader.readAsDataURL(file)
+      await api.companies.uploadLogo(company.id, file)
+      await load()
+    } catch (e) {
+      setSaveError(String(e))
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  async function deleteLogo() {
+    if (!company) return
+    setLogoUploading(true)
+    try {
+      await api.companies.deleteLogo(company.id)
+      setLogoPreview(null)
+      await load()
+    } catch (e) {
+      setSaveError(String(e))
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    if (!editing) return
+    const file = e.clipboardData.files[0]
+    if (file && file.type.startsWith('image/')) {
+      uploadLogo(file)
+    }
+  }
+
   function ef(field: keyof EditState) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setEditState(s => s ? { ...s, [field]: e.target.value } : s)
@@ -162,6 +204,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onPaste={handlePaste}
     >
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
 
@@ -173,7 +216,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
             ) : (
               <>
                 <div className="flex items-center gap-2.5 mb-0.5">
-                  <CompanyLogo name={company?.name_display || company?.name_norm || ''} website={company?.website} />
+                  <CompanyLogo name={company?.name_display || company?.name_norm || ''} website={company?.website} logoData={logoPreview ?? company?.logo_data} />
                   <h2 className="text-lg font-semibold text-gray-900 truncate">
                     {company?.name_display || company?.name_norm}
                   </h2>
@@ -329,6 +372,47 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                   )}
                 </div>
               ) : editState && (
+                <>
+                {/* Logo section */}
+                <div className="flex items-center gap-4 mb-2">
+                  <CompanyLogo
+                    name={company.name_display || company.name_norm || ''}
+                    website={company.website}
+                    logoData={logoPreview ?? company.logo_data}
+                    size="md"
+                  />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={logoUploading}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Logo hochladen
+                    </button>
+                    {(logoPreview ?? company.logo_data) && (
+                      <button
+                        type="button"
+                        onClick={deleteLogo}
+                        disabled={logoUploading}
+                        className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Logo entfernen
+                      </button>
+                    )}
+                    {logoUploading && <span className="text-xs text-gray-400">Wird hochgeladen…</span>}
+                    <span className="text-xs text-gray-400">oder Bild einfügen (Strg+V)</span>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <EditField label="Anzeigename" value={editState.name_display} onChange={ef('name_display')} />
                   <EditField label="Branche" value={editState.industry} onChange={ef('industry')} />
@@ -361,6 +445,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                     />
                   </div>
                 </div>
+                </>
               )}
 
               {!editing && company.description && (

@@ -19,10 +19,12 @@ export function CompanyLogo({
   name,
   website,
   size = 'md',
+  logoData,
 }: {
   name: string
   website?: string | null
   size?: 'sm' | 'md'
+  logoData?: string | null
 }) {
   const { logoDevKey } = useLogoKey()
   const [logoDevErr, setLogoDevErr] = useState(false)
@@ -32,6 +34,16 @@ export function CompanyLogo({
   const initials = name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
   const color = COLORS[name.charCodeAt(0) % COLORS.length]
   const cls = size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-8 w-8 text-xs'
+
+  if (logoData) {
+    return (
+      <img
+        src={logoData}
+        alt={name}
+        className={clsx(cls, 'rounded object-contain bg-white border border-gray-100 p-0.5 shrink-0')}
+      />
+    )
+  }
 
   if (domain && logoDevKey && !logoDevErr) {
     return (

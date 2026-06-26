@@ -54,6 +54,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     })
   }
 
+  const [linking, setLinking] = useState(false)
+  const [linkMsg, setLinkMsg] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [syncLive, setSyncLive] = useState<CompanySyncStatus | null>(null)
@@ -119,6 +121,20 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     } catch (e) {
       setSyncMsg(e instanceof Error ? e.message : 'Fehler')
       setSyncing(false)
+    }
+  }
+
+  async function handleLinkContacts() {
+    setLinking(true)
+    setLinkMsg(null)
+    try {
+      const r = await api.companies.linkContacts()
+      setLinkMsg(`${r.linked} verknüpft, ${r.created} neue Profile`)
+      await load()
+    } catch (e) {
+      setLinkMsg(e instanceof Error ? e.message : 'Fehler')
+    } finally {
+      setLinking(false)
     }
   }
 
@@ -204,6 +220,17 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             : <RefreshCw className="h-3.5 w-3.5" />}
           Firmendaten aktualisieren
         </button>
+        <button
+          onClick={handleLinkContacts}
+          disabled={linking}
+          className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+        >
+          {linking
+            ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
+            : null}
+          {linking ? 'Verknüpfe…' : 'Kontakte verknüpfen'}
+        </button>
+        {linkMsg && <span className="text-xs text-violet-600">{linkMsg}</span>}
         {failed > 0 && (
           <button
             onClick={resetFailed}
@@ -290,7 +317,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <CompanyLogo name={company.name_display || company.name_norm} website={company.website} />
+                      <CompanyLogo name={company.name_display || company.name_norm} website={company.website} logoData={company.logo_data} />
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900 truncate max-w-[180px]">
                           {company.name_display || company.name_norm}
