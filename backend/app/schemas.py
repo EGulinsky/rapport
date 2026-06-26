@@ -169,6 +169,8 @@ class ApplicationListItem(BaseModel):
     naechster_schritt: Optional[str] = None
     company_profile_id: Optional[int] = None
     target_company_profile_id: Optional[int] = None
+    company_website: Optional[str] = None
+    target_company_website: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

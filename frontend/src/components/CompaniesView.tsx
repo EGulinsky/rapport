@@ -3,31 +3,9 @@ import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw } from 'luc
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
+import { CompanyLogo } from './CompanyLogo'
 
 type SortKey = 'name' | 'industry' | 'apps' | 'sync_status'
-
-function CompanyLogo({ name, website }: { name: string; website?: string | null }) {
-  const [err, setErr] = useState(false)
-  const domain = website ? (() => { try { return new URL(website).hostname.replace(/^www\./, '') } catch { return null } })() : null
-  const initials = name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
-  const colors = ['bg-indigo-100 text-indigo-700', 'bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700']
-  const color = colors[name.charCodeAt(0) % colors.length]
-  if (domain && !err) {
-    return (
-      <img
-        src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
-        alt={name}
-        onError={() => setErr(true)}
-        className="h-8 w-8 rounded object-contain bg-white border border-gray-100 p-0.5"
-      />
-    )
-  }
-  return (
-    <div className={clsx('h-8 w-8 rounded flex items-center justify-center text-xs font-bold shrink-0', color)}>
-      {initials || '?'}
-    </div>
-  )
-}
 
 interface Props {
   onOpenApplication: (id: number) => void

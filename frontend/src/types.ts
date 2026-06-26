@@ -83,6 +83,8 @@ export interface Application {
   events?: Event[]
   company_profile_id?: number | null
   target_company_profile_id?: number | null
+  company_website?: string | null
+  target_company_website?: string | null
 }
 
 export interface CompanyProfile {
