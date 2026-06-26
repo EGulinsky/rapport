@@ -9,6 +9,17 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.6.0',
+    date: '2026-06-26',
+    changes: [
+      'Neu: Firmenfilter mit Autocomplete in Bewerbungs- und Kontaktansicht.',
+      'Neu: Firmenliste → Bewerbungen/Kontakte öffnet direkt den Firmenfilter in der Zielansicht.',
+      'Neu: Kontakte manuell einer Firma zuordnen — aus Kontaktliste und aus Firmenmodal.',
+      'Fix: Fehlende Links zur Firma in der Kontaktliste.',
+      'Fix: Kontakte werden beim Backend-Start automatisch mit Firmenprofilen verknüpft.',
+    ],
+  },
+  {
     version: '3.5.0',
     date: '2026-06-26',
     changes: [

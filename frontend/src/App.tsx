@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2 } from 'lucide-react'
+import { CompanyFilterPicker, type CompanyFilter } from './components/CompanyFilterPicker'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
@@ -83,7 +84,8 @@ export default function App() {
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
-  const [contactsInitialSearch, setContactsInitialSearch] = useState('')
+  const [appsCompanyFilter, setAppsCompanyFilter] = useState<CompanyFilter | null>(null)
+  const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [liTrigger, setLiTrigger] = useState(0)
 
   useEffect(() => {
@@ -120,7 +122,15 @@ export default function App() {
 
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
 
-  const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
+  const companyFilteredApps = appsCompanyFilter
+    ? apps.filter(a =>
+        a.company_profile_id === appsCompanyFilter.id ||
+        a.target_company_profile_id === appsCompanyFilter.id ||
+        a.firma === appsCompanyFilter.name ||
+        a.zielfirma_bei_hh === appsCompanyFilter.name
+      )
+    : apps
+  const visibleApps = showGhostingOnly ? companyFilteredApps.filter(a => a.ghosting) : companyFilteredApps
 
   // Rejected apps appear in their last-active column, not a separate "Abgesagt" column
   const kanbanColumns: MainStatus[] = MAIN_PIPELINE
@@ -260,8 +270,10 @@ export default function App() {
         )}
         {mainView === 'contacts' && (
           <ContactsView
-            initialSearch={contactsInitialSearch}
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
+            onOpenCompany={id => setCompanyModalId(id)}
+            companyFilter={contactsCompanyFilter}
+            onCompanyFilterChange={setContactsCompanyFilter}
           />
         )}
         {mainView === 'companies' && (
@@ -269,8 +281,8 @@ export default function App() {
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
             onMergeRequest={ids => setCompanyMergeIds(ids)}
-            onNavigateToApps={name => { setSearch(name); setMainView('applications') }}
-            onNavigateToContacts={name => { setContactsInitialSearch(name); setMainView('contacts') }}
+            onNavigateToApps={f => { setAppsCompanyFilter(f); setSearch(''); setMainView('applications') }}
+            onNavigateToContacts={f => { setContactsCompanyFilter(f); setMainView('contacts') }}
           />
         )}
         {mainView === 'calendar' && (
@@ -283,15 +295,18 @@ export default function App() {
         {/* Stats */}
         {stats && <StatsBar stats={stats} />}
 
-        {/* Search bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Firma oder Rolle suchen…"
-            className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-          />
+        {/* Search bar + company filter */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Firma oder Rolle suchen…"
+              className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            />
+          </div>
+          <CompanyFilterPicker value={appsCompanyFilter} onChange={setAppsCompanyFilter} />
         </div>
 
         {/* Controls row */}

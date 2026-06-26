@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import type { ContactWithApp, CompanyProfile } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
 import { CompanyLogo } from './CompanyLogo'
+import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
 import clsx from 'clsx'
 
 function CompanyCell({ contact, onOpenCompany, onChanged }: {
@@ -120,12 +121,13 @@ type SortKey = 'name' | 'firma' | 'typ' | 'letzter_kontakt'
 interface Props {
   onOpenApplication: (id: number) => void
   onOpenCompany?: (id: number) => void
-  initialSearch?: string
+  companyFilter?: CompanyFilter | null
+  onCompanyFilterChange?: (v: CompanyFilter | null) => void
 }
 
-export function ContactsView({ onOpenApplication, onOpenCompany, initialSearch = '' }: Props) {
+export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, onCompanyFilterChange }: Props) {
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
-  const [search, setSearch] = useState(initialSearch)
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -156,7 +158,15 @@ export function ContactsView({ onOpenApplication, onOpenCompany, initialSearch =
   }
 
   const sorted = useMemo(() => {
-    return [...contacts].sort((a, b) => {
+    let list = contacts
+    if (companyFilter) {
+      list = contacts.filter(c =>
+        c.company_profile_id === companyFilter.id ||
+        c.firma === companyFilter.name ||
+        c.firma?.toLowerCase() === companyFilter.name.toLowerCase()
+      )
+    }
+    return [...list].sort((a, b) => {
       let av: string
       let bv: string
       if (sortKey === 'letzter_kontakt') {
@@ -169,9 +179,9 @@ export function ContactsView({ onOpenApplication, onOpenCompany, initialSearch =
       const cmp = av.localeCompare(bv, 'de')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [contacts, sortKey, sortDir])
+  }, [contacts, sortKey, sortDir, companyFilter])
 
-  const allSelected = contacts.length > 0 && selected.size === contacts.length
+  const allSelected = sorted.length > 0 && selected.size === sorted.length
 
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(contacts.map(c => c.id)))
@@ -226,6 +236,9 @@ export function ContactsView({ onOpenApplication, onOpenCompany, initialSearch =
             className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+        {onCompanyFilterChange && (
+          <CompanyFilterPicker value={companyFilter ?? null} onChange={onCompanyFilterChange} />
+        )}
 
         {selected.size >= 2 && (
           <button
