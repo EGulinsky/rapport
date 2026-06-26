@@ -426,6 +426,7 @@ export default function App() {
         />
       )}
     </div>
+    </LogoProvider>
   )
 }
 
@@ -518,6 +519,5 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
         </div>
       </form>
     </div>
-    </LogoProvider>
   )
 }
