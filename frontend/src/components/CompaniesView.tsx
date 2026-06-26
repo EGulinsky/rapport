@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp } from 'lucide-react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp, Network } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -58,6 +58,43 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
   const [linking, setLinking] = useState(false)
   const [linkMsg, setLinkMsg] = useState<string | null>(null)
+  const [parentPickerOpen, setParentPickerOpen] = useState(false)
+  const [parentQuery, setParentQuery] = useState('')
+  const [parentResults, setParentResults] = useState<CompanyProfile[]>([])
+  const [assigningParent, setAssigningParent] = useState(false)
+  const parentPickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!parentPickerOpen) { setParentQuery(''); return }
+    const t = setTimeout(async () => {
+      setParentResults(await api.companies.list({ search: parentQuery || undefined }))
+    }, 200)
+    return () => clearTimeout(t)
+  }, [parentQuery, parentPickerOpen])
+
+  useEffect(() => {
+    if (!parentPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      if (parentPickerRef.current && !parentPickerRef.current.contains(e.target as Node))
+        setParentPickerOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [parentPickerOpen])
+
+  async function assignParent(parentId: number, parentName: string) {
+    setAssigningParent(true)
+    setParentPickerOpen(false)
+    try {
+      await Promise.all([...selectedIds].map(id =>
+        api.companies.update(id, { parent_company_id: parentId })
+      ))
+      setSelectedIds(new Set())
+      load()
+    } finally {
+      setAssigningParent(false)
+    }
+  }
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [syncLive, setSyncLive] = useState<CompanySyncStatus | null>(null)
@@ -241,6 +278,47 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           >
             {failed} fehlgeschlagen — zurücksetzen
           </button>
+        )}
+        {selectedIds.size >= 1 && (
+          <div className="relative" ref={parentPickerRef}>
+            <button
+              onClick={() => setParentPickerOpen(o => !o)}
+              disabled={assigningParent}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 transition-colors shrink-0"
+            >
+              <Network className="h-3.5 w-3.5" />
+              {assigningParent ? 'Wird zugeordnet…' : `${selectedIds.size} → Muttergesellschaft`}
+            </button>
+            {parentPickerOpen && (
+              <div className="absolute z-50 top-full right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg">
+                <div className="p-2 border-b border-gray-100">
+                  <input
+                    autoFocus
+                    value={parentQuery}
+                    onChange={e => setParentQuery(e.target.value)}
+                    placeholder="Muttergesellschaft suchen…"
+                    className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto py-1">
+                  {parentResults.length === 0 && <p className="text-xs text-gray-400 px-3 py-2 italic">Keine Treffer</p>}
+                  {parentResults
+                    .filter(c => !selectedIds.has(c.id))
+                    .slice(0, 15)
+                    .map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => assignParent(c.id, c.name_display ?? c.name_norm)}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                      >
+                        <span className="font-medium">{c.name_display ?? c.name_norm}</span>
+                        {c.parent_name && <span className="ml-1 text-gray-400">↑ {c.parent_name}</span>}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {selectedIds.size >= 2 && onMergeRequest && (
           <button
