@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.1',
+    date: '2026-06-26',
+    changes: [
+      'LinkedIn-Nachrichten-Matching korrigiert: Kontaktnamen (aus der Datenbank) werden jetzt als primäres Matching-Signal verwendet — LinkedIn zeigt Personennamen, keine Firmennamen in der Sidebar.',
+      'Fallback: Firmenname im Nachrichtenvorschau-Text (≥ 5 Zeichen) für noch unbekannte Recruiter.',
+      'Threads werden nur bei tatsächlichem Match geöffnet, kein blindes Öffnen aller Konversationen.',
+    ],
+  },
+  {
     version: '3.14.0',
     date: '2026-06-26',
     changes: [
