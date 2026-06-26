@@ -17,11 +17,12 @@ interface Props {
   selectedIds?: Set<number>
   onToggleSelect?: (id: number) => void
   onOpenCompany?: (id: number) => void
+  updatedIds?: Set<number>
 }
 
 type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
 
-export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany }: Props) {
+export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany, updatedIds }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('datum_bewerbung')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [popoverId, setPopoverId] = useState<number | null>(null)
@@ -158,7 +159,14 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                   />
                 </td>
               )}
-              <td className="px-3 py-3 text-xs text-gray-400 font-mono whitespace-nowrap select-all align-top">{app.id}</td>
+              <td className="px-3 py-3 text-xs text-gray-400 font-mono whitespace-nowrap select-all align-top">
+                <div className="flex items-center gap-1.5">
+                  {updatedIds?.has(app.id) && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+                  )}
+                  {app.id}
+                </div>
+              </td>
               <td className="px-4 py-3">
                 <div className="flex items-start gap-2">
                   <div className="mt-0.5 shrink-0">

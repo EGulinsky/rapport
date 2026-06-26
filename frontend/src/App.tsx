@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2 } from 'lucide-react'
 import { CompanyFilterPicker, type CompanyFilter } from './components/CompanyFilterPicker'
 import { api } from './api/client'
@@ -89,6 +89,9 @@ export default function App() {
   const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [liTrigger, setLiTrigger] = useState(0)
 
+  const prevAppsRef = useRef<Map<number, string>>(new Map())
+  const [updatedAppIds, setUpdatedAppIds] = useState<Set<number>>(new Set())
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(t)
@@ -105,6 +108,18 @@ export default function App() {
         }),
         api.applications.stats(),
       ])
+      const prev = prevAppsRef.current
+      if (prev.size > 0) {
+        const changed = new Set<number>()
+        for (const app of appsData) {
+          const prevUpd = prev.get(app.id)
+          if (prevUpd === undefined || (app.letztes_update && prevUpd !== app.letztes_update)) {
+            changed.add(app.id)
+          }
+        }
+        if (changed.size > 0) setUpdatedAppIds(s => new Set([...s, ...changed]))
+      }
+      prevAppsRef.current = new Map(appsData.map(a => [a.id, a.letztes_update ?? '']))
       setApps(appsData)
       setStats(statsData)
     } finally {
@@ -122,6 +137,22 @@ export default function App() {
   }, [])
 
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
+
+  useEffect(() => {
+    const id = setInterval(loadReviewCount, 30_000)
+    return () => clearInterval(id)
+  }, [loadReviewCount])
+
+  useEffect(() => {
+    if (selectedId && selectedId > 0) {
+      setUpdatedAppIds(s => {
+        if (!s.has(selectedId)) return s
+        const next = new Set(s)
+        next.delete(selectedId)
+        return next
+      })
+    }
+  }, [selectedId])
 
   const companyFilteredApps = appsCompanyFilter
     ? (() => {
@@ -410,6 +441,7 @@ export default function App() {
               return next
             })}
             onOpenCompany={id => setCompanyModalId(id)}
+            updatedIds={updatedAppIds}
           />
         )}
         </>)}
@@ -417,7 +449,7 @@ export default function App() {
 
       {/* Kanban: full viewport width, outside max-w-7xl */}
       {mainView === 'applications' && viewMode === 'kanban' && (
-        <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} onOpenCompany={id => setCompanyModalId(id)} />
+        <KanbanBoard columns={kanbanByStatus} onSelect={setSelectedId} onChanged={load} onOpenCompany={id => setCompanyModalId(id)} updatedIds={updatedAppIds} />
       )}
 
       {/* Modal */}
@@ -425,7 +457,7 @@ export default function App() {
         <ApplicationModal
           appId={selectedId}
           onClose={() => setSelectedId(null)}
-          onSaved={load}
+          onSaved={() => { load(); loadReviewCount() }}
           onOpenCompany={id => setCompanyModalId(id)}
         />
       )}
