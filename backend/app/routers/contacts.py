@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app import models, schemas
-from app.models import CompanyProfile
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
