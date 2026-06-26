@@ -218,7 +218,14 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                     className="rounded focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     title="Status ändern"
                   >
-                    <StatusBadge status={app.main_status} subStatus={app.sub_status} size="sm" />
+                    {app.abgesagt && app.pre_rejection_status ? (
+                      <span className="flex items-center gap-1">
+                        <StatusBadge status={app.pre_rejection_status as import('../types').MainStatus} size="sm" />
+                        <span className="text-[10px] text-red-400 font-medium">✕</span>
+                      </span>
+                    ) : (
+                      <StatusBadge status={app.main_status} subStatus={app.sub_status} size="sm" />
+                    )}
                   </button>
                   {popoverId === app.id && (
                     <StatusPopover
