@@ -124,12 +124,15 @@ export default function App() {
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
 
   const companyFilteredApps = appsCompanyFilter
-    ? apps.filter(a =>
-        a.company_profile_id === appsCompanyFilter.id ||
-        a.target_company_profile_id === appsCompanyFilter.id ||
-        a.firma === appsCompanyFilter.name ||
-        a.zielfirma_bei_hh === appsCompanyFilter.name
-      )
+    ? (() => {
+        const ids = new Set([appsCompanyFilter.id, ...(appsCompanyFilter.subsidiaryIds ?? [])])
+        return apps.filter(a =>
+          ids.has(a.company_profile_id!) ||
+          ids.has(a.target_company_profile_id!) ||
+          a.firma === appsCompanyFilter.name ||
+          a.zielfirma_bei_hh === appsCompanyFilter.name
+        )
+      })()
     : apps
   const visibleApps = showGhostingOnly ? companyFilteredApps.filter(a => a.ghosting) : companyFilteredApps
 

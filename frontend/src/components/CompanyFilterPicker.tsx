@@ -6,6 +6,7 @@ import type { CompanyProfile } from '../types'
 export interface CompanyFilter {
   id: number
   name: string
+  subsidiaryIds?: number[]
 }
 
 interface Props {
@@ -75,7 +76,12 @@ export function CompanyFilterPicker({ value, onChange, placeholder = 'Firma' }: 
             {results.slice(0, 15).map(c => (
               <button
                 key={c.id}
-                onClick={() => { onChange({ id: c.id, name: c.name_display ?? c.name_norm }); setOpen(false) }}
+                onClick={async () => {
+                  const detail = await api.companies.get(c.id)
+                  const subsidiaryIds = detail.subsidiaries?.map(s => s.id) ?? []
+                  onChange({ id: c.id, name: c.name_display ?? c.name_norm, subsidiaryIds })
+                  setOpen(false)
+                }}
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
                 {c.name_display ?? c.name_norm}

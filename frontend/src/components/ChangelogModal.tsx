@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.9.0',
+    date: '2026-06-26',
+    changes: [
+      'Firmenfilter in Bewerbungen/Kontakten schließt jetzt auch Tochterunternehmen ein.',
+    ],
+  },
+  {
     version: '3.8.0',
     date: '2026-06-26',
     changes: [
