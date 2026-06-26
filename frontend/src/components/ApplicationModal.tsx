@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -59,6 +59,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
   const [syncResult, setSyncResult] = useState<{ created: number; errors: string[] } | null>(null)
   const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'attachments' | 'contacts'>('overview')
+  const [timeFilter, setTimeFilter] = useState<'all' | '1m' | '3m' | '6m' | '1y'>('all')
+  const [typeFilter, setTypeFilter] = useState('all')
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -367,10 +370,47 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
     return best
   })()
 
+  const allEvents = app?.events ?? []
+  const timelineEvents = useMemo(() => {
+    const evs = allEvents.filter(ev => ev.typ !== 'file')
+    const now = new Date()
+    const cutoff: Date | null = (() => {
+      if (timeFilter === 'all') return null
+      const d = new Date(now)
+      if (timeFilter === '1m') d.setMonth(d.getMonth() - 1)
+      else if (timeFilter === '3m') d.setMonth(d.getMonth() - 3)
+      else if (timeFilter === '6m') d.setMonth(d.getMonth() - 6)
+      else if (timeFilter === '1y') d.setFullYear(d.getFullYear() - 1)
+      return d
+    })()
+    return evs.filter(ev => {
+      if (cutoff && ev.datum && new Date(ev.datum) < cutoff) return false
+      if (typeFilter === 'all') return true
+      if (typeFilter === 'mail') return ev.source === 'gmail' || ev.source === 'icloud_mail'
+      if (typeFilter === 'calendar') return ev.source === 'gcal' || ev.source === 'icloud_cal'
+      return ev.typ === typeFilter
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app?.events, timeFilter, typeFilter])
+  const fileEvents = allEvents.filter(ev => ev.typ === 'file')
+  const rawTimelineEvents = allEvents.filter(ev => ev.typ !== 'file')
+
+  // Unique event types present in this application's timeline (for type filter)
+  const availableTypes = useMemo(() => {
+    const types = new Set<string>()
+    rawTimelineEvents.forEach(ev => {
+      if (ev.source === 'gmail' || ev.source === 'icloud_mail') types.add('mail')
+      else if (ev.source === 'gcal' || ev.source === 'icloud_cal') types.add('calendar')
+      else if (ev.typ) types.add(ev.typ)
+    })
+    return Array.from(types)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app?.events])
+
   return (
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
 
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-gray-100">
@@ -463,13 +503,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
                     </span>
                   </button>
                   <button
-                    onClick={openDocBrowse}
+                    onClick={() => { setSyncMenuOpen(false); setActiveTab('attachments') }}
                     className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
                     <FolderOpen className="h-3.5 w-3.5 text-amber-500" />
                     <span>
                       Dokument hinzufügen
-                      <span className="block text-[10px] text-gray-400">Aus Dokumentenordner</span>
+                      <span className="block text-[10px] text-gray-400">Im Anhänge-Tab</span>
                     </span>
                   </button>
                 </div>
@@ -596,49 +636,52 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
           </div>
         )}
 
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 p-6 space-y-6">
+        {/* Tab bar */}
+        <div className="flex border-b border-gray-100 px-6 shrink-0 gap-1">
+          {([
+            { id: 'overview',     label: 'Übersicht',  icon: null },
+            { id: 'timeline',     label: 'Verlauf',    count: rawTimelineEvents.length },
+            { id: 'attachments',  label: 'Anhänge',    count: fileEvents.length },
+            { id: 'contacts',     label: 'Kontakte',   count: app?.contacts?.length ?? 0, icon: <Users className="h-3 w-3" /> },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+              {'count' in tab && (tab.count ?? 0) > 0 && (
+                <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 leading-none">{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
 
-          {/* Status selector */}
+        {/* Tab: Übersicht */}
+        {activeTab === 'overview' && (
+        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+
+          {/* Status */}
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Status</p>
             {editing ? (
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-1.5">
                   {([...MAIN_PIPELINE, 'rejected'] as MainStatus[]).map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setDraft(d => ({
-                        ...d,
-                        main_status: s,
-                        sub_status: (s === 'hr' || s === 'fb') ? (d.sub_status ?? '1_scheduled') : undefined,
-                      }))}
-                      className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
-                        draft.main_status === s
-                          ? `${MAIN_STATUS_COLORS[s]} border-transparent ring-2 ring-offset-1 ring-indigo-400`
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      {MAIN_STATUS_LABELS[s]}
-                    </button>
+                    <button key={s} type="button"
+                      onClick={() => setDraft(d => ({ ...d, main_status: s, sub_status: (s === 'hr' || s === 'fb') ? (d.sub_status ?? '1_scheduled') : undefined }))}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-all ${draft.main_status === s ? `${MAIN_STATUS_COLORS[s]} border-transparent ring-2 ring-offset-1 ring-indigo-400` : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                    >{MAIN_STATUS_LABELS[s]}</button>
                   ))}
                 </div>
                 {(draft.main_status === 'hr' || draft.main_status === 'fb') && (
                   <div className="flex flex-wrap gap-1.5 pl-1 border-l-2 border-indigo-200">
                     {SUB_STATUS_SEQUENCE.map(sub => (
-                      <button
-                        key={sub}
-                        type="button"
-                        onClick={() => setDraft(d => ({ ...d, sub_status: sub }))}
-                        className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
-                          draft.sub_status === sub
-                            ? 'bg-indigo-100 text-indigo-800 border-indigo-300 font-medium'
-                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                        }`}
-                      >
-                        {SUB_STATUS_LABELS[sub]}
-                      </button>
+                      <button key={sub} type="button" onClick={() => setDraft(d => ({ ...d, sub_status: sub }))}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-all ${draft.sub_status === sub ? 'bg-indigo-100 text-indigo-800 border-indigo-300 font-medium' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                      >{SUB_STATUS_LABELS[sub]}</button>
                     ))}
                   </div>
                 )}
@@ -651,30 +694,20 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
           {/* Flags */}
           {editing && (
             <div className="flex gap-4">
-              {([['is_headhunter', 'Headhunter']] as const).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!(draft as Record<string, unknown>)[key]}
-                    onChange={e => setDraft(d => ({ ...d, [key]: e.target.checked }))}
-                    className="rounded border-gray-300 text-indigo-600"
-                  />
-                  {label}
-                </label>
-              ))}
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={!!draft.is_headhunter}
+                  onChange={e => setDraft(d => ({ ...d, is_headhunter: e.target.checked }))}
+                  className="rounded border-gray-300 text-indigo-600" />
+                Headhunter
+              </label>
             </div>
           )}
 
           {/* Meta fields */}
           {editing ? (
             <div className="grid grid-cols-2 gap-3">
-              {[
-                ['quelle', 'Quelle (LinkedIn, XING, …)'],
-                ['zielfirma_bei_hh', 'Zielfirma (bei HH)'],
-                ['wurde_besetzt_von', 'Besetzt von'],
-              ].map(([key, placeholder]) => (
-                <input
-                  key={key}
+              {[['quelle', 'Quelle (LinkedIn, XING, …)'], ['zielfirma_bei_hh', 'Zielfirma (bei HH)'], ['wurde_besetzt_von', 'Besetzt von']].map(([key, placeholder]) => (
+                <input key={key}
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder={placeholder}
                   value={(draft as Record<string, string>)[key] ?? ''}
@@ -683,9 +716,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
               ))}
               <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-500">
                 <span className="text-xs text-gray-400 mr-1">Bewerbungsdatum:</span>
-                {app?.datum_bewerbung
-                  ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE')
-                  : <span className="italic">über Timeline-Ereignis "Bewerbung" setzen</span>}
+                {app?.datum_bewerbung ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE') : <span className="italic">über Timeline "Bewerbung" setzen</span>}
               </div>
             </div>
           ) : (
@@ -695,18 +726,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
               {field('Letztes Update', app?.letztes_update)}
               {field('Zielfirma (HH)', app?.zielfirma_bei_hh)}
               {field('Besetzt von', app?.wurde_besetzt_von)}
-              {app?.is_headhunter && (
-                <div>
-                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Headhunter</dt>
-                  <dd className="mt-0.5 text-sm text-indigo-700 font-medium">Ja</dd>
-                </div>
-              )}
-              {app?.ghosting && (
-                <div>
-                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Ghosting</dt>
-                  <dd className="mt-0.5 text-sm text-red-600 font-medium">Ja</dd>
-                </div>
-              )}
+              {app?.is_headhunter && <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Headhunter</dt><dd className="mt-0.5 text-sm text-indigo-700 font-medium">Ja</dd></div>}
+              {app?.ghosting && <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Ghosting</dt><dd className="mt-0.5 text-sm text-red-600 font-medium">Ja</dd></div>}
             </dl>
           )}
 
@@ -714,85 +735,109 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Stellenanzeige</p>
             {editing ? (
-              <input
-                type="url"
+              <input type="url"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={draft.stellenanzeige_url ?? ''}
+                value={draft.stellenanzeige_url ?? ''} placeholder="https://…"
                 onChange={e => setDraft(d => ({ ...d, stellenanzeige_url: e.target.value || undefined }))}
-                placeholder="https://…"
               />
             ) : app?.stellenanzeige_url ? (
-              <a
-                href={app.stellenanzeige_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 hover:underline break-all"
-              >
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                {app.stellenanzeige_url}
+              <a href={app.stellenanzeige_url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 hover:underline break-all">
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />{app.stellenanzeige_url}
               </a>
-            ) : (
-              <span className="text-gray-400 italic text-sm">Kein Link</span>
-            )}
+            ) : <span className="text-gray-400 italic text-sm">Kein Link</span>}
           </div>
 
           {/* Kommentar */}
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Kommentar</p>
             {editing ? (
-              <textarea
-                rows={3}
+              <textarea rows={4}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={draft.kommentar ?? ''}
+                value={draft.kommentar ?? ''} placeholder="Notizen zur Bewerbung…"
                 onChange={e => setDraft(d => ({ ...d, kommentar: e.target.value }))}
-                placeholder="Notizen zur Bewerbung…"
               />
             ) : (
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{app?.kommentar || <span className="text-gray-400 italic">Kein Kommentar</span>}</p>
             )}
           </div>
 
-          {/* Timeline */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" /> Verlauf
-              </p>
-              {!addingNote && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setAddingNote(true)}
-                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
-                  >
-                    <Plus className="h-3 w-3" /> Notiz
-                  </button>
-                  <button
-                    onClick={() => setAddingBewerbung(true)}
-                    className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700"
-                    title="Bewerbungsdatum als neues Timeline-Ereignis setzen"
-                  >
-                    <Plus className="h-3 w-3" /> Bewerbung
-                  </button>
-                </div>
-              )}
+          {/* Gesprächsnotizen (view only) */}
+          {!editing && [app?.gespraech_1, app?.gespraech_2, app?.gespraech_3, app?.gespraech_4, app?.gespraech_5].some(Boolean) && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Gesprächsnotizen</p>
+              <div className="space-y-2">
+                {[app?.gespraech_1, app?.gespraech_2, app?.gespraech_3, app?.gespraech_4, app?.gespraech_5].map((g, i) =>
+                  g ? (
+                    <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                      <p className="text-[10px] text-gray-400 font-medium uppercase mb-0.5">{i + 1}. Gespräch</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{g}</p>
+                    </div>
+                  ) : null
+                )}
+              </div>
             </div>
+          )}
+        </div>
+        )}
+
+        {/* Tab: Verlauf */}
+        {activeTab === 'timeline' && (
+        <div className="overflow-y-auto flex-1 flex flex-col">
+          {/* Filter row */}
+          <div className="px-6 pt-4 pb-3 border-b border-gray-100 space-y-2 shrink-0">
+            {/* Time filter */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-gray-400 shrink-0 mr-0.5">Zeitraum:</span>
+              {([['all', 'Alle'], ['1m', '1 Monat'], ['3m', '3 Monate'], ['6m', '6 Monate'], ['1y', '1 Jahr']] as const).map(([v, l]) => (
+                <button key={v} onClick={() => setTimeFilter(v)}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${timeFilter === v ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
+                >{l}</button>
+              ))}
+            </div>
+            {/* Type filter */}
+            {availableTypes.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-gray-400 shrink-0 mr-0.5">Typ:</span>
+                <button onClick={() => setTypeFilter('all')}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${typeFilter === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
+                >Alle</button>
+                {availableTypes.map(t => {
+                  const labels: Record<string, string> = { bewerbung: 'Bewerbung', gespräch: 'Gespräch', notiz: 'Notiz', status: 'Status', mail: 'Mail', calendar: 'Kalender' }
+                  return (
+                    <button key={t} onClick={() => setTypeFilter(t)}
+                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${typeFilter === t ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
+                    >{labels[t] ?? t}</button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="overflow-y-auto flex-1 p-6 space-y-3">
+            {/* Add note / Bewerbung */}
+            {!addingNote && !addingBewerbung && (
+              <div className="flex items-center gap-3 mb-1">
+                <button onClick={() => setAddingNote(true)} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
+                  <Plus className="h-3 w-3" /> Notiz
+                </button>
+                <button onClick={() => setAddingBewerbung(true)} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700">
+                  <Plus className="h-3 w-3" /> Bewerbung
+                </button>
+              </div>
+            )}
 
             {addingNote && (
-              <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-                <textarea
-                  autoFocus
-                  rows={2}
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+                <textarea autoFocus rows={2}
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Notiz…"
-                  value={noteDraft.notiz}
+                  placeholder="Notiz…" value={noteDraft.notiz}
                   onChange={e => setNoteDraft(d => ({ ...d, notiz: e.target.value }))}
                 />
                 <div className="flex items-center justify-between">
-                  <input
-                    type="date"
+                  <input type="date"
                     className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={noteDraft.datum}
-                    onChange={e => setNoteDraft(d => ({ ...d, datum: e.target.value }))}
+                    value={noteDraft.datum} onChange={e => setNoteDraft(d => ({ ...d, datum: e.target.value }))}
                   />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => { setAddingNote(false); setNoteDraft({ notiz: '', datum: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
@@ -805,21 +850,17 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
             )}
 
             {addingBewerbung && (
-              <div className="mb-3 rounded-lg border border-green-200 bg-green-50 p-3 space-y-2">
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-2">
                 <p className="text-xs text-green-700 font-medium">Bewerbungsdatum setzen</p>
-                <input
-                  autoFocus
+                <input autoFocus
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Titel (z.B. Bewerbung eingereicht)"
-                  value={bewerbungDraft.titel}
+                  placeholder="Titel (z.B. Bewerbung eingereicht)" value={bewerbungDraft.titel}
                   onChange={e => setBewerbungDraft(d => ({ ...d, titel: e.target.value }))}
                 />
                 <div className="flex items-center justify-between">
-                  <input
-                    type="date"
+                  <input type="date"
                     className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
-                    value={bewerbungDraft.datum}
-                    onChange={e => setBewerbungDraft(d => ({ ...d, datum: e.target.value }))}
+                    value={bewerbungDraft.datum} onChange={e => setBewerbungDraft(d => ({ ...d, datum: e.target.value }))}
                   />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => { setAddingBewerbung(false); setBewerbungDraft({ datum: '', titel: 'Bewerbung eingereicht' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
@@ -831,188 +872,148 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
               </div>
             )}
 
-            {(() => {
-              const allEvents = app?.events ?? []
-              const timelineEvents = allEvents.filter(ev => ev.typ !== 'file')
-              const fileEvents = allEvents.filter(ev => ev.typ === 'file')
-              return (
-                <>
-                  {timelineEvents.length === 0 && !addingNote ? (
-                    <p className="text-sm text-gray-400 italic">Noch keine Einträge</p>
-                  ) : (
-                    <div className="relative">
-                      <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200" />
-                      <div className="space-y-3 pl-7">
-                        {[...timelineEvents].sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? '')).map(ev => (
-                          <TimelineEvent key={ev.id} event={ev} appId={appId!} onUpdated={refreshContacts} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {fileEvents.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-1.5 mb-2">
-                        <File className="h-3.5 w-3.5" /> Dokumente ({fileEvents.length})
-                      </p>
-                      <div className="space-y-1">
-                        {fileEvents.map(ev => (
-                          <FileRow key={ev.id} event={ev} appId={appId!} onDeleted={refreshContacts} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )
-            })()}
-          </div>
-
-          {/* Kontakte */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Kontakte</p>
-              {!addingContact && (
-                <button
-                  onClick={() => setAddingContact(true)}
-                  className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
-                >
-                  <Plus className="h-3 w-3" /> Hinzufügen
-                </button>
-              )}
-            </div>
-
-            {(app?.contacts ?? []).length > 0 && (
-              <div className="space-y-2 mb-3">
-                {app!.contacts!.map(c => (
-                  <div key={c.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
-                    {editingContactId === c.id ? (
-                      <div className="space-y-2">
-                        <input
-                          autoFocus
-                          className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          value={editContactDraft.name ?? ''}
-                          onChange={e => setEditContactDraft(d => ({ ...d, name: e.target.value }))}
-                          placeholder="Name *"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
-                          <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
-                          <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={editContactDraft.rolle ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, rolle: e.target.value }))} />
-                          <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={editContactDraft.firma ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, firma: e.target.value }))} />
-                          <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={editContactDraft.typ ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, typ: e.target.value }))}>
-                            <option value="">Typ wählen…</option>
-                            {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        </div>
-                        <input className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="LinkedIn URL" value={editContactDraft.linkedin_url ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
-                        <div className="flex justify-end gap-2 pt-1">
-                          <button type="button" onClick={() => setEditingContactId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
-                          <button type="button" disabled={!editContactDraft.name || savingContact} onClick={() => updateContact(c.id)} className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                            <Check className="h-3 w-3" /> Speichern
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{c.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
-                          {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
-                          {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
-                          {c.telefon && <p className="text-xs text-gray-400">{c.telefon}</p>}
-                          {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">LinkedIn</a>}
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          <button
-                            onClick={() => { setEditingContactId(c.id); setEditContactDraft({ name: c.name, email: c.email, telefon: c.telefon, rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
-                            className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
-                            title="Bearbeiten"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteContact(c.id, c.name)}
-                            className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
-                            title="Löschen"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {(app?.contacts ?? []).length === 0 && !addingContact && (
-              <p className="text-sm text-gray-400 italic">Keine Kontakte hinterlegt</p>
-            )}
-
-            {addingContact && (
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-                <input
-                  autoFocus
-                  className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Name *"
-                  value={contactDraft.name ?? ''}
-                  onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="E-Mail"
-                    value={contactDraft.email ?? ''}
-                    onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))}
-                  />
-                  <input
-                    className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Telefon"
-                    value={contactDraft.telefon ?? ''}
-                    onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))}
-                  />
-                  <input
-                    className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Rolle"
-                    value={contactDraft.rolle ?? ''}
-                    onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))}
-                  />
-                  <input
-                    className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Firma"
-                    value={contactDraft.firma ?? ''}
-                    onChange={e => setContactDraft(d => ({ ...d, firma: e.target.value }))}
-                  />
-                  <select
-                    className="col-span-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={contactDraft.typ ?? ''}
-                    onChange={e => setContactDraft(d => ({ ...d, typ: e.target.value }))}
-                  >
-                    <option value="">Typ wählen…</option>
-                    {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => { setAddingContact(false); setContactDraft(EMPTY_CONTACT) }}
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    <Trash2 className="h-3 w-3" /> Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!contactDraft.name || savingContact}
-                    onClick={saveContact}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {savingContact ? 'Speichern…' : 'Speichern'}
-                  </button>
+            {timelineEvents.length === 0 && !addingNote && !addingBewerbung ? (
+              <p className="text-sm text-gray-400 italic">
+                {rawTimelineEvents.length > 0 ? 'Keine Einträge für diesen Filter' : 'Noch keine Einträge'}
+              </p>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200" />
+                <div className="space-y-3 pl-7">
+                  {[...timelineEvents].sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? '')).map(ev => (
+                    <TimelineEvent key={ev.id} event={ev} appId={appId!} onUpdated={refreshContacts} />
+                  ))}
                 </div>
               </div>
             )}
           </div>
         </div>
+        )}
+
+        {/* Tab: Anhänge */}
+        {activeTab === 'attachments' && (
+        <div className="overflow-y-auto flex-1 p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <File className="h-3.5 w-3.5" /> Dokumente
+            </p>
+            <button
+              onClick={openDocBrowse}
+              className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700"
+            >
+              <Plus className="h-3 w-3" /> Dokument hinzufügen
+            </button>
+          </div>
+          {fileEvents.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Keine Anhänge</p>
+          ) : (
+            <div className="space-y-1">
+              {fileEvents.map(ev => (
+                <FileRow key={ev.id} event={ev} appId={appId!} onDeleted={refreshContacts} />
+              ))}
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* Tab: Kontakte */}
+        {activeTab === 'contacts' && (
+        <div className="overflow-y-auto flex-1 p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Kontakte</p>
+            {!addingContact && (
+              <button onClick={() => setAddingContact(true)} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
+                <Plus className="h-3 w-3" /> Hinzufügen
+              </button>
+            )}
+          </div>
+
+          {(app?.contacts ?? []).length > 0 && (
+            <div className="space-y-2">
+              {app!.contacts!.map(c => (
+                <div key={c.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
+                  {editingContactId === c.id ? (
+                    <div className="space-y-2">
+                      <input autoFocus
+                        className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={editContactDraft.name ?? ''} placeholder="Name *"
+                        onChange={e => setEditContactDraft(d => ({ ...d, name: e.target.value }))}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={editContactDraft.rolle ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, rolle: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={editContactDraft.firma ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, firma: e.target.value }))} />
+                        <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={editContactDraft.typ ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, typ: e.target.value }))}>
+                          <option value="">Typ wählen…</option>
+                          {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <input className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="LinkedIn URL" value={editContactDraft.linkedin_url ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button type="button" onClick={() => setEditingContactId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                        <button type="button" disabled={!editContactDraft.name || savingContact} onClick={() => updateContact(c.id)} className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                          <Check className="h-3 w-3" /> Speichern
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{c.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
+                        {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
+                        {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
+                        {c.telefon && <p className="text-xs text-gray-400">{c.telefon}</p>}
+                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">LinkedIn</a>}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ name: c.name, email: c.email, telefon: c.telefon, rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
+                          className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600" title="Bearbeiten"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => deleteContact(c.id, c.name)}
+                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Löschen"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {(app?.contacts ?? []).length === 0 && !addingContact && (
+            <p className="text-sm text-gray-400 italic">Keine Kontakte hinterlegt</p>
+          )}
+
+          {addingContact && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+              <input autoFocus
+                className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Name *" value={contactDraft.name ?? ''}
+                onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
+                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
+                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
+                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={contactDraft.firma ?? ''} onChange={e => setContactDraft(d => ({ ...d, firma: e.target.value }))} />
+                <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={contactDraft.typ ?? ''} onChange={e => setContactDraft(d => ({ ...d, typ: e.target.value }))}>
+                  <option value="">Typ wählen…</option>
+                  {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => { setAddingContact(false); setContactDraft(EMPTY_CONTACT) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                  <Trash2 className="h-3 w-3" /> Abbrechen
+                </button>
+                <button type="button" disabled={!contactDraft.name || savingContact} onClick={saveContact}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {savingContact ? 'Speichern…' : 'Speichern'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-gray-50 rounded-b-2xl">

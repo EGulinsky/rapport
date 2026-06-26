@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.12.0',
+    date: '2026-06-26',
+    changes: [
+      'Bewerbungsmodal: Tabs Übersicht / Verlauf / Anhänge / Kontakte (analog Firmenmodal).',
+      'Verlauf-Tab: Filter nach Zeitraum (1M/3M/6M/1J) und Ereignistyp (Mail, Kalender, Gespräch …).',
+      'Anhänge und Kontakte in eigenen Tabs ausgelagert.',
+      'Breites Modal (max-w-3xl) für mehr Platz.',
+    ],
+  },
+  {
     version: '3.11.0',
     date: '2026-06-26',
     changes: [
