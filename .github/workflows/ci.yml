@@ -116,3 +116,21 @@ jobs:
           DOCKER_BUILDKIT: "1"
           BUILD_NUMBER: ${{ github.run_number }}
         run: docker compose -f /Users/eugengulinsky/code/jobtracker/docker-compose.yml up -d --build
+
+      - name: Browser öffnen
+        run: open "https://frontend.jobtracker.orb.local/"
+
+  notify-failure:
+    name: Fehler-Benachrichtigung
+    runs-on: self-hosted
+    needs: [backend, frontend, docker, deploy]
+    if: always() && contains(needs.*.result, 'failure')
+    steps:
+      - name: macOS-Notification
+        run: |
+          FAILED=""
+          [ "${{ needs.backend.result }}"  = "failure" ] && FAILED="${FAILED} Backend"
+          [ "${{ needs.frontend.result }}" = "failure" ] && FAILED="${FAILED} Frontend"
+          [ "${{ needs.docker.result }}"   = "failure" ] && FAILED="${FAILED} Docker"
+          [ "${{ needs.deploy.result }}"   = "failure" ] && FAILED="${FAILED} Deploy"
+          osascript -e "display notification \"Fehlgeschlagen:${FAILED} — Build ${{ github.run_number }}\" with title \"Jobtracker CI ✗\" sound name \"Basso\""
