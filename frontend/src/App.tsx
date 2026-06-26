@@ -40,7 +40,7 @@ function BackendGate({ children }: { children: React.ReactNode }) {
     async function poll() {
       while (!cancelled) {
         try {
-          const res = await fetch('/api/stats')
+          const res = await fetch('/api/applications/stats')
           if (res.ok) { setReady(true); return }
         } catch { /* still starting */ }
         await new Promise(r => setTimeout(r, 1500))
