@@ -740,21 +740,48 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
 
 
 async def _scrape_messages(page, db: Session, apps_list: list) -> int:
-    """Scrape LinkedIn inbox and create timeline events for application-related conversations."""
+    """Scrape LinkedIn inbox and create timeline events for application-related conversations.
+
+    Matching strategy (two passes, no blind thread-opens):
+    1. PRIMARY — contact name in sidebar: LinkedIn shows the person's name in the
+       conversation list. We match known contacts (linked to applications via
+       contact_application) against that name. Accurate and efficient.
+    2. SECONDARY — company name in message preview: when the sidebar preview text
+       itself mentions a known company ("Hi, I'm reaching out from Acme…"), we catch
+       initial messages from yet-unknown recruiters without needing to open the thread.
+    """
     from app.routers.sync_common import load_synced_ids, mark_synced
     from app.dedup import norm_firma
 
     _state["step"] = "Nachrichten: Posteingang laden…"
 
-    # Build lookup: normalized company name → set of app_ids
+    # PRIMARY lookup: contact full-name (lowercased) → set of linked app_ids
+    name_map: dict[str, set[int]] = {}
+    try:
+        contacts_with_apps = (
+            db.query(models.Contact)
+            .filter(models.Contact.applications.any())
+            .all()
+        )
+        for contact in contacts_with_apps:
+            normalized = (contact.name or "").lower().strip()
+            if len(normalized) >= 3:
+                app_ids = {app.id for app in contact.applications}
+                if app_ids:
+                    name_map.setdefault(normalized, set()).update(app_ids)
+    except Exception:
+        pass
+
+    # SECONDARY lookup: normalized company name → set of app_ids
+    # Used for preview-text matching (requires ≥ 5 chars to avoid "SAP"/"BMW" noise)
     company_map: dict[str, set[int]] = {}
     for app in apps_list:
-        for name in filter(None, [app.firma, getattr(app, "zielfirma_bei_hh", None)]):
-            key = norm_firma(name)
-            if len(key) >= 3:
+        for raw in filter(None, [app.firma, getattr(app, "zielfirma_bei_hh", None)]):
+            key = norm_firma(raw)
+            if len(key) >= 5:
                 company_map.setdefault(key, set()).add(app.id)
 
-    if not company_map:
+    if not name_map and not company_map:
         return 0
 
     synced = load_synced_ids(db, "linkedin_msg")
@@ -766,7 +793,7 @@ async def _scrape_messages(page, db: Session, apps_list: list) -> int:
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await asyncio.sleep(1)
 
-        # Extract conversation thread links + sidebar preview text
+        # Extract conversation thread links + sidebar text (name + last-message preview)
         try:
             conv_data: list[dict] = await page.evaluate("""
                 () => {
@@ -801,16 +828,25 @@ async def _scrape_messages(page, db: Session, apps_list: list) -> int:
             if thread_id in synced:
                 continue
 
-            # Match company names against sidebar preview text
+            # ── Pass 1: contact name in sidebar (person's name shown by LinkedIn) ──
             matched_ids: set[int] = set()
-            for key, ids in company_map.items():
-                if key in sidebar_text:
+            matched_participant: Optional[str] = None
+            for contact_name, ids in name_map.items():
+                if contact_name in sidebar_text:
                     matched_ids.update(ids)
+                    if not matched_participant:
+                        matched_participant = contact_name.title()
+
+            # ── Pass 2: company name in sidebar preview text ──
+            if not matched_ids:
+                for company_key, ids in company_map.items():
+                    if company_key in sidebar_text:
+                        matched_ids.update(ids)
 
             if not matched_ids:
                 continue
 
-            # Open conversation for full content
+            # Open conversation only for matched threads (to get message content)
             _state["step"] = f"Nachrichten: öffne Thread {thread_id[:16]}…"
             try:
                 await page.goto(href, wait_until="domcontentloaded", timeout=20000)
@@ -819,14 +855,27 @@ async def _scrape_messages(page, db: Session, apps_list: list) -> int:
             except Exception:
                 continue
 
-            # Extract participant name (first short substantial line)
-            lines = [ln.strip() for ln in full_text.split("\n") if 2 < len(ln.strip()) < 80]
-            skip = {"LinkedIn", "Messaging", "Nachrichten", "Messages"}
-            participant = next((ln for ln in lines if ln not in skip), "Unbekannt")
+            # ── Pass 3 (refinement): if we only matched via company (pass 2),
+            #    also try contact names in the full thread text to narrow app_ids ──
+            if matched_participant is None:
+                refined: set[int] = set()
+                for contact_name, ids in name_map.items():
+                    if contact_name in full_text.lower():
+                        refined.update(ids)
+                if refined:
+                    matched_ids &= refined if matched_ids & refined else matched_ids
 
-            # Message preview: first long-ish line that looks like content
-            preview_lines = [ln for ln in (ln.strip() for ln in full_text.split("\n"))
-                             if len(ln) > 20 and ln not in skip and ln != participant]
+            # Extract human-readable participant name for the event title
+            skip = {"LinkedIn", "Messaging", "Nachrichten", "Messages", "New message", "Send"}
+            lines = [ln.strip() for ln in full_text.split("\n") if 2 < len(ln.strip()) < 80]
+            participant = matched_participant or next(
+                (ln for ln in lines if ln not in skip), "Unbekannt"
+            )
+
+            # Message preview: first long-ish line that looks like actual content
+            preview_lines = [ln.strip() for ln in full_text.split("\n")
+                             if len(ln.strip()) > 20 and ln.strip() not in skip
+                             and ln.strip() != participant]
             preview = preview_lines[0][:300] if preview_lines else None
 
             today = date.today()
