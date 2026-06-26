@@ -9,9 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '3.3.9',
-    date: '2026-06-25',
+    version: '3.4.0',
+    date: '2026-06-26',
     changes: [
+      'Neu: Firmenlogos in der Bewerbungstabelle und im Kanban-Board.',
       'Fix: Firmenlogos in der Firmenliste — Clearbit (abgeschaltet) ersetzt durch Google Favicons.',
     ],
   },

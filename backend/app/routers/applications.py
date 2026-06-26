@@ -214,6 +214,20 @@ def list_applications(
         if fixed_any:
             db.commit()
 
+    # Attach company websites for logo display
+    cp_ids = {a.company_profile_id for a in apps if a.company_profile_id}
+    tcp_ids = {a.target_company_profile_id for a in apps if a.target_company_profile_id}
+    all_ids = cp_ids | tcp_ids
+    if all_ids:
+        website_map = dict(
+            db.query(models.CompanyProfile.id, models.CompanyProfile.website)
+            .filter(models.CompanyProfile.id.in_(all_ids))
+            .all()
+        )
+        for a in apps:
+            a.company_website = website_map.get(a.company_profile_id)
+            a.target_company_website = website_map.get(a.target_company_profile_id)
+
     return apps
 
 
