@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { RefreshCw, ChevronDown, CheckCircle, AlertCircle, X, ArrowRight, Linkedin } from 'lucide-react'
 import { api } from '../api/client'
+import type { LinkedInSyncStatus } from '../types'
 import clsx from 'clsx'
 
 interface Props {
   onSynced: () => void
   onReviewOpen?: () => void
-  onLinkedIn?: () => void
+  onLinkedInConfig?: () => void
 }
 
 interface SourceResult {
@@ -44,11 +45,13 @@ const SOURCE_CONFIGS: { key: string; label: string }[] = [
   { key: 'local_files',        label: 'Dokumente' },
 ]
 
-export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
+export function SyncButton({ onSynced, onReviewOpen, onLinkedInConfig }: Props) {
   const [syncing, setSyncing] = useState(false)
   const [open, setOpen] = useState(false)
   const [summary, setSummary] = useState<SyncSummary | null>(null)
   const [progress, setProgress] = useState<Record<string, ProgressEntry>>({})
+  const [liStatus, setLiStatus] = useState<LinkedInSyncStatus | null>(null)
+  const [twoFaCode, setTwoFaCode] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -81,11 +84,19 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
     }, 1000)
   }, [stopPolling])
 
+  async function handleSubmit2Fa() {
+    if (!twoFaCode.trim()) return
+    await api.linkedin.submitTwoFa(twoFaCode.trim()).catch(() => null)
+    setTwoFaCode('')
+  }
+
   async function runSync(reset: boolean) {
     setSyncing(true)
     setOpen(false)
     setSummary(null)
     setProgress({})
+    setLiStatus(null)
+    setTwoFaCode('')
     startPolling()
 
     try {
@@ -103,6 +114,21 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
 
       const pendingBefore = await api.review.count().then(r => r.count).catch(() => 0)
 
+      // Check LinkedIn config — fire in parallel if configured
+      const liCfg = await api.linkedin.getConfig().catch(() => null)
+      const liEnabled = !!(liCfg?.configured)
+      let liSyncRunning = false
+      if (liEnabled) {
+        try {
+          await api.linkedin.run()
+          liSyncRunning = true
+        } catch (e: unknown) {
+          // 409 = already running — still track it
+          const msg = e instanceof Error ? e.message : String(e)
+          if (msg.includes('409') || msg.includes('already running')) liSyncRunning = true
+        }
+      }
+
       // Load sync settings to skip disabled sources
       const syncCfg = await api.settings.getSync().catch(() => null)
       const filesCfg = await api.settings.getFiles().catch(() => null)
@@ -115,7 +141,7 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
         await api.icloud.syncContacts().catch(() => null)
       }
 
-      // Fire all syncs as background tasks — they return immediately
+      // Fire all batch syncs as background tasks — they return immediately
       const FIRE_SOURCES = [
         { key: 'gmail',            enabled: googleOn && (syncCfg?.gmail_enabled            ?? true), fn: () => api.sync.syncGmail() },
         { key: 'gcal',             enabled: googleOn && (syncCfg?.gcal_enabled             ?? true), fn: () => api.sync.syncCalendar() },
@@ -137,16 +163,31 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
         }
       }))
 
-      // Poll batch results until all started sources are done (max 20 min)
+      // Combined polling: batch sources + LinkedIn (max 20 min)
       let batchData: Record<string, { done: boolean; processed?: number; created?: number; skipped?: number; errors?: string[] }> = {}
       for (let i = 0; i < 600; i++) {
         await new Promise(r => setTimeout(r, 2000))
-        try {
-          batchData = await api.sync.batchResults()
-        } catch {
-          continue
+
+        try { batchData = await api.sync.batchResults() } catch { /* continue */ }
+
+        if (liSyncRunning) {
+          try {
+            const ls = await api.linkedin.status() as LinkedInSyncStatus
+            setLiStatus(ls)
+            if (['done', 'error', 'needs_login'].includes(ls.status)) {
+              liSyncRunning = false
+            }
+          } catch { /* ignore */ }
         }
-        if ([...startedSources].every(src => batchData[src]?.done)) break
+
+        const batchDone = startedSources.size === 0 || [...startedSources].every(src => batchData[src]?.done)
+        if (batchDone && !liSyncRunning) break
+      }
+
+      // Final LinkedIn status snapshot
+      let finalLi: LinkedInSyncStatus | null = null
+      if (liEnabled) {
+        finalLi = await api.linkedin.status().catch(() => null) as LinkedInSyncStatus | null
       }
 
       const pendingAfter = await api.review.count().then(r => r.count).catch(() => 0)
@@ -169,6 +210,23 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
         }
       })
 
+      // Add LinkedIn results to summary
+      if (finalLi && ['done', 'error'].includes(finalLi.status)) {
+        const liJobsCreated = finalLi.created ?? 0
+        const liMsgCreated = finalLi.msg_created ?? 0
+        const liSrc: SourceResult = {
+          label: 'LinkedIn',
+          created: liJobsCreated + liMsgCreated,
+          processed: (finalLi.total ?? 0) + (finalLi.msg_processed ?? 0),
+          skipped: finalLi.skipped ?? 0,
+          errors: finalLi.errors ?? [],
+        }
+        if (liSrc.processed > 0 || liSrc.errors.length > 0) {
+          sources.push(liSrc)
+          totalCreated += liSrc.created
+        }
+      }
+
       const newPending = Math.max(0, pendingAfter - pendingBefore)
       const totalErrors = sources.reduce((s, r) => s + r.errors.length, 0)
 
@@ -179,12 +237,7 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
         setSummary({ sources, totalCreated, newPending, totalErrors })
       }
     } catch {
-      setSummary({
-        sources: [],
-        totalCreated: 0,
-        newPending: 0,
-        totalErrors: 1,
-      })
+      setSummary({ sources: [], totalCreated: 0, newPending: 0, totalErrors: 1 })
     } finally {
       stopPolling()
       setSyncing(false)
@@ -193,6 +246,20 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
   }
 
   const progressEntries = Object.values(progress).filter(p => p.total > 0 || p.done)
+
+  // Synthetic LinkedIn progress entry for the overlay
+  const liProgressEntry: ProgressEntry | null = (syncing && liStatus && liStatus.status !== 'idle') ? {
+    label: 'LinkedIn',
+    step: liStatus.step || '',
+    current: liStatus.processed || 0,
+    total: liStatus.total || 0,
+    percent: liStatus.total > 0 ? Math.round(((liStatus.processed || 0) / liStatus.total) * 100) : 0,
+    done: ['done', 'error', 'needs_login'].includes(liStatus.status),
+  } : null
+
+  const allProgressEntries = liProgressEntry
+    ? [...progressEntries, liProgressEntry]
+    : progressEntries
 
   return (
     <>
@@ -235,15 +302,18 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
                 <span className="block text-xs text-gray-400">Reset + neu einlesen</span>
               </span>
             </button>
-            {onLinkedIn && (
+            {onLinkedInConfig && (
               <>
                 <div className="my-1 border-t border-gray-100" />
                 <button
-                  onClick={() => { setOpen(false); onLinkedIn() }}
+                  onClick={() => { setOpen(false); onLinkedInConfig() }}
                   className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                 >
-                  <Linkedin className="h-3.5 w-3.5 text-blue-600" />
-                  LinkedIn-Sync
+                  <Linkedin className="h-3.5 w-3.5 text-[#0077B5]" />
+                  <span>
+                    LinkedIn einrichten
+                    <span className="block text-xs text-gray-400">Zugangsdaten & Session</span>
+                  </span>
                 </button>
               </>
             )}
@@ -252,16 +322,42 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedIn }: Props) {
       </div>
 
       {/* Progress overlay while syncing */}
-      {syncing && progressEntries.length > 0 && (
+      {syncing && (allProgressEntries.length > 0 || liStatus?.status === 'needs_2fa') && (
         <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
             <RefreshCw className="h-3.5 w-3.5 text-indigo-500 animate-spin shrink-0" />
             <span className="text-xs font-semibold text-gray-700">Sync läuft…</span>
           </div>
           <div className="px-4 py-3 space-y-3">
-            {progressEntries.map(p => (
+            {allProgressEntries.map(p => (
               <ProgressRow key={p.label} entry={p} />
             ))}
+            {liStatus?.status === 'needs_2fa' && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-amber-700 font-medium">
+                  LinkedIn: 2FA-Code eingeben
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Code…"
+                    value={twoFaCode}
+                    onChange={e => setTwoFaCode(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSubmit2Fa()}
+                    className="flex-1 rounded-lg border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#0077B5]/30"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSubmit2Fa}
+                    disabled={!twoFaCode.trim()}
+                    className="text-xs px-2 py-1 rounded-lg bg-[#0077B5] text-white hover:bg-[#005f91] disabled:opacity-40"
+                  >
+                    OK
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
