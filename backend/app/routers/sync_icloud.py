@@ -1370,12 +1370,10 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
                     existing.rolle = title_val
                 continue
 
+            # Always import the contact so it appears in the company Kontakte tab.
+            # Application links are created only for apps where the contact is
+            # explicitly mentioned in events or application text (not just by firma match).
             mention_app_ids = _find_apps_where_contact_mentioned(name, email_val, db)
-            if not mention_app_ids:
-                continue
-
-            company_app_ids = _find_apps_for_contact(org_val, db)
-            all_app_ids = list(set(mention_app_ids) | set(company_app_ids))
 
             contact = models.Contact(
                 name=name, email=email_val, telefon=tel_val,
@@ -1383,7 +1381,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             )
             db.add(contact)
             db.flush()
-            for aid in all_app_ids:
+            for aid in mention_app_ids:
                 app_obj = db.query(models.Application).get(aid)
                 if app_obj:
                     contact.applications.append(app_obj)
