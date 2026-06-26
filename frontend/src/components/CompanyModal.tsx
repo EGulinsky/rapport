@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2, UserPlus, UserMinus } from 'lucide-react'
+import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2, UserPlus, UserMinus, ChevronsUp, ChevronsDown } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus, ContactWithApp } from '../types'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
+import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
 import clsx from 'clsx'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   onClose: () => void
   onOpenApplication?: (id: number) => void
   onOpenContact?: (id: number) => void
+  onOpenCompany?: (id: number) => void
   onMergeRequest?: (ids: number[]) => void
 }
 
@@ -56,6 +58,8 @@ interface EditState {
   website: string
   linkedin_company_url: string
   description: string
+  parent_company_id: number | null
+  parent_name: string
 }
 
 function toEditState(c: CompanyProfile): EditState {
@@ -71,10 +75,12 @@ function toEditState(c: CompanyProfile): EditState {
     website: c.website ?? '',
     linkedin_company_url: c.linkedin_company_url ?? '',
     description: c.description ?? '',
+    parent_company_id: c.parent_company_id ?? null,
+    parent_name: c.parent_name ?? '',
   }
 }
 
-export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onMergeRequest }: Props) {
+export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onOpenCompany, onMergeRequest }: Props) {
   const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,6 +173,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
         website: editState.website || null,
         linkedin_company_url: editState.linkedin_company_url || null,
         description: editState.description || null,
+        parent_company_id: editState.parent_company_id,
       })
       setCompany(updated)
       setEditing(false)
@@ -405,6 +412,33 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                       </a>
                     </Field>
                   )}
+                  {company.parent_company_id && (
+                    <Field label="Muttergesellschaft">
+                      <button
+                        onClick={() => onOpenCompany?.(company.parent_company_id!)}
+                        className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs font-medium hover:underline"
+                      >
+                        <ChevronsUp className="h-3 w-3" />
+                        {company.parent_name}
+                      </button>
+                    </Field>
+                  )}
+                  {company.subsidiaries && company.subsidiaries.length > 0 && (
+                    <Field label="Tochterunternehmen">
+                      <div className="flex flex-wrap gap-1">
+                        {company.subsidiaries.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => onOpenCompany?.(s.id)}
+                            className="inline-flex items-center gap-1 rounded-full bg-gray-100 hover:bg-indigo-100 text-gray-700 hover:text-indigo-700 px-2 py-0.5 text-xs font-medium transition-colors"
+                          >
+                            <ChevronsDown className="h-3 w-3" />
+                            {s.name_display ?? s.name_norm}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+                  )}
                 </div>
               ) : editState && (
                 <>
@@ -477,6 +511,14 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                       onChange={ef('description')}
                       rows={4}
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-gray-400 mb-1">Muttergesellschaft</label>
+                    <CompanyFilterPicker
+                      value={editState.parent_company_id ? { id: editState.parent_company_id, name: editState.parent_name || String(editState.parent_company_id) } : null}
+                      onChange={v => setEditState(s => s ? { ...s, parent_company_id: v?.id ?? null, parent_name: v?.name ?? '' } : s)}
+                      placeholder="Muttergesellschaft zuordnen…"
                     />
                   </div>
                 </div>

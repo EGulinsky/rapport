@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users } from 'lucide-react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -325,6 +325,12 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                         <p className="font-medium text-gray-900 truncate max-w-[180px]">
                           {company.name_display || company.name_norm}
                         </p>
+                        {company.parent_name && (
+                          <p className="flex items-center gap-0.5 text-[10px] text-gray-400 truncate max-w-[180px] mt-0">
+                            <ChevronsUp className="h-2.5 w-2.5 shrink-0" />
+                            {company.parent_name}
+                          </p>
+                        )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {(company.app_count ?? 0) > 0 && (
                             <button

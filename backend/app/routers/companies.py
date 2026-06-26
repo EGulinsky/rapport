@@ -26,6 +26,16 @@ class CompanyProfileListItem(BaseModel):
     app_count: int
     contact_count: int = 0
     has_logo: bool = False
+    parent_company_id: Optional[int] = None
+    parent_name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CompanySubsidiaryRef(BaseModel):
+    id: int
+    name_display: Optional[str] = None
+    name_norm: str
 
     model_config = {"from_attributes": True}
 
@@ -74,6 +84,9 @@ class CompanyProfileDetail(BaseModel):
     app_count: int
     contact_count: int = 0
     logo_data: Optional[str] = None
+    parent_company_id: Optional[int] = None
+    parent_name: Optional[str] = None
+    subsidiaries: List[CompanySubsidiaryRef] = []
     applications: List[CompanyApplicationRef] = []
     contacts: List[CompanyContactRef] = []
 
@@ -92,6 +105,7 @@ class CompanyUpdateRequest(BaseModel):
     website: Optional[str] = None
     linkedin_company_url: Optional[str] = None
     description: Optional[str] = None
+    parent_company_id: Optional[int] = None
 
 
 def _app_count(p: CompanyProfile) -> int:
@@ -122,6 +136,7 @@ def list_companies(
     db: Session = Depends(get_db),
 ):
     profiles = db.query(CompanyProfile).all()
+    id_to_name = {p.id: p.name_display or p.name_norm for p in profiles}
 
     if search:
         q = search.lower()
@@ -161,6 +176,8 @@ def list_companies(
             app_count=_app_count(p),
             contact_count=len(_collect_contacts(p)),
             has_logo=bool(p.logo_data),
+            parent_company_id=p.parent_company_id,
+            parent_name=id_to_name.get(p.parent_company_id) if p.parent_company_id else None,
         )
         for p in profiles
     ]
@@ -202,6 +219,9 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
 
     ids = {a.id for a in profile.applications} | {a.id for a in profile.hh_applications}
 
+    parent_name = (profile.parent.name_display or profile.parent.name_norm) if profile.parent else None
+    subs = [CompanySubsidiaryRef(id=s.id, name_display=s.name_display, name_norm=s.name_norm) for s in profile.subsidiaries]
+
     return CompanyProfileDetail(
         id=profile.id,
         name_display=profile.name_display,
@@ -223,6 +243,9 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
         app_count=len(ids),
         contact_count=len(contacts),
         logo_data=profile.logo_data,
+        parent_company_id=profile.parent_company_id,
+        parent_name=parent_name,
+        subsidiaries=subs,
         applications=apps,
         contacts=contacts,
     )
@@ -235,7 +258,21 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
         raise HTTPException(status_code=404, detail="Company not found")
 
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(profile, field, value or None)
+        if field == "parent_company_id":
+            # cycle guard: don't allow a company to be its own ancestor
+            if value is not None:
+                ancestor = db.get(CompanyProfile, value)
+                visited: set[int] = set()
+                while ancestor:
+                    if ancestor.id == profile.id:
+                        raise HTTPException(400, "Zyklische Hierarchie nicht erlaubt")
+                    if ancestor.id in visited:
+                        break
+                    visited.add(ancestor.id)
+                    ancestor = db.get(CompanyProfile, ancestor.parent_company_id) if ancestor.parent_company_id else None
+            setattr(profile, field, value)
+        else:
+            setattr(profile, field, value or None)
 
     db.commit()
     db.refresh(profile)

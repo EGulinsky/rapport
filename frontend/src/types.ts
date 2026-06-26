@@ -120,6 +120,9 @@ export interface CompanyProfile {
   contact_count?: number
   has_logo?: boolean
   logo_data?: string | null
+  parent_company_id?: number | null
+  parent_name?: string | null
+  subsidiaries?: { id: number; name_display: string | null; name_norm: string }[]
   applications?: { id: number; firma: string; rolle: string; main_status: string; datum_bewerbung?: string | null }[]
   contacts?: CompanyContactRef[]
 }
