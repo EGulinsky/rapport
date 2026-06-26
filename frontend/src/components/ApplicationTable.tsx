@@ -3,7 +3,7 @@ import { ArrowUpDown, ExternalLink } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { StatusPopover } from './StatusPopover'
 import { CompanyLogo } from './CompanyLogo'
-import { MAIN_PIPELINE, MAIN_STATUS_LABELS, SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE } from '../types'
+import { MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE } from '../types'
 import type { Application, MainStatus } from '../types'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
@@ -219,9 +219,12 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                     title="Status ändern"
                   >
                     {app.abgesagt && app.pre_rejection_status ? (
-                      <span className="flex items-center gap-1">
-                        <StatusBadge status={app.pre_rejection_status as import('../types').MainStatus} size="sm" />
-                        <span className="text-[10px] text-red-400 font-medium">✕</span>
+                      <span className={clsx(
+                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                        MAIN_STATUS_COLORS[app.pre_rejection_status as import('../types').MainStatus],
+                      )}>
+                        {MAIN_STATUS_LABELS[app.pre_rejection_status as import('../types').MainStatus]}
+                        <span className="opacity-60">· Absage</span>
                       </span>
                     ) : (
                       <StatusBadge status={app.main_status} subStatus={app.sub_status} size="sm" />
