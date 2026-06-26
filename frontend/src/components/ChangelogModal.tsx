@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.11.0',
+    date: '2026-06-26',
+    changes: [
+      'Kontakt-Sync: Alle Firmenkontakte vom Rechner werden importiert und im Kontakttab der Firma angezeigt.',
+      'Bewerbungs-Verknüpfung nur noch wenn Kontakt explizit in Mails, Kalender oder Bewerbungsnotizen erwähnt wird.',
+    ],
+  },
+  {
     version: '3.10.0',
     date: '2026-06-26',
     changes: [

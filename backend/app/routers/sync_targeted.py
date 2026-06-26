@@ -651,7 +651,9 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                     linkedin_url = str(url_prop.value)
                     break
 
-            # Gate: contact must match by company name OR be mentioned in this app's events/text
+            # Import contact if it belongs to this company (org match).
+            # Only link to THIS application if the contact is explicitly mentioned
+            # in its events or text fields — not just by company name.
             org_matches = org_val and _text_matches(org_val, terms)
             name_in_app_text = _contact_mentioned_in_app(name, email_val, app, db)
             if not org_matches and not name_in_app_text:
@@ -674,9 +676,10 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                     existing.firma = org_val
                 if title_val and not existing.rolle:
                     existing.rolle = title_val
-                db.execute(text(
-                    "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
-                ), {"c": existing.id, "a": app.id})
+                if name_in_app_text:
+                    db.execute(text(
+                        "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
+                    ), {"c": existing.id, "a": app.id})
             else:
                 contact = models.Contact(
                     name=name, email=email_val, telefon=tel_val,
@@ -684,9 +687,10 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 )
                 db.add(contact)
                 db.flush()
-                db.execute(text(
-                    "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
-                ), {"c": contact.id, "a": app.id})
+                if name_in_app_text:
+                    db.execute(text(
+                        "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
+                    ), {"c": contact.id, "a": app.id})
                 created += 1
         except Exception as e:
             errors.append(f"Kontakt {name if 'name' in dir() else '?'}: {e}")
