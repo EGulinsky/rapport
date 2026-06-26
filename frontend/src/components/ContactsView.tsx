@@ -18,10 +18,11 @@ type SortKey = 'name' | 'firma' | 'typ' | 'letzter_kontakt'
 
 interface Props {
   onOpenApplication: (id: number) => void
+  onOpenCompany?: (id: number) => void
   initialSearch?: string
 }
 
-export function ContactsView({ onOpenApplication, initialSearch = '' }: Props) {
+export function ContactsView({ onOpenApplication, onOpenCompany, initialSearch = '' }: Props) {
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
   const [search, setSearch] = useState(initialSearch)
   const [loading, setLoading] = useState(false)
@@ -200,7 +201,14 @@ export function ContactsView({ onOpenApplication, initialSearch = '' }: Props) {
                   {c.firma ? (
                     <div className="flex items-center gap-2">
                       <CompanyLogo name={c.firma} website={c.company_website} size="sm" />
-                      <span className="text-sm text-gray-700">{c.firma}</span>
+                      {c.company_profile_id && onOpenCompany ? (
+                        <button
+                          onClick={e => { e.stopPropagation(); onOpenCompany(c.company_profile_id!) }}
+                          className="text-sm text-gray-700 hover:text-indigo-600 hover:underline text-left"
+                        >{c.firma}</button>
+                      ) : (
+                        <span className="text-sm text-gray-700">{c.firma}</span>
+                      )}
                     </div>
                   ) : <span className="text-gray-300">—</span>}
                 </td>
