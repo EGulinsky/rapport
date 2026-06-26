@@ -14,6 +14,7 @@ interface Props {
   onMergeRequest?: (ids: number[]) => void
   onNavigateToApps?: (filter: CompanyFilter) => void
   onNavigateToContacts?: (filter: CompanyFilter) => void
+  reloadKey?: number
 }
 
 const COMPANY_TYPE_COLORS: Record<string, string> = {
@@ -38,7 +39,7 @@ const COMPANY_TYPE_LABELS: Record<string, string> = {
   other:       'Sonstiges',
 }
 
-export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts }: Props) {
+export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey }: Props) {
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -75,7 +76,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   useEffect(() => {
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
-  }, [load])
+  }, [load, reloadKey])
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }

@@ -84,6 +84,7 @@ export default function App() {
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
+  const [companyReloadKey, setCompanyReloadKey] = useState(0)
   const [appsCompanyFilter, setAppsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [liTrigger, setLiTrigger] = useState(0)
@@ -283,6 +284,7 @@ export default function App() {
             onMergeRequest={ids => setCompanyMergeIds(ids)}
             onNavigateToApps={f => { setAppsCompanyFilter(f); setSearch(''); setMainView('applications') }}
             onNavigateToContacts={f => { setContactsCompanyFilter(f); setMainView('contacts') }}
+            reloadKey={companyReloadKey}
           />
         )}
         {mainView === 'calendar' && (
@@ -438,7 +440,7 @@ export default function App() {
       {companyMergeIds && (
         <CompanyMergeDialog
           companyIds={companyMergeIds}
-          onMerged={winnerId => { setCompanyMergeIds(null); setCompanyModalId(winnerId) }}
+          onMerged={winnerId => { setCompanyMergeIds(null); setCompanyReloadKey(k => k + 1); setCompanyModalId(winnerId) }}
           onClose={() => setCompanyMergeIds(null)}
         />
       )}
