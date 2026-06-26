@@ -465,3 +465,10 @@ class BackupConfig(Base):
     last_backup     = Column(DateTime(timezone=True), nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class LogoSettings(Base):
+    __tablename__ = "logo_settings"
+
+    id      = Column(Integer, primary_key=True)
+    api_key = Column(String, nullable=True)   # Logo.dev public pk_ key

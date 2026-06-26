@@ -9,9 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '3.4.0',
+    version: '3.4.1',
     date: '2026-06-26',
     changes: [
+      'Neu: Logo.dev als primäre Logo-Quelle (Einstellungen → Logos). Liefert echte Logos inkl. Headhunter-Agenturen; Google Favicons bleibt als Fallback.',
       'Neu: Firmenlogos in der Bewerbungstabelle und im Kanban-Board.',
       'Fix: Firmenlogos in der Firmenliste — Clearbit (abgeschaltet) ersetzt durch Google Favicons.',
     ],

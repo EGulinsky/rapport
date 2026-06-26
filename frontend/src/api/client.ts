@@ -149,6 +149,11 @@ export const api = {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     }),
+    getLogo: () => request<{ api_key: string | null }>('/settings/logo'),
+    saveLogo: (api_key: string | null) => request<{ api_key: string | null }>('/settings/logo', {
+      method: 'POST',
+      body: JSON.stringify({ api_key }),
+    }),
     getSync: () => request<SyncSettings>('/settings/sync'),
     saveSync: (data: Partial<SyncSettings>) => request<SyncSettings>('/settings/sync', {
       method: 'POST',

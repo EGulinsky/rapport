@@ -70,6 +70,23 @@ def clear_api_key(db: Session = Depends(get_db)):
     raise HTTPException(404, "Keine Einstellungen vorhanden")
 
 
+@router.get("/logo")
+def get_logo_settings(db: Session = Depends(get_db)):
+    cfg = db.query(models.LogoSettings).first()
+    return {"api_key": cfg.api_key if cfg else None}
+
+
+@router.post("/logo")
+def save_logo_settings(payload: dict, db: Session = Depends(get_db)):
+    cfg = db.query(models.LogoSettings).first()
+    if not cfg:
+        cfg = models.LogoSettings()
+        db.add(cfg)
+    cfg.api_key = payload.get("api_key") or None
+    db.commit()
+    return {"api_key": cfg.api_key}
+
+
 @router.get("/sync")
 def get_sync_settings(db: Session = Depends(get_db)):
     cfg = db.query(models.SyncSettings).first()

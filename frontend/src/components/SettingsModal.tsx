@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw } from 'lucide-react'
 import { api } from '../api/client'
 import { JobPortalSettings } from './JobSearchView'
+import { useLogoKey } from '../context/LogoContext'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus } from '../types'
 import clsx from 'clsx'
 
@@ -1778,7 +1779,7 @@ function BackupPanel() {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'jobportals'
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'jobportals' | 'logos'
 
 const TABS: [Tab, string][] = [
   ['sync',       'Sync'],
@@ -1790,7 +1791,79 @@ const TABS: [Tab, string][] = [
   ['linkedin',   'LinkedIn'],
   ['backup',     'Backup'],
   ['jobportals', 'Jobportale'],
+  ['logos',      'Logos'],
 ]
+
+function LogoPanel() {
+  const { logoDevKey, setLogoDevKey } = useLogoKey()
+  const [key, setKey] = useState(logoDevKey ?? '')
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    try {
+      const r = await api.settings.saveLogo(key.trim() || null)
+      setLogoDevKey(r.api_key)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">Firmenlogos</h3>
+        <p className="text-xs text-gray-400">
+          Logo.dev liefert hochwertige Firmenlogos (inkl. Headhunter). Kostenlos bis 10.000 Abrufe/Monat.
+          Ohne Key wird Google Favicons als Fallback verwendet.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Logo.dev Public Key{' '}
+            <a href="https://logo.dev" target="_blank" rel="noreferrer"
+               className="text-indigo-500 hover:underline font-normal">logo.dev →</a>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              placeholder="pk_…"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {saved ? <Check className="h-4 w-4" /> : saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saved ? 'Gespeichert' : 'Speichern'}
+            </button>
+          </div>
+        </div>
+
+        {logoDevKey && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+            <CheckCircle className="h-3.5 w-3.5" />
+            Logo.dev aktiv — Logos werden bevorzugt geladen
+          </div>
+        )}
+        {!logoDevKey && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <XCircle className="h-3.5 w-3.5" />
+            Kein Key — nur Google Favicons als Fallback
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function SettingsModal({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>('sync')
@@ -1835,6 +1908,7 @@ export function SettingsModal({ onClose }: Props) {
             {tab === 'files'    && <FilesPanel />}
             {tab === 'linkedin' && <LinkedInPanel onSynced={onClose} />}
             {tab === 'backup'     && <BackupPanel />}
+            {tab === 'logos'      && <LogoPanel />}
             {tab === 'jobportals' && (
               <div>
                 <h3 className="text-sm font-semibold text-gray-800 mb-1">Jobportale</h3>
