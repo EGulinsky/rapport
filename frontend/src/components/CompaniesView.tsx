@@ -250,8 +250,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
       )}
 
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="w-8 px-3" />
@@ -261,8 +261,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Größe</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Standort</th>
               <Th k="sync_status" label="Status" />
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Bew.</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Kontak.</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-20">Bew.</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-20">Kontak.</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
