@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,6 +29,13 @@ STATUS_LABEL = {
 TYP_LABEL = {
     "gespräch": "Gespräch",
     "anruf":    "Anruf",
+    "status":   "Gespräch",
+    "notiz":    "Gespräch",
+}
+
+SOURCE_LABEL = {
+    "gcal":      "Google Kal.",
+    "icloud_cal": "iCloud Kal.",
 }
 
 # macOS Arial → Linux Liberation Sans (metric-compatible Arial substitute, ships in fonts-liberation)
@@ -200,7 +208,7 @@ def _build_pdf(apps: list, appointments: list, since: Optional[date], name: str)
 
         for appt in appointments:
             datum  = appt.datum.strftime("%d.%m.%Y") if appt.datum else "—"
-            art    = TYP_LABEL.get(appt.typ or "", appt.typ or "—")
+            art    = SOURCE_LABEL.get(appt.source or "", None) or TYP_LABEL.get(appt.typ or "", appt.typ or "—")
             firma  = _trunc(appt.application.firma or "", 40) if appt.application else "—"
             rolle  = _trunc(appt.application.rolle or "", 46) if appt.application else "—"
             titel  = _trunc(appt.titel or "", 40)
@@ -235,7 +243,10 @@ def export_pdf(
         db.query(models.Event)
         .join(models.Application, models.Event.application_id == models.Application.id)
         .filter(
-            models.Event.typ.in_(["gespräch", "anruf"]),
+            or_(
+                models.Event.typ.in_(["gespräch", "anruf"]),
+                models.Event.source.in_(["gcal", "icloud_cal"]),
+            ),
             models.Event.datum >= cutoff,
         )
         .order_by(models.Event.datum)
