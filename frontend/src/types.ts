@@ -118,6 +118,8 @@ export interface CompanyProfile {
   last_synced_at: string | null
   app_count?: number
   contact_count?: number
+  has_logo?: boolean
+  logo_data?: string | null
   applications?: { id: number; firma: string; rolle: string; main_status: string; datum_bewerbung?: string | null }[]
   contacts?: CompanyContactRef[]
 }
@@ -134,6 +136,7 @@ export interface Contact {
   notizen?: string
   letzter_kontakt?: string
   company_website?: string | null
+  company_profile_id?: number | null
 }
 
 export interface ContactWithApp extends Contact {

@@ -372,5 +372,12 @@ export const api = {
     get: (id: number) => request<CompanyProfile>(`/companies/${id}`),
     update: (id: number, data: Partial<CompanyProfile>) =>
       request<CompanyProfile>(`/companies/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    linkContacts: () => request<{linked: number; created: number}>('/companies/link-contacts', {method: 'POST'}),
+    uploadLogo: async (id: number, file: File): Promise<void> => {
+      const form = new FormData()
+      form.append('file', file)
+      await fetch(`/api/companies/${id}/logo`, {method: 'POST', body: form})
+    },
+    deleteLogo: (id: number) => request<{ok: boolean}>(`/companies/${id}/logo`, {method: 'DELETE'}),
   },
 }

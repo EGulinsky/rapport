@@ -130,6 +130,9 @@ class CompanyProfile(Base):
     # Free-text summary from sync source
     description          = Column(Text, nullable=True)
 
+    # Custom logo (base64 data URI)
+    logo_data            = Column(Text, nullable=True)
+
     # Sync bookkeeping
     sync_source          = Column(String, nullable=True)   # "linkedin"|"web"|"manual"
     sync_status          = Column(String, default="pending", nullable=False)  # pending|done|failed
@@ -232,6 +235,9 @@ class Contact(Base):
     letzter_kontakt = Column(Date, nullable=True)
 
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    company_profile_id = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
+    company_profile    = relationship("CompanyProfile", foreign_keys=[company_profile_id])
 
     applications    = relationship("Application", secondary="contact_application", back_populates="contacts")
 

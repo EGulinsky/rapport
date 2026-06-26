@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, date
+import base64
 
 from app.database import get_db
 from app.models import CompanyProfile
@@ -24,6 +25,7 @@ class CompanyProfileListItem(BaseModel):
     last_synced_at: Optional[datetime] = None
     app_count: int
     contact_count: int = 0
+    has_logo: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -71,6 +73,7 @@ class CompanyProfileDetail(BaseModel):
     last_synced_at: Optional[datetime] = None
     app_count: int
     contact_count: int = 0
+    logo_data: Optional[str] = None
     applications: List[CompanyApplicationRef] = []
     contacts: List[CompanyContactRef] = []
 
@@ -154,6 +157,7 @@ def list_companies(
             last_synced_at=p.last_synced_at,
             app_count=_app_count(p),
             contact_count=len(_collect_contacts(p)),
+            has_logo=bool(p.logo_data),
         )
         for p in profiles
     ]
@@ -215,6 +219,7 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
         last_synced_at=profile.last_synced_at,
         app_count=len(ids),
         contact_count=len(contacts),
+        logo_data=profile.logo_data,
         applications=apps,
         contacts=contacts,
     )
@@ -234,3 +239,43 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
 
     # Re-use get_company logic
     return get_company(company_id, db)
+
+
+@router.post("/link-contacts")
+def link_contacts_to_companies(db: Session = Depends(get_db)):
+    from app.dedup import norm_firma
+    from app import models
+    contacts = db.query(models.Contact).all()
+    linked = 0; created = 0
+    for c in contacts:
+        if not c.firma: continue
+        nname = norm_firma(c.firma)
+        profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
+        if not profile:
+            profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending")
+            db.add(profile); db.flush(); created += 1
+        if c.company_profile_id != profile.id:
+            c.company_profile_id = profile.id; linked += 1
+    db.commit()
+    return {"linked": linked, "created": created}
+
+
+@router.post("/{company_id}/logo")
+async def upload_company_logo(company_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    profile = db.get(CompanyProfile, company_id)
+    if not profile: raise HTTPException(404)
+    data = await file.read()
+    mime = file.content_type or "image/png"
+    b64 = base64.b64encode(data).decode()
+    profile.logo_data = f"data:{mime};base64,{b64}"
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{company_id}/logo")
+def delete_company_logo(company_id: int, db: Session = Depends(get_db)):
+    profile = db.get(CompanyProfile, company_id)
+    if not profile: raise HTTPException(404)
+    profile.logo_data = None
+    db.commit()
+    return {"ok": True}
