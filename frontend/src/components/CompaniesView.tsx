@@ -74,6 +74,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   }, [search])
 
   useEffect(() => {
+    if (reloadKey) setSelectedIds(new Set())
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
   }, [load, reloadKey])
