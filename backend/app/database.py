@@ -639,27 +639,31 @@ def _backfill_company_profiles():
 def _migrate_contact_company_profile():
     import sqlite3
     db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
-    if not os.path.exists(db_path): return
+    if not os.path.exists(db_path):
+        return
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(contacts)")
     cols = {row[1] for row in cur.fetchall()}
     if "company_profile_id" not in cols:
         cur.execute("ALTER TABLE contacts ADD COLUMN company_profile_id INTEGER REFERENCES company_profiles(id)")
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
 
 def _migrate_company_logo():
     import sqlite3
     db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
-    if not os.path.exists(db_path): return
+    if not os.path.exists(db_path):
+        return
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(company_profiles)")
     cols = {row[1] for row in cur.fetchall()}
     if "logo_data" not in cols:
         cur.execute("ALTER TABLE company_profiles ADD COLUMN logo_data TEXT")
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
 
 def init_db():
