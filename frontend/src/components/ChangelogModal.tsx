@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.13.1',
+    date: '2026-06-26',
+    changes: [
+      'PDF-Export: Kalendereinträge (Google/iCloud) jetzt vollständig in der Terminübersicht — auch wenn sie vom globalen Sync nicht als "Gespräch" klassifiziert wurden.',
+    ],
+  },
+  {
     version: '3.13.0',
     date: '2026-06-26',
     changes: [
