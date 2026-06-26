@@ -1,10 +1,111 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X } from 'lucide-react'
 import { api } from '../api/client'
-import type { ContactWithApp } from '../types'
+import type { ContactWithApp, CompanyProfile } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
 import { CompanyLogo } from './CompanyLogo'
 import clsx from 'clsx'
+
+function CompanyCell({ contact, onOpenCompany, onChanged }: {
+  contact: ContactWithApp
+  onOpenCompany?: (id: number) => void
+  onChanged: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<CompanyProfile[]>([])
+  const [loading, setLoading] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) { setQuery(''); setResults([]); return }
+    const t = setTimeout(async () => {
+      setLoading(true)
+      try { setResults(await api.companies.list({ search: query || undefined })) }
+      finally { setLoading(false) }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [query, open])
+
+  useEffect(() => {
+    if (!open) return
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
+
+  async function pick(company: CompanyProfile) {
+    await api.contacts.patch(contact.id, { company_profile_id: company.id, firma: company.name_display ?? company.name_norm })
+    setOpen(false)
+    onChanged()
+  }
+
+  async function unlink(e: React.MouseEvent) {
+    e.stopPropagation()
+    await api.contacts.patch(contact.id, { company_profile_id: null })
+    onChanged()
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      {contact.firma ? (
+        <div className="flex items-center gap-2">
+          <CompanyLogo name={contact.firma} website={contact.company_website} size="sm" />
+          {contact.company_profile_id && onOpenCompany ? (
+            <button
+              onClick={e => { e.stopPropagation(); onOpenCompany(contact.company_profile_id!) }}
+              className="text-sm text-gray-700 hover:text-indigo-600 hover:underline text-left"
+            >{contact.firma}</button>
+          ) : (
+            <span className="text-sm text-gray-700">{contact.firma}</span>
+          )}
+          {contact.company_profile_id ? (
+            <button onClick={unlink} className="text-gray-300 hover:text-red-400 transition-colors" title="Verknüpfung lösen">
+              <X className="h-3 w-3" />
+            </button>
+          ) : (
+            <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="text-gray-300 hover:text-indigo-500 transition-colors" title="Firma zuordnen">
+              <Building2 className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="flex items-center gap-1 text-xs text-gray-300 hover:text-indigo-500 transition-colors">
+          <Building2 className="h-3 w-3" />
+          <span>Zuordnen</span>
+        </button>
+      )}
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg" onClick={e => e.stopPropagation()}>
+          <div className="p-2 border-b border-gray-100">
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Firma suchen…"
+              className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            {loading && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+            {!loading && results.length === 0 && <p className="text-xs text-gray-400 px-3 py-2 italic">Keine Treffer</p>}
+            {results.slice(0, 12).map(c => (
+              <button
+                key={c.id}
+                onClick={() => pick(c)}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              >
+                {c.name_display ?? c.name_norm}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const TYPE_COLORS: Record<string, string> = {
   HR:          'bg-blue-100 text-blue-700',
@@ -198,19 +299,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, initialSearch =
                   {c.rolle && <p className="text-xs text-gray-500">{c.rolle}</p>}
                 </td>
                 <td className="px-4 py-3">
-                  {c.firma ? (
-                    <div className="flex items-center gap-2">
-                      <CompanyLogo name={c.firma} website={c.company_website} size="sm" />
-                      {c.company_profile_id && onOpenCompany ? (
-                        <button
-                          onClick={e => { e.stopPropagation(); onOpenCompany(c.company_profile_id!) }}
-                          className="text-sm text-gray-700 hover:text-indigo-600 hover:underline text-left"
-                        >{c.firma}</button>
-                      ) : (
-                        <span className="text-sm text-gray-700">{c.firma}</span>
-                      )}
-                    </div>
-                  ) : <span className="text-gray-300">—</span>}
+                  <CompanyCell contact={c} onOpenCompany={onOpenCompany} onChanged={load} />
                 </td>
                 <td className="px-4 py-3">
                   {c.typ ? (

@@ -100,13 +100,16 @@ def _app_count(p: CompanyProfile) -> int:
 
 
 def _collect_contacts(p: CompanyProfile) -> list:
-    all_apps = list(p.applications) + list(p.hh_applications)
-    seen_contact_ids = set()
+    seen: set[int] = set()
     contacts = []
-    for a in all_apps:
+    for c in getattr(p, 'direct_contacts', []):
+        if c.id not in seen:
+            seen.add(c.id)
+            contacts.append(c)
+    for a in list(p.applications) + list(p.hh_applications):
         for c in a.contacts:
-            if c.id not in seen_contact_ids:
-                seen_contact_ids.add(c.id)
+            if c.id not in seen:
+                seen.add(c.id)
                 contacts.append(c)
     return contacts
 
@@ -285,4 +288,30 @@ def delete_company_logo(company_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404)
     profile.logo_data = None
     db.commit()
+    return {"ok": True}
+
+
+@router.post("/{company_id}/contacts/{contact_id}", status_code=200)
+def assign_contact_to_company(company_id: int, contact_id: int, db: Session = Depends(get_db)):
+    from app import models as m
+    profile = db.get(CompanyProfile, company_id)
+    if not profile:
+        raise HTTPException(404)
+    contact = db.get(m.Contact, contact_id)
+    if not contact:
+        raise HTTPException(404)
+    contact.company_profile_id = company_id
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{company_id}/contacts/{contact_id}", status_code=200)
+def unassign_contact_from_company(company_id: int, contact_id: int, db: Session = Depends(get_db)):
+    from app import models as m
+    contact = db.get(m.Contact, contact_id)
+    if not contact:
+        raise HTTPException(404)
+    if contact.company_profile_id == company_id:
+        contact.company_profile_id = None
+        db.commit()
     return {"ok": True}

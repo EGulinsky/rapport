@@ -117,8 +117,27 @@ async def _background_sync_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _auto_link_contacts()
     asyncio.create_task(_background_sync_loop())
     yield
+
+
+def _auto_link_contacts():
+    from app.database import SessionLocal
+    from app.dedup import norm_firma
+    from app import models as m
+    from app.models import CompanyProfile
+    try:
+        with SessionLocal() as db:
+            contacts = db.query(m.Contact).filter(m.Contact.company_profile_id.is_(None), m.Contact.firma.isnot(None)).all()
+            for c in contacts:
+                nname = norm_firma(c.firma)
+                profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
+                if profile:
+                    c.company_profile_id = profile.id
+            db.commit()
+    except Exception as e:
+        logger.warning("Auto link contacts failed: %s", e)
 
 
 app = FastAPI(

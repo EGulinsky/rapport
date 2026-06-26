@@ -86,6 +86,12 @@ export const api = {
         method: 'DELETE',
         body: JSON.stringify({ ids, all }),
       }),
+
+    patch: (id: number, data: { company_profile_id?: number | null; firma?: string }) =>
+      request<{ ok: boolean }>(`/contacts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
   },
 
   export: {
@@ -379,5 +385,9 @@ export const api = {
       await fetch(`/api/companies/${id}/logo`, {method: 'POST', body: form})
     },
     deleteLogo: (id: number) => request<{ok: boolean}>(`/companies/${id}/logo`, {method: 'DELETE'}),
+    assignContact: (companyId: number, contactId: number) =>
+      request<{ok: boolean}>(`/companies/${companyId}/contacts/${contactId}`, {method: 'POST'}),
+    unassignContact: (companyId: number, contactId: number) =>
+      request<{ok: boolean}>(`/companies/${companyId}/contacts/${contactId}`, {method: 'DELETE'}),
   },
 }

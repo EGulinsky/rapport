@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2 } from 'lucide-react'
+import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2, UserPlus, UserMinus } from 'lucide-react'
 import { api } from '../api/client'
-import type { CompanyProfile, MainStatus } from '../types'
+import type { CompanyProfile, MainStatus, ContactWithApp } from '../types'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import clsx from 'clsx'
@@ -86,6 +86,11 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [addingContact, setAddingContact] = useState(false)
+  const [contactQuery, setContactQuery] = useState('')
+  const [contactResults, setContactResults] = useState<ContactWithApp[]>([])
+  const [contactSearching, setContactSearching] = useState(false)
+  const addContactRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -101,6 +106,36 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   }, [id])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!addingContact) { setContactQuery(''); setContactResults([]); return }
+    const t = setTimeout(async () => {
+      setContactSearching(true)
+      try { setContactResults(await api.contacts.listAll(contactQuery || undefined)) }
+      finally { setContactSearching(false) }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [contactQuery, addingContact])
+
+  useEffect(() => {
+    if (!addingContact) return
+    function handler(e: MouseEvent) {
+      if (addContactRef.current && !addContactRef.current.contains(e.target as Node)) setAddingContact(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [addingContact])
+
+  async function assignContact(contactId: number) {
+    await api.companies.assignContact(id, contactId)
+    setAddingContact(false)
+    load()
+  }
+
+  async function unassignContact(contactId: number) {
+    await api.companies.unassignContact(id, contactId)
+    load()
+  }
 
   function startEdit() {
     if (!company) return
@@ -485,16 +520,62 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
 
           {/* ── Kontakte Tab ── */}
           {tab === 'contacts' && !loading && company && (
-            company.contacts && company.contacts.length > 0 ? (
-              <div className="space-y-1.5">
-                {company.contacts.map(contact => (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">{company.contacts?.length ?? 0} Kontakte</span>
+                <div className="relative" ref={addContactRef}>
                   <button
-                    key={contact.id}
-                    onClick={() => onOpenContact?.(contact.id)}
-                    className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2.5 transition-colors"
+                    onClick={() => setAddingContact(o => !o)}
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Kontakt hinzufügen
+                  </button>
+                  {addingContact && (
+                    <div className="absolute z-50 right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg">
+                      <div className="p-2 border-b border-gray-100">
+                        <input
+                          autoFocus
+                          value={contactQuery}
+                          onChange={e => setContactQuery(e.target.value)}
+                          placeholder="Name oder Firma suchen…"
+                          className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="max-h-56 overflow-y-auto py-1">
+                        {contactSearching && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+                        {!contactSearching && contactResults.length === 0 && (
+                          <p className="text-xs text-gray-400 px-3 py-2 italic">Keine Treffer</p>
+                        )}
+                        {contactResults.slice(0, 15).map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => assignContact(c.id)}
+                            className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                          >
+                            <p className="text-xs font-medium text-gray-900">{c.name}</p>
+                            {(c.firma || c.rolle) && (
+                              <p className="text-[11px] text-gray-400">{[c.rolle, c.firma].filter(Boolean).join(' · ')}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {company.contacts && company.contacts.length > 0 ? (
+                <div className="space-y-1.5">
+                  {company.contacts.map(contact => (
+                    <div
+                      key={contact.id}
+                      className="flex items-start justify-between gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 group"
+                    >
+                      <button
+                        onClick={() => onOpenContact?.(contact.id)}
+                        className="min-w-0 flex-1 text-left hover:text-indigo-600 transition-colors"
+                      >
                         <p className="text-sm font-medium text-gray-900 truncate">{contact.name}</p>
                         {contact.rolle && <p className="text-xs text-gray-500 truncate">{contact.rolle}</p>}
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -514,17 +595,26 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                             </span>
                           )}
                         </div>
+                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {contact.typ && (
+                          <span className="text-[10px] font-medium bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{contact.typ}</span>
+                        )}
+                        <button
+                          onClick={() => unassignContact(contact.id)}
+                          className="text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Verknüpfung lösen"
+                        >
+                          <UserMinus className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      {contact.typ && (
-                        <span className="text-[10px] font-medium bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 shrink-0">{contact.typ}</span>
-                      )}
                     </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 text-center py-8">Keine verknüpften Kontakte</p>
-            )
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 text-center py-6">Keine verknüpften Kontakte</p>
+              )}
+            </div>
           )}
 
           {loading && (
