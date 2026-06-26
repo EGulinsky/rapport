@@ -32,6 +32,35 @@ import { LogoProvider } from './context/LogoContext'
 type ViewMode = 'table' | 'kanban'
 type MainView = 'jobsearch' | 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
 
+function BackendGate({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function poll() {
+      while (!cancelled) {
+        try {
+          const res = await fetch('/api/stats')
+          if (res.ok) { setReady(true); return }
+        } catch { /* still starting */ }
+        await new Promise(r => setTimeout(r, 1500))
+      }
+    }
+    poll()
+    return () => { cancelled = true }
+  }, [])
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gray-50 text-gray-500">
+        <div className="h-8 w-8 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+        <p className="text-sm font-medium">Backend startet…</p>
+      </div>
+    )
+  }
+  return <>{children}</>
+}
+
 export default function App() {
   const [apps, setApps] = useState<Application[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -116,6 +145,7 @@ export default function App() {
   })).filter(col => col.items.length > 0 || filterStatus === col.status)
 
   return (
+    <BackendGate>
     <LogoProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -433,6 +463,7 @@ export default function App() {
       )}
     </div>
     </LogoProvider>
+    </BackendGate>
   )
 }
 

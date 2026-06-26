@@ -117,6 +117,19 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
         run: docker compose -f /Users/eugengulinsky/code/jobtracker/docker-compose.yml up -d --build
 
+      - name: Warte auf Backend
+        run: |
+          echo "Warte auf Backend..."
+          for i in $(seq 1 30); do
+            if curl -sf https://backend.jobtracker.orb.local/health > /dev/null 2>&1; then
+              echo "Backend bereit."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend nach 60s nicht erreichbar" >&2
+          exit 1
+
       - name: Browser öffnen und Sound
         run: |
           osascript -e 'display notification "Build ${{ github.run_number }} erfolgreich deployt" with title "Jobtracker CI ✓" sound name "Glass"'
