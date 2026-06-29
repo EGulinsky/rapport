@@ -141,7 +141,7 @@ jobs:
     needs: [backend, frontend, docker, deploy]
     if: always() && contains(needs.*.result, 'failure')
     steps:
-      - name: macOS-Notification
+      - name: macOS-Notification + Claude-Signal
         run: |
           FAILED=""
           [ "${{ needs.backend.result }}"  = "failure" ] && FAILED="${FAILED} Backend"
@@ -149,3 +149,4 @@ jobs:
           [ "${{ needs.docker.result }}"   = "failure" ] && FAILED="${FAILED} Docker"
           [ "${{ needs.deploy.result }}"   = "failure" ] && FAILED="${FAILED} Deploy"
           osascript -e "display notification \"Fehlgeschlagen:${FAILED} — Build ${{ github.run_number }}\" with title \"Jobtracker CI ✗\" sound name \"Basso\""
+          echo "$(date '+%Y-%m-%d %H:%M:%S') FAILED build=${{ github.run_number }} jobs=${FAILED}" >> /tmp/ci_failures.log
