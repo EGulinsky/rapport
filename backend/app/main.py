@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,9 +15,7 @@ from app.routers import (
 )
 
 logger = logging.getLogger(__name__)
-
-import os as _os
-_sync_log_level = getattr(logging, _os.getenv("SYNC_LOG_LEVEL", "INFO").upper(), logging.INFO)
+_sync_log_level = getattr(logging, os.getenv("SYNC_LOG_LEVEL", "INFO").upper(), logging.INFO)
 logging.getLogger("sync.targeted").setLevel(_sync_log_level)
 
 # Sources currently running in background (prevents duplicate concurrent runs)
