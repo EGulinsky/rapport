@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.8',
+    date: '2026-06-29',
+    changes: [
+      'Sync-Menü: Neuer Eintrag „Sync-Events löschen" — entfernt alle automatisch erzeugten Timeline-Einträge einer Bewerbung, ohne einen neuen Sync zu starten.',
+    ],
+  },
+  {
     version: '3.14.7',
     date: '2026-06-29',
     changes: [
