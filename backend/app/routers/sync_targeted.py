@@ -29,6 +29,7 @@ from app.routers.sync_common import (
     term_variants, process_item_for_app, save_classified_event,
     init_progress, update_progress, finish_progress,
     upsert_contact_from_sender,
+    build_contact_domain_index, build_contact_email_index, find_apps_from_addresses,
 )
 from app.ai.tasks import classify_batch_for_app, BATCH_SIZE
 
@@ -107,17 +108,22 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     since = datetime.now(timezone.utc) - timedelta(days=365)
     after_ts = int(since.timestamp())
 
-    # Build search terms: use clean versions (no +/operators) for the query,
-    # but keep originals for in-Python text matching later.
-    clean_terms = list(dict.fromkeys(_query_safe(t) for t in terms if _query_safe(t)))
-    term_clause = " OR ".join(f'"{t}"' for t in clean_terms)
+    # Build query from this app's linked contact emails and domains
+    contact_domain_index = build_contact_domain_index(db)
+    contact_email_index  = build_contact_email_index(db)
+    app_id = app.id
 
-    role_words = _role_query_words(app.rolle or "")
-    if role_words:
-        role_clause = " OR ".join(f'"{w}"' for w in role_words[:3])
-        query = f"after:{after_ts} ({term_clause}) ({role_clause})"
+    app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
+    app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
+
+    if app_domains or app_emails:
+        parts = [f"(from:{d} OR to:{d})" for d in app_domains]
+        parts += [f"(from:{e} OR to:{e})" for e in app_emails[:20]]
+        query = f"after:{after_ts} ({' OR '.join(parts)})"
     else:
-        query = f"after:{after_ts} ({term_clause})"
+        # No contacts linked yet — fall back to firm name terms
+        clean_terms = list(dict.fromkeys(_query_safe(t) for t in terms if _query_safe(t)))
+        query = f"after:{after_ts} ({' OR '.join(f'\"{t}\"' for t in clean_terms)})" if clean_terms else f"after:{after_ts}"
 
     messages: list[dict] = []
     page_token = None
@@ -138,7 +144,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     errors: list[str] = []
     total = len(messages)
 
-    # Phase 1: fetch unsynced messages
+    # Phase 1: fetch unsynced messages and verify address match
     pending: list[dict] = []
     for i, msg_ref in enumerate(messages):
         update_progress("targeted_gmail", i, total, f"Gmail laden {i+1}/{total}")
@@ -153,10 +159,18 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
             continue
 
         headers = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
+        sender  = headers.get("from", "")
+        to_cc   = headers.get("to", "") + "," + headers.get("cc", "")
         subject = headers.get("subject", "(kein Betreff)")
-        sender = headers.get("from", "")
         date_str = headers.get("date", "")
         body = _gmail_body(msg["payload"])[:1500]
+
+        # Verify the message actually involves this app's contacts/domain
+        matched = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
+        if not any(a["id"] == app_id for a in matched):
+            mark_synced(db, "gmail", msg_id)
+            skipped += 1
+            continue
 
         date_hint = None
         try:
@@ -164,12 +178,6 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
             date_hint = parsedate_to_datetime(date_str).astimezone(timezone.utc)
         except Exception:
             pass
-
-        # Skip reaction/like notifications — no informational content
-        if "reacted to your message" in body.lower() or "liked your message" in body.lower():
-            mark_synced(db, "gmail", msg_id)
-            skipped += 1
-            continue
 
         pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
@@ -222,10 +230,17 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
     except Exception as e:
         return 0, 0, [f"Google Calendar: {e}"]
 
-    cal_events = [
-        ev for ev in events_result.get("items", [])
-        if _text_matches((ev.get("summary") or "") + " " + (ev.get("description") or ""), terms)
-    ]
+    contact_domain_index = build_contact_domain_index(db)
+    contact_email_index  = build_contact_email_index(db)
+    app_id = app.id
+
+    def _ev_matches_app(ev: dict) -> bool:
+        org_email  = ((ev.get("organizer") or {}).get("email") or "").lower()
+        att_emails = ",".join((a.get("email") or "") for a in (ev.get("attendees") or []))
+        matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
+        return any(a["id"] == app_id for a in matched)
+
+    cal_events = [ev for ev in events_result.get("items", []) if _ev_matches_app(ev)]
     created = skipped = 0
     errors: list[str] = []
 

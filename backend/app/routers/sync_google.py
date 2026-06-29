@@ -24,6 +24,7 @@ from app.routers.sync_common import (
     is_synced, mark_synced, load_synced_ids, purge_source,
     strip_html, decode_b64,
     build_firm_index, build_contact_domain_index, find_hint_apps,
+    build_contact_email_index, find_apps_from_addresses,
     process_item, earliest_bewerbung_date,
     init_progress, update_progress, finish_progress, get_all_progress,
     set_batch_result, get_batch_results,
@@ -37,7 +38,7 @@ SCOPES = [
 ]
 REDIRECT_URI = "http://localhost:8000/api/sync/google/callback"
 
-# Legacy aliases so sync_icloud.py imports keep working during any transition
+# Legacy aliases kept for any external imports
 _is_synced = is_synced
 _mark_synced = mark_synced
 _purge_source = purge_source
@@ -285,18 +286,19 @@ async def _do_gmail() -> dict:
         after_ts = int(since.timestamp())
 
         _t0 = _time.perf_counter()
-        firm_clause, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
+        contact_email_index  = build_contact_email_index(db)
         t_index = _time.perf_counter() - _t0
 
-        # When firm names are known, use only those — broad keywords fetch too many irrelevant mails
+        # Build query from known contact domains (precise, no false positives from firm names)
         fallback = (
             "Bewerbung OR Interview OR Gespräch OR Absage OR Einladung OR Angebot "
             "OR recruiting OR Headhunter OR Kandidat "
             "OR application OR position OR candidate OR hiring OR shortlisted "
             "OR \"not moving forward\" OR \"next steps\""
         )
-        search_clause = firm_clause if firm_clause else f"({fallback})"
+        domain_parts = [f"(from:{d} OR to:{d})" for d in contact_domain_index]
+        search_clause = f"({' OR '.join(domain_parts)})" if domain_parts else f"({fallback})"
         query = f"after:{after_ts} {search_clause}"
 
         # Global cutoff: skip mails older than the earliest application submission date
@@ -351,7 +353,7 @@ async def _do_gmail() -> dict:
                 batch_req.add(
                     service.users().messages().get(
                         userId="me", id=msg_id, format="metadata",
-                        metadataHeaders=["From", "Subject", "Date"],
+                        metadataHeaders=["From", "To", "Cc", "Subject", "Date"],
                     ),
                     request_id=msg_id,
                 )
@@ -359,14 +361,15 @@ async def _do_gmail() -> dict:
             n_phase1 += len(chunk)
         t_phase1 = _time.perf_counter() - _t0
 
-        # ── Filter: date cutoff + quick firm check ─────────────────────────────
+        # ── Filter: date cutoff + address-based app matching ──────────────────
         phase2_ids: list[str] = []
-        phase2_meta: dict[str, tuple] = {}   # msg_id → (subject, sender, date_hint)
+        phase2_meta: dict[str, tuple] = {}   # msg_id → (subject, sender, date_hint, hint_apps)
 
         for msg_id, msg_meta in meta_results.items():
             hdrs = {h["name"].lower(): h["value"] for h in msg_meta["payload"].get("headers", [])}
             subject  = hdrs.get("subject", "(kein Betreff)")
             sender   = hdrs.get("from", "")
+            to_cc    = hdrs.get("to", "") + "," + hdrs.get("cc", "")
             date_str = hdrs.get("date", "")
 
             date_hint = None
@@ -380,13 +383,14 @@ async def _do_gmail() -> dict:
                 skipped += 1
                 continue
 
-            if not find_hint_apps(f"Von: {sender}\nBetreff: {subject}", term_to_apps, contact_domain_index):
+            hint_apps = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
+            if not hint_apps:
                 mark_synced(db, "gmail", msg_id)
                 skipped += 1
                 continue
 
             phase2_ids.append(msg_id)
-            phase2_meta[msg_id] = (subject, sender, date_hint)
+            phase2_meta[msg_id] = (subject, sender, date_hint, hint_apps)
 
         # ── Phase 2: batch-fetch full body for promising messages ──────────────
         # Use smaller batches (50) as full bodies can be large
@@ -420,10 +424,9 @@ async def _do_gmail() -> dict:
             if not msg_full:
                 continue
 
-            subject, sender, date_hint = phase2_meta[msg_id]
+            subject, sender, date_hint, hint_apps = phase2_meta[msg_id]
             body = _gmail_body(msg_full["payload"])[:1500]
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
-            hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
             _t0 = _time.perf_counter()
             try:
@@ -547,15 +550,8 @@ async def _do_gcal() -> dict:
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Calendar API Fehler: {e}"]}
 
         cal_events = events_result.get("items", [])
-        _, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
-
-        JOB_KEYWORDS = {
-            "interview", "gespräch", "vorstellungsgespräch", "assessment",
-            "vorstellung", "bewerbung", "hr", "recruiting", "kennenlernen",
-            "onboarding", "probearbeitstag",
-        }
-        firm_terms_lower = {t.lower() for t in term_to_apps}
+        contact_email_index  = build_contact_email_index(db)
 
         total = len(cal_events)
         update_progress("gcal", 0, total, f"{total} Termine gefunden")
@@ -594,20 +590,20 @@ async def _do_gcal() -> dict:
                 skipped += 1
                 continue
 
-            combined_lower = (summary + " " + desc).lower()
-            has_keyword = any(kw in combined_lower for kw in JOB_KEYWORDS)
-            has_firm    = any(ft in combined_lower for ft in firm_terms_lower)
-            if not has_keyword and not has_firm:
+            organizer = ev.get("organizer") or {}
+            attendees = ev.get("attendees") or []
+            org_email = organizer.get("email", "")
+            att_emails = ",".join(a.get("email", "") for a in attendees[:20])
+            hint_apps = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
+            if not hint_apps:
                 skipped += 1
                 continue
 
-            location  = ev.get("location", "")
-            organizer = ev.get("organizer", {})
-            attendees = ev.get("attendees", [])
+            location = ev.get("location", "")
             participants = []
-            if organizer.get("email"):
+            if org_email:
                 label = organizer.get("displayName", "")
-                participants.append(f"{label} <{organizer['email']}>" if label else organizer["email"])
+                participants.append(f"{label} <{org_email}>" if label else org_email)
             for a in attendees[:8]:
                 if a.get("email"):
                     label = a.get("displayName", "")
@@ -619,8 +615,6 @@ async def _do_gcal() -> dict:
                 + (f"Teilnehmer: {', '.join(participants)}\n" if participants else "")
                 + f"Beschreibung: {strip_html(desc)[:800]}"
             )
-
-            hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
             try:
                 ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps)
@@ -698,18 +692,17 @@ def debug_gcal_events(db: Session = Depends(get_db)):
         timeMax=(now + timedelta(days=90)).isoformat(),
         singleEvents=True, orderBy="startTime", maxResults=200,
     ).execute()
-    _, term_to_apps = build_firm_index(db)
-    firm_terms_lower = {t.lower() for t in term_to_apps}
-    JOB_KEYWORDS = {"interview","gespräch","vorstellungsgespräch","assessment","vorstellung","bewerbung","hr","recruiting","kennenlernen","onboarding","probearbeitstag"}
+    contact_domain_index = build_contact_domain_index(db)
+    contact_email_index  = build_contact_email_index(db)
     results = []
     for ev in events_result.get("items", []):
         summary = ev.get("summary", "") or ""
-        desc = ev.get("description", "") or ""
-        combined_lower = (summary + " " + desc).lower()
-        has_kw = any(kw in combined_lower for kw in JOB_KEYWORDS)
-        matched_firms = [ft for ft in firm_terms_lower if ft in combined_lower]
         start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date", "")
-        results.append({"summary": summary, "start": start[:10], "has_keyword": has_kw, "matched_firms": matched_firms, "synced": is_synced(db, "gcal", ev.get("id",""))})
+        org_email  = ((ev.get("organizer") or {}).get("email") or "")
+        att_emails = ",".join((a.get("email") or "") for a in (ev.get("attendees") or []))
+        matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
+        matched_firms = list({a["firma"] for a in matched})
+        results.append({"summary": summary, "start": start[:10], "matched_firms": matched_firms, "synced": is_synced(db, "gcal", ev.get("id",""))})
     return sorted(results, key=lambda x: x["start"])
 
 
