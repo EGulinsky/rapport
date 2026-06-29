@@ -11,8 +11,6 @@ import html
 import logging
 import re
 from dataclasses import dataclass
-
-log = logging.getLogger("sync.targeted")
 from datetime import date, datetime
 from email.utils import parseaddr
 from typing import Optional
@@ -23,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 
+log = logging.getLogger("sync.targeted")
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 
