@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import base64
 import html
+import logging
 import re
 from dataclasses import dataclass
+
+log = logging.getLogger("sync.targeted")
 from datetime import date, datetime
 from email.utils import parseaddr
 from typing import Optional
@@ -731,7 +734,9 @@ def _save_deterministic_event(
         return False
 
     datum = date_hint.date() if date_hint else None
+    pfx = f"[SYNC #{det['app_id']} {source}]"
     if _predates_bewerbung(datum, app):
+        log.debug("%s %s → SKIP predates Bewerbung (datum=%s)", pfx, external_id[:20], datum)
         mark_synced(db, source, external_id)
         return False
 
@@ -746,6 +751,7 @@ def _save_deterministic_event(
     elif time_pfx:
         notiz = time_pfx.rstrip('\n') or None
 
+    log.debug("%s %s → CREATED typ=%s titel=%r datum=%s", pfx, external_id[:20], det['typ'], det['titel'], datum)
     db.add(models.Event(
         application_id=det['app_id'],
         typ=det['typ'],

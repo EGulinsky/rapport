@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.10',
+    date: '2026-06-29',
+    changes: [
+      'Detailliertes Sync-Logging: Alle Sync-Quellen (Gmail, GCal, iCloud Mail, iCloud Cal, Notes, Reminders) loggen jetzt per-Item-Entscheidungen im Docker-Log (DEBUG-Level).',
+      'Format: [SYNC #<id> <quelle>] <item-id> → SKIP/CREATED/pending mit Betreff, Absender und Grund.',
+    ],
+  },
+  {
     version: '3.14.9',
     date: '2026-06-29',
     changes: [
