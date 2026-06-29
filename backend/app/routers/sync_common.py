@@ -615,17 +615,17 @@ def find_hint_apps(
 
 # ── Deterministic classification helpers ─────────────────────────────────────
 
-def _classify_type_from_text(text: str) -> tuple[str, Optional[str]]:
-    """Returns (event_typ, suggested_main_status|None) using keyword patterns — no AI."""
+def _classify_type_from_text(text: str) -> tuple[str, Optional[str], str]:
+    """Returns (event_typ, suggested_main_status|None, reason) using keyword patterns."""
     if _RE_REJECTION.search(text):
-        return 'status', 'rejected'
+        return 'status', 'rejected', 'Absage-Keyword'
     if _RE_OFFER.search(text):
-        return 'status', 'negotiating'
+        return 'status', 'negotiating', 'Angebot-Keyword'
     if _RE_INVITATION.search(text):
-        return 'gespräch', None
+        return 'gespräch', None, 'Einladungs-Keyword'
     if _RE_ACK.search(text):
-        return 'status', None
-    return 'notiz', None
+        return 'status', None, 'Eingangsbestätigung-Keyword'
+    return 'notiz', None, 'kein Keyword → Notiz'
 
 
 def _extract_title_from_raw(raw_text: str) -> str:
@@ -675,6 +675,7 @@ def _classify_deterministic(
             'titel': _extract_title_from_raw(raw_text) or 'Termin',
             'status': None,
             'notiz': None,
+            'reason': 'Kalendertermin → immer Gespräch',
         }
 
     # Local documents: firm from filename/folder name, always notiz
@@ -686,12 +687,13 @@ def _classify_deterministic(
                 'titel': _extract_title_from_raw(raw_text) or 'Dokument',
                 'status': None,
                 'notiz': None,
+                'reason': 'Lokale Datei → Notiz',
             }
         return None  # multiple matches for a file → skip
 
     # Single firm match: classify event type by keywords
     if len(hint_apps) == 1:
-        typ, status = _classify_type_from_text(raw_text)
+        typ, status, reason = _classify_type_from_text(raw_text)
         notiz: Optional[str] = None
         if source == 'icloud_notes':
             notiz = _extract_body_preview(raw_text, max_len=300)
@@ -701,11 +703,12 @@ def _classify_deterministic(
             'titel': _extract_title_from_raw(raw_text) or source,
             'status': status,
             'notiz': notiz,
+            'reason': reason,
         }
 
     # Multiple firm matches → pick first app
     first_app = hint_apps[0]
-    typ, status = _classify_type_from_text(raw_text)
+    typ, status, reason = _classify_type_from_text(raw_text)
     notiz: Optional[str] = None
     if source == 'icloud_notes':
         notiz = _extract_body_preview(raw_text, max_len=300)
@@ -715,6 +718,7 @@ def _classify_deterministic(
         'titel': _extract_title_from_raw(raw_text) or source,
         'status': status,
         'notiz': notiz,
+        'reason': f"{reason} (von {len(hint_apps)} Matches)",
     }
 
 
@@ -735,7 +739,7 @@ def _save_deterministic_event(
     datum = date_hint.date() if date_hint else None
     pfx = f"[SYNC #{det['app_id']} {source}]"
     if _predates_bewerbung(datum, app):
-        log.debug("{} {} → SKIP predates Bewerbung (datum={})", pfx, external_id[:20], datum)
+        log.debug("{} {} → SKIP zu alt ({}  <  Bewerbungsdatum {})", pfx, external_id[:20], datum, app.datum_bewerbung)
         mark_synced(db, source, external_id)
         return False
 
@@ -750,7 +754,7 @@ def _save_deterministic_event(
     elif time_pfx:
         notiz = time_pfx.rstrip('\n') or None
 
-    log.debug("{} {} → CREATED typ={} titel={!r} datum={}", pfx, external_id[:20], det['typ'], det['titel'], datum)
+    log.debug("{} {!r} → CREATED typ={} datum={} ({})", pfx, det['titel'], det['typ'], datum, det.get('reason', '?'))
     db.add(models.Event(
         application_id=det['app_id'],
         typ=det['typ'],

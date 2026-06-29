@@ -575,7 +575,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             notiz_parts.append(desc[:400])
         notiz = "\n".join(notiz_parts) or None
 
-        log.debug("{} {} SUMMARY:{!r} → CREATED gespräch", pfx, uid[:16], summary)
+        log.debug("{} {!r} → CREATED gespräch (Kalendertermin, Adress-Match)", pfx, summary)
         try:
             db.add(models.Event(
                 application_id=app_dict["id"],
@@ -1017,6 +1017,9 @@ async def _do_sync(app_id: int) -> dict:
         total_processed = 0
         all_errors: list[str] = []
 
+        label = f"{app.firma or '?'} | {app.rolle or '?'}"
+        log.info("━━━ SYNC START #{} — {} ━━━", app_id, label)
+
         # 1. Contacts (sequential — calls need phone numbers)
         init_progress("targeted_contacts", "iCloud Kontakte", "Starte…")
         try:
@@ -1075,6 +1078,8 @@ async def _do_sync(app_id: int) -> dict:
         finish_progress("targeted_calls")
 
         db.commit()
+        log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} geprüft, {} Fehler ━━━",
+                 app_id, label, total_created, total_processed, len(all_errors))
         return {"created": total_created, "processed": total_processed, "errors": all_errors}
     finally:
         db.close()
