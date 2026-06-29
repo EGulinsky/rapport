@@ -721,9 +721,11 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                     linkedin_url = str(url_prop.value)
                     break
 
-            # Import contact if it belongs to this company (org match).
-            # Only link to THIS application if the contact is explicitly mentioned
-            # in its events or text fields — not just by company name.
+            # Email is required — contacts without it are useless for domain matching.
+            if not email_val:
+                skipped += 1
+                continue
+
             org_matches = org_val and _text_matches(org_val, terms)
             name_in_app_text = _contact_mentioned_in_app(name, email_val, app, db)
             if not org_matches and not name_in_app_text:
