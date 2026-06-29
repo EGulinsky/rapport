@@ -122,6 +122,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         log.debug("{} kein Kontakt → übersprungen", pfx)
         return 0, 0, []
 
+    log.debug("{} domains: {}  emails: {}", pfx, app_domains, app_emails)
     parts = [f"(from:{d} OR to:{d})" for d in app_domains]
     parts += [f"(from:{e} OR to:{e})" for e in app_emails[:20]]
     query = f"after:{after_ts} ({' OR '.join(parts)})"
@@ -237,6 +238,9 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
         return any(a["id"] == app_id for a in matched)
 
+    log.debug("{} Adress-Matching gegen domains: {}  emails: {}", pfx,
+              [d for d in contact_domain_index if any(a["id"] == app_id for a in contact_domain_index[d])],
+              [e for e in contact_email_index if any(a["id"] == app_id for a in contact_email_index[e])])
     all_events = events_result.get("items", [])
     cal_events = [ev for ev in all_events if _ev_matches_app(ev)]
     log.debug("{} {} Termine gesamt, {} Adress-Match", pfx, len(all_events), len(cal_events))
@@ -350,6 +354,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
 
     # Build IMAP search criteria from contact domains/emails (search headers + body)
     search_terms = list(dict.fromkeys(app_domains + app_emails))
+    log.debug("{} domains: {}  emails: {}", pfx, app_domains, app_emails)
     # IMAP OR chaining: OR crit1 crit2 for two, OR crit1 (OR crit2 crit3) for more
     def _imap_or(criteria: list[str]) -> str:
         if len(criteria) == 1:
@@ -469,6 +474,8 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     if not app_domains and not app_emails:
         log.debug("{} kein Kontakt → übersprungen", pfx)
         return 0, 0, []  # No contacts → nothing to match against
+
+    log.debug("{} Adress-Matching gegen domains: {}  emails: {}", pfx, app_domains, app_emails)
 
     def _ev_matches_app_icloud(vevent) -> bool:
         org_val = getattr(vevent, "organizer", None)
@@ -626,12 +633,13 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
     # Smart filter: always include text-matching notes (company/role in title/body) +
     # the 30 most recent notes (relevant notes often don't mention the company by name).
     # This avoids sending hundreds of old unrelated notes through AI on every targeted sync.
+    log.debug("{} text-Match-Begriffe: {}", pfx, terms)
     notes_sorted = sorted(notes, key=lambda n: n.get("date") or n.get("creationDate") or "", reverse=True)
     matching = [n for n in notes_sorted if _text_matches((n.get("name") or "") + " " + (n.get("body") or ""), terms)]
     matching_ids = {n.get("id") for n in matching}
     recent = [n for n in notes_sorted if n.get("id") not in matching_ids][:30]
     candidates = (matching + recent)[:50]
-    log.debug("{} {} Kandidaten ({} text-Match, {} recent)", pfx, len(candidates), len(matching), len(recent))
+    log.debug("{} {} Notizen gesamt, {} text-Match, {} recent → {} Kandidaten", pfx, len(notes_sorted), len(matching), len(recent), len(candidates))
 
     for note in candidates:
         title = (note.get("name") or "").strip()
@@ -831,6 +839,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
         except Exception:
             pass
 
+    log.debug("{} text-Match-Begriffe: {}", pfx, terms)
     log.debug("{} {} Todos gesamt, {} text-Match", pfx, len(all_todos), len(matched_todos))
 
     for todo in matched_todos:
@@ -1019,6 +1028,7 @@ async def _do_sync(app_id: int) -> dict:
 
         label = f"{app.firma or '?'} | {app.rolle or '?'}"
         log.info("━━━ SYNC START #{} — {} ━━━", app_id, label)
+        log.debug("[SYNC #{}] Suchbegriffe: {}", app_id, terms)
 
         # 1. Contacts (sequential — calls need phone numbers)
         init_progress("targeted_contacts", "iCloud Kontakte", "Starte…")
