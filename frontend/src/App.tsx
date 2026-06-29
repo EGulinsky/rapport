@@ -89,8 +89,16 @@ export default function App() {
   const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [showLinkedInConfig, setShowLinkedInConfig] = useState(false)
 
-  const prevAppsRef = useRef<Map<number, string>>(new Map())
+  const prevAppsRef = useRef<Map<number, Application>>(new Map())
   const [updatedAppIds, setUpdatedAppIds] = useState<Set<number>>(new Set())
+  const [changedFields, setChangedFields] = useState<Map<number, Set<string>>>(new Map())
+
+  const SYNC_DIFFABLE_FIELDS: (keyof Application)[] = [
+    'main_status', 'sub_status', 'naechster_schritt', 'kommentar', 'quelle',
+    'wurde_besetzt_von', 'zielfirma_bei_hh', 'ghosting', 'abgesagt',
+    'stellenanzeige_url', 'gespraech_1', 'gespraech_2', 'gespraech_3',
+    'gespraech_4', 'gespraech_5', 'firma', 'rolle',
+  ]
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -111,15 +119,33 @@ export default function App() {
       const prev = prevAppsRef.current
       if (prev.size > 0) {
         const changed = new Set<number>()
+        const newFieldChanges = new Map<number, Set<string>>()
         for (const app of appsData) {
-          const prevUpd = prev.get(app.id)
-          if (prevUpd === undefined || (app.letztes_update && prevUpd !== app.letztes_update)) {
+          const prevApp = prev.get(app.id)
+          if (!prevApp) continue
+          if (app.letztes_update && prevApp.letztes_update !== app.letztes_update) {
             changed.add(app.id)
+            const fields = new Set<string>()
+            for (const key of SYNC_DIFFABLE_FIELDS) {
+              if (String(prevApp[key] ?? '') !== String(app[key] ?? '')) fields.add(key)
+            }
+            if (fields.size > 0) newFieldChanges.set(app.id, fields)
           }
         }
         if (changed.size > 0) setUpdatedAppIds(s => new Set([...s, ...changed]))
+        if (newFieldChanges.size > 0) {
+          setChangedFields(prev => {
+            const next = new Map(prev)
+            for (const [id, fields] of newFieldChanges) {
+              const existing = next.get(id)
+              if (existing) fields.forEach(f => existing.add(f))
+              else next.set(id, new Set(fields))
+            }
+            return next
+          })
+        }
       }
-      prevAppsRef.current = new Map(appsData.map(a => [a.id, a.letztes_update ?? '']))
+      prevAppsRef.current = new Map(appsData.map(a => [a.id, a]))
       setApps(appsData)
       setStats(statsData)
     } finally {
@@ -148,6 +174,12 @@ export default function App() {
       setUpdatedAppIds(s => {
         if (!s.has(selectedId)) return s
         const next = new Set(s)
+        next.delete(selectedId)
+        return next
+      })
+      setChangedFields(prev => {
+        if (!prev.has(selectedId)) return prev
+        const next = new Map(prev)
         next.delete(selectedId)
         return next
       })
@@ -459,6 +491,7 @@ export default function App() {
           onClose={() => setSelectedId(null)}
           onSaved={() => { load(); loadReviewCount() }}
           onOpenCompany={id => setCompanyModalId(id)}
+          updatedFields={changedFields.get(selectedId) ?? undefined}
         />
       )}
 

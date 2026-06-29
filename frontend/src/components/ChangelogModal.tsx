@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.3',
+    date: '2026-06-29',
+    changes: [
+      'Sync-Änderungsanzeige: Nach einem Sync werden nicht nur geänderte Bewerbungen markiert, sondern auch die konkreten Felder hervorgehoben (Amber-Hintergrund + Punkt bei Status, Kommentar, Quelle, Gesprächsnotizen, Stellenanzeige, etc.).',
+      'Die Feld-Markierungen verschwinden, sobald die Bewerbung geöffnet wird.',
+    ],
+  },
+  {
     version: '3.14.2',
     date: '2026-06-29',
     changes: [
