@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.7',
+    date: '2026-06-29',
+    changes: [
+      'Targeted Sync (Gmail, iCloud Mail, iCloud Cal) fällt nicht mehr auf Firmennamen zurück, wenn keine Kontakte verknüpft sind — dadurch keine Fremd-Mails/-Termine mehr durch mehrdeutige Namen (z.B. „HERE" matcht „there").',
+      'iCloud Mail: Suche jetzt adressbasiert (Kontakt-Domains/-E-Mails statt Firmenname).',
+      'iCloud Cal: Matching jetzt per Organizer/Attendee-E-Mail statt Textsuche im Titel.',
+    ],
+  },
+  {
     version: '3.14.6',
     date: '2026-06-29',
     changes: [

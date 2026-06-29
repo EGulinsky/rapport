@@ -115,14 +115,12 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
     app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
 
-    if app_domains or app_emails:
-        parts = [f"(from:{d} OR to:{d})" for d in app_domains]
-        parts += [f"(from:{e} OR to:{e})" for e in app_emails[:20]]
-        query = f"after:{after_ts} ({' OR '.join(parts)})"
-    else:
-        # No contacts linked yet — fall back to firm name terms
-        clean_terms = list(dict.fromkeys(_query_safe(t) for t in terms if _query_safe(t)))
-        query = f"after:{after_ts} ({' OR '.join(f'\"{t}\"' for t in clean_terms)})" if clean_terms else f"after:{after_ts}"
+    if not app_domains and not app_emails:
+        return 0, 0, []  # No contacts → nothing to match against
+
+    parts = [f"(from:{d} OR to:{d})" for d in app_domains]
+    parts += [f"(from:{e} OR to:{e})" for e in app_emails[:20]]
+    query = f"after:{after_ts} ({' OR '.join(parts)})"
 
     messages: list[dict] = []
     page_token = None
@@ -322,23 +320,42 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     if not cfg:
         return 0, 0, []
 
+    contact_domain_index = build_contact_domain_index(db)
+    contact_email_index  = build_contact_email_index(db)
+    app_id = app.id
+
+    app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
+    app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
+
+    if not app_domains and not app_emails:
+        return 0, 0, []  # No contacts → nothing to match against
+
+    # Build IMAP search criteria from contact domains/emails (search headers + body)
+    search_terms = list(dict.fromkeys(app_domains + app_emails))
+    # IMAP OR chaining: OR crit1 crit2 for two, OR crit1 (OR crit2 crit3) for more
+    def _imap_or(criteria: list[str]) -> str:
+        if len(criteria) == 1:
+            return f'TEXT "{criteria[0]}"'
+        if len(criteria) == 2:
+            return f'(OR TEXT "{criteria[0]}" TEXT "{criteria[1]}")'
+        return f'(OR TEXT "{criteria[0]}" {_imap_or(criteria[1:])})'
+
+    imap_query = _imap_or(search_terms[:10])
+
     created = skipped = 0
     errors: list[str] = []
-    # Use a clean version of the primary term for IMAP TEXT search (+ and operators break it)
-    raw_primary = terms[0] if terms else (app.firma or "")
-    primary_term = _query_safe(raw_primary)
 
     try:
         imap = _imap_connect(cfg)
         imap.select("INBOX")
-        _, msg_ids = imap.search(None, f'TEXT "{primary_term}"')
+        _, msg_ids = imap.search(None, imap_query)
         ids = msg_ids[0].split() if msg_ids[0] else []
     except Exception as e:
         return 0, 0, [f"iCloud Mail IMAP: {e}"]
 
     total = len(ids)
 
-    # Phase 1: fetch unsynced messages
+    # Phase 1: fetch unsynced messages, verify by address
     pending: list[dict] = []
     for i, msg_id_bytes in enumerate(ids):
         update_progress("targeted_icloud_mail", i, total, f"iCloud Mail laden {i+1}/{total}")
@@ -356,6 +373,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
 
         subject = msg.get("Subject", "(kein Betreff)")
         sender = msg.get("From", "")
+        to_cc = (msg.get("To", "") or "") + "," + (msg.get("Cc", "") or "")
         body = _imap_body(msg)[:1500]
         date_hint = None
         try:
@@ -364,11 +382,14 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         except Exception:
             pass
 
-        raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
-        if not _text_matches(raw, terms):
+        # Verify this message actually involves this app's contacts/domain
+        matched = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
+        if not any(a["id"] == app_id for a in matched):
+            mark_synced(db, "icloud_mail", msg_id)
             skipped += 1
             continue
 
+        raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
         pending.append({"id": msg_id, "raw": raw, "date_hint": date_hint})
 
     try:
@@ -412,6 +433,29 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     except ImportError:
         return 0, 0, ["caldav nicht installiert"]
 
+    contact_domain_index = build_contact_domain_index(db)
+    contact_email_index  = build_contact_email_index(db)
+    app_id = app.id
+
+    app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
+    app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
+
+    if not app_domains and not app_emails:
+        return 0, 0, []  # No contacts → nothing to match against
+
+    def _ev_matches_app_icloud(vevent) -> bool:
+        org_val = getattr(vevent, "organizer", None)
+        org_email = ""
+        if org_val:
+            v = str(getattr(org_val, "value", org_val) or "")
+            org_email = v.lower().replace("mailto:", "").strip()
+        att_emails = ""
+        for att in vevent.contents.get("attendee", []):
+            v = str(getattr(att, "value", att) or "")
+            att_emails += "," + v.lower().replace("mailto:", "")
+        matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
+        return any(a["id"] == app_id for a in matched)
+
     created = skipped = 0
     errors: list[str] = []
     now = datetime.now(timezone.utc)
@@ -428,9 +472,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             for ev in cal.date_search(start=now - timedelta(days=365), end=now + timedelta(days=90), expand=True):
                 try:
                     vevent = ev.vobject_instance.vevent
-                    summary = _vobj_str(vevent, "summary")
-                    desc = _vobj_str(vevent, "description")
-                    if _text_matches(summary + " " + desc, terms):
+                    if _ev_matches_app_icloud(vevent):
                         matched_events.append(ev)
                 except Exception:
                     continue
