@@ -19,8 +19,6 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app import models
-from app.ai.provider import AINotConfigured, AIRateLimited
-from app.ai.tasks import match_and_classify
 
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
@@ -667,17 +665,15 @@ def _classify_deterministic(
     Returns a result dict {app_id, typ, titel, status, notiz} when confident,
     or None when AI disambiguation is required (2+ hint_apps for a non-calendar source).
     """
-    # Calendar events: always a gespräch, single app match required
+    # Calendar events: always a gespräch
     if source in ('gcal', 'icloud_cal'):
-        if len(hint_apps) == 1:
-            return {
-                'app_id': hint_apps[0]['id'],
-                'typ': 'gespräch',
-                'titel': _extract_title_from_raw(raw_text) or 'Termin',
-                'status': None,
-                'notiz': None,
-            }
-        return None  # multiple matches → AI
+        return {
+            'app_id': hint_apps[0]['id'],
+            'typ': 'gespräch',
+            'titel': _extract_title_from_raw(raw_text) or 'Termin',
+            'status': None,
+            'notiz': None,
+        }
 
     # Local documents: firm from filename/folder name, always notiz
     if source == 'local_files':
@@ -689,7 +685,7 @@ def _classify_deterministic(
                 'status': None,
                 'notiz': None,
             }
-        return None  # multiple matches for a file → skip (AI not worth it)
+        return None  # multiple matches for a file → skip
 
     # Single firm match: classify event type by keywords
     if len(hint_apps) == 1:
@@ -705,8 +701,19 @@ def _classify_deterministic(
             'notiz': notiz,
         }
 
-    # Multiple firm matches → need AI to disambiguate
-    return None
+    # Multiple firm matches → pick first app
+    first_app = hint_apps[0]
+    typ, status = _classify_type_from_text(raw_text)
+    notiz: Optional[str] = None
+    if source == 'icloud_notes':
+        notiz = _extract_body_preview(raw_text, max_len=300)
+    return {
+        'app_id': first_app['id'],
+        'typ': typ,
+        'titel': _extract_title_from_raw(raw_text) or source,
+        'status': status,
+        'notiz': notiz,
+    }
 
 
 def _save_deterministic_event(
@@ -815,131 +822,20 @@ async def process_item(
     date_hint: Optional[datetime] = None,
     hint_apps: Optional[list[dict]] = None,
 ) -> bool:
-    """Classify and persist event. Uses deterministic rules first; AI only for ambiguous cases."""
+    """Classify and persist event using deterministic rules. No AI."""
     if is_synced(db, source, external_id):
         return False
 
-    # ── Deterministic fast path (no AI) ─────────────────────────────────────
-    if hint_apps is not None:
-        if not hint_apps:
-            # No firm match → irrelevant, skip without calling AI
-            mark_synced(db, source, external_id)
-            return False
-        det = _classify_deterministic(source, raw_text, date_hint, hint_apps)
-        if det is not None:
-            return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint)
-        # Multiple hint_apps → fall through to AI for disambiguation
-
-    # ── AI fallback (only for ambiguous multi-firm cases) ───────────────────
-    # Send only active apps to AI to conserve tokens.
-    # Rejected hint_apps are appended so they can still be matched (e.g. follow-up mails).
-    active = db.query(models.Application).filter(models.Application.main_status != "rejected").all()
-    app_list = [
-        {
-            "id": a.id,
-            "firma": a.firma,
-            "rolle": a.rolle,
-            **({"zielfirma": a.zielfirma_bei_hh} if a.zielfirma_bei_hh else {}),
-            **({"besetzt_von": a.wurde_besetzt_von} if a.wurde_besetzt_von else {}),
-        }
-        for a in active
-    ]
-    if hint_apps:
-        active_ids = {e["id"] for e in app_list}
-        for h in hint_apps:
-            if h["id"] not in active_ids:
-                app_list.append(h)
-
-    try:
-        result = await match_and_classify(db, source, raw_text, app_list, hint_apps=hint_apps)
-    except (AINotConfigured, AIRateLimited):
-        raise
-    except Exception:
-        return False
-
-    confidence = float(result.get("confidence") or 0)
-    app_id = result.get("application_id")
-
-    autor = None
-    for line in raw_text.splitlines():
-        if line.startswith("Von: ") or line.startswith("From: "):
-            autor = line.split(": ", 1)[1].strip() or None
-            break
-
-    if date_hint:
-        datum = date_hint.date()
-    elif result.get("datum"):
-        try:
-            datum = datetime.fromisoformat(result["datum"]).date()
-        except ValueError:
-            datum = None
-    else:
-        datum = None
-
-    if confidence < REVIEW_THRESHOLD:
+    if not hint_apps:
         mark_synced(db, source, external_id)
         return False
 
-    if confidence < MIN_CONFIDENCE or not app_id:
-        mark_synced(db, source, external_id)
-        db.add(models.PendingMatch(
-            source=source,
-            external_id=external_id,
-            confidence=int(confidence * 100),
-            event_type=result.get("event_type"),
-            datum=datum,
-            titel=result.get("titel"),
-            extract=result.get("extract"),
-            raw_content=raw_text,
-            suggested_app_id=app_id,
-            suggested_main_status=result.get("suggested_main_status"),
-            suggested_sub_status=result.get("suggested_sub_status"),
-        ))
-        return False
+    det = _classify_deterministic(source, raw_text, date_hint, hint_apps)
+    if det is not None:
+        return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint)
 
-    app = db.query(models.Application).get(app_id)
-    if app and _predates_bewerbung(datum, app):
-        mark_synced(db, source, external_id)
-        return False
-    db.add(models.Event(
-        application_id=app_id,
-        typ=_map_event_type(result.get("event_type", "note")),
-        datum=datum,
-        titel=result.get("titel") or source,
-        notiz=result.get("extract"),
-        autor=autor,
-        source=source,
-        external_id=external_id,
-    ))
     mark_synced(db, source, external_id)
-
-    new_main = result.get("suggested_main_status")
-    new_sub  = result.get("suggested_sub_status")
-    # Calendar events are appointments, not status-changing communications
-    if new_main and source not in ('gcal', 'icloud_cal'):
-        if app and app.main_status != new_main:
-            ai_already_reviewed = db.query(models.PendingMatch).filter(
-                models.PendingMatch.suggested_app_id == app_id,
-                models.PendingMatch.suggested_main_status == new_main,
-                models.PendingMatch.review_status.in_(["approved", "rejected"]),
-            ).first()
-            if not ai_already_reviewed:
-                db.add(models.PendingMatch(
-                    source=source,
-                    external_id=f"{external_id}__status",
-                    confidence=int(confidence * 100),
-                    event_type="status_change",
-                    datum=datum,
-                    titel=f"Status: {app.main_status} → {new_main}",
-                    extract=result.get("extract"),
-                    raw_content=raw_text,
-                    suggested_app_id=app_id,
-                    suggested_main_status=new_main,
-                    suggested_sub_status=new_sub,
-                    status_only=True,
-                ))
-
-    return True
+    return False
 
 
 def save_classified_event(
@@ -1053,18 +949,6 @@ async def process_item_for_app(
     raw_text: str,
     date_hint: Optional[datetime],
     target_app: dict,
-    extra_notiz: Optional[str] = None,
 ) -> bool:
-    """Like process_item but scoped to a single known application."""
-    if is_synced(db, source, external_id):
-        return False
-
-    from app.ai.tasks import classify_for_app
-    try:
-        result = await classify_for_app(db, source, raw_text, target_app)
-    except (AINotConfigured, AIRateLimited):
-        raise
-    except Exception:
-        return False
-
-    return save_classified_event(db, source, external_id, result, raw_text, date_hint, target_app, extra_notiz)
+    """Like process_item but scoped to a single known application. No AI."""
+    return await process_item(db, source, external_id, raw_text, date_hint, hint_apps=[target_app])

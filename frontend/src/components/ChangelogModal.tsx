@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.6',
+    date: '2026-06-29',
+    changes: [
+      'AI komplett aus dem Sync entfernt: Mails, Kalendereinträge, iCloud-Notizen und Erinnerungen werden jetzt rein deterministisch klassifiziert (Regex-Muster für Typ, Betreffzeile als Titel).',
+      'Kein AI-Fallback mehr bei mehreren gematchten Bewerbungen — der erste Treffer wird verwendet.',
+    ],
+  },
+  {
     version: '3.14.5',
     date: '2026-06-29',
     changes: [

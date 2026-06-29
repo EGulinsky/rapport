@@ -23,15 +23,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
 from app import models, schemas
-from app.ai.provider import AINotConfigured, AIRateLimited, decrypt_api_key
+from app.ai.provider import decrypt_api_key
 from app.routers.sync_common import (
     is_synced, mark_synced, strip_html,
-    term_variants, process_item_for_app, save_classified_event,
+    term_variants, process_item, process_item_for_app,
     init_progress, update_progress, finish_progress,
     upsert_contact_from_sender,
     build_contact_domain_index, build_contact_email_index, find_apps_from_addresses,
 )
-from app.ai.tasks import classify_batch_for_app, BATCH_SIZE
 
 router = APIRouter(prefix="/api/sync/targeted", tags=["sync"])
 
@@ -181,28 +180,17 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
 
         pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
-    # Phase 2: batch classify
-    n_pending = len(pending)
-    for batch_start in range(0, n_pending, BATCH_SIZE):
-        batch = pending[batch_start:batch_start + BATCH_SIZE]
-        end = min(batch_start + len(batch), n_pending)
-        update_progress("targeted_gmail", batch_start, n_pending, f"Gmail KI {batch_start+1}–{end}/{n_pending}")
+    # Phase 2: deterministic classification
+    for i, item in enumerate(pending):
+        update_progress("targeted_gmail", i, len(pending), f"Gmail {i+1}/{len(pending)}")
         try:
-            results = await classify_batch_for_app(db, "gmail", batch, app_dict)
-        except (AINotConfigured, AIRateLimited):
-            raise
+            ok = await process_item(db, "gmail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict])
+            if ok:
+                created += 1
+            else:
+                skipped += 1
         except Exception as e:
-            errors.append(f"gmail batch: {e}")
-            continue
-        for item, result in zip(batch, results):
-            try:
-                ok = save_classified_event(db, "gmail", item["id"], result, item["raw"], item["date_hint"], app_dict)
-                if ok:
-                    created += 1
-                else:
-                    skipped += 1
-            except Exception as e:
-                errors.append(f"gmail/{item['id']}: {e}")
+            errors.append(f"gmail/{item['id']}: {e}")
 
     return created, total, errors
 
@@ -388,28 +376,17 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     except Exception:
         pass
 
-    # Phase 2: batch classify
-    n_pending = len(pending)
-    for batch_start in range(0, n_pending, BATCH_SIZE):
-        batch = pending[batch_start:batch_start + BATCH_SIZE]
-        end = min(batch_start + len(batch), n_pending)
-        update_progress("targeted_icloud_mail", batch_start, n_pending, f"iCloud Mail KI {batch_start+1}–{end}/{n_pending}")
+    # Phase 2: deterministic classification
+    for i, item in enumerate(pending):
+        update_progress("targeted_icloud_mail", i, len(pending), f"iCloud Mail {i+1}/{len(pending)}")
         try:
-            results = await classify_batch_for_app(db, "icloud_mail", batch, app_dict)
-        except (AINotConfigured, AIRateLimited):
-            raise
+            ok = await process_item(db, "icloud_mail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict])
+            if ok:
+                created += 1
+            else:
+                skipped += 1
         except Exception as e:
-            errors.append(f"icloud_mail batch: {e}")
-            continue
-        for item, result in zip(batch, results):
-            try:
-                ok = save_classified_event(db, "icloud_mail", item["id"], result, item["raw"], item["date_hint"], app_dict)
-                if ok:
-                    created += 1
-                else:
-                    skipped += 1
-            except Exception as e:
-                errors.append(f"icloud_mail/{item['id']}: {e}")
+            errors.append(f"icloud_mail/{item['id']}: {e}")
 
     return created, total, errors
 
@@ -601,8 +578,6 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
         raw = f"Titel: {title}\n\n{body[:2000]}"
         try:
             ok = await process_item_for_app(db, "icloud_notes", note_key, raw, date_hint, app_dict)
-        except (AINotConfigured, AIRateLimited):
-            raise
         except Exception as e:
             errors.append(f"note/{title}: {e}")
             continue
@@ -800,8 +775,6 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
         raw = f"Erinnerung: {summary}\n{desc[:800]}"
         try:
             ok = await process_item_for_app(db, "icloud_todo", uid, raw, date_hint, app_dict)
-        except (AINotConfigured, AIRateLimited):
-            raise
         except Exception as e:
             errors.append(f"reminder/{summary}: {e}")
             continue
