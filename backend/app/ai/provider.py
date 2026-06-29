@@ -5,14 +5,12 @@ API key is encrypted with Fernet; key file lives next to the SQLite DB.
 import json
 import os
 import pathlib
-import logging
 
 import litellm
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 litellm.suppress_debug_info = True
-logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 _DATA_DIR = pathlib.Path(
     os.getenv("DATABASE_URL", "sqlite:///./data/jobtracker.db")

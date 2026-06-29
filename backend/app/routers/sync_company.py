@@ -1,6 +1,5 @@
 """Company profile background sync via AI."""
 import asyncio
-import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, BackgroundTasks
@@ -8,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
 from app import models
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("ai")
 
 router = APIRouter(prefix="/api/sync/company", tags=["sync_company"])
 

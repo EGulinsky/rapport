@@ -8,7 +8,8 @@ services:
     environment:
       - DATABASE_URL=sqlite:////app/data/jobtracker.db
       - TZ=Europe/Berlin
-      - SYNC_LOG_LEVEL=DEBUG
+      - LOG_LEVEL=INFO
+      - SEQ_URL=http://seq:5341
     volumes:
       - jobtracker-data:/app/data
     ports:
@@ -36,6 +37,21 @@ services:
       default:
         ipv4_address: 192.168.117.12
 
+  seq:
+    image: datalust/seq:latest
+    container_name: jobtracker-seq
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq-data:/data
+    ports:
+      - "8088:80"
+      - "5341:5341"
+    networks:
+      default:
+        ipv4_address: 192.168.117.12
+
   frontend:
     build:
       context: ./frontend
@@ -53,6 +69,7 @@ services:
 
 volumes:
   jobtracker-data:
+  seq-data:
 
 networks:
   default:

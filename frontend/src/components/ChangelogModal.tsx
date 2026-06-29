@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.11',
+    date: '2026-06-29',
+    changes: [
+      'Structured Logging: Loguru ersetzt stdlib logging — JSON auf stdout, alle Logs an Seq weitergeleitet.',
+      'Kategorien: sync, ai, backup, app — in Seq nach Kategorie, Level und Zeitraum filterbar.',
+      'Seq Log-Viewer läuft auf http://localhost:8088',
+    ],
+  },
+  {
     version: '3.14.10',
     date: '2026-06-29',
     changes: [

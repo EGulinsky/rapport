@@ -1,10 +1,12 @@
 import asyncio
-import logging
-import os
 from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+
+from app.logger import setup_logging, get_logger
+setup_logging()
+logger = get_logger("app")
 
 from app.database import init_db
 from app.routers import (
@@ -13,10 +15,6 @@ from app.routers import (
     review, cleanup, calendar, attachments, merge, audit_log, backup, jobsearch,
     analytics, sync_company, companies, startup_check,
 )
-
-logger = logging.getLogger(__name__)
-_sync_log_level = getattr(logging, os.getenv("SYNC_LOG_LEVEL", "INFO").upper(), logging.INFO)
-logging.getLogger("sync.targeted").setLevel(_sync_log_level)
 
 # Sources currently running in background (prevents duplicate concurrent runs)
 _RUNNING_SOURCES: set[str] = set()
@@ -33,7 +31,7 @@ async def _run_source(name: str, coro_fn):
     try:
         await coro_fn()
     except Exception as e:
-        logger.warning("Background sync %s failed: %s", name, e)
+        logger.warning("Background sync {} failed: {}", name, e)
     finally:
         _RUNNING_SOURCES.discard(name)
 
@@ -109,10 +107,10 @@ async def _background_sync_loop():
                 finally:
                     _db.close()
             except Exception as e:
-                logger.warning("Backup error: %s", e)
+                logger.warning("Backup error: {}", e)
 
         except Exception as e:
-            logger.warning("Background sync loop error: %s", e)
+            logger.warning("Background sync loop error: {}", e)
 
         await asyncio.sleep(_BG_INTERVAL_MINUTES * 60)
 
@@ -140,7 +138,7 @@ def _auto_link_contacts():
                     c.company_profile_id = profile.id
             db.commit()
     except Exception as e:
-        logger.warning("Auto link contacts failed: %s", e)
+        logger.warning("Auto link contacts failed: {}", e)
 
 
 app = FastAPI(

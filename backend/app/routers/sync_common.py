@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import html
-import logging
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -20,8 +19,9 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app import models
+from app.logger import get_logger
 
-log = logging.getLogger("sync.targeted")
+log = get_logger("sync")
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 
