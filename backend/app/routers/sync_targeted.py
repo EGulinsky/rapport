@@ -1030,19 +1030,8 @@ async def _do_sync(app_id: int) -> dict:
         log.info("━━━ SYNC START #{} — {} ━━━", app_id, label)
         log.debug("[SYNC #{}] Suchbegriffe: {}", app_id, terms)
 
-        # 1. Contacts (sequential — calls need phone numbers)
-        init_progress("targeted_contacts", "iCloud Kontakte", "Starte…")
-        try:
-            c, p, errs = await _sync_contacts_for_app(app, terms, db)
-            total_created += c
-            total_processed += p
-            all_errors.extend(errs)
-        except Exception as e:
-            all_errors.append(f"Kontakte: {e}")
-        finish_progress("targeted_contacts")
-        db.commit()
-
-        # 2. All AI sources in parallel
+        # 1. Mail, Cal, Notes, Reminders — parallel; create events first so contact
+        #    sync can find names in event titles/notes when linking contacts.
         sources = [
             ("Gmail",               "targeted_gmail",             _sync_gmail_for_app),
             ("Google Calendar",     "targeted_gcal",              _sync_gcal_for_app),
@@ -1075,6 +1064,21 @@ async def _do_sync(app_id: int) -> dict:
                 total_created += c
                 total_processed += p
                 all_errors.extend(errs)
+        db.commit()
+
+        # 2. Contacts — after events exist, _contact_mentioned_in_app finds names in them
+        init_progress("targeted_contacts", "iCloud Kontakte", "Starte…")
+        try:
+            # Refresh app so SQLAlchemy sees the newly committed events
+            db.refresh(app)
+            c, p, errs = await _sync_contacts_for_app(app, terms, db)
+            total_created += c
+            total_processed += p
+            all_errors.extend(errs)
+        except Exception as e:
+            all_errors.append(f"Kontakte: {e}")
+        finish_progress("targeted_contacts")
+        db.commit()
 
         # 3. Calls (no AI)
         init_progress("targeted_calls", "Anrufliste", "Starte…")
