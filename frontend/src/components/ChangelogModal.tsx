@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.14',
+    date: '2026-06-29',
+    changes: [
+      'Kontakte: Separate Vorname/Nachname-Felder — Sync erkennt "Mehra, Malvika" und "Malvika Mehra" als dieselbe Person.',
+      'Kontakte: Bearbeitungsmodal (klick auf Zeile) — alle Felder editierbar analog Firmenprofile.',
+      'Kontakte: Bewerbungsformular zeigt Vorname/Nachname als separate Felder.',
+    ],
+  },
+  {
     version: '3.14.13',
     date: '2026-06-29',
     changes: [

@@ -48,6 +48,33 @@ def _time_prefix(date_hint: Optional[datetime]) -> str:
     return f"{local.hour}:{local.minute:02d} Uhr\n"
 
 
+# ── Contact name helpers ──────────────────────────────────────────────────────
+
+def _normalize_name(name: str) -> str:
+    """Return a canonical sorted-token fingerprint for order-independent name comparison.
+
+    "Mehra, Malvika" and "Malvika Mehra" both become frozenset → sorted str.
+    """
+    tokens = sorted(t.strip().lower() for t in re.split(r"[,\s]+", name) if t.strip())
+    return " ".join(tokens)
+
+
+def _split_name(name: str) -> tuple[str, str]:
+    """Return (nachname, vorname) by best-effort parsing.
+
+    Handles "Mehra, Malvika" (comma-separated, last first),
+    "Malvika Mehra" (first last), and single-token names.
+    Returns (name, "") for unrecognised patterns.
+    """
+    if "," in name:
+        parts = [p.strip() for p in name.split(",", 1)]
+        return parts[0], parts[1]
+    tokens = name.strip().split()
+    if len(tokens) >= 2:
+        return tokens[-1], " ".join(tokens[:-1])
+    return name.strip(), ""
+
+
 # ── Contact auto-creation ─────────────────────────────────────────────────────
 
 _SKIP_CONTACT_LOCALS = frozenset({
@@ -222,13 +249,16 @@ def _upsert_contact(
         func.lower(_models.Contact.email) == email_addr
     ).first()
 
-    # Fallback: same name + company → treat as the same person
+    # Fallback: same person by name+company — normalize ordering (Mehra, Malvika == Malvika Mehra)
     if not existing and name and firma:
-        existing = db.query(_models.Contact).filter(
-            func.lower(_models.Contact.name) == name.strip().lower(),
+        norm_new = _normalize_name(name)
+        candidates = db.query(_models.Contact).filter(
             func.lower(_models.Contact.firma) == firma.strip().lower(),
-        ).first()
-        # If found via name+firma and the new email is a real address (not ATS), update it
+        ).all()
+        for c in candidates:
+            if _normalize_name(c.name) == norm_new:
+                existing = c
+                break
         if existing and not is_ats_tracking and not existing.email:
             existing.email = email_addr
 
@@ -252,8 +282,11 @@ def _upsert_contact(
         db.execute(_LINK_SQL, {"cid": existing.id, "aid": app_id})
         return
 
+    raw_name = name.strip() or email_addr.split("@")[0]
+    nachname, vorname = _split_name(raw_name)
     contact = _models.Contact(
-        name=(name.strip() or email_addr.split("@")[0]),
+        name=raw_name,
+        vorname=vorname or None,
         email=None if is_ats_tracking else email_addr,
         firma=firma or None,
         typ="Headhunter" if is_headhunter else None,

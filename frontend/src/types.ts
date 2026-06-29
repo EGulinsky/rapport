@@ -130,6 +130,7 @@ export interface CompanyProfile {
 export interface Contact {
   id: number
   name: string
+  vorname?: string
   email?: string
   telefon?: string
   linkedin_url?: string

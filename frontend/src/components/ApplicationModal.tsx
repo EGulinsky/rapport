@@ -1022,11 +1022,18 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <div key={c.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
                   {editingContactId === c.id ? (
                     <div className="space-y-2">
-                      <input autoFocus
-                        className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={editContactDraft.name ?? ''} placeholder="Name *"
-                        onChange={e => setEditContactDraft(d => ({ ...d, name: e.target.value }))}
-                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input autoFocus
+                          className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={editContactDraft.vorname ?? ''} placeholder="Vorname"
+                          onChange={e => setEditContactDraft(d => ({ ...d, vorname: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={editContactDraft.name ?? ''} placeholder="Nachname *"
+                          onChange={e => setEditContactDraft(d => ({ ...d, name: e.target.value }))}
+                        />
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
@@ -1048,7 +1055,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   ) : (
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{c.name}</p>
+                        <p className="font-medium text-gray-900 truncate">{c.vorname ? `${c.vorname} ${c.name}` : c.name}</p>
                         <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
                         {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
                         {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
@@ -1056,7 +1063,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">LinkedIn</a>}
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ name: c.name, email: c.email, telefon: c.telefon, rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
+                        <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ vorname: c.vorname, name: c.name, email: c.email, telefon: c.telefon, rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
                           className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600" title="Bearbeiten"><Pencil className="h-3.5 w-3.5" /></button>
                         <button onClick={() => deleteContact(c.id, c.name)}
                           className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Löschen"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -1090,11 +1097,18 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
               {addMode === 'new' ? (
                 <>
-                  <input autoFocus
-                    className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Name *" value={contactDraft.name ?? ''}
-                    onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input autoFocus
+                      className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Vorname" value={contactDraft.vorname ?? ''}
+                      onChange={e => setContactDraft(d => ({ ...d, vorname: e.target.value }))}
+                    />
+                    <input
+                      className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Nachname *" value={contactDraft.name ?? ''}
+                      onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />

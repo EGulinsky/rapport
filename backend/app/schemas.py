@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 class ContactBase(BaseModel):
     name: str
+    vorname: Optional[str] = None
     email: Optional[str] = None
     telefon: Optional[str] = None
     linkedin_url: Optional[str] = None
@@ -22,6 +23,7 @@ class ContactCreate(ContactBase):
 
 class ContactUpdate(BaseModel):
     name: Optional[str] = None
+    vorname: Optional[str] = None
     email: Optional[str] = None
     telefon: Optional[str] = None
     linkedin_url: Optional[str] = None

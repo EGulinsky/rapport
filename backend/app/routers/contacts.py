@@ -49,12 +49,14 @@ class ContactPatch(BaseModel):
     company_profile_id: Optional[int] = None
     firma: Optional[str] = None
     name: Optional[str] = None
+    vorname: Optional[str] = None
     email: Optional[str] = None
     telefon: Optional[str] = None
     linkedin_url: Optional[str] = None
     rolle: Optional[str] = None
     typ: Optional[str] = None
     notizen: Optional[str] = None
+    letzter_kontakt: Optional[str] = None
 
 
 @router.patch("/{contact_id}")

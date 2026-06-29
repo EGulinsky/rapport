@@ -681,6 +681,21 @@ def _migrate_company_parent():
     conn.close()
 
 
+def _migrate_contact_vorname():
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(contacts)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "vorname" not in cols:
+        cur.execute("ALTER TABLE contacts ADD COLUMN vorname VARCHAR")
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -696,6 +711,7 @@ def init_db():
     _migrate_pre_rejection_status()
     _migrate_audit_log()
     _migrate_contact_company_profile()
+    _migrate_contact_vorname()
     _migrate_company_logo()
     _migrate_company_parent()
     Base.metadata.create_all(bind=engine)
