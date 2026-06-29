@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.15',
+    date: '2026-06-29',
+    changes: [
+      'Fix: Firma-Merge aktualisiert jetzt app.firma, zielfirma_bei_hh und contact.firma auf den Gewinner-Namen.',
+    ],
+  },
+  {
     version: '3.14.14',
     date: '2026-06-29',
     changes: [

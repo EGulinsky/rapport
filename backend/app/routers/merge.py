@@ -112,13 +112,19 @@ def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
         if field in MERGEABLE_COMPANY_FIELDS and source_id in companies:
             setattr(winner, field, getattr(companies[source_id], field))
 
+    winner_name = winner.name_display or winner.name_norm
+
     for loser in losers:
         for app in list(loser.applications):
             app.company_profile_id = winner.id
+            app.firma = winner_name
         for app in list(loser.hh_applications):
             app.target_company_profile_id = winner.id
+            if app.zielfirma_bei_hh:
+                app.zielfirma_bei_hh = winner_name
         for contact in list(loser.direct_contacts):
             contact.company_profile_id = winner.id
+            contact.firma = winner_name
         db.flush()
 
         add_audit(db, "merge", "user", app_id=None,
