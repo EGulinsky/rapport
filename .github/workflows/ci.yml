@@ -132,7 +132,8 @@ jobs:
 
       - name: Browser öffnen und Sound
         run: |
-          osascript -e "display notification \"Build ${{ github.run_number }} erfolgreich deployt ($(date '+%H:%M'))\" with title \"Jobtracker CI ✓\" sound name \"Glass\""
+          TIME=$(date '+%H:%M')
+          osascript -e "display notification \"Build ${{ github.run_number }} erfolgreich deployt (${TIME})\" with title \"Jobtracker CI ✓\" sound name \"Glass\""
           osascript -e 'open location "https://frontend.jobtracker.orb.local/"'
 
   notify-failure:
