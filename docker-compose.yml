@@ -8,6 +8,7 @@ services:
     environment:
       - DATABASE_URL=sqlite:////app/data/jobtracker.db
       - TZ=Europe/Berlin
+      - SYNC_LOG_LEVEL=DEBUG
     volumes:
       - jobtracker-data:/app/data
     ports:
