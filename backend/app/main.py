@@ -1,13 +1,11 @@
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 
 from app.logger import setup_logging, get_logger
-setup_logging()
-logger = get_logger("app")
-
 from app.database import init_db
 from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
@@ -15,6 +13,9 @@ from app.routers import (
     review, cleanup, calendar, attachments, merge, audit_log, backup, jobsearch,
     analytics, sync_company, companies, startup_check,
 )
+
+setup_logging()
+logger = get_logger("app")
 
 # Sources currently running in background (prevents duplicate concurrent runs)
 _RUNNING_SOURCES: set[str] = set()
