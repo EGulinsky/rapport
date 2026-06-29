@@ -72,10 +72,24 @@ def _build_credentials(cfg: models.GoogleSync):
 
 def _refresh_if_needed(cfg: models.GoogleSync, db: Session):
     from google.auth.transport.requests import Request
+    from google.auth.exceptions import TransportError
 
     creds = _build_credentials(cfg)
     if creds.expired or not creds.token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except Exception as e:
+            err_str = str(e).lower()
+            if "invalid_grant" in err_str or "token has been expired" in err_str or "revoked" in err_str:
+                # Refresh token is invalid — wipe stored tokens so user is prompted to reconnect
+                cfg.access_token_enc  = None
+                cfg.refresh_token_enc = None
+                cfg.token_expiry      = None
+                db.commit()
+                raise RuntimeError(
+                    "Gmail-Verbindung abgelaufen. Bitte unter Einstellungen → Google neu verbinden."
+                ) from e
+            raise
         cfg.access_token_enc = encrypt_api_key(creds.token)
         if creds.expiry:
             cfg.token_expiry = creds.expiry.replace(tzinfo=timezone.utc)

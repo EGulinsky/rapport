@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.4',
+    date: '2026-06-29',
+    changes: [
+      'Gmail: Abgelaufene/widerrufene OAuth-Token werden jetzt erkannt (invalid_grant). Tokens werden automatisch gelöscht und eine klare Meldung mit Hinweis zum Neu-Verbinden erscheint.',
+    ],
+  },
+  {
     version: '3.14.3',
     date: '2026-06-29',
     changes: [
