@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.9',
+    date: '2026-06-29',
+    changes: [
+      'Startup-Check: Beim Laden der App werden alle lokalen Bridges (Files, Notes, Calls) und Verbindungen (Google, iCloud, AI, Lokale Dateien) geprüft.',
+      'Fehlende/nicht erreichbare Dienste erscheinen als gelbes Banner mit Details — per Klick aufklappbar, wiederholbar und schließbar.',
+    ],
+  },
+  {
     version: '3.14.8',
     date: '2026-06-29',
     changes: [

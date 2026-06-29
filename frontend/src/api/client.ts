@@ -390,4 +390,15 @@ export const api = {
     unassignContact: (companyId: number, contactId: number) =>
       request<{ok: boolean}>(`/companies/${companyId}/contacts/${contactId}`, {method: 'DELETE'}),
   },
+
+  startup: {
+    check: () => request<{ checks: StartupCheck[]; all_ok: boolean; errors: StartupCheck[] }>('/startup-check'),
+  },
+}
+
+export interface StartupCheck {
+  name: string
+  group: 'bridges' | 'connections'
+  ok: boolean
+  message: string | null
 }
