@@ -325,35 +325,49 @@ async def _do_gmail() -> dict:
         update_progress("gmail", 0, total, f"{total} Nachrichten gefunden")
         synced_ids = load_synced_ids(db, "gmail")
         n_already_synced = sum(1 for m in messages if m["id"] in synced_ids)
+        unsynced = [m["id"] for m in messages if m["id"] not in synced_ids]
+        skipped += n_already_synced
 
         from email.utils import parsedate_to_datetime as _parse_date_hdr
 
-        for i, msg_ref in enumerate(messages):
-            if i % 10 == 0:
-                update_progress("gmail", i, total, f"E-Mail {i + 1}/{total}")
-            msg_id = msg_ref["id"]
-            if msg_id in synced_ids:
-                skipped += 1
-                continue
+        # ── Phase 1: batch-fetch metadata for all unsynced messages ───────────
+        # Google API allows up to 100 requests per batch → 133 serial calls → 2 batch calls
+        BATCH_META = 100
+        meta_results: dict[str, dict] = {}
 
-            # ── Phase 1: metadata only (headers, no body) ──────────────────
-            _t0 = _time.perf_counter()
-            try:
-                msg_meta = service.users().messages().get(
-                    userId="me", id=msg_id, format="metadata",
-                    metadataHeaders=["From", "Subject", "Date"]
-                ).execute()
-            except Exception as e:
-                errors.append(f"Nachricht {msg_id}: {e}")
-                continue
-            finally:
-                t_phase1 += _time.perf_counter() - _t0
-                n_phase1 += 1
+        def _meta_cb(req_id: str, response: dict | None, exception: Exception | None) -> None:
+            if exception is None and response is not None:
+                meta_results[req_id] = response
+            else:
+                errors.append(f"Metadata {req_id}: {exception}")
 
-            meta_hdrs = {h["name"].lower(): h["value"] for h in msg_meta["payload"].get("headers", [])}
-            subject   = meta_hdrs.get("subject", "(kein Betreff)")
-            sender    = meta_hdrs.get("from", "")
-            date_str  = meta_hdrs.get("date", "")
+        _t0 = _time.perf_counter()
+        for batch_start in range(0, len(unsynced), BATCH_META):
+            chunk = unsynced[batch_start:batch_start + BATCH_META]
+            update_progress("gmail", batch_start, total,
+                            f"Metadaten {batch_start + 1}–{batch_start + len(chunk)}/{total}")
+            batch_req = service.new_batch_http_request(callback=_meta_cb)
+            for msg_id in chunk:
+                batch_req.add(
+                    service.users().messages().get(
+                        userId="me", id=msg_id, format="metadata",
+                        metadataHeaders=["From", "Subject", "Date"],
+                    ),
+                    request_id=msg_id,
+                )
+            batch_req.execute()
+            n_phase1 += len(chunk)
+        t_phase1 = _time.perf_counter() - _t0
+
+        # ── Filter: date cutoff + quick firm check ─────────────────────────────
+        phase2_ids: list[str] = []
+        phase2_meta: dict[str, tuple] = {}   # msg_id → (subject, sender, date_hint)
+
+        for msg_id, msg_meta in meta_results.items():
+            hdrs = {h["name"].lower(): h["value"] for h in msg_meta["payload"].get("headers", [])}
+            subject  = hdrs.get("subject", "(kein Betreff)")
+            sender   = hdrs.get("from", "")
+            date_str = hdrs.get("date", "")
 
             date_hint = None
             try:
@@ -361,35 +375,52 @@ async def _do_gmail() -> dict:
             except Exception:
                 pass
 
-            # Skip mails before the earliest application date
             if global_cutoff and date_hint and date_hint.date() < global_cutoff:
                 mark_synced(db, "gmail", msg_id)
-                synced_ids.add(msg_id)
                 skipped += 1
                 continue
 
-            # Quick firm check on subject + sender — skip full-body fetch if no match
-            quick_raw = f"Von: {sender}\nBetreff: {subject}"
-            quick_hints = find_hint_apps(quick_raw, term_to_apps, contact_domain_index)
-            if not quick_hints:
+            if not find_hint_apps(f"Von: {sender}\nBetreff: {subject}", term_to_apps, contact_domain_index):
                 mark_synced(db, "gmail", msg_id)
-                synced_ids.add(msg_id)
                 skipped += 1
                 continue
 
-            # ── Phase 2: full body (only for promising mails) ──────────────
-            _t0 = _time.perf_counter()
-            try:
-                msg_full = service.users().messages().get(
-                    userId="me", id=msg_id, format="full"
-                ).execute()
-            except Exception as e:
-                errors.append(f"Nachricht {msg_id}: {e}")
-                continue
-            finally:
-                t_phase2 += _time.perf_counter() - _t0
-                n_phase2 += 1
+            phase2_ids.append(msg_id)
+            phase2_meta[msg_id] = (subject, sender, date_hint)
 
+        # ── Phase 2: batch-fetch full body for promising messages ──────────────
+        # Use smaller batches (50) as full bodies can be large
+        BATCH_FULL = 50
+        full_results: dict[str, dict] = {}
+
+        def _full_cb(req_id: str, response: dict | None, exception: Exception | None) -> None:
+            if exception is None and response is not None:
+                full_results[req_id] = response
+            else:
+                errors.append(f"Volltext {req_id}: {exception}")
+
+        _t0 = _time.perf_counter()
+        for batch_start in range(0, len(phase2_ids), BATCH_FULL):
+            chunk = phase2_ids[batch_start:batch_start + BATCH_FULL]
+            update_progress("gmail", len(unsynced), total,
+                            f"Volltext {batch_start + 1}–{batch_start + len(chunk)}/{len(phase2_ids)} Treffer")
+            batch_req = service.new_batch_http_request(callback=_full_cb)
+            for msg_id in chunk:
+                batch_req.add(
+                    service.users().messages().get(userId="me", id=msg_id, format="full"),
+                    request_id=msg_id,
+                )
+            batch_req.execute()
+            n_phase2 += len(chunk)
+        t_phase2 = _time.perf_counter() - _t0
+
+        # ── AI / deterministic processing ──────────────────────────────────────
+        for msg_id in phase2_ids:
+            msg_full = full_results.get(msg_id)
+            if not msg_full:
+                continue
+
+            subject, sender, date_hint = phase2_meta[msg_id]
             body = _gmail_body(msg_full["payload"])[:1500]
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
