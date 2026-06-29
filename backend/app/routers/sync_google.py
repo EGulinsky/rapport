@@ -72,7 +72,6 @@ def _build_credentials(cfg: models.GoogleSync):
 
 def _refresh_if_needed(cfg: models.GoogleSync, db: Session):
     from google.auth.transport.requests import Request
-    from google.auth.exceptions import TransportError
 
     creds = _build_credentials(cfg)
     if creds.expired or not creds.token:
