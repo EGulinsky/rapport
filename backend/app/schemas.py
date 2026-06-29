@@ -16,6 +16,7 @@ class ContactBase(BaseModel):
 
 
 class ContactCreate(ContactBase):
+    email: str  # required on create
     application_id: Optional[int] = None
 
 

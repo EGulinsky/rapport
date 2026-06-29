@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.13',
+    date: '2026-06-29',
+    changes: [
+      'Sync: Domain-basiertes Matching (Mail/Kalender) statt Kontakt-Index — Datum >= Bewerbungsdatum.',
+      'Sync: Kontakte-Sync läuft nach Mail/Cal, sodass Kontakte in neuen Events gefunden werden.',
+      'Sync: iCloud Notes — kein "recent 30"-Fallback mehr, nur noch text-matching.',
+      'Kontakte: E-Mail ist jetzt Pflichtfeld beim Erstellen und Bearbeiten.',
+    ],
+  },
+  {
     version: '3.14.12',
     date: '2026-06-29',
     changes: [

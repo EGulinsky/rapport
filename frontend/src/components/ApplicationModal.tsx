@@ -314,7 +314,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   }
 
   async function saveContact() {
-    if (!appId || !contactDraft.name) return
+    if (!appId || !contactDraft.name || !contactDraft.email) return
     setSavingContact(true)
     try {
       await api.contacts.add(appId, contactDraft)
@@ -1028,7 +1028,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         onChange={e => setEditContactDraft(d => ({ ...d, name: e.target.value }))}
                       />
                       <div className="grid grid-cols-2 gap-2">
-                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={editContactDraft.rolle ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, rolle: e.target.value }))} />
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={editContactDraft.firma ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, firma: e.target.value }))} />
@@ -1040,7 +1040,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       <input className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="LinkedIn URL" value={editContactDraft.linkedin_url ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
                       <div className="flex justify-end gap-2 pt-1">
                         <button type="button" onClick={() => setEditingContactId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
-                        <button type="button" disabled={!editContactDraft.name || savingContact} onClick={() => updateContact(c.id)} className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                        <button type="button" disabled={!editContactDraft.name || !editContactDraft.email || savingContact} onClick={() => updateContact(c.id)} className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                           <Check className="h-3 w-3" /> Speichern
                         </button>
                       </div>
@@ -1096,7 +1096,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
                   />
                   <div className="grid grid-cols-2 gap-2">
-                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={contactDraft.firma ?? ''} onChange={e => setContactDraft(d => ({ ...d, firma: e.target.value }))} />
@@ -1109,7 +1109,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <button type="button" onClick={() => { setAddingContact(false); setContactDraft(EMPTY_CONTACT) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
                       <Trash2 className="h-3 w-3" /> Abbrechen
                     </button>
-                    <button type="button" disabled={!contactDraft.name || savingContact} onClick={saveContact}
+                    <button type="button" disabled={!contactDraft.name || !contactDraft.email || savingContact} onClick={saveContact}
                       className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                       {savingContact ? 'Speichern…' : 'Speichern'}
                     </button>
