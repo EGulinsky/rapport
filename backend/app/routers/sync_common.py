@@ -526,6 +526,59 @@ def build_contact_domain_index(db: Session) -> dict[str, list[dict]]:
     return index
 
 
+_ADDR_RE = re.compile(r'[\w.+\-]+@[\w.\-]+\.[a-zA-Z]{2,}')
+
+
+def extract_email_addresses(header_val: str) -> list[str]:
+    """Extract all email addresses from a header value string."""
+    return [m.lower() for m in _ADDR_RE.findall(header_val)]
+
+
+def build_contact_email_index(db: Session) -> dict[str, list[dict]]:
+    """Map exact contact email → [app_dict] for contacts linked to applications."""
+    index: dict[str, list[dict]] = {}
+    for c in db.query(models.Contact).all():
+        if not c.email or "@" not in c.email:
+            continue
+        email_lower = c.email.lower()
+        domain = email_lower.split("@")[-1]
+        if domain in _GENERIC_EMAIL_DOMAINS:
+            continue
+        for app in (c.applications or []):
+            app_dict = {"id": app.id, "firma": app.firma, "rolle": app.rolle}
+            bucket = index.setdefault(email_lower, [])
+            if app_dict not in bucket:
+                bucket.append(app_dict)
+    return index
+
+
+def find_apps_from_addresses(
+    from_val: str,
+    to_cc_val: str,
+    contact_email_index: dict[str, list[dict]],
+    contact_domain_index: dict[str, list[dict]],
+) -> list[dict]:
+    """Match applications by FROM/TO/CC email addresses only — no content analysis."""
+    seen_ids: set[int] = set()
+    result: list[dict] = []
+
+    def _add(app_dict: dict) -> None:
+        if app_dict["id"] not in seen_ids:
+            result.append(app_dict)
+            seen_ids.add(app_dict["id"])
+
+    for addr in extract_email_addresses(from_val + "," + to_cc_val):
+        for app_dict in contact_email_index.get(addr, []):
+            _add(app_dict)
+        if "@" in addr:
+            domain = addr.split("@")[1]
+            if domain not in _GENERIC_EMAIL_DOMAINS:
+                for app_dict in contact_domain_index.get(domain, []):
+                    _add(app_dict)
+
+    return result
+
+
 def find_hint_apps(
     raw_text: str,
     term_to_apps: dict[str, list[dict]],

@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.5',
+    date: '2026-06-29',
+    changes: [
+      'Gmail/Kalender-Matching radikal vereinfacht: Mails und Termine werden nur noch anhand von E-Mail-Adressen der verknüpften Kontakte gematcht (exakte Adresse oder Firmendomain) — kein Firmenname-Substring-Matching mehr, das False Positives wie „there" → HERE verursacht hat.',
+      'Globaler Gmail-Sync nutzt jetzt einen domainbasierten Suchfilter statt Firmennamen.',
+      'Neuer Kontakt wird automatisch angelegt, wenn eine neue Adresse aus einer bekannten Firmendomain erkannt wird.',
+    ],
+  },
+  {
     version: '3.14.4',
     date: '2026-06-29',
     changes: [
