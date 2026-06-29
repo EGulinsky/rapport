@@ -92,6 +92,18 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  async function clearSyncEvents() {
+    if (!appId) return
+    setSyncMenuOpen(false)
+    try {
+      const result = await api.targeted.resetForApp(appId)
+      setSyncResult({ created: -(result.deleted_events ?? 0), errors: [] })
+      onSaved()
+    } catch (e: unknown) {
+      setSyncResult({ created: 0, errors: [e instanceof Error ? e.message : String(e)] })
+    }
+  }
+
   async function runSync(reset: boolean) {
     if (!appId) return
     setSyncing(true)
@@ -500,6 +512,16 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       <span className="block text-[10px] text-gray-400">Reset + neu einlesen</span>
                     </span>
                   </button>
+                  <button
+                    onClick={clearSyncEvents}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                    <span>
+                      Sync-Events löschen
+                      <span className="block text-[10px] text-gray-400">Nur entfernen, kein Neu-Sync</span>
+                    </span>
+                  </button>
                   <hr className="my-1 border-gray-100" />
                   <button
                     onClick={openManual}
@@ -639,7 +661,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             <span>
               {syncResult.errors.length > 0
                 ? `Sync: ${syncResult.errors[0]}`
-                : `Sync abgeschlossen — ${syncResult.created} neue Einträge`}
+                : syncResult.created < 0
+                  ? `${Math.abs(syncResult.created)} Sync-Events gelöscht`
+                  : `Sync abgeschlossen — ${syncResult.created} neue Einträge`}
             </span>
             <button onClick={() => setSyncResult(null)} className="ml-2 opacity-60 hover:opacity-100">✕</button>
           </div>
