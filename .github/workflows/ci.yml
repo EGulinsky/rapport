@@ -132,7 +132,7 @@ jobs:
 
       - name: Browser öffnen und Sound
         run: |
-          osascript -e 'display notification "Build ${{ github.run_number }} erfolgreich deployt" with title "Jobtracker CI ✓" sound name "Glass"'
+          osascript -e "display notification \"Build ${{ github.run_number }} erfolgreich deployt ($(date '+%H:%M'))\" with title \"Jobtracker CI ✓\" sound name \"Glass\""
           osascript -e 'open location "https://frontend.jobtracker.orb.local/"'
 
   notify-failure:
@@ -148,5 +148,6 @@ jobs:
           [ "${{ needs.frontend.result }}" = "failure" ] && FAILED="${FAILED} Frontend"
           [ "${{ needs.docker.result }}"   = "failure" ] && FAILED="${FAILED} Docker"
           [ "${{ needs.deploy.result }}"   = "failure" ] && FAILED="${FAILED} Deploy"
-          osascript -e "display notification \"Fehlgeschlagen:${FAILED} — Build ${{ github.run_number }}\" with title \"Jobtracker CI ✗\" sound name \"Basso\""
+          TIME=$(date '+%H:%M')
+          osascript -e "display notification \"Fehlgeschlagen:${FAILED} — Build ${{ github.run_number }} (${TIME})\" with title \"Jobtracker CI ✗\" sound name \"Basso\""
           echo "$(date '+%Y-%m-%d %H:%M:%S') FAILED build=${{ github.run_number }} jobs=${FAILED}" >> /tmp/ci_failures.log
