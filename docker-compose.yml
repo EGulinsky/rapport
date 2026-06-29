@@ -43,6 +43,7 @@ services:
     restart: unless-stopped
     environment:
       - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_NOAUTHENTICATION=true
     volumes:
       - seq-data:/data
     ports:
@@ -50,7 +51,7 @@ services:
       - "5341:5341"
     networks:
       default:
-        ipv4_address: 192.168.117.12
+        ipv4_address: 192.168.117.13
 
   frontend:
     build:
