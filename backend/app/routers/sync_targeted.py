@@ -76,18 +76,41 @@ _PERSONAL_DOMAINS = {
 }
 
 
-def _company_domains_for_app(app: models.Application, terms: list[str], db: Session) -> list[str]:
-    """Email domains derived from contacts directly linked to this application.
+def _domain_from_website(website: Optional[str]) -> Optional[str]:
+    """Extract bare domain from a website URL, e.g. 'https://www.here.com/' → 'here.com'."""
+    if not website:
+        return None
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(website).hostname or ""
+        host = host.lower().removeprefix("www.")
+        return host if host and '.' in host else None
+    except Exception:
+        return None
 
-    Only uses linked contacts so we don't accidentally pick up recruiter/headhunter
-    domains from contacts whose 'firma' is the target company but who work elsewhere.
+
+def _company_domains_for_app(app: models.Application, terms: list[str], db: Session) -> list[str]:
+    """Email domains for this application, derived from linked CompanyProfile websites.
+
+    - Direct application: domain from app.company_profile.website
+    - HH application: domain from app.target_company_profile.website (the actual employer),
+      plus app.company_profile.website (the HH firm) so HH mails are also captured.
+    Personal/freemail domains are excluded.
     """
     domains: set[str] = set()
-    for c in (app.contacts or []):
-        if c.email and '@' in c.email:
-            d = c.email.split('@', 1)[1].lower()
-            if d not in _PERSONAL_DOMAINS:
+
+    def _add_profile(profile) -> None:
+        if profile:
+            d = _domain_from_website(profile.website)
+            if d and d not in _PERSONAL_DOMAINS:
                 domains.add(d)
+
+    if app.is_headhunter:
+        _add_profile(app.target_company_profile)   # Zielfirma (may be None)
+        _add_profile(app.company_profile)           # HH-Firma
+    else:
+        _add_profile(app.company_profile)
+
     return sorted(domains)
 
 
