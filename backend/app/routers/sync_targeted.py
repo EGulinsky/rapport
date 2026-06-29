@@ -29,7 +29,7 @@ from app.routers.sync_common import (
     term_variants, process_item, process_item_for_app,
     init_progress, update_progress, finish_progress,
     upsert_contact_from_sender,
-    build_contact_domain_index, build_contact_email_index, find_apps_from_addresses,
+
 )
 from app.logger import get_logger
 
@@ -69,6 +69,40 @@ def _app_dict(app: models.Application) -> dict:
     return d
 
 
+_PERSONAL_DOMAINS = {
+    'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.de', 'hotmail.com',
+    'hotmail.de', 'outlook.com', 'outlook.de', 'gmx.de', 'gmx.net', 'gmx.at',
+    'web.de', 'icloud.com', 'me.com', 't-online.de', 'freenet.de',
+}
+
+
+def _company_domains_for_app(app: models.Application, terms: list[str], db: Session) -> list[str]:
+    """Email domains of all contacts associated with this company.
+
+    Searches both contacts already linked to this app and any contact in the
+    DB whose 'firma' field text-matches the app's search terms.  Personal
+    freemail domains are excluded so we don't accidentally match on gmail etc.
+    """
+    from sqlalchemy import or_
+    domains: set[str] = set()
+
+    def _add(email: Optional[str]) -> None:
+        if email and '@' in email:
+            d = email.split('@', 1)[1].lower()
+            if d not in _PERSONAL_DOMAINS:
+                domains.add(d)
+
+    for c in (app.contacts or []):
+        _add(c.email)
+
+    filters = [models.Contact.firma.ilike(f'%{t}%') for t in terms if len(t) >= 4]
+    if filters:
+        for c in db.query(models.Contact).filter(or_(*filters)).all():
+            _add(c.email)
+
+    return sorted(domains)
+
+
 def _text_matches(text: str, terms: list[str]) -> bool:
     tl = text.lower()
     return any(t.lower() in tl for t in terms)
@@ -106,27 +140,18 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     creds = _refresh_if_needed(cfg, db)
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
-    since = datetime.now(timezone.utc) - timedelta(days=365)
-    after_ts = int(since.timestamp())
-
-    # Build query from this app's linked contact emails and domains
-    contact_domain_index = build_contact_domain_index(db)
-    contact_email_index  = build_contact_email_index(db)
     app_id = app.id
-
-    app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
-    app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
-
     pfx = f"[SYNC #{app_id} gmail]"
-    if not app_domains and not app_emails:
-        log.debug("{} kein Kontakt → übersprungen", pfx)
+    app_domains = _company_domains_for_app(app, terms, db)
+    if not app_domains:
+        log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
         return 0, 0, []
 
-    log.debug("{} domains: {}  emails: {}", pfx, app_domains, app_emails)
+    since = app.datum_bewerbung or (datetime.now(timezone.utc) - timedelta(days=365)).date()
+    after_ts = int(datetime(since.year, since.month, since.day, tzinfo=timezone.utc).timestamp())
     parts = [f"(from:{d} OR to:{d})" for d in app_domains]
-    parts += [f"(from:{e} OR to:{e})" for e in app_emails[:20]]
     query = f"after:{after_ts} ({' OR '.join(parts)})"
-    log.debug("{} query: {}", pfx, query)
+    log.debug("{} domains: {}  query: {}", pfx, app_domains, query)
 
     messages: list[dict] = []
     page_token = None
@@ -148,7 +173,6 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     errors: list[str] = []
     total = len(messages)
 
-    # Phase 1: fetch unsynced messages and verify address match
     pending: list[dict] = []
     for i, msg_ref in enumerate(messages):
         update_progress("targeted_gmail", i, total, f"Gmail laden {i+1}/{total}")
@@ -165,18 +189,9 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
 
         headers = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
         sender  = headers.get("from", "")
-        to_cc   = headers.get("to", "") + "," + headers.get("cc", "")
         subject = headers.get("subject", "(kein Betreff)")
         date_str = headers.get("date", "")
         body = _gmail_body(msg["payload"])[:1500]
-
-        # Verify the message actually involves this app's contacts/domain
-        matched = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
-        if not any(a["id"] == app_id for a in matched):
-            log.debug("{} {} SUBJ:{!r} FROM:{!r} → SKIP kein Adress-Match", pfx, msg_id, subject, sender)
-            mark_synced(db, "gmail", msg_id)
-            skipped += 1
-            continue
 
         date_hint = None
         try:
@@ -188,7 +203,6 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         log.debug("{} {} SUBJ:{!r} FROM:{!r} → pending", pfx, msg_id, subject, sender)
         pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
-    # Phase 2: deterministic classification
     for i, item in enumerate(pending):
         update_progress("targeted_gmail", i, len(pending), f"Gmail {i+1}/{len(pending)}")
         try:
@@ -216,34 +230,37 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
     creds = _refresh_if_needed(cfg, db)
     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
+    app_id = app.id
+    pfx = f"[SYNC #{app_id} gcal]"
+    app_domains = _company_domains_for_app(app, terms, db)
+    if not app_domains:
+        log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
+        return 0, 0, []
+
+    since = app.datum_bewerbung or (datetime.now(timezone.utc) - timedelta(days=365)).date()
     now = datetime.now(timezone.utc)
     try:
         events_result = service.events().list(
             calendarId="primary",
-            timeMin=(now - timedelta(days=365)).isoformat(),
+            timeMin=datetime(since.year, since.month, since.day, tzinfo=timezone.utc).isoformat(),
             timeMax=(now + timedelta(days=90)).isoformat(),
             singleEvents=True, orderBy="startTime", maxResults=500,
         ).execute()
     except Exception as e:
         return 0, 0, [f"Google Calendar: {e}"]
 
-    contact_domain_index = build_contact_domain_index(db)
-    contact_email_index  = build_contact_email_index(db)
-    app_id = app.id
-    pfx = f"[SYNC #{app_id} gcal]"
+    def _ev_matches_domain(ev: dict) -> bool:
+        emails = [((ev.get("organizer") or {}).get("email") or "")]
+        emails += [(a.get("email") or "") for a in (ev.get("attendees") or [])]
+        return any(
+            e and '@' in e and e.split('@', 1)[1].lower() in app_domains
+            for e in emails
+        )
 
-    def _ev_matches_app(ev: dict) -> bool:
-        org_email  = ((ev.get("organizer") or {}).get("email") or "").lower()
-        att_emails = ",".join((a.get("email") or "") for a in (ev.get("attendees") or []))
-        matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
-        return any(a["id"] == app_id for a in matched)
-
-    log.debug("{} Adress-Matching gegen domains: {}  emails: {}", pfx,
-              [d for d in contact_domain_index if any(a["id"] == app_id for a in contact_domain_index[d])],
-              [e for e in contact_email_index if any(a["id"] == app_id for a in contact_email_index[e])])
+    log.debug("{} domains: {}", pfx, app_domains)
     all_events = events_result.get("items", [])
-    cal_events = [ev for ev in all_events if _ev_matches_app(ev)]
-    log.debug("{} {} Termine gesamt, {} Adress-Match", pfx, len(all_events), len(cal_events))
+    cal_events = [ev for ev in all_events if _ev_matches_domain(ev)]
+    log.debug("{} {} Termine gesamt, {} Domain-Match", pfx, len(all_events), len(cal_events))
     created = skipped = 0
     errors: list[str] = []
 
@@ -339,23 +356,13 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     if not cfg:
         return 0, 0, []
 
-    contact_domain_index = build_contact_domain_index(db)
-    contact_email_index  = build_contact_email_index(db)
     app_id = app.id
-
-    app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
-    app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
-
     pfx = f"[SYNC #{app_id} icloud_mail]"
+    app_domains = _company_domains_for_app(app, terms, db)
+    if not app_domains:
+        log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
+        return 0, 0, []
 
-    if not app_domains and not app_emails:
-        log.debug("{} kein Kontakt → übersprungen", pfx)
-        return 0, 0, []  # No contacts → nothing to match against
-
-    # Build IMAP search criteria from contact domains/emails (search headers + body)
-    search_terms = list(dict.fromkeys(app_domains + app_emails))
-    log.debug("{} domains: {}  emails: {}", pfx, app_domains, app_emails)
-    # IMAP OR chaining: OR crit1 crit2 for two, OR crit1 (OR crit2 crit3) for more
     def _imap_or(criteria: list[str]) -> str:
         if len(criteria) == 1:
             return f'TEXT "{criteria[0]}"'
@@ -363,8 +370,11 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
             return f'(OR TEXT "{criteria[0]}" TEXT "{criteria[1]}")'
         return f'(OR TEXT "{criteria[0]}" {_imap_or(criteria[1:])})'
 
-    imap_query = _imap_or(search_terms[:10])
-    log.debug("{} query: {}", pfx, imap_query)
+    imap_query = _imap_or(app_domains[:10])
+    since = app.datum_bewerbung
+    if since:
+        imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
+    log.debug("{} domains: {}  query: {}", pfx, app_domains, imap_query)
 
     created = skipped = 0
     errors: list[str] = []
@@ -380,7 +390,6 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     total = len(ids)
     log.debug("{} {} Nachrichten gefunden", pfx, total)
 
-    # Phase 1: fetch unsynced messages, verify by address
     pending: list[dict] = []
     for i, msg_id_bytes in enumerate(ids):
         update_progress("targeted_icloud_mail", i, total, f"iCloud Mail laden {i+1}/{total}")
@@ -399,7 +408,6 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
 
         subject = msg.get("Subject", "(kein Betreff)")
         sender = msg.get("From", "")
-        to_cc = (msg.get("To", "") or "") + "," + (msg.get("Cc", "") or "")
         body = _imap_body(msg)[:1500]
         date_hint = None
         try:
@@ -408,24 +416,14 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         except Exception:
             pass
 
-        # Verify this message actually involves this app's contacts/domain
-        matched = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
-        if not any(a["id"] == app_id for a in matched):
-            log.debug("{} {} SUBJ:{!r} FROM:{!r} → SKIP kein Adress-Match", pfx, msg_id, subject, sender)
-            mark_synced(db, "icloud_mail", msg_id)
-            skipped += 1
-            continue
-
         log.debug("{} {} SUBJ:{!r} FROM:{!r} → pending", pfx, msg_id, subject, sender)
-        raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
-        pending.append({"id": msg_id, "raw": raw, "date_hint": date_hint})
+        pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
     try:
         imap.logout()
     except Exception:
         pass
 
-    # Phase 2: deterministic classification
     for i, item in enumerate(pending):
         update_progress("targeted_icloud_mail", i, len(pending), f"iCloud Mail {i+1}/{len(pending)}")
         try:
@@ -462,37 +460,33 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     except ImportError:
         return 0, 0, ["caldav nicht installiert"]
 
-    contact_domain_index = build_contact_domain_index(db)
-    contact_email_index  = build_contact_email_index(db)
     app_id = app.id
-
     pfx = f"[SYNC #{app_id} icloud_cal]"
+    app_domains = _company_domains_for_app(app, terms, db)
+    if not app_domains:
+        log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
+        return 0, 0, []
 
-    app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
-    app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
-
-    if not app_domains and not app_emails:
-        log.debug("{} kein Kontakt → übersprungen", pfx)
-        return 0, 0, []  # No contacts → nothing to match against
-
-    log.debug("{} Adress-Matching gegen domains: {}  emails: {}", pfx, app_domains, app_emails)
-
-    def _ev_matches_app_icloud(vevent) -> bool:
+    def _ev_matches_domain_icloud(vevent) -> bool:
+        emails: list[str] = []
         org_val = getattr(vevent, "organizer", None)
-        org_email = ""
         if org_val:
             v = str(getattr(org_val, "value", org_val) or "")
-            org_email = v.lower().replace("mailto:", "").strip()
-        att_emails = ""
+            emails.append(v.lower().replace("mailto:", "").strip())
         for att in vevent.contents.get("attendee", []):
             v = str(getattr(att, "value", att) or "")
-            att_emails += "," + v.lower().replace("mailto:", "")
-        matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
-        return any(a["id"] == app_id for a in matched)
+            emails.append(v.lower().replace("mailto:", "").strip())
+        return any(
+            '@' in e and e.split('@', 1)[1] in app_domains
+            for e in emails
+        )
+
+    since = app.datum_bewerbung
+    now = datetime.now(timezone.utc)
+    start_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc) if since else now - timedelta(days=365)
 
     created = skipped = 0
     errors: list[str] = []
-    now = datetime.now(timezone.utc)
 
     try:
         client = caldav.DAVClient(url=CALDAV_URL, username=cfg.apple_id, password=decrypt_api_key(cfg.app_password_enc))
@@ -500,22 +494,23 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     except Exception as e:
         return 0, 0, [f"iCloud CalDAV: {e}"]
 
+    log.debug("{} domains: {}", pfx, app_domains)
     all_cal_events: list = []
     matched_events: list = []
     for cal in calendars:
         try:
-            for ev in cal.date_search(start=now - timedelta(days=365), end=now + timedelta(days=90), expand=True):
+            for ev in cal.date_search(start=start_dt, end=now + timedelta(days=90), expand=True):
                 try:
                     vevent = ev.vobject_instance.vevent
                     all_cal_events.append(ev)
-                    if _ev_matches_app_icloud(vevent):
+                    if _ev_matches_domain_icloud(vevent):
                         matched_events.append(ev)
                 except Exception:
                     continue
         except Exception as e:
             errors.append(f"Kalender {cal.name}: {e}")
 
-    log.debug("{} {} Termine gesamt, {} Adress-Match", pfx, len(all_cal_events), len(matched_events))
+    log.debug("{} {} Termine gesamt, {} Domain-Match", pfx, len(all_cal_events), len(matched_events))
 
     for ev in matched_events:
         try:
@@ -634,12 +629,8 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
     # the 30 most recent notes (relevant notes often don't mention the company by name).
     # This avoids sending hundreds of old unrelated notes through AI on every targeted sync.
     log.debug("{} text-Match-Begriffe: {}", pfx, terms)
-    notes_sorted = sorted(notes, key=lambda n: n.get("date") or n.get("creationDate") or "", reverse=True)
-    matching = [n for n in notes_sorted if _text_matches((n.get("name") or "") + " " + (n.get("body") or ""), terms)]
-    matching_ids = {n.get("id") for n in matching}
-    recent = [n for n in notes_sorted if n.get("id") not in matching_ids][:30]
-    candidates = (matching + recent)[:50]
-    log.debug("{} {} Notizen gesamt, {} text-Match, {} recent → {} Kandidaten", pfx, len(notes_sorted), len(matching), len(recent), len(candidates))
+    candidates = [n for n in notes if _text_matches((n.get("name") or "") + " " + (n.get("body") or ""), terms)]
+    log.debug("{} {} Notizen gesamt, {} text-Match", pfx, len(notes), len(candidates))
 
     for note in candidates:
         title = (note.get("name") or "").strip()
