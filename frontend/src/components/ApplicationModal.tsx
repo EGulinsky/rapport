@@ -20,12 +20,13 @@ interface Props {
   onClose: () => void
   onSaved: () => void
   onOpenCompany?: (id: number) => void
+  updatedFields?: Set<string>
 }
 
 const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
-export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Props) {
+export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields }: Props) {
   const [app, setApp] = useState<Application | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Application>>({})
@@ -327,13 +328,21 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
     await refreshContacts()
   }
 
-  const field = (label: string, value?: string | null) =>
-    value ? (
-      <div>
-        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</dt>
+  const updDot = (fieldKey?: string) =>
+    fieldKey && updatedFields?.has(fieldKey)
+      ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0 ml-1 align-middle" />
+      : null
+
+  const field = (label: string, value?: string | null, fieldKey?: string) => {
+    if (!value) return null
+    const updated = !!fieldKey && !!updatedFields?.has(fieldKey)
+    return (
+      <div className={updated ? 'rounded px-2 py-0.5 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
+        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}{updDot(fieldKey)}</dt>
         <dd className="mt-0.5 text-sm text-gray-900">{value}</dd>
       </div>
-    ) : null
+    )
+  }
 
   const STEP_LABELS: Record<string, string> = {
     prospecting: 'Anbahnung',
@@ -442,14 +451,14 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
                       <button
                         onClick={() => onOpenCompany(app.company_profile_id!)}
                         className="text-lg font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 hover:underline"
-                      >{app?.firma}</button>
+                      >{app?.firma}{updDot('firma')}</button>
                     ) : (
-                      <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}{updDot('firma')}</h2>
                     )}
                     <span className="text-xs text-gray-300 shrink-0 select-all">#{app?.id}</span>
                   </div>
                 </div>
-                <p className="text-sm text-gray-500 truncate">{app?.rolle}</p>
+                <p className="text-sm text-gray-500 truncate">{app?.rolle}{updDot('rolle')}</p>
               </>
             )}
           </div>
@@ -665,7 +674,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
 
           {/* Status */}
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Status</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+              Status{updDot('main_status')}{updDot('sub_status')}{updDot('abgesagt')}
+            </p>
             {editing ? (
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-1.5">
@@ -721,19 +732,31 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
             </div>
           ) : (
             <dl className="grid grid-cols-2 gap-3">
-              {field('Quelle', app?.quelle)}
+              {field('Quelle', app?.quelle, 'quelle')}
               {field('Datum Bewerbung', app?.datum_bewerbung)}
               {field('Letztes Update', app?.letztes_update)}
-              {field('Zielfirma (HH)', app?.zielfirma_bei_hh)}
-              {field('Besetzt von', app?.wurde_besetzt_von)}
-              {app?.is_headhunter && <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Headhunter</dt><dd className="mt-0.5 text-sm text-indigo-700 font-medium">Ja</dd></div>}
-              {app?.ghosting && <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Ghosting</dt><dd className="mt-0.5 text-sm text-red-600 font-medium">Ja</dd></div>}
+              {field('Zielfirma (HH)', app?.zielfirma_bei_hh, 'zielfirma_bei_hh')}
+              {field('Besetzt von', app?.wurde_besetzt_von, 'wurde_besetzt_von')}
+              {app?.is_headhunter && (
+                <div className={updatedFields?.has('is_headhunter') ? 'rounded px-2 py-0.5 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Headhunter{updDot('is_headhunter')}</dt>
+                  <dd className="mt-0.5 text-sm text-indigo-700 font-medium">Ja</dd>
+                </div>
+              )}
+              {app?.ghosting && (
+                <div className={updatedFields?.has('ghosting') ? 'rounded px-2 py-0.5 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Ghosting{updDot('ghosting')}</dt>
+                  <dd className="mt-0.5 text-sm text-red-600 font-medium">Ja</dd>
+                </div>
+              )}
             </dl>
           )}
 
           {/* Stellenanzeige */}
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Stellenanzeige</p>
+          <div className={!editing && updatedFields?.has('stellenanzeige_url') ? 'rounded px-2 py-1 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+              Stellenanzeige{updDot('stellenanzeige_url')}
+            </p>
             {editing ? (
               <input type="url"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -749,8 +772,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
           </div>
 
           {/* Kommentar */}
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Kommentar</p>
+          <div className={!editing && updatedFields?.has('kommentar') ? 'rounded px-2 py-1 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+              Kommentar{updDot('kommentar')}
+            </p>
             {editing ? (
               <textarea rows={4}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -767,14 +792,19 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany }: Pro
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Gesprächsnotizen</p>
               <div className="space-y-2">
-                {[app?.gespraech_1, app?.gespraech_2, app?.gespraech_3, app?.gespraech_4, app?.gespraech_5].map((g, i) =>
-                  g ? (
-                    <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                      <p className="text-[10px] text-gray-400 font-medium uppercase mb-0.5">{i + 1}. Gespräch</p>
+                {[app?.gespraech_1, app?.gespraech_2, app?.gespraech_3, app?.gespraech_4, app?.gespraech_5].map((g, i) => {
+                  if (!g) return null
+                  const gKey = `gespraech_${i + 1}` as keyof Application
+                  const gUpdated = updatedFields?.has(gKey as string)
+                  return (
+                    <div key={i} className={`rounded-lg border px-3 py-2 ${gUpdated ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-gray-50'}`}>
+                      <p className="text-[10px] text-gray-400 font-medium uppercase mb-0.5">
+                        {i + 1}. Gespräch{gUpdated && <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 ml-1 align-middle" />}
+                      </p>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{g}</p>
                     </div>
-                  ) : null
-                )}
+                  )
+                })}
               </div>
             </div>
           )}
