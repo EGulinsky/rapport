@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.2',
+    date: '2026-06-29',
+    changes: [
+      'Kanban-Layout: Spalten verteilen sich jetzt automatisch über die gesamte Breite — wenige Spalten füllen den Bildschirm gleichmäßig, viele Spalten scrollen horizontal.',
+    ],
+  },
+  {
     version: '3.14.1',
     date: '2026-06-26',
     changes: [

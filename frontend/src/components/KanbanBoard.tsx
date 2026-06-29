@@ -155,7 +155,7 @@ function DroppableColumn({ status, items, onSelect, onOpenCompany, updatedIds }:
   }
 
   return (
-    <div className="flex-shrink-0 w-64">
+    <div className="min-w-0">
       <div className="flex items-center justify-between mb-2">
         <StatusBadge status={status} size="sm" />
         <span className="text-xs text-gray-400">{items.length}</span>
@@ -219,8 +219,11 @@ export function KanbanBoard({ columns, onSelect, onChanged, onOpenCompany, updat
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="overflow-x-auto w-screen pb-8" style={{ scrollbarGutter: 'stable' }}>
-        <div className="flex gap-4 px-4 sm:px-6 lg:px-8 pb-4 w-max">
+      <div className="overflow-x-auto w-full pb-8" style={{ scrollbarGutter: 'stable' }}>
+        <div
+          className="grid gap-4 px-4 sm:px-6 lg:px-8 pb-4"
+          style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(220px, 1fr))` }}
+        >
           {columns.map(({ status, items }) => (
             <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} onOpenCompany={onOpenCompany} updatedIds={updatedIds} />
           ))}
