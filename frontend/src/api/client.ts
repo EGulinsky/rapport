@@ -72,6 +72,9 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
+    link: (appId: number, contactId: number) =>
+      request<Contact>(`/applications/${appId}/contacts/${contactId}`, { method: 'PUT' }),
+
     update: (appId: number, contactId: number, data: Partial<Contact>) =>
       request<Contact>(`/applications/${appId}/contacts/${contactId}`, {
         method: 'PATCH',
