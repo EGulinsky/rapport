@@ -17,8 +17,6 @@ import re as _re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-log = logging.getLogger("sync.targeted")
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -35,6 +33,7 @@ from app.routers.sync_common import (
     build_contact_domain_index, build_contact_email_index, find_apps_from_addresses,
 )
 
+log = logging.getLogger("sync.targeted")
 router = APIRouter(prefix="/api/sync/targeted", tags=["sync"])
 
 
