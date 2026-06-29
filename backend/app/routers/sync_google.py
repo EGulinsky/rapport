@@ -261,9 +261,16 @@ def batch_results():
 # ── Gmail background task ─────────────────────────────────────────────────────
 
 async def _do_gmail() -> dict:
+    import time as _time
     db = SessionLocal()
     processed = created = skipped = 0
     errors: list[str] = []
+
+    # Timing buckets
+    t_start = _time.perf_counter()
+    t_index = t_list = t_phase1 = t_phase2 = t_ai = 0.0
+    n_phase1 = n_phase2 = n_ai = 0          # API call counts
+
     try:
         cfg = db.query(models.GoogleSync).first()
         if not cfg or not cfg.refresh_token_enc:
@@ -277,8 +284,10 @@ async def _do_gmail() -> dict:
         since = cfg.gmail_last_sync or (datetime.now(timezone.utc) - timedelta(days=90))
         after_ts = int(since.timestamp())
 
+        _t0 = _time.perf_counter()
         firm_clause, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
+        t_index = _time.perf_counter() - _t0
 
         # When firm names are known, use only those — broad keywords fetch too many irrelevant mails
         fallback = (
@@ -296,6 +305,7 @@ async def _do_gmail() -> dict:
         update_progress("gmail", 0, 0, "Nachrichten werden geladen…")
         messages = []
         page_token = None
+        _t0 = _time.perf_counter()
         try:
             while True:
                 kwargs: dict = {"userId": "me", "q": query, "maxResults": 500}
@@ -309,10 +319,12 @@ async def _do_gmail() -> dict:
         except Exception as e:
             finish_progress("gmail")
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Gmail API Fehler: {e}"]}
+        t_list = _time.perf_counter() - _t0
 
         total = len(messages)
         update_progress("gmail", 0, total, f"{total} Nachrichten gefunden")
         synced_ids = load_synced_ids(db, "gmail")
+        n_already_synced = sum(1 for m in messages if m["id"] in synced_ids)
 
         from email.utils import parsedate_to_datetime as _parse_date_hdr
 
@@ -325,6 +337,7 @@ async def _do_gmail() -> dict:
                 continue
 
             # ── Phase 1: metadata only (headers, no body) ──────────────────
+            _t0 = _time.perf_counter()
             try:
                 msg_meta = service.users().messages().get(
                     userId="me", id=msg_id, format="metadata",
@@ -333,6 +346,9 @@ async def _do_gmail() -> dict:
             except Exception as e:
                 errors.append(f"Nachricht {msg_id}: {e}")
                 continue
+            finally:
+                t_phase1 += _time.perf_counter() - _t0
+                n_phase1 += 1
 
             meta_hdrs = {h["name"].lower(): h["value"] for h in msg_meta["payload"].get("headers", [])}
             subject   = meta_hdrs.get("subject", "(kein Betreff)")
@@ -362,6 +378,7 @@ async def _do_gmail() -> dict:
                 continue
 
             # ── Phase 2: full body (only for promising mails) ──────────────
+            _t0 = _time.perf_counter()
             try:
                 msg_full = service.users().messages().get(
                     userId="me", id=msg_id, format="full"
@@ -369,11 +386,15 @@ async def _do_gmail() -> dict:
             except Exception as e:
                 errors.append(f"Nachricht {msg_id}: {e}")
                 continue
+            finally:
+                t_phase2 += _time.perf_counter() - _t0
+                n_phase2 += 1
 
             body = _gmail_body(msg_full["payload"])[:1500]
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
+            _t0 = _time.perf_counter()
             try:
                 ok = await process_item(db, "gmail", msg_id, raw, date_hint, hint_apps=hint_apps)
             except AINotConfigured as e:
@@ -385,6 +406,9 @@ async def _do_gmail() -> dict:
             except Exception as e:
                 errors.append(f"{subject}: {e}")
                 continue
+            finally:
+                t_ai += _time.perf_counter() - _t0
+                n_ai += 1
 
             processed += 1
             if ok:
@@ -394,7 +418,25 @@ async def _do_gmail() -> dict:
         cfg.gmail_last_sync = datetime.now(timezone.utc)
         db.commit()
         finish_progress("gmail")
-        return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
+
+        t_total = _time.perf_counter() - t_start
+        perf = {
+            "total_s":         round(t_total, 1),
+            "index_s":         round(t_index, 2),
+            "list_s":          round(t_list, 2),
+            "phase1_s":        round(t_phase1, 1),
+            "phase2_s":        round(t_phase2, 1),
+            "ai_s":            round(t_ai, 1),
+            "n_listed":        total,
+            "n_already_synced": n_already_synced,
+            "n_phase1_calls":  n_phase1,
+            "n_phase2_calls":  n_phase2,
+            "n_ai_calls":      n_ai,
+            "phase1_avg_ms":   round(t_phase1 / n_phase1 * 1000, 0) if n_phase1 else 0,
+            "phase2_avg_ms":   round(t_phase2 / n_phase2 * 1000, 0) if n_phase2 else 0,
+            "ai_avg_ms":       round(t_ai / n_ai * 1000, 0) if n_ai else 0,
+        }
+        return {"processed": processed, "created": created, "skipped": skipped, "errors": errors, "perf": perf}
     except Exception as e:
         finish_progress("gmail")
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -423,6 +465,17 @@ async def sync_gmail(background_tasks: BackgroundTasks, db: Session = Depends(ge
     async def _bg():
         result = await _do_gmail()
         set_batch_result("gmail", {**result, "done": True})
+        if p := result.get("perf"):
+            print(
+                f"\n[Gmail Sync] total={p['total_s']}s  "
+                f"list={p['list_s']}s  "
+                f"phase1={p['phase1_s']}s ({p['n_phase1_calls']} calls, ~{p['phase1_avg_ms']}ms/call)  "
+                f"phase2={p['phase2_s']}s ({p['n_phase2_calls']} calls, ~{p['phase2_avg_ms']}ms/call)  "
+                f"ai={p['ai_s']}s ({p['n_ai_calls']} calls, ~{p['ai_avg_ms']}ms/call)  "
+                f"| listed={p['n_listed']} already_synced={p['n_already_synced']} "
+                f"phase1_fetched={p['n_phase1_calls']} phase2_fetched={p['n_phase2_calls']}",
+                flush=True,
+            )
 
     background_tasks.add_task(_bg)
     return schemas.SyncResult(processed=0, created=0, skipped=0, errors=[])
