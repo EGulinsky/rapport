@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Optional
-
 import httpx
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
