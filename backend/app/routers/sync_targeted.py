@@ -12,9 +12,12 @@ from __future__ import annotations
 import asyncio
 import email as email_lib
 import hashlib
+import logging
 import re as _re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+
+log = logging.getLogger("sync.targeted")
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
@@ -115,12 +118,15 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
     app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
 
+    pfx = f"[SYNC #{app_id} gmail]"
     if not app_domains and not app_emails:
-        return 0, 0, []  # No contacts → nothing to match against
+        log.debug("%s kein Kontakt → übersprungen", pfx)
+        return 0, 0, []
 
     parts = [f"(from:{d} OR to:{d})" for d in app_domains]
     parts += [f"(from:{e} OR to:{e})" for e in app_emails[:20]]
     query = f"after:{after_ts} ({' OR '.join(parts)})"
+    log.debug("%s query: %s", pfx, query)
 
     messages: list[dict] = []
     page_token = None
@@ -137,6 +143,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     except Exception as e:
         return 0, 0, [f"Gmail API: {e}"]
 
+    log.debug("%s %d Nachrichten gefunden", pfx, len(messages))
     created = skipped = 0
     errors: list[str] = []
     total = len(messages)
@@ -147,6 +154,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         update_progress("targeted_gmail", i, total, f"Gmail laden {i+1}/{total}")
         msg_id = msg_ref["id"]
         if is_synced(db, "gmail", msg_id):
+            log.debug("%s %s → SKIP bereits synced", pfx, msg_id)
             skipped += 1
             continue
         try:
@@ -165,6 +173,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         # Verify the message actually involves this app's contacts/domain
         matched = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
         if not any(a["id"] == app_id for a in matched):
+            log.debug("%s %s SUBJ:%r FROM:%r → SKIP kein Adress-Match", pfx, msg_id, subject, sender)
             mark_synced(db, "gmail", msg_id)
             skipped += 1
             continue
@@ -176,6 +185,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         except Exception:
             pass
 
+        log.debug("%s %s SUBJ:%r FROM:%r → pending", pfx, msg_id, subject, sender)
         pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
     # Phase 2: deterministic classification
@@ -190,6 +200,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         except Exception as e:
             errors.append(f"gmail/{item['id']}: {e}")
 
+    log.debug("%s fertig: %d erstellt, %d übersprungen, %d fehler", pfx, created, skipped, len(errors))
     return created, total, errors
 
 
@@ -219,6 +230,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
     contact_domain_index = build_contact_domain_index(db)
     contact_email_index  = build_contact_email_index(db)
     app_id = app.id
+    pfx = f"[SYNC #{app_id} gcal]"
 
     def _ev_matches_app(ev: dict) -> bool:
         org_email  = ((ev.get("organizer") or {}).get("email") or "").lower()
@@ -226,16 +238,20 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         matched = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
         return any(a["id"] == app_id for a in matched)
 
-    cal_events = [ev for ev in events_result.get("items", []) if _ev_matches_app(ev)]
+    all_events = events_result.get("items", [])
+    cal_events = [ev for ev in all_events if _ev_matches_app(ev)]
+    log.debug("%s %d Termine gesamt, %d Adress-Match", pfx, len(all_events), len(cal_events))
     created = skipped = 0
     errors: list[str] = []
 
     for ev in cal_events:
         ev_id = ev.get("id", "")
         if is_synced(db, "gcal", ev_id):
+            log.debug("%s %s SUMMARY:%r → SKIP bereits synced", pfx, ev_id, ev.get("summary"))
             skipped += 1
             continue
 
+        log.debug("%s %s SUMMARY:%r → pending", pfx, ev_id, ev.get("summary"))
         summary = ev.get("summary", "") or ""
         desc = ev.get("description", "") or ""
         location = ev.get("location", "")
@@ -327,7 +343,10 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
     app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
 
+    pfx = f"[SYNC #{app_id} icloud_mail]"
+
     if not app_domains and not app_emails:
+        log.debug("%s kein Kontakt → übersprungen", pfx)
         return 0, 0, []  # No contacts → nothing to match against
 
     # Build IMAP search criteria from contact domains/emails (search headers + body)
@@ -341,6 +360,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         return f'(OR TEXT "{criteria[0]}" {_imap_or(criteria[1:])})'
 
     imap_query = _imap_or(search_terms[:10])
+    log.debug("%s query: %s", pfx, imap_query)
 
     created = skipped = 0
     errors: list[str] = []
@@ -354,6 +374,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         return 0, 0, [f"iCloud Mail IMAP: {e}"]
 
     total = len(ids)
+    log.debug("%s %d Nachrichten gefunden", pfx, total)
 
     # Phase 1: fetch unsynced messages, verify by address
     pending: list[dict] = []
@@ -361,6 +382,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         update_progress("targeted_icloud_mail", i, total, f"iCloud Mail laden {i+1}/{total}")
         msg_id = msg_id_bytes.decode()
         if is_synced(db, "icloud_mail", msg_id):
+            log.debug("%s %s → SKIP bereits synced", pfx, msg_id)
             skipped += 1
             continue
         try:
@@ -385,10 +407,12 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         # Verify this message actually involves this app's contacts/domain
         matched = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
         if not any(a["id"] == app_id for a in matched):
+            log.debug("%s %s SUBJ:%r FROM:%r → SKIP kein Adress-Match", pfx, msg_id, subject, sender)
             mark_synced(db, "icloud_mail", msg_id)
             skipped += 1
             continue
 
+        log.debug("%s %s SUBJ:%r FROM:%r → pending", pfx, msg_id, subject, sender)
         raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
         pending.append({"id": msg_id, "raw": raw, "date_hint": date_hint})
 
@@ -409,6 +433,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         except Exception as e:
             errors.append(f"icloud_mail/{item['id']}: {e}")
 
+    log.debug("%s fertig: %d erstellt, %d übersprungen, %d fehler", pfx, created, skipped, len(errors))
     return created, total, errors
 
 
@@ -437,10 +462,13 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     contact_email_index  = build_contact_email_index(db)
     app_id = app.id
 
+    pfx = f"[SYNC #{app_id} icloud_cal]"
+
     app_domains = [d for d, apps in contact_domain_index.items() if any(a["id"] == app_id for a in apps)]
     app_emails  = [e for e, apps in contact_email_index.items()  if any(a["id"] == app_id for a in apps)]
 
     if not app_domains and not app_emails:
+        log.debug("%s kein Kontakt → übersprungen", pfx)
         return 0, 0, []  # No contacts → nothing to match against
 
     def _ev_matches_app_icloud(vevent) -> bool:
@@ -466,18 +494,22 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     except Exception as e:
         return 0, 0, [f"iCloud CalDAV: {e}"]
 
+    all_cal_events: list = []
     matched_events: list = []
     for cal in calendars:
         try:
             for ev in cal.date_search(start=now - timedelta(days=365), end=now + timedelta(days=90), expand=True):
                 try:
                     vevent = ev.vobject_instance.vevent
+                    all_cal_events.append(ev)
                     if _ev_matches_app_icloud(vevent):
                         matched_events.append(ev)
                 except Exception:
                     continue
         except Exception as e:
             errors.append(f"Kalender {cal.name}: {e}")
+
+    log.debug("%s %d Termine gesamt, %d Adress-Match", pfx, len(all_cal_events), len(matched_events))
 
     for ev in matched_events:
         try:
@@ -489,6 +521,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             continue
 
         if is_synced(db, "icloud_cal", uid):
+            log.debug("%s %s SUMMARY:%r → SKIP bereits synced", pfx, uid[:16], summary)
             skipped += 1
             continue
 
@@ -543,6 +576,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             notiz_parts.append(desc[:400])
         notiz = "\n".join(notiz_parts) or None
 
+        log.debug("%s %s SUMMARY:%r → CREATED gespräch", pfx, uid[:16], summary)
         try:
             db.add(models.Event(
                 application_id=app_dict["id"],
@@ -568,6 +602,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
         except Exception as e:
             errors.append(f"icloud_cal/{summary}: {e}")
             continue
+    log.debug("%s fertig: %d erstellt, %d übersprungen, %d fehler", pfx, created, skipped, len(errors))
     return created, len(matched_events), errors
 
 
@@ -575,6 +610,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
 
 async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
     NOTES_BRIDGE_URL = "http://host.docker.internal:9999/notes"
+    pfx = f"[SYNC #{app.id} icloud_notes]"
     created = skipped = 0
     errors: list[str] = []
 
@@ -596,6 +632,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
     matching_ids = {n.get("id") for n in matching}
     recent = [n for n in notes_sorted if n.get("id") not in matching_ids][:30]
     candidates = (matching + recent)[:50]
+    log.debug("%s %d Kandidaten (%d text-Match, %d recent)", pfx, len(candidates), len(matching), len(recent))
 
     for note in candidates:
         title = (note.get("name") or "").strip()
@@ -604,6 +641,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
         note_key = hashlib.md5(uid.encode()).hexdigest()[:16]
 
         if is_synced(db, "icloud_notes", note_key):
+            log.debug("%s %s TITLE:%r → SKIP bereits synced", pfx, note_key, title)
             skipped += 1
             continue
 
@@ -617,6 +655,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
                 except Exception:
                     pass
 
+        log.debug("%s %s TITLE:%r → pending", pfx, note_key, title)
         raw = f"Titel: {title}\n\n{body[:2000]}"
         try:
             ok = await process_item_for_app(db, "icloud_notes", note_key, raw, date_hint, app_dict)
@@ -628,6 +667,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
         else:
             skipped += 1
 
+    log.debug("%s fertig: %d erstellt, %d übersprungen, %d fehler", pfx, created, skipped, len(errors))
     return created, len(candidates), errors
 
 
@@ -756,6 +796,7 @@ def _contact_mentioned_in_app(name: str, email: Optional[str], app: models.Appli
 
 async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, CALDAV_URL
+    pfx = f"[SYNC #{app.id} icloud_todo]"
     cfg = _get_icloud_cfg(db)
     if not cfg:
         return 0, 0, []
@@ -775,6 +816,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
         return 0, 0, [f"iCloud Reminders CalDAV: {e}"]
 
     matched_todos: list = []
+    all_todos: list = []
     for cal in calendars:
         try:
             for todo in cal.todos():
@@ -782,12 +824,15 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
                     vtodo = todo.vobject_instance.vtodo
                     summary = str(getattr(vtodo, "summary", None) or "")
                     desc = str(getattr(vtodo, "description", None) or "")
+                    all_todos.append(todo)
                     if _text_matches(summary + " " + desc, terms):
                         matched_todos.append(todo)
                 except Exception:
                     continue
         except Exception:
             pass
+
+    log.debug("%s %d Todos gesamt, %d text-Match", pfx, len(all_todos), len(matched_todos))
 
     for todo in matched_todos:
         try:
@@ -799,6 +844,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
             continue
 
         if is_synced(db, "icloud_todo", uid):
+            log.debug("%s %s SUMMARY:%r → SKIP bereits synced", pfx, uid[:16], summary)
             skipped += 1
             continue
 
@@ -814,6 +860,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
         except Exception:
             pass
 
+        log.debug("%s %s SUMMARY:%r → pending", pfx, uid[:16], summary)
         raw = f"Erinnerung: {summary}\n{desc[:800]}"
         try:
             ok = await process_item_for_app(db, "icloud_todo", uid, raw, date_hint, app_dict)
@@ -825,6 +872,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
         else:
             skipped += 1
 
+    log.debug("%s fertig: %d erstellt, %d übersprungen, %d fehler", pfx, created, skipped, len(errors))
     return created, len(matched_todos), errors
 
 

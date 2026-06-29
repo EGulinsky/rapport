@@ -14,6 +14,7 @@ from app.routers import (
 )
 
 logger = logging.getLogger(__name__)
+logging.getLogger("sync.targeted").setLevel(logging.DEBUG)
 
 # Sources currently running in background (prevents duplicate concurrent runs)
 _RUNNING_SOURCES: set[str] = set()
