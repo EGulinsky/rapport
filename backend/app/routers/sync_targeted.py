@@ -77,29 +77,17 @@ _PERSONAL_DOMAINS = {
 
 
 def _company_domains_for_app(app: models.Application, terms: list[str], db: Session) -> list[str]:
-    """Email domains of all contacts associated with this company.
+    """Email domains derived from contacts directly linked to this application.
 
-    Searches both contacts already linked to this app and any contact in the
-    DB whose 'firma' field text-matches the app's search terms.  Personal
-    freemail domains are excluded so we don't accidentally match on gmail etc.
+    Only uses linked contacts so we don't accidentally pick up recruiter/headhunter
+    domains from contacts whose 'firma' is the target company but who work elsewhere.
     """
-    from sqlalchemy import or_
     domains: set[str] = set()
-
-    def _add(email: Optional[str]) -> None:
-        if email and '@' in email:
-            d = email.split('@', 1)[1].lower()
+    for c in (app.contacts or []):
+        if c.email and '@' in c.email:
+            d = c.email.split('@', 1)[1].lower()
             if d not in _PERSONAL_DOMAINS:
                 domains.add(d)
-
-    for c in (app.contacts or []):
-        _add(c.email)
-
-    filters = [models.Contact.firma.ilike(f'%{t}%') for t in terms if len(t) >= 4]
-    if filters:
-        for c in db.query(models.Contact).filter(or_(*filters)).all():
-            _add(c.email)
-
     return sorted(domains)
 
 
