@@ -18,3 +18,4 @@ vobject==0.9.6.1
 icloudpy
 playwright==1.49.0
 fpdf2==2.8.3
+loguru==0.7.2

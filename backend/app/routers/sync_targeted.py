@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import email as email_lib
 import hashlib
-import logging
 import re as _re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -32,8 +31,9 @@ from app.routers.sync_common import (
     upsert_contact_from_sender,
     build_contact_domain_index, build_contact_email_index, find_apps_from_addresses,
 )
+from app.logger import get_logger
 
-log = logging.getLogger("sync.targeted")
+log = get_logger("sync")
 router = APIRouter(prefix="/api/sync/targeted", tags=["sync"])
 
 
