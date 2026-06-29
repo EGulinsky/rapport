@@ -32,10 +32,14 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [draft, setDraft] = useState<Partial<Application>>({})
   const [saving, setSaving] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
+  const [addMode, setAddMode] = useState<'new' | 'link'>('new')
   const [contactDraft, setContactDraft] = useState<Partial<Contact>>(EMPTY_CONTACT)
   const [savingContact, setSavingContact] = useState(false)
   const [editingContactId, setEditingContactId] = useState<number | null>(null)
   const [editContactDraft, setEditContactDraft] = useState<Partial<Contact>>({})
+  const [linkSearch, setLinkSearch] = useState('')
+  const [linkResults, setLinkResults] = useState<Contact[]>([])
+  const [linkLoading, setLinkLoading] = useState(false)
   const [addingNote, setAddingNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState({ notiz: '', datum: '' })
   const [savingNote, setSavingNote] = useState(false)
@@ -321,6 +325,36 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setSavingContact(false)
     }
   }
+
+  async function linkContact(contactId: number) {
+    if (!appId) return
+    setSavingContact(true)
+    try {
+      await api.contacts.link(appId, contactId)
+      await refreshContacts()
+      setAddingContact(false)
+      setLinkSearch('')
+      setLinkResults([])
+    } finally {
+      setSavingContact(false)
+    }
+  }
+
+  useEffect(() => {
+    if (addMode !== 'link') return
+    if (!linkSearch.trim()) { setLinkResults([]); return }
+    const timer = setTimeout(async () => {
+      setLinkLoading(true)
+      try {
+        const res = await api.contacts.listAll(linkSearch)
+        const existing = new Set((app?.contacts ?? []).map(c => c.id))
+        setLinkResults(res.filter(c => !existing.has(c.id)))
+      } finally {
+        setLinkLoading(false)
+      }
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [linkSearch, addMode, app?.contacts])
 
   async function updateContact(contactId: number) {
     if (!appId) return
@@ -976,7 +1010,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Kontakte</p>
             {!addingContact && (
-              <button onClick={() => setAddingContact(true)} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
+              <button onClick={() => { setAddingContact(true); setAddMode('new') }} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
                 <Plus className="h-3 w-3" /> Hinzufügen
               </button>
             )}
@@ -1040,30 +1074,82 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
           {addingContact && (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-              <input autoFocus
-                className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Name *" value={contactDraft.name ?? ''}
-                onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
-                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
-                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
-                <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={contactDraft.firma ?? ''} onChange={e => setContactDraft(d => ({ ...d, firma: e.target.value }))} />
-                <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={contactDraft.typ ?? ''} onChange={e => setContactDraft(d => ({ ...d, typ: e.target.value }))}>
-                  <option value="">Typ wählen…</option>
-                  {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => { setAddingContact(false); setContactDraft(EMPTY_CONTACT) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-                  <Trash2 className="h-3 w-3" /> Abbrechen
+              {/* Mode toggle */}
+              <div className="flex rounded-md overflow-hidden border border-indigo-200 text-xs font-medium">
+                <button type="button"
+                  onClick={() => { setAddMode('new'); setLinkSearch(''); setLinkResults([]) }}
+                  className={`flex-1 px-2 py-1.5 ${addMode === 'new' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
+                  Neu erstellen
                 </button>
-                <button type="button" disabled={!contactDraft.name || savingContact} onClick={saveContact}
-                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                  {savingContact ? 'Speichern…' : 'Speichern'}
+                <button type="button"
+                  onClick={() => { setAddMode('link'); setContactDraft(EMPTY_CONTACT) }}
+                  className={`flex-1 px-2 py-1.5 ${addMode === 'link' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
+                  Vorhandenen zuordnen
                 </button>
               </div>
+
+              {addMode === 'new' ? (
+                <>
+                  <input autoFocus
+                    className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Name *" value={contactDraft.name ?? ''}
+                    onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={contactDraft.firma ?? ''} onChange={e => setContactDraft(d => ({ ...d, firma: e.target.value }))} />
+                    <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={contactDraft.typ ?? ''} onChange={e => setContactDraft(d => ({ ...d, typ: e.target.value }))}>
+                      <option value="">Typ wählen…</option>
+                      {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button type="button" onClick={() => { setAddingContact(false); setContactDraft(EMPTY_CONTACT) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                      <Trash2 className="h-3 w-3" /> Abbrechen
+                    </button>
+                    <button type="button" disabled={!contactDraft.name || savingContact} onClick={saveContact}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                      {savingContact ? 'Speichern…' : 'Speichern'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                    <input autoFocus
+                      className="w-full rounded-md border border-gray-200 pl-7 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Name, E-Mail oder Firma suchen…"
+                      value={linkSearch}
+                      onChange={e => setLinkSearch(e.target.value)}
+                    />
+                  </div>
+                  {linkLoading && <p className="text-xs text-gray-400 text-center py-1">Suche…</p>}
+                  {!linkLoading && linkSearch.trim() && linkResults.length === 0 && (
+                    <p className="text-xs text-gray-400 italic text-center py-1">Keine Kontakte gefunden</p>
+                  )}
+                  {linkResults.length > 0 && (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {linkResults.map(c => (
+                        <button key={c.id} type="button" disabled={savingContact}
+                          onClick={() => linkContact(c.id)}
+                          className="w-full text-left rounded-md border border-gray-200 bg-white px-3 py-2 hover:border-indigo-400 hover:bg-indigo-50 disabled:opacity-50 transition-colors">
+                          <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                          <p className="text-xs text-gray-500">{[c.typ, c.rolle, c.firma].filter(Boolean).join(' · ')}</p>
+                          {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex justify-end pt-1">
+                    <button type="button" onClick={() => { setAddingContact(false); setLinkSearch(''); setLinkResults([]) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                      <Trash2 className="h-3 w-3" /> Abbrechen
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

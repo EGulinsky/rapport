@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.12',
+    date: '2026-06-29',
+    changes: [
+      'Bewerbungsmodal: Kontakte können jetzt entweder neu erstellt oder aus bestehenden Kontakten zugeordnet werden.',
+      'Live-Suche im "Vorhandenen zuordnen"-Modus filtert sofort nach Name, E-Mail oder Firma.',
+    ],
+  },
+  {
     version: '3.14.11',
     date: '2026-06-29',
     changes: [
