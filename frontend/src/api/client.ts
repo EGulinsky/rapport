@@ -90,7 +90,7 @@ export const api = {
         body: JSON.stringify({ ids, all }),
       }),
 
-    patch: (id: number, data: { company_profile_id?: number | null; firma?: string }) =>
+    patch: (id: number, data: Partial<Contact> & { company_profile_id?: number | null }) =>
       request<{ ok: boolean }>(`/contacts/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),

@@ -3,6 +3,7 @@ import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2
 import { api } from '../api/client'
 import type { ContactWithApp, CompanyProfile } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
+import { ContactModal, displayName } from './ContactModal'
 import { CompanyLogo } from './CompanyLogo'
 import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
 import clsx from 'clsx'
@@ -134,6 +135,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
   const [showMerge, setShowMerge] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [openContactId, setOpenContactId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -298,9 +300,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
             {sorted.map(c => (
               <tr
                 key={c.id}
-                className={clsx('transition-colors', selected.has(c.id) ? 'bg-indigo-50' : 'hover:bg-gray-50')}
+                className={clsx('transition-colors cursor-pointer', selected.has(c.id) ? 'bg-indigo-50' : 'hover:bg-gray-50')}
+                onClick={() => setOpenContactId(c.id)}
               >
-                <td className="pl-4 pr-2 py-3 w-8">
+                <td className="pl-4 pr-2 py-3 w-8" onClick={e => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selected.has(c.id)}
@@ -309,10 +312,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900">{c.name}</p>
+                  <p className="font-medium text-gray-900">{displayName(c)}</p>
                   {c.rolle && <p className="text-xs text-gray-500">{c.rolle}</p>}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   <CompanyCell contact={c} onOpenCompany={onOpenCompany} onChanged={load} />
                 </td>
                 <td className="px-4 py-3">
@@ -354,7 +357,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
                     ? new Date(c.letzter_kontakt).toLocaleDateString('de-DE')
                     : <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   {c.applications && c.applications.length > 0 ? (
                     <div className="flex flex-col gap-1">
                       {c.applications.map(a => (
@@ -392,6 +395,16 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
           contacts={contacts.filter(c => selected.has(c.id))}
           onMerged={() => { setShowMerge(false); load() }}
           onClose={() => setShowMerge(false)}
+        />
+      )}
+
+      {openContactId !== null && (
+        <ContactModal
+          id={openContactId}
+          onClose={() => setOpenContactId(null)}
+          onOpenApplication={id => { setOpenContactId(null); onOpenApplication(id) }}
+          onOpenCompany={onOpenCompany}
+          onChanged={load}
         />
       )}
     </div>

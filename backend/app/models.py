@@ -227,6 +227,7 @@ class Contact(Base):
     id              = Column(Integer, primary_key=True, index=True)
 
     name            = Column(String, nullable=False)
+    vorname         = Column(String, nullable=True)
     email           = Column(String, nullable=True)
     telefon         = Column(String, nullable=True)
     linkedin_url    = Column(String, nullable=True)
