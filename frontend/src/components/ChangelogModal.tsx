@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.21',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Sync individuell: scrapt Kategorie für Kategorie und matcht sofort per LI-Job-ID (aus linkedin_job_id oder stellenanzeige_url) bzw. Firma+Rolle — stoppt nach erstem Match, ohne alle anderen Jobs zu verarbeiten.',
+    ],
+  },
+  {
     version: '3.14.20',
     date: '2026-06-30',
     changes: [
