@@ -292,9 +292,10 @@ async def _run_sync_batch(profile_ids: list[int]):
                          data.get("employee_count"))
 
             except Exception as e:
-                log.error("DDG-Fehler für '{}': {}", name, e)
+                log.opt(exception=True).error("DDG-Fehler für '{}': {} ({})",
+                                              name, e, type(e).__name__)
                 p.sync_status = "failed"
-                p.sync_error = str(e)[:500]
+                p.sync_error = f"{type(e).__name__}: {e}"[:500]
                 p.last_synced_at = now
 
             db.commit()
@@ -304,7 +305,7 @@ async def _run_sync_batch(profile_ids: list[int]):
         log.info("Firmensync abgeschlossen: {} Firmen", len(profile_ids))
 
     except Exception as e:
-        log.error("Firmensync Fehler: {}", e)
+        log.opt(exception=True).error("Firmensync Fehler: {} ({})", e, type(e).__name__)
     finally:
         _SYNC_RUNNING = False
         _SYNC_CANCEL = False
