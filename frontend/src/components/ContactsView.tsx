@@ -393,7 +393,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
         </table>
         {!loading && contacts.length > 0 && (
           <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-400 flex items-center justify-between">
-            <span>{contacts.length} {contacts.length === 1 ? 'Kontakt' : 'Kontakte'}</span>
+            <span>
+              {sorted.length} {sorted.length === 1 ? 'Kontakt' : 'Kontakte'}
+              {sorted.length !== contacts.length && <span className="ml-1 text-gray-300">von {contacts.length}</span>}
+            </span>
             {selected.size > 0 && (
               <span className="text-indigo-600 font-medium">{selected.size} ausgewählt</span>
             )}
