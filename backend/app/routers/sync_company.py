@@ -65,25 +65,16 @@ def _domain_from_url(url: str) -> str | None:
 
 async def _ddg_fetch(name: str) -> dict:
     query = _clean_query(name)
-    for attempt in range(2):
-        try:
-            async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
-                                         follow_redirects=True) as client:
-                resp = await client.get(_DDG_URL, params={
-                    "q": query, "format": "json",
-                    "no_redirect": "1", "no_html": "1", "skip_disambig": "1",
-                })
-            break
-        except httpx.TimeoutException:
-            if attempt == 0:
-                log.warning("DDG: Timeout für '{}' — warte 5s und retry", query)
-                await asyncio.sleep(5.0)
-            else:
-                log.warning("DDG: Timeout für '{}' nach Retry — Fallback", query)
-                raise
-        except httpx.RequestError as e:
-            log.warning("DDG: Verbindungsfehler für '{}': {} ({})", query, e, type(e).__name__)
-            raise
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
+                                     follow_redirects=True) as client:
+            resp = await client.get(_DDG_URL, params={
+                "q": query, "format": "json",
+                "no_redirect": "1", "no_html": "1", "skip_disambig": "1",
+            })
+    except (httpx.TimeoutException, httpx.RequestError) as e:
+        log.warning("DDG: {} für '{}' — Fallback", type(e).__name__, query)
+        raise
 
     if resp.status_code == 429:
         log.warning("DDG: Rate-limit (429) für '{}'", query)
