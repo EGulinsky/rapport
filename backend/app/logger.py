@@ -49,6 +49,9 @@ def _seq_sink(message: object) -> None:
         "line": record["line"],
         "function": record["function"],
     }
+    for key in ("source", "app_id"):
+        if key in record["extra"]:
+            event[key] = record["extra"][key]
     if record["exception"]:
         event["@x"] = "".join(traceback.format_exception(*record["exception"]))
     try:
@@ -89,6 +92,9 @@ def setup_logging() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
-def get_logger(category: str):
-    """Return a Loguru logger bound to a category (shown in Seq as a filter field)."""
-    return logger.bind(category=category)
+def get_logger(category: str, source: str | None = None):
+    """Return a Loguru logger bound to a category (and optional source) for Seq filtering."""
+    extra: dict = {"category": category}
+    if source:
+        extra["source"] = source
+    return logger.bind(**extra)

@@ -33,7 +33,7 @@ from app.routers.sync_common import (
 )
 from app.logger import get_logger
 
-log = get_logger("sync")
+log = get_logger("sync", source="targeted")
 router = APIRouter(prefix="/api/sync/targeted", tags=["sync"])
 
 

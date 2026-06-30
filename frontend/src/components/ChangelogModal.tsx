@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.24',
+    date: '2026-06-30',
+    changes: [
+      'Seq-Log: source-Feld pro Sync-Quelle — in Seq nach source = linkedin bzw. source = targeted filtern.',
+    ],
+  },
+  {
     version: '3.14.23',
     date: '2026-06-30',
     changes: [

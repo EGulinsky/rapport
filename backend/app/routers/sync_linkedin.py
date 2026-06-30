@@ -20,7 +20,7 @@ from app.database import get_db
 from app import models
 from app.logger import get_logger
 
-log = get_logger("sync")
+log = get_logger("sync", source="linkedin")
 
 router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
 
