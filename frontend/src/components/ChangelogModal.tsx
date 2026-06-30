@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.2',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Import: Firma wird jetzt automatisch mit bestehenden Firmenprofilen abgeglichen oder sauber neu angelegt — bei Neuanlage läuft im Hintergrund einmalig der Firmendaten-Fetch (Beschreibung, Logo, Branche, Standort) an, wie beim regulären Firmen-Sync.',
+    ],
+  },
+  {
     version: '3.15.1',
     date: '2026-06-30',
     changes: [

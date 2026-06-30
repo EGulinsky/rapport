@@ -48,7 +48,7 @@ export const api = {
       request<{ color: string; reasoning: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
     aiAssessAllUrl: () => `${BASE}/applications/ai-assess-all`,
     extractFromLinkedInUrl: (url: string) =>
-      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null; stellenanzeige_url: string }>(
+      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null; stellenanzeige_url: string; company_profile_id: number | null }>(
         '/applications/extract-from-linkedin-url',
         { method: 'POST', body: JSON.stringify({ url }) }
       ),
