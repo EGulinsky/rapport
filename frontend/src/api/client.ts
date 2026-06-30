@@ -47,6 +47,11 @@ export const api = {
     aiAssess: (id: number) =>
       request<{ color: string; reasoning: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
     aiAssessAllUrl: () => `${BASE}/applications/ai-assess-all`,
+    extractFromText: (text: string) =>
+      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null }>(
+        '/applications/extract-from-text',
+        { method: 'POST', body: JSON.stringify({ text }) }
+      ),
 
     deleteEvent: (appId: number, eventId: number) =>
       fetch(`${BASE}/applications/${appId}/events/${eventId}`, { method: 'DELETE' }).then(r => {
@@ -329,26 +334,6 @@ export const api = {
     run: () => request<{ success: boolean; filename: string }>('/backup/run', { method: 'POST' }),
     pickFolder: () => request<{ path: string }>('/backup/pick-folder'),
     restore: (filename: string, folder: string) => request<{ success: boolean; filename: string }>('/backup/restore', { method: 'POST', body: JSON.stringify({ filename, folder }) }),
-  },
-
-  jobsearch: {
-    portals: () => request<import('../types').JobPortal[]>('/jobsearch/portals'),
-    addPortal: (data: { name: string; url_template?: string; color?: string; enabled?: boolean }) =>
-      request<import('../types').JobPortal>('/jobsearch/portals', { method: 'POST', body: JSON.stringify(data) }),
-    updatePortal: (id: number, data: Partial<{ name: string; url_template: string; color: string; enabled: boolean; sort_order: number }>) =>
-      request<import('../types').JobPortal>(`/jobsearch/portals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    deletePortal: (id: number) => fetch(`${BASE}/jobsearch/portals/${id}`, { method: 'DELETE' }),
-    search: (q: string, location: string) => {
-      const qs = new URLSearchParams({ q, location })
-      return request<import('../types').JobSearchResponse>(`/jobsearch/search?${qs}`)
-    },
-    importJobs: (jobs: import('../types').JobResult[]) =>
-      request<{ created: number; skipped: number; ids: number[] }>('/jobsearch/import', {
-        method: 'POST',
-        body: JSON.stringify({ jobs }),
-      }),
-    description: (url: string) =>
-      request<{ description: string }>(`/jobsearch/description?url=${encodeURIComponent(url)}`),
   },
 
   analytics: {

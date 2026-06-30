@@ -484,3 +484,57 @@ Diese Bewerbung endete mit einer Absage. Analysiere die Timeline und gib ein JSO
         "reasoning": result.get("reasoning") or "",
         "next_step": result.get("next_step") or "",
     }
+
+
+_EXTRACT_SYSTEM = """\
+Du bist ein KI-Assistent für einen aktiven Bewerber. Du liest den Text einer
+LinkedIn-Stellenanzeige (kopiert von der Jobseite) und extrahierst strukturierte
+Felder für eine neue Bewerbung. Antworte ausschließlich als valides JSON-Objekt,
+kein Markdown. Fehlende Werte als null bzw. leerer String.
+"""
+
+
+async def extract_application_from_text(db: Session, raw_text: str) -> dict:
+    """
+    Parse a pasted LinkedIn job posting (or similar free-text job ad) into
+    structured application fields for the "new application" form.
+
+    Returns:
+        firma            – Firmenname (Arbeitgeber, nicht Personalvermittlung)
+        rolle             – Jobtitel
+        quelle            – i.d.R. "LinkedIn"
+        is_headhunter     – true wenn über Personalvermittlung/Headhunter ausgeschrieben
+        zielfirma_bei_hh  – Zielfirma falls is_headhunter, sonst null
+        kommentar         – 1–2 Sätze Kurzbeschreibung (Standort, Seniorität, Besonderheiten)
+    """
+    prompt = f"""\
+Text der Stellenanzeige (von LinkedIn kopiert):
+---
+{raw_text[:4000]}
+---
+
+Extrahiere:
+{{
+  "firma": "<Firmenname>",
+  "rolle": "<Jobtitel>",
+  "quelle": "LinkedIn",
+  "is_headhunter": <true|false>,
+  "zielfirma_bei_hh": "<Zielfirma|null>",
+  "kommentar": "<kurze Zusammenfassung, max 2 Sätze|null>"
+}}"""
+
+    result = await complete(
+        db,
+        [{"role": "system", "content": _EXTRACT_SYSTEM}, {"role": "user", "content": prompt}],
+        json_mode=True,
+        max_tokens=400,
+    )
+
+    return {
+        "firma": result.get("firma") or "",
+        "rolle": result.get("rolle") or "",
+        "quelle": result.get("quelle") or "LinkedIn",
+        "is_headhunter": bool(result.get("is_headhunter") or False),
+        "zielfirma_bei_hh": result.get("zielfirma_bei_hh") or None,
+        "kommentar": result.get("kommentar") or None,
+    }

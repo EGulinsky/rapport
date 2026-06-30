@@ -99,6 +99,10 @@ class EventRead(EventBase):
     model_config = {"from_attributes": True}
 
 
+class ExtractFromTextRequest(BaseModel):
+    text: str
+
+
 class ApplicationBase(BaseModel):
     firma: str
     rolle: str

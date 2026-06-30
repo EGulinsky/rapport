@@ -313,6 +313,20 @@ async def ai_assess_all(db: Session = Depends(get_db)):
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
+@router.post("/extract-from-text")
+async def extract_from_text(payload: schemas.ExtractFromTextRequest, db: Session = Depends(get_db)):
+    from app.ai.tasks import extract_application_from_text
+    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
+    try:
+        return await extract_application_from_text(db, payload.text)
+    except AINotConfigured as e:
+        raise HTTPException(400, str(e))
+    except AIRateLimited:
+        raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
+    except AIBadRequest as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/{app_id}", response_model=schemas.ApplicationRead)
 def get_application(app_id: int, db: Session = Depends(get_db)):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
