@@ -73,46 +73,31 @@ _DESCRIPTION_JS = """() => {
 }"""
 
 _COMPANY_NAME_JS = """() => {
-    // Stable structural selectors for the job posting's hiring/posting company,
-    // tried in order (logged-in unified top card, public top card, generic fallback).
-    const selectors = [
-        '.job-details-jobs-unified-top-card__company-name a',
-        '.job-details-jobs-unified-top-card__company-name',
-        '.jobs-unified-top-card__company-name a',
-        '.jobs-unified-top-card__company-name',
-        '.topcard__org-name-link',
-        '.topcard__flavor--black-link',
-        'a[data-tracking-control-name="public_jobs_topcard-org-name"]',
-    ];
-    for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        const t = el && el.innerText && el.innerText.trim();
-        if (t && t.length > 0 && t.length < 120) return t;
+    // LinkedIn now hashes all CSS class names (atomic/CSS-in-JS build) — class-based
+    // selectors like ".jobs-unified-top-card__company-name" no longer exist in the DOM.
+    // Use structural/semantic signals instead, which survive these rebuilds:
+
+    // 1) The job header always links to the posting company's LinkedIn page —
+    //    the first such link in document order is that header link.
+    const bad = new Set(['linkedin', 'show more', 'mehr anzeigen']);
+    const companyLinks = [...document.querySelectorAll('a[href*="linkedin.com/company/"], a[href^="/company/"]')];
+    for (const a of companyLinks) {
+        const t = (a.innerText || '').split('\\n')[0].trim();
+        if (t && t.length > 0 && t.length < 120 && !bad.has(t.toLowerCase())) return t;
     }
 
-    // Fallback: parse <meta property="og:title"> — usually "<Company> hiring <Title> in <Location>"
+    // 2) <title> follows the pattern "<Job Title> | <Company> | LinkedIn"
+    const parts = document.title.split('|').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 3 && /linkedin/i.test(parts[parts.length - 1])) {
+        return parts[parts.length - 2];
+    }
+
+    // 3) og:title meta — usually "<Company> hiring <Title> in <Location>"
     const og = document.querySelector('meta[property="og:title"]');
     const ogContent = og && og.getAttribute('content');
     if (ogContent) {
         const m = ogContent.match(/^(.+?)\\s+hiring\\s+/i);
         if (m) return m[1].trim();
-    }
-
-    // Fallback for anonymized/"confidential" postings: LinkedIn still shows the
-    // recruiter who posted it ("hiring team" / "hirer card"), whose subtitle
-    // usually reads "<Title> at <Company>" — that company is the headhunter/agency.
-    const hirerSelectors = [
-        '.hirer-card__hirer-information',
-        '.job-details-people-who-can-help__hirer-information',
-        '[data-test-id="hirer-information"]',
-        '.jobs-poster__name',
-    ];
-    for (const sel of hirerSelectors) {
-        const el = document.querySelector(sel);
-        const t = el && el.innerText && el.innerText.trim();
-        if (!t) continue;
-        const m = t.match(/\\b(?:at|bei)\\s+(.+)$/im);
-        if (m && m[1].trim().length > 0 && m[1].trim().length < 120) return m[1].trim();
     }
 
     return '';
@@ -194,14 +179,10 @@ async def load_job_description(job_url: str, db: Session) -> dict:
         except Exception:
             pass
 
-        try:
-            await page.wait_for_selector(
-                '#job-details, .jobs-description__content, .description__text, [data-view-name="job-view-description"], div[class*="show-more-less-html"]',
-                timeout=8000,
-            )
-        except Exception:
-            pass
-        await asyncio.sleep(0.5)
+        # LinkedIn hashes all CSS class names per build, so there is no stable
+        # selector left to wait on here — _DESCRIPTION_JS's tree-walker fallback
+        # doesn't need one. A short settle delay is enough after networkidle.
+        await asyncio.sleep(1.0)
 
         description = ""
         try:
@@ -215,9 +196,8 @@ async def load_job_description(job_url: str, db: Session) -> dict:
         except Exception:
             pass
 
-        # Top-card selectors miss on anonymized/"confidential" postings — the
-        # hiring-team/hirer-card fallback lives further down the page, so give
-        # it a chance to lazy-load before giving up.
+        # Retry once after extra scroll/wait in case the header was still
+        # hydrating on first evaluate.
         if not company:
             try:
                 await page.evaluate("window.scrollBy(0, 1200)")

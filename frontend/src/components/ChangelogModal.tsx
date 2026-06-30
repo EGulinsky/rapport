@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.6',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Import: Root-Cause gefunden und gefixt — LinkedIn hasht mittlerweile alle CSS-Klassennamen, dadurch griffen sämtliche bisherigen Firmenname-Selektoren ins Leere. Firmenname wird jetzt über stabile strukturelle Signale gelesen (Link zur Firmen-Seite im Anzeigenkopf, Seitentitel-Pattern) statt über Klassennamen — live an einer echten Headhunter-Anzeige verifiziert (BLACKBULL INTERNATIONAL GmbH korrekt erkannt).',
+    ],
+  },
+  {
     version: '3.15.5',
     date: '2026-06-30',
     changes: [
