@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.37',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einschätzung: Farbe (grün/gelb/rot) und nächster Schritt pro Bewerbung basierend auf Status und Timeline. Wird nach gezieltem Sync automatisch aktualisiert. "KI bewerten"-Button für alle aktiven Bewerbungen im Header; "KI"-Button pro Bewerbung im Modal.',
+    ],
+  },
+  {
     version: '3.14.36',
     date: '2026-06-30',
     changes: [

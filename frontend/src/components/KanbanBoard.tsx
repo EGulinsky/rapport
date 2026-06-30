@@ -94,7 +94,17 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
         <p className="text-xs text-gray-400 mt-1">{SUB_STATUS_LABELS[app.sub_status] ?? app.sub_status}</p>
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
-      {!app.abgesagt && app.naechster_schritt && (
+      {!app.abgesagt && app.ai_color && (
+        <div className="flex items-start gap-1.5 mt-1.5">
+          <span className={clsx(
+            'mt-0.5 shrink-0 h-2 w-2 rounded-full',
+            app.ai_color === 'green' ? 'bg-green-500' :
+            app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+          )} />
+          <p className="text-[10px] leading-tight text-gray-500">{app.ai_next_step}</p>
+        </div>
+      )}
+      {!app.abgesagt && !app.ai_color && app.naechster_schritt && (
         <p className={`text-[10px] mt-1.5 leading-tight font-medium ${
           app.naechster_schritt.startsWith('Gespräch') ? 'text-indigo-600' :
           app.naechster_schritt.startsWith('Kein Feedback') || app.naechster_schritt.startsWith('Keine Reaktion') ? 'text-orange-600' :

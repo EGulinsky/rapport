@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 
 from app.database import get_db
 from app import models, schemas
@@ -380,6 +380,58 @@ def delete_application(app_id: int, db: Session = Depends(get_db)):
               old_value=f"{app.firma} – {app.rolle}")
     db.delete(app)
     db.commit()
+
+
+# ── AI Assessment ────────────────────────────────────────────────────────
+@router.post("/{app_id}/ai-assess")
+async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
+    app = (
+        db.query(models.Application)
+        .options(joinedload(models.Application.events))
+        .filter(models.Application.id == app_id)
+        .first()
+    )
+    if not app:
+        raise HTTPException(404, "Bewerbung nicht gefunden")
+    from app.ai.tasks import assess_application
+    from app.ai.provider import AINotConfigured
+    try:
+        result = await assess_application(db, app)
+    except AINotConfigured as e:
+        raise HTTPException(400, str(e))
+    app.ai_color = result["color"]
+    app.ai_next_step = result["next_step"]
+    app.ai_assessed_at = datetime.utcnow()
+    db.commit()
+    return result
+
+
+@router.post("/ai-assess-all")
+async def ai_assess_all(db: Session = Depends(get_db)):
+    apps = (
+        db.query(models.Application)
+        .options(joinedload(models.Application.events))
+        .filter(models.Application.main_status != "rejected")
+        .all()
+    )
+    from app.ai.tasks import assess_application
+    from app.ai.provider import AINotConfigured, AIRateLimited
+    updated = 0
+    errors: list[str] = []
+    for app in apps:
+        try:
+            result = await assess_application(db, app)
+            app.ai_color = result["color"]
+            app.ai_next_step = result["next_step"]
+            app.ai_assessed_at = datetime.utcnow()
+            updated += 1
+        except (AINotConfigured, AIRateLimited) as e:
+            errors.append(str(e))
+            break
+        except Exception as e:
+            errors.append(f"#{app.id} {app.firma}: {e}")
+    db.commit()
+    return {"updated": updated, "errors": errors}
 
 
 # ── Events ──────────────────────────────────────────────────────────────

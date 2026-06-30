@@ -81,6 +81,7 @@ export default function App() {
   const [showAuditLog, setShowAuditLog] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
+  const [aiAssessingAll, setAiAssessingAll] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
@@ -287,6 +288,20 @@ export default function App() {
             <div className="flex items-center gap-2">
               <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} onLinkedInConfig={() => setShowLinkedInConfig(true)} />
               <ImportExportMenu onImported={load} />
+              <button
+                onClick={async () => {
+                  setAiAssessingAll(true)
+                  try { await api.applications.aiAssessAll(); load() }
+                  catch (e) { console.error('AI assess all failed', e) }
+                  finally { setAiAssessingAll(false) }
+                }}
+                disabled={aiAssessingAll}
+                title="KI-Einschätzung für alle aktiven Bewerbungen aktualisieren"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${aiAssessingAll ? 'animate-pulse' : ''}`} />
+                {aiAssessingAll ? 'KI läuft…' : 'KI bewerten'}
+              </button>
               <button
                 onClick={() => setShowCleanup(true)}
                 title="Duplikate in Bewerbungen, Kontakten und Timeline bereinigen"

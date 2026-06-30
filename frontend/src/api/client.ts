@@ -44,6 +44,11 @@ export const api = {
 
     stats: () => request<Stats>('/applications/stats'),
 
+    aiAssess: (id: number) =>
+      request<{ color: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
+    aiAssessAll: () =>
+      request<{ updated: number; errors: string[] }>('/applications/ai-assess-all', { method: 'POST' }),
+
     deleteEvent: (appId: number, eventId: number) =>
       fetch(`${BASE}/applications/${appId}/events/${eventId}`, { method: 'DELETE' }).then(r => {
         if (!r.ok) throw new Error(`${r.status}`)

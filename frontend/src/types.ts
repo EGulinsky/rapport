@@ -87,6 +87,9 @@ export interface Application {
   target_company_website?: string | null
   company_name_display?: string | null
   target_company_name_display?: string | null
+  ai_color?: 'green' | 'yellow' | 'red' | null
+  ai_next_step?: string | null
+  ai_assessed_at?: string | null
 }
 
 export interface CompanyContactRef {

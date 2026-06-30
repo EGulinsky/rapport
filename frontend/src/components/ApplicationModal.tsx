@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2 } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -79,6 +79,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [ecFirmaCreating, setEcFirmaCreating] = useState(false)
   const ecFirmaRef = useRef<HTMLDivElement>(null)
   const [docAttaching, setDocAttaching] = useState<string | null>(null)
+  const [aiAssessing, setAiAssessing] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>({})
@@ -127,6 +128,20 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       onSaved()
     } catch (e: unknown) {
       setSyncResult({ created: 0, errors: [e instanceof Error ? e.message : String(e)] })
+    }
+  }
+
+  async function runAiAssess() {
+    if (!appId) return
+    setAiAssessing(true)
+    try {
+      await api.applications.aiAssess(appId)
+      const updated = await api.applications.get(appId)
+      setApp(updated)
+    } catch (e) {
+      console.error('AI assess failed', e)
+    } finally {
+      setAiAssessing(false)
     }
   }
 
@@ -718,10 +733,31 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   </div>
                 </div>
                 <p className="text-sm text-gray-500 truncate">{app?.rolle}{updDot('rolle')}</p>
+                {app?.ai_color && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${
+                      app.ai_color === 'green' ? 'bg-green-500' :
+                      app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+                    }`} />
+                    <p className="text-xs text-gray-500 leading-tight">{app.ai_next_step}</p>
+                  </div>
+                )}
               </>
             )}
           </div>
           <div className="ml-4 flex items-center gap-1.5">
+            {/* KI-Bewerten button */}
+            {!editing && (
+              <button
+                onClick={runAiAssess}
+                disabled={aiAssessing}
+                title="KI-Einschätzung aktualisieren"
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${aiAssessing ? 'animate-pulse' : ''}`} />
+                {aiAssessing ? '…' : 'KI'}
+              </button>
+            )}
             {/* Split sync button */}
             <div className="relative flex rounded-lg border border-indigo-200" ref={syncMenuRef}>
               <button

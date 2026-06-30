@@ -112,7 +112,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
             <Th k="main_status" label="Status" />
             <Th k="datum_bewerbung" label="Beworben" />
             <Th k="letztes_update" label="Update" />
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nächster Schritt</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Einschätzung</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -258,8 +258,17 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
               <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                 {app.letztes_update ? new Date(app.letztes_update).toLocaleDateString('de-DE') : '—'}
               </td>
-              <td className="px-4 py-3 text-xs max-w-[220px]">
-                {app.naechster_schritt ? (
+              <td className="px-4 py-3 text-xs max-w-[240px]">
+                {app.ai_color ? (
+                  <div className="flex items-start gap-1.5">
+                    <span className={clsx(
+                      'mt-0.5 shrink-0 h-2 w-2 rounded-full',
+                      app.ai_color === 'green' ? 'bg-green-500' :
+                      app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+                    )} />
+                    <span className="text-gray-600 leading-tight">{app.ai_next_step || '—'}</span>
+                  </div>
+                ) : app.naechster_schritt ? (
                   <span className={clsx(
                     'inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight',
                     app.naechster_schritt.startsWith('Gespräch') ? 'bg-indigo-50 text-indigo-700' :
