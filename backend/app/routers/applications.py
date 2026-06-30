@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
@@ -74,36 +74,36 @@ def _compute_naechster_schritt(
 
     return ""
 
+def _find_or_create_company_profile(db: Session, firma_name: str) -> tuple[models.CompanyProfile, bool]:
+    """Match an existing CompanyProfile by normalized name or create a new one.
+
+    Returns (profile, created) — created=True means a fresh "pending" profile
+    was inserted and still needs its background data fetch.
+    """
+    key = norm_firma(firma_name)
+    profile = db.query(models.CompanyProfile).filter(
+        models.CompanyProfile.name_norm == key
+    ).first()
+    if profile:
+        return profile, False
+    profile = models.CompanyProfile(
+        name_norm=key,
+        name_display=firma_name,
+        sync_status="pending",
+    )
+    db.add(profile)
+    db.flush()
+    return profile, True
+
+
 def _ensure_company_profile(db: Session, app: models.Application) -> None:
     """Create or link CompanyProfile for the application's firma (and zielfirma if HH)."""
     if app.firma:
-        key = norm_firma(app.firma)
-        profile = db.query(models.CompanyProfile).filter(
-            models.CompanyProfile.name_norm == key
-        ).first()
-        if not profile:
-            profile = models.CompanyProfile(
-                name_norm=key,
-                name_display=app.firma,
-                sync_status="pending",
-            )
-            db.add(profile)
-            db.flush()
+        profile, _ = _find_or_create_company_profile(db, app.firma)
         app.company_profile_id = profile.id
 
     if app.is_headhunter and app.zielfirma_bei_hh:
-        zkey = norm_firma(app.zielfirma_bei_hh)
-        zprofile = db.query(models.CompanyProfile).filter(
-            models.CompanyProfile.name_norm == zkey
-        ).first()
-        if not zprofile:
-            zprofile = models.CompanyProfile(
-                name_norm=zkey,
-                name_display=app.zielfirma_bei_hh,
-                sync_status="pending",
-            )
-            db.add(zprofile)
-            db.flush()
+        zprofile, _ = _find_or_create_company_profile(db, app.zielfirma_bei_hh)
         app.target_company_profile_id = zprofile.id
 
 
@@ -314,13 +314,18 @@ async def ai_assess_all(db: Session = Depends(get_db)):
 
 
 @router.post("/extract-from-linkedin-url")
-async def extract_from_linkedin_url(payload: schemas.ExtractFromUrlRequest, db: Session = Depends(get_db)):
+async def extract_from_linkedin_url(
+    payload: schemas.ExtractFromUrlRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     if "linkedin.com" not in payload.url:
         raise HTTPException(400, "Bitte einen LinkedIn-Job-Link angeben.")
 
     from app.linkedin_job_description import load_job_description
     from app.ai.tasks import extract_application_from_text
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
+    from app.routers.sync_company import _run_sync_batch
 
     try:
         description = await load_job_description(payload.url, db)
@@ -337,6 +342,15 @@ async def extract_from_linkedin_url(payload: schemas.ExtractFromUrlRequest, db: 
         raise HTTPException(400, str(e))
 
     result["stellenanzeige_url"] = payload.url
+    result["company_profile_id"] = None
+    if result.get("firma"):
+        profile, created = _find_or_create_company_profile(db, result["firma"])
+        db.commit()
+        result["company_profile_id"] = profile.id
+        result["firma"] = profile.name_display or result["firma"]
+        if created:
+            background_tasks.add_task(_run_sync_batch, [profile.id])
+
     return result
 
 

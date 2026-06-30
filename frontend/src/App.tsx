@@ -640,6 +640,7 @@ interface NewApplicationPrefill {
   zielfirma_bei_hh: string | null
   kommentar: string | null
   stellenanzeige_url?: string
+  company_profile_id?: number | null
 }
 
 function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; onExtracted: (prefill: NewApplicationPrefill) => void }) {
@@ -716,7 +717,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
     main_status: MainStatus; datum_bewerbung: string; zielfirma_bei_hh: string; kommentar: string; stellenanzeige_url: string
   }>({
     firma: initial?.firma ?? '',
-    company_profile_id: null,
+    company_profile_id: initial?.company_profile_id ?? null,
     rolle: initial?.rolle ?? '',
     quelle: initial?.quelle ?? '',
     is_headhunter: initial?.is_headhunter ?? false,
