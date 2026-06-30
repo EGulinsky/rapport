@@ -42,9 +42,9 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
       <div className="flex items-start gap-2">
         <div className="mt-0.5 shrink-0">
           {app.is_headhunter ? (
-            <CompanyLogo name={app.zielfirma_bei_hh || app.firma} website={app.target_company_website ?? app.company_website} size="sm" />
+            <CompanyLogo name={(app.target_company_name_display ?? app.zielfirma_bei_hh) || (app.company_name_display ?? app.firma)} website={app.target_company_website ?? app.company_website} size="sm" />
           ) : (
-            <CompanyLogo name={app.firma} website={app.company_website} size="sm" />
+            <CompanyLogo name={app.company_name_display ?? app.firma} website={app.company_website} size="sm" />
           )}
         </div>
         <div className="min-w-0">
@@ -56,9 +56,9 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
                   <button
                     onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
                     className="text-xs text-indigo-700 truncate leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
-                  >{app.firma}</button>
+                  >{app.company_name_display ?? app.firma}</button>
                 ) : (
-                  <span className="text-xs text-indigo-700 truncate leading-tight">{app.firma}</span>
+                  <span className="text-xs text-indigo-700 truncate leading-tight">{app.company_name_display ?? app.firma}</span>
                 )}
               </div>
               {app.zielfirma_bei_hh ? (
@@ -66,9 +66,9 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
                   <button
                     onClick={e => { e.stopPropagation(); onOpenCompany(app.target_company_profile_id!) }}
                     className="font-medium text-sm text-gray-900 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
-                  >{app.zielfirma_bei_hh}</button>
+                  >{app.target_company_name_display ?? app.zielfirma_bei_hh}</button>
                 ) : (
-                  <p className="font-medium text-sm text-gray-900 leading-tight">{app.zielfirma_bei_hh}</p>
+                  <p className="font-medium text-sm text-gray-900 leading-tight">{app.target_company_name_display ?? app.zielfirma_bei_hh}</p>
                 )
               ) : (
                 <span className="text-gray-400 italic text-xs">Zielfirma unbekannt</span>
@@ -79,10 +79,10 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
               <button
                 onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
                 className={clsx('font-medium text-sm leading-tight cursor-pointer hover:text-indigo-600 hover:underline', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}
-              >{app.firma}</button>
+              >{app.company_name_display ?? app.firma}</button>
             ) : (
               <p className={clsx('font-medium text-sm leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>
-                {app.firma}
+                {app.company_name_display ?? app.firma}
               </p>
             )
           )}

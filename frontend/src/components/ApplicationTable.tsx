@@ -171,9 +171,9 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                 <div className="flex items-start gap-2">
                   <div className="mt-0.5 shrink-0">
                     {app.is_headhunter ? (
-                      <CompanyLogo name={app.zielfirma_bei_hh || app.firma} website={app.target_company_website ?? app.company_website} size="sm" />
+                      <CompanyLogo name={(app.target_company_name_display ?? app.zielfirma_bei_hh) || (app.company_name_display ?? app.firma)} website={app.target_company_website ?? app.company_website} size="sm" />
                     ) : (
-                      <CompanyLogo name={app.firma} website={app.company_website} size="sm" />
+                      <CompanyLogo name={app.company_name_display ?? app.firma} website={app.company_website} size="sm" />
                     )}
                   </div>
                   <div>
@@ -185,9 +185,9 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                             <button
                               onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
                               className="text-xs text-indigo-700 font-medium truncate cursor-pointer hover:text-indigo-600 hover:underline"
-                            >{app.firma}</button>
+                            >{app.company_name_display ?? app.firma}</button>
                           ) : (
-                            <span className="text-xs text-indigo-700 font-medium truncate">{app.firma}</span>
+                            <span className="text-xs text-indigo-700 font-medium truncate">{app.company_name_display ?? app.firma}</span>
                           )}
                         </div>
                         {app.zielfirma_bei_hh ? (
@@ -195,9 +195,9 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                             <button
                               onClick={e => { e.stopPropagation(); onOpenCompany(app.target_company_profile_id!) }}
                               className="font-medium text-gray-900 leading-tight mt-0.5 cursor-pointer hover:text-indigo-600 hover:underline"
-                            >→ {app.zielfirma_bei_hh}</button>
+                            >→ {app.target_company_name_display ?? app.zielfirma_bei_hh}</button>
                           ) : (
-                            <p className="font-medium text-gray-900 leading-tight mt-0.5">→ {app.zielfirma_bei_hh}</p>
+                            <p className="font-medium text-gray-900 leading-tight mt-0.5">→ {app.target_company_name_display ?? app.zielfirma_bei_hh}</p>
                           )
                         ) : (
                           <p className="text-xs text-gray-400 italic leading-tight mt-0.5">Zielfirma unbekannt</p>
@@ -208,9 +208,9 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                         <button
                           onClick={e => { e.stopPropagation(); onOpenCompany(app.company_profile_id!) }}
                           className={clsx('font-medium leading-tight cursor-pointer hover:text-indigo-600 hover:underline', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}
-                        >{app.firma}</button>
+                        >{app.company_name_display ?? app.firma}</button>
                       ) : (
-                        <p className={clsx('font-medium leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>{app.firma}</p>
+                        <p className={clsx('font-medium leading-tight', app.abgesagt ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-900')}>{app.company_name_display ?? app.firma}</p>
                       )
                     )}
                     <p className="text-xs text-gray-500 leading-tight mt-0.5">{app.rolle}</p>

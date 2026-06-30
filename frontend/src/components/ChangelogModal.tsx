@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.36',
+    date: '2026-06-30',
+    changes: [
+      'Firmenname auf Bewerbungen kommt jetzt aus dem Firmenstammdatensatz (name_display) wenn verknüpft — in Tabelle, Kanban, Bewerbungsmodal, Review und Kontaktansichten.',
+    ],
+  },
+  {
     version: '3.14.35',
     date: '2026-06-30',
     changes: [

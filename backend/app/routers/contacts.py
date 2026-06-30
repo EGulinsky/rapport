@@ -28,19 +28,22 @@ def list_all_contacts(
         )
     contacts = q.order_by(models.Contact.name).all()
 
-    # Attach company website from first linked application's company profile
+    # Attach company website and name_display from linked application company profiles
     cp_ids = {a.company_profile_id for c in contacts for a in c.applications if a.company_profile_id}
     if cp_ids:
-        website_map = dict(
-            db.query(models.CompanyProfile.id, models.CompanyProfile.website)
+        profiles = (
+            db.query(models.CompanyProfile.id, models.CompanyProfile.website, models.CompanyProfile.name_display)
             .filter(models.CompanyProfile.id.in_(cp_ids))
             .all()
         )
+        website_map = {p.id: p.website for p in profiles}
+        name_map = {p.id: p.name_display for p in profiles}
         for c in contacts:
             for a in c.applications:
-                if a.company_profile_id and website_map.get(a.company_profile_id):
-                    c.company_website = website_map[a.company_profile_id]
-                    break
+                if a.company_profile_id:
+                    a.company_name_display = name_map.get(a.company_profile_id)
+                    if not getattr(c, 'company_website', None) and website_map.get(a.company_profile_id):
+                        c.company_website = website_map[a.company_profile_id]
 
     return contacts
 

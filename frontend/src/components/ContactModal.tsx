@@ -301,7 +301,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                       onClick={() => onOpenApplication?.(a.id)}
                       className="w-full text-left rounded-lg border border-gray-100 px-3 py-2 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
                     >
-                      <p className="text-sm font-medium text-gray-800">{a.firma}</p>
+                      <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
                       <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
                     </button>
                   ))}

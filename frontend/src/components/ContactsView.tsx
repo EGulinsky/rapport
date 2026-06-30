@@ -378,7 +378,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
                           onClick={() => onOpenApplication(a.id)}
                           className="text-left hover:text-indigo-600 transition-colors"
                         >
-                          <p className="font-medium text-gray-800 hover:text-indigo-600 leading-tight">{a.firma}</p>
+                          <p className="font-medium text-gray-800 hover:text-indigo-600 leading-tight">{a.company_name_display ?? a.firma}</p>
                           <p className="text-xs text-gray-500 truncate max-w-[160px]">{a.rolle}</p>
                         </button>
                       ))}
