@@ -131,15 +131,23 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     }
   }
 
+  const [aiAssessError, setAiAssessError] = useState<string | null>(null)
+
   async function runAiAssess() {
     if (!appId) return
     setAiAssessing(true)
+    setAiAssessError(null)
     try {
       await api.applications.aiAssess(appId)
       const updated = await api.applications.get(appId)
       setApp(updated)
-    } catch (e) {
-      console.error('AI assess failed', e)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
+        setAiAssessError('Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.')
+      } else {
+        setAiAssessError('KI-Analyse fehlgeschlagen.')
+      }
     } finally {
       setAiAssessing(false)
     }
@@ -1170,6 +1178,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     Jetzt bewerten
                   </button>
                 </div>
+              )}
+              {aiAssessError && (
+                <p className="mt-2 text-xs text-red-600">{aiAssessError}</p>
               )}
             </div>
           )}

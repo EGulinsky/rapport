@@ -394,7 +394,7 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden")
     from app.ai.tasks import assess_application, assess_rejected_application
-    from app.ai.provider import AINotConfigured
+    from app.ai.provider import AINotConfigured, AIRateLimited
     try:
         if app.abgesagt:
             result = await assess_rejected_application(db, app)
@@ -402,6 +402,8 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
             result = await assess_application(db, app)
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
+    except AIRateLimited:
+        raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
     app.ai_color = result["color"]
     app.ai_next_step = result["next_step"]
     app.ai_reasoning = result.get("reasoning", "")
@@ -412,6 +414,13 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
 
 @router.post("/ai-assess-all")
 async def ai_assess_all(db: Session = Depends(get_db)):
+    import asyncio
+    from app.models import AiSettings
+    cfg = db.query(AiSettings).first()
+    # Throttle: Gemini free tier = 15 RPM, Groq = 30 RPM — use 5s gap to stay safe
+    provider_id = (cfg.provider if cfg else "") or ""
+    delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
+
     apps = (
         db.query(models.Application)
         .options(joinedload(models.Application.events))
@@ -422,13 +431,16 @@ async def ai_assess_all(db: Session = Depends(get_db)):
     from app.ai.provider import AINotConfigured, AIRateLimited
     updated = 0
     errors: list[str] = []
-    for app in apps:
+    for i, app in enumerate(apps):
+        if i > 0:
+            await asyncio.sleep(delay_s)
         try:
             result = await assess_application(db, app)
             app.ai_color = result["color"]
             app.ai_next_step = result["next_step"]
             app.ai_reasoning = result.get("reasoning", "")
             app.ai_assessed_at = datetime.utcnow()
+            db.commit()
             updated += 1
         except (AINotConfigured, AIRateLimited) as e:
             errors.append(str(e))

@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.45',
+    date: '2026-06-30',
+    changes: [
+      'KI-Batch: 5 Sekunden Pause zwischen Anfragen bei Gemini/Groq — verhindert Rate-Limit-Fehler. Jede Bewerbung wird direkt nach Bewertung gespeichert.',
+      'Rate-Limit-Fehler (429) werden im Modal verständlich angezeigt statt als 502.',
+    ],
+  },
+  {
     version: '3.14.44',
     date: '2026-06-30',
     changes: [
