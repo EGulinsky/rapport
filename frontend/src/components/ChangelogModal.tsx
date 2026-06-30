@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.32',
+    date: '2026-06-30',
+    changes: [
+      'Firma-Picker beim manuellen Anlegen von Bewerbungen und Kontakten: Firmen-Dropdown mit Suche und "Neu anlegen"-Option — analog zum Bearbeitungsmodus. Kontakte-Tab in Firmenprofil hat jetzt Modus-Umschalter "Neu erstellen" / "Vorhandenen zuordnen".',
+    ],
+  },
+  {
     version: '3.14.31',
     date: '2026-06-30',
     changes: [

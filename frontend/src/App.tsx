@@ -25,7 +25,7 @@ import { StartupWarningBanner } from './components/StartupWarningBanner'
 import { BUILD_NUMBER } from './version'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
-  type Application, type Stats, type MainStatus,
+  type Application, type Stats, type MainStatus, type CompanyProfile,
 } from './types'
 import { Calendar, Telescope } from 'lucide-react'
 import clsx from 'clsx'
@@ -558,10 +558,49 @@ export default function App() {
 
 function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<{
-    firma: string; rolle: string; quelle: string; is_headhunter: boolean
+    firma: string; company_profile_id: number | null; rolle: string; quelle: string; is_headhunter: boolean
     main_status: MainStatus; datum_bewerbung: string
-  }>({ firma: '', rolle: '', quelle: '', is_headhunter: false, main_status: 'applied', datum_bewerbung: '' })
+  }>({ firma: '', company_profile_id: null, rolle: '', quelle: '', is_headhunter: false, main_status: 'applied', datum_bewerbung: '' })
   const [saving, setSaving] = useState(false)
+  const [firmaPicker, setFirmaPicker] = useState(false)
+  const [firmaQuery, setFirmaQuery] = useState('')
+  const [firmaResults, setFirmaResults] = useState<CompanyProfile[]>([])
+  const [firmaLoading, setFirmaLoading] = useState(false)
+  const [firmaCreating, setFirmaCreating] = useState(false)
+  const firmaPickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!firmaPicker) { setFirmaQuery(''); setFirmaResults([]); return }
+    let active = true
+    setFirmaLoading(true)
+    api.companies.list({ search: firmaQuery || undefined }).then(r => { if (active) setFirmaResults(r) }).finally(() => { if (active) setFirmaLoading(false) })
+    return () => { active = false }
+  }, [firmaQuery, firmaPicker])
+
+  useEffect(() => {
+    if (!firmaPicker) return
+    function onDown(e: MouseEvent) {
+      if (firmaPickerRef.current && !firmaPickerRef.current.contains(e.target as Node)) setFirmaPicker(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [firmaPicker])
+
+  async function pickCompany(c: CompanyProfile) {
+    setForm(f => ({ ...f, firma: c.name_display ?? c.name_norm, company_profile_id: c.id }))
+    setFirmaPicker(false)
+  }
+
+  async function createAndPickCompany(name: string) {
+    setFirmaCreating(true)
+    try {
+      const c = await api.companies.create(name)
+      setForm(f => ({ ...f, firma: c.name_display ?? c.name_norm, company_profile_id: c.id }))
+      setFirmaPicker(false)
+    } finally {
+      setFirmaCreating(false)
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -569,7 +608,12 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
     setSaving(true)
     try {
       await api.applications.create({
-        ...form,
+        firma: form.firma,
+        company_profile_id: form.company_profile_id ?? undefined,
+        rolle: form.rolle,
+        quelle: form.quelle,
+        is_headhunter: form.is_headhunter,
+        main_status: form.main_status,
         datum_bewerbung: form.datum_bewerbung || undefined,
       })
       onSaved()
@@ -582,13 +626,47 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">Neue Bewerbung</h2>
-        <input
-          required
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="Firma *"
-          value={form.firma}
-          onChange={e => setForm(f => ({ ...f, firma: e.target.value }))}
-        />
+        <div className="relative" ref={firmaPickerRef}>
+          <div
+            className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-sm cursor-pointer ${form.firma ? 'border-gray-200 text-gray-900' : 'border-gray-200 text-gray-400'} hover:border-indigo-300`}
+            onClick={() => setFirmaPicker(o => !o)}
+          >
+            <span className="truncate">{form.firma || 'Firma wählen… *'}</span>
+            <Building2 className="h-4 w-4 text-gray-400 shrink-0 ml-2" />
+          </div>
+          {firmaPicker && (
+            <div className="absolute z-50 top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+              <div className="p-2 border-b border-gray-100">
+                <input
+                  autoFocus
+                  value={firmaQuery}
+                  onChange={e => setFirmaQuery(e.target.value)}
+                  placeholder="Firma suchen…"
+                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto py-1">
+                {firmaLoading && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+                {!firmaLoading && firmaResults.length === 0 && !firmaQuery && (
+                  <p className="text-xs text-gray-400 px-3 py-2 italic">Suchbegriff eingeben…</p>
+                )}
+                {firmaResults.slice(0, 12).map(c => (
+                  <button key={c.id} type="button" onClick={() => pickCompany(c)}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                    {c.name_display ?? c.name_norm}
+                  </button>
+                ))}
+                {firmaQuery.trim() && (
+                  <button type="button" disabled={firmaCreating} onClick={() => createAndPickCompany(firmaQuery.trim())}
+                    className="w-full text-left px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center gap-2 border-t border-gray-100 mt-1">
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    {firmaCreating ? 'Anlegen…' : `"${firmaQuery.trim()}" neu anlegen`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         <input
           required
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -638,7 +716,7 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
             Abbrechen
           </button>
-          <button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+          <button type="submit" disabled={saving || !form.firma || !form.rolle} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Speichern…' : 'Anlegen'}
           </button>
         </div>

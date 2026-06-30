@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2, UserPlus, UserMinus, ChevronsUp, ChevronsDown } from 'lucide-react'
+import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2, UserPlus, UserMinus, ChevronsUp, ChevronsDown, Check } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus, ContactWithApp } from '../types'
 import { StatusBadge } from './StatusBadge'
@@ -43,6 +43,7 @@ const SYNC_SOURCE_LABELS: Record<string, string> = {
 }
 
 const COMPANY_TYPES = ['startup', 'konzern', 'kmu', 'beratung', 'headhunter', 'nonprofit', 'public', 'other']
+const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 
 type Tab = 'info' | 'apps' | 'contacts'
 
@@ -93,10 +94,12 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   const [logoUploading, setLogoUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [addingContact, setAddingContact] = useState(false)
+  const [addContactMode, setAddContactMode] = useState<'new' | 'link'>('new')
   const [contactQuery, setContactQuery] = useState('')
   const [contactResults, setContactResults] = useState<ContactWithApp[]>([])
   const [contactSearching, setContactSearching] = useState(false)
-  const addContactRef = useRef<HTMLDivElement>(null)
+  const [newContactDraft, setNewContactDraft] = useState<{ vorname: string; name: string; email: string; telefon: string; rolle: string; typ: string; linkedin_url: string }>({ vorname: '', name: '', email: '', telefon: '', rolle: '', typ: '', linkedin_url: '' })
+  const [savingNewContact, setSavingNewContact] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -114,28 +117,43 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    if (!addingContact) { setContactQuery(''); setContactResults([]); return }
+    if (!addingContact || addContactMode !== 'link') { setContactQuery(''); setContactResults([]); return }
     const t = setTimeout(async () => {
       setContactSearching(true)
       try { setContactResults(await api.contacts.listAll(contactQuery || undefined)) }
       finally { setContactSearching(false) }
     }, 200)
     return () => clearTimeout(t)
-  }, [contactQuery, addingContact])
+  }, [contactQuery, addingContact, addContactMode])
 
-  useEffect(() => {
-    if (!addingContact) return
-    function handler(e: MouseEvent) {
-      if (addContactRef.current && !addContactRef.current.contains(e.target as Node)) setAddingContact(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [addingContact])
+  function closeAddContact() {
+    setAddingContact(false)
+    setNewContactDraft({ vorname: '', name: '', email: '', telefon: '', rolle: '', typ: '', linkedin_url: '' })
+    setContactQuery('')
+    setContactResults([])
+  }
 
   async function assignContact(contactId: number) {
     await api.companies.assignContact(id, contactId)
-    setAddingContact(false)
+    closeAddContact()
     load()
+  }
+
+  async function createContact() {
+    if (!newContactDraft.name) return
+    setSavingNewContact(true)
+    try {
+      const contact = await api.contacts.create({
+        ...newContactDraft,
+        firma: company?.name_display ?? company?.name_norm,
+        company_profile_id: id,
+      })
+      await api.companies.assignContact(id, contact.id)
+      closeAddContact()
+      load()
+    } finally {
+      setSavingNewContact(false)
+    }
   }
 
   async function unassignContact(contactId: number) {
@@ -565,36 +583,95 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">{company.contacts?.length ?? 0} Kontakte</span>
-                <div className="relative" ref={addContactRef}>
+                {!addingContact && (
                   <button
-                    onClick={() => setAddingContact(o => !o)}
+                    onClick={() => { setAddingContact(true); setAddContactMode('new') }}
                     className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
                   >
                     <UserPlus className="h-3.5 w-3.5" />
                     Kontakt hinzufügen
                   </button>
-                  {addingContact && (
-                    <div className="absolute z-50 right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg">
-                      <div className="p-2 border-b border-gray-100">
+                )}
+              </div>
+
+              {addingContact && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+                  <div className="flex rounded-md overflow-hidden border border-indigo-200 text-xs font-medium">
+                    <button type="button"
+                      onClick={() => { setAddContactMode('new'); setContactQuery(''); setContactResults([]) }}
+                      className={`flex-1 px-2 py-1.5 ${addContactMode === 'new' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
+                      Neu erstellen
+                    </button>
+                    <button type="button"
+                      onClick={() => setAddContactMode('link')}
+                      className={`flex-1 px-2 py-1.5 ${addContactMode === 'link' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
+                      Vorhandenen zuordnen
+                    </button>
+                  </div>
+
+                  {addContactMode === 'new' ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input autoFocus
+                          className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Vorname" value={newContactDraft.vorname}
+                          onChange={e => setNewContactDraft(d => ({ ...d, vorname: e.target.value }))} />
                         <input
-                          autoFocus
-                          value={contactQuery}
-                          onChange={e => setContactQuery(e.target.value)}
-                          placeholder="Name oder Firma suchen…"
-                          className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
+                          className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Nachname *" value={newContactDraft.name}
+                          onChange={e => setNewContactDraft(d => ({ ...d, name: e.target.value }))} />
+                        <input
+                          className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="E-Mail" value={newContactDraft.email}
+                          onChange={e => setNewContactDraft(d => ({ ...d, email: e.target.value }))} />
+                        <input
+                          className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Telefon" value={newContactDraft.telefon}
+                          onChange={e => setNewContactDraft(d => ({ ...d, telefon: e.target.value }))} />
+                        <input
+                          className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Rolle" value={newContactDraft.rolle}
+                          onChange={e => setNewContactDraft(d => ({ ...d, rolle: e.target.value }))} />
+                        <select
+                          className="rounded-md border border-gray-200 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={newContactDraft.typ}
+                          onChange={e => setNewContactDraft(d => ({ ...d, typ: e.target.value }))}>
+                          <option value="">Typ wählen…</option>
+                          {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                       </div>
-                      <div className="max-h-56 overflow-y-auto py-1">
-                        {contactSearching && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+                      <input
+                        className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="LinkedIn URL" value={newContactDraft.linkedin_url}
+                        onChange={e => setNewContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button type="button" onClick={closeAddContact} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                          <Trash2 className="h-3 w-3" /> Abbrechen
+                        </button>
+                        <button type="button" disabled={!newContactDraft.name || savingNewContact} onClick={createContact}
+                          className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                          <Check className="h-3 w-3" />
+                          {savingNewContact ? 'Speichern…' : 'Speichern'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        autoFocus
+                        value={contactQuery}
+                        onChange={e => setContactQuery(e.target.value)}
+                        placeholder="Name oder Firma suchen…"
+                        className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <div className="max-h-40 overflow-y-auto">
+                        {contactSearching && <p className="text-xs text-gray-400 px-1 py-1.5">Suche…</p>}
                         {!contactSearching && contactResults.length === 0 && (
-                          <p className="text-xs text-gray-400 px-3 py-2 italic">Keine Treffer</p>
+                          <p className="text-xs text-gray-400 px-1 py-1.5 italic">Keine Treffer</p>
                         )}
                         {contactResults.slice(0, 15).map(c => (
-                          <button
-                            key={c.id}
-                            onClick={() => assignContact(c.id)}
-                            className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                          >
+                          <button key={c.id} onClick={() => assignContact(c.id)}
+                            className="w-full text-left px-2 py-1.5 rounded hover:bg-indigo-100 hover:text-indigo-700 transition-colors">
                             <p className="text-xs font-medium text-gray-900">{c.name}</p>
                             {(c.firma || c.rolle) && (
                               <p className="text-[11px] text-gray-400">{[c.rolle, c.firma].filter(Boolean).join(' · ')}</p>
@@ -602,10 +679,14 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                           </button>
                         ))}
                       </div>
-                    </div>
+                      <div className="flex justify-end">
+                        <button type="button" onClick={closeAddContact} className="text-xs text-gray-500 hover:text-gray-700">Abbrechen</button>
+                      </div>
+                    </>
                   )}
                 </div>
-              </div>
+              )}
+
 
               {company.contacts && company.contacts.length > 0 ? (
                 <div className="space-y-1.5">
