@@ -49,10 +49,7 @@ _state: dict = {
     "updated": 0,
     "skipped": 0,
     "errors": [],
-    "log": [],             # per-application action log
-    "category_counts": [], # per-category scrape results (grows during scraping)
-    "pagination_log": [],  # debug: pagination events per category (persists after sync)
-    "raw_jobs": [],        # all scraped jobs (debug)
+    "raw_jobs": [],        # all scraped jobs (for status endpoint)
     "msg_processed": 0,    # conversations scanned for messages
     "msg_created": 0,      # message events created
     "started_at": None,
@@ -75,9 +72,6 @@ def _reset_state():
         "updated": 0,
         "skipped": 0,
         "errors": [],
-        "log": [],
-        "category_counts": [],
-        "pagination_log": [],
         "msg_processed": 0,
         "msg_created": 0,
         "started_at": None,
@@ -150,104 +144,6 @@ def delete_config(db: Session = Depends(get_db)):
 @router.get("/status")
 def get_status():
     return dict(_state)
-
-
-@router.get("/debug-excel")
-def debug_excel():
-    """Download an Excel with all scraped LI jobs from the last sync run."""
-    import io
-    from fastapi.responses import StreamingResponse
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-
-    log = _state.get("log") or []
-    if not log:
-        raise HTTPException(404, "Kein Sync-Log vorhanden — bitte zuerst einen LinkedIn-Sync durchführen")
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "LinkedIn Sync"
-
-    headers = ["#", "App-ID", "Match-Grund", "LI Job-ID", "Firma (LI)", "Rolle (LI)", "Datum (LI)", "Kategorie (LI)", "Status-Hint (LI)", "Aktion", "Status DB", "Raw Context (debug)"]
-    header_fill = PatternFill("solid", fgColor="1E4078")
-    header_font = Font(bold=True, color="FFFFFF")
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center")
-
-    ACTION_COLORS = {
-        "neu":              "C6EFCE",
-        "aktualisiert":     "FFEB9C",
-        "abgesagt":         "FFC7CE",
-        "fehler":           "FF0000",
-        "unverändert":      "FFFFFF",
-        "zur Überprüfung":  "BDD7EE",
-    }
-
-    for row_i, entry in enumerate(log, 2):
-        row = [
-            row_i - 1,
-            entry.get("app_id", ""),
-            entry.get("match_grund", ""),
-            entry.get("li_job_id", ""),
-            entry.get("firma_li", ""),
-            entry.get("rolle_li", ""),
-            entry.get("datum_li", ""),
-            entry.get("kategorie_li", ""),
-            entry.get("status_hint_li", ""),
-            entry.get("aktion", ""),
-            entry.get("status_db", ""),
-            entry.get("_raw_context", ""),
-        ]
-        fill_color = ACTION_COLORS.get(entry.get("aktion", ""), "FFFFFF")
-        fill = PatternFill("solid", fgColor=fill_color) if fill_color != "FFFFFF" else None
-        for col, val in enumerate(row, 1):
-            cell = ws.cell(row=row_i, column=col, value=val)
-            if fill:
-                cell.fill = fill
-
-    col_widths = [5, 10, 28, 16, 38, 42, 14, 16, 20, 22, 28, 60]
-    for col, w in enumerate(col_widths, 1):
-        ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = w
-
-    ws.freeze_panes = "A2"
-
-    # ── Sheet 2: Kategorien-Übersicht ────────────────────────────────────────
-    ws2 = wb.create_sheet("Kategorien")
-    ws2.append(["Kategorie (LI)", "Label", "Gefunden"])
-    for cell in ws2[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-    for cat in (_state.get("category_counts") or []):
-        ws2.append([cat.get("card_type", ""), cat.get("label", ""), cat.get("count", 0)])
-    ws2.column_dimensions["A"].width = 18
-    ws2.column_dimensions["B"].width = 18
-    ws2.column_dimensions["C"].width = 12
-
-    # ── Sheet 3: Pagination-Log ───────────────────────────────────────────────
-    ws3 = wb.create_sheet("Pagination-Log")
-    ws3.append(["#", "Eintrag"])
-    for cell in ws3[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-    for i, entry in enumerate((_state.get("pagination_log") or []), 1):
-        ws3.append([i, str(entry)])
-    ws3.column_dimensions["A"].width = 5
-    ws3.column_dimensions["B"].width = 100
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    from datetime import date
-    ts = date.today().strftime("%Y-%m-%d")
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="linkedin_sync_debug_{ts}.xlsx"'},
-    )
 
 
 @router.post("/run")
@@ -698,12 +594,9 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         jobs.extend(new_jobs)
         _state["step"] = f"{label or card_type}: Seite {page_num + 1} — {len(jobs)} gefunden"
 
-        # Log pagination hints found in text
         has_next_text = bool(re.search(r'\bNext\b', text[-2000:], re.IGNORECASE))
-        _state["pagination_log"].append(
-            f"[{card_type}] p{page_num + 1}: {chunk_count} chunks, "
-            f"{len(new_jobs)} neue Jobs (gesamt {len(jobs)}), next_in_text={has_next_text}"
-        )
+        log.debug("[LI pag] {} p{}: {} chunks, {} neue Jobs (gesamt {}), next_in_text={}",
+                  card_type, page_num + 1, chunk_count, len(new_jobs), len(jobs), has_next_text)
 
         if page_num >= max_pages - 1:
             break
@@ -728,17 +621,13 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
                     except Exception:
                         await asyncio.sleep(4)
                     clicked_next = True
-                    _state["pagination_log"].append(
-                        f"[{card_type}] p{page_num + 1}→{page_num + 2}: Next geklickt ({sel})"
-                    )
+                    log.debug("[LI pag] {} p{}→{}: Next geklickt ({})", card_type, page_num + 1, page_num + 2, sel)
                     break
             except Exception:
                 pass
 
         if not clicked_next:
-            _state["pagination_log"].append(
-                f"[{card_type}] p{page_num + 1}: kein Next-Button → Ende"
-            )
+            log.debug("[LI pag] {} p{}: kein Next-Button → Ende", card_type, page_num + 1)
             break
 
     return jobs
@@ -1140,7 +1029,6 @@ async def _async_sync(cfg_id: int):
             # over APPLIED even if the same job ID appeared earlier.
             # Dedup by firma|title — later categories (higher priority) overwrite earlier ones
             all_jobs_by_key: dict[str, dict] = {}
-            _state["category_counts"] = []
             for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
                 _state["step"] = f"{label}: Seite 1 — lade…"
                 cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label)
@@ -1149,7 +1037,7 @@ async def _async_sync(cfg_id: int):
                     j["_label"] = label
                     dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
                     all_jobs_by_key[dedup_key] = j
-                _state["category_counts"].append({"card_type": card_type, "label": label, "count": len(cat_jobs)})
+                log.info("[LI kat] {}: {} gefunden (gesamt {})", label, len(cat_jobs), len(all_jobs_by_key))
                 _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_key)})"
             all_jobs = list(all_jobs_by_key.values())
 
@@ -1168,25 +1056,17 @@ async def _async_sync(cfg_id: int):
         _state["step"] = f"Verarbeite 0/{len(all_jobs)}…"
         created = updated = skipped = 0
         errors: list[str] = []
-        action_log: list[dict] = []
         STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
 
         for i, job in enumerate(all_jobs):
             _state["processed"] = i + 1
             _state["step"] = f"Verarbeite {i + 1}/{len(all_jobs)}"
-            raw = {
-                "li_job_id":      job.get("id", ""),
-                "firma_li":       job.get("company", ""),
-                "rolle_li":       job.get("title", ""),
-                "datum_li":       job.get("applied_date", ""),
-                "kategorie_li":   job.get("_label") or job.get("default_status", ""),
-                "status_hint_li": str(job.get("status_hint") or ""),
-                "_raw_context":   job.get("_raw_context", ""),
-            }
             try:
                 app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
-                app_info = {"firma": app.firma or "", "rolle": app.rolle or "", "app_id": app.id, "match_grund": match_grund}
                 pfx = f"[LI #{app.id}]"
+                log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
+                          pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
+                          job.get("_label", ""), job.get("status_hint", ""), job.get("_raw_context", ""), match_grund)
                 if was_created:
                     created += 1
                     if pending_status:
@@ -1205,10 +1085,8 @@ async def _async_sync(cfg_id: int):
                             status_only=True,
                         ))
                         log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
-                        action_log.append({**raw, **app_info, "aktion": "zur Überprüfung (neu)", "status_db": f"applied → {pending_status}?"})
                     else:
                         log.info("{} neu angelegt: {} | match={}", pfx, app.main_status, match_grund)
-                        action_log.append({**raw, **app_info, "aktion": "neu", "status_db": app.main_status})
                 else:
                     job_url = job.get("stellenanzeige_url") or None
                     if job_url and not app.stellenanzeige_url:
@@ -1260,27 +1138,23 @@ async def _async_sync(cfg_id: int):
                                 status_only=True,
                             ))
                             log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
-                            pm_note = ""
                         elif already_pending:
                             log.info("{} Status-Vorschlag übersprungen (bereits ausstehend): {} → {} | match={}", pfx, old_status, target_status, match_grund)
-                            pm_note = " (bereits ausstehend)"
                         else:
                             log.info("{} Status-Vorschlag übersprungen (bereits überprüft: {}): {} → {} | match={}", pfx, already_reviewed.review_status, old_status, target_status, match_grund)
-                            pm_note = f" (bereits überprüft: {already_reviewed.review_status})"
                         updated += 1
-                        action_log.append({**raw, **app_info, "aktion": "zur Überprüfung" + pm_note, "status_db": f"{old_status} → {target_status}?"})
                     else:
                         skipped += 1
                         log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
-                        action_log.append({**raw, **app_info, "aktion": "unverändert", "status_db": old_status})
             except Exception as e:
                 errors.append(f"{job.get('company', '?')}: {e}")
                 log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)
-                action_log.append({**raw, "firma": job.get("company", ""), "rolle": job.get("title", ""), "aktion": "fehler", "status_db": str(e)})
 
         cfg.last_sync = datetime.now(timezone.utc)
         _commit_with_retry(db)
 
+        log.info("[LI sync] fertig: {} neu, {} aktualisiert, {} unverändert, {} fehler",
+                 created, updated, skipped, len(errors))
         _state.update({
             "status": "done",
             "step": "Fertig",
@@ -1288,7 +1162,6 @@ async def _async_sync(cfg_id: int):
             "updated": updated,
             "skipped": skipped,
             "errors": errors,
-            "log": action_log,
             "msg_created": _state.get("msg_created", 0),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         })
