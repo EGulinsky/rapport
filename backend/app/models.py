@@ -186,6 +186,10 @@ class Application(Base):
     gespraech_4         = Column(Text, nullable=True)
     gespraech_5         = Column(Text, nullable=True)
 
+    ai_color            = Column(String, nullable=True)   # 'green', 'yellow', 'red'
+    ai_next_step        = Column(Text, nullable=True)
+    ai_assessed_at      = Column(DateTime(timezone=True), nullable=True)
+
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 

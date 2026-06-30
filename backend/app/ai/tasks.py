@@ -277,3 +277,98 @@ async def test_connection(db: Session) -> str:
         max_tokens=32,
     )
     return "ok" if result.get("ok") else f"Unerwartete Antwort: {result}"
+
+
+_ASSESS_SYSTEM = """\
+Du bist ein Karrierecoach, der Bewerbungssituationen bewertet.
+Analysiere die Bewerbung und ihre Timeline und gib eine prägnante Einschätzung.
+Antworte ausschließlich als valides JSON-Objekt, kein Markdown.
+"""
+
+_STATUS_LABELS = {
+    "prospecting": "Anbahnung",
+    "applied": "Beworben",
+    "hr": "Gespräch HR/HH",
+    "fb": "Gespräch FB",
+    "waiting": "Warten auf Entscheidung",
+    "negotiating": "Angebotsverhandlung",
+    "signed": "Unterschrift",
+    "rejected": "Absage",
+}
+
+
+async def assess_application(db: Session, app) -> dict:
+    """
+    Generate AI assessment for a single application.
+    Returns: {"color": "green"|"yellow"|"red", "next_step": str}
+    """
+    from datetime import date as _date
+    firma = getattr(app, 'company_name_display', None) or app.firma
+    status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
+
+    events = sorted(
+        [e for e in (app.events or []) if e.datum],
+        key=lambda e: e.datum,
+        reverse=True,
+    )
+    timeline_lines = []
+    for e in events[:15]:
+        line = f"  {e.datum.strftime('%d.%m.%Y')}: {e.typ}"
+        if e.titel:
+            line += f" — {e.titel}"
+        if e.notiz:
+            line += f"\n    {e.notiz[:300]}"
+        timeline_lines.append(line)
+    timeline = "\n".join(timeline_lines) if timeline_lines else "  (keine Ereignisse)"
+
+    today = _date.today()
+    days_since_update = (today - app.letztes_update).days if app.letztes_update else None
+    days_since_apply  = (today - app.datum_bewerbung).days if app.datum_bewerbung else None
+
+    meta = f"  Status: {status_label}\n"
+    meta += f"  Beworben: {app.datum_bewerbung.strftime('%d.%m.%Y') if app.datum_bewerbung else '?'}"
+    if days_since_apply is not None:
+        meta += f" (vor {days_since_apply} Tagen)"
+    meta += f"\n  Letztes Update: {app.letztes_update.strftime('%d.%m.%Y') if app.letztes_update else '?'}"
+    if days_since_update is not None:
+        meta += f" (vor {days_since_update} Tagen)"
+    if app.is_headhunter and app.zielfirma_bei_hh:
+        meta += f"\n  Headhunter für: {app.zielfirma_bei_hh}"
+
+    prompt = f"""Bewerbung:
+  Firma: {firma}
+  Stelle: {app.rolle}
+{meta}
+
+Timeline (neueste zuerst):
+{timeline}
+
+Bewerte die Erfolgschance und schlage den konkret nächsten sinnvollen Schritt vor.
+
+color-Regeln:
+- green: Aktiver positiver Fortschritt — Gespräch geplant, Angebot, gute Rückmeldung
+- yellow: Offen/unklar — warte auf Feedback, wenig Information, kurze Wartezeit normal
+- red: Kritisch — lange Funkstille (>3 Wochen ohne Reaktion), keine Antwort, Ghosting-Verdacht, Absage
+
+next_step: Konkreter Handlungsvorschlag in 1–2 Sätzen auf Deutsch.
+  Beispiele: "Nachfassen per E-Mail, Bewerbung liegt bereits X Tage ohne Rückmeldung vor."
+             "Gesprächstermin bestätigen und Vorbereitung starten."
+             "Abwarten — Feedback wurde für nächste Woche angekündigt."
+
+{{
+  "color": "green"|"yellow"|"red",
+  "next_step": "<konkreter nächster Schritt>"
+}}"""
+
+    result = await complete(
+        db,
+        [{"role": "system", "content": _ASSESS_SYSTEM}, {"role": "user", "content": prompt}],
+        json_mode=True,
+        max_tokens=200,
+    )
+
+    color = result.get("color")
+    if color not in ("green", "yellow", "red"):
+        color = "yellow"
+
+    return {"color": color, "next_step": result.get("next_step") or ""}
