@@ -45,7 +45,7 @@ export const api = {
     stats: () => request<Stats>('/applications/stats'),
 
     aiAssess: (id: number) =>
-      request<{ color: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
+      request<{ color: string; reasoning: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
     aiAssessAll: () =>
       request<{ updated: number; errors: string[] }>('/applications/ai-assess-all', { method: 'POST' }),
 

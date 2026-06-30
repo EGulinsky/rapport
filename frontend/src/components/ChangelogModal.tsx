@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.48',
+    date: '2026-06-30',
+    changes: [
+      'KI-Bewertung: UI-Refresh nach "Neu bewerten" funktioniert jetzt — Felder werden direkt aus der API-Antwort in den lokalen State geschrieben, kein zweiter GET-Request mehr.',
+    ],
+  },
+  {
     version: '3.14.47',
     date: '2026-06-30',
     changes: [
