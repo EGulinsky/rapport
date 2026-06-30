@@ -53,23 +53,31 @@ async def _ddg_fetch(name: str) -> dict:
     # Strip pipe/slash separators that confuse DDG (e.g. "Akkodis | inContext AB")
     query = re.split(r"\s*[|/]\s*", name)[0].strip()
 
-    async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
-                                 follow_redirects=True) as client:
-        resp = await client.get(_DDG_URL, params={
-            "q": query,
-            "format": "json",
-            "no_redirect": "1",
-            "no_html": "1",
-            "skip_disambig": "1",
-        })
-        if resp.status_code not in (200, 429):
-            resp.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
+                                     follow_redirects=True) as client:
+            resp = await client.get(_DDG_URL, params={
+                "q": query,
+                "format": "json",
+                "no_redirect": "1",
+                "no_html": "1",
+                "skip_disambig": "1",
+            })
+    except httpx.TimeoutException:
+        log.warning("DDG: Timeout für '{}' (Rate-Limit via Connection-Drop) — überspringe", query)
+        return {}
+    except httpx.RequestError as e:
+        log.warning("DDG: Verbindungsfehler für '{}': {} ({})", query, e, type(e).__name__)
+        return {}
 
     if resp.status_code == 429:
         log.warning("DDG: Rate-limit (429) für '{}' — überspringe", query)
         return {}
+    if resp.status_code != 200:
+        log.warning("DDG: HTTP {} für '{}'", resp.status_code, query)
+        return {}
     if not resp.content:
-        log.warning("DDG: leere Antwort (HTTP {}) für '{}'", resp.status_code, query)
+        log.warning("DDG: leere Antwort für '{}'", query)
         return {}
     try:
         data = resp.json()
@@ -300,7 +308,7 @@ async def _run_sync_batch(profile_ids: list[int]):
 
             db.commit()
             db.close()
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
 
         log.info("Firmensync abgeschlossen: {} Firmen", len(profile_ids))
 
