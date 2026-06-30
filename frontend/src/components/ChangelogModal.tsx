@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.31',
+    date: '2026-06-30',
+    changes: [
+      'Firmensync: Wikipedia REST API als Fallback wenn DDG nichts liefert. Logo-Fallback via Clearbit (domain-basiert). sync_source zeigt an welche Quelle genutzt wurde.',
+    ],
+  },
+  {
     version: '3.14.30',
     date: '2026-06-30',
     changes: [
