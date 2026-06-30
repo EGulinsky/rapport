@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.50',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einstellungen: Modellauswahl-Chips für Groq, Gemini, Anthropic, OpenAI — Modelle jetzt direkt im Provider-Array statt in separatem Dictionary (robusterer Lookup).',
+    ],
+  },
+  {
     version: '3.14.49',
     date: '2026-06-30',
     changes: [
