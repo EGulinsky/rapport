@@ -94,9 +94,12 @@ async def _background_sync_loop():
                     _bcfg = _db.query(_models.BackupConfig).first()
                     if _bcfg and _bcfg.enabled and _bcfg.backup_folder:
                         from datetime import timedelta
+                        _last = _bcfg.last_backup
+                        if _last is not None and _last.tzinfo is None:
+                            _last = _last.replace(tzinfo=timezone.utc)
                         due = (
-                            _bcfg.last_backup is None
-                            or (datetime.now(timezone.utc) - _bcfg.last_backup)
+                            _last is None
+                            or (datetime.now(timezone.utc) - _last)
                             >= timedelta(hours=_bcfg.frequency_hours)
                         )
                         if due and "backup" not in _RUNNING_SOURCES:
