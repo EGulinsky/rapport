@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 from app.ai.provider import decrypt_api_key, encrypt_api_key
 from app.database import get_db
 from app import models
+from app.logger import get_logger
+
+log = get_logger("sync")
 
 router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
 
@@ -1183,6 +1186,7 @@ async def _async_sync(cfg_id: int):
             try:
                 app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
                 app_info = {"firma": app.firma or "", "rolle": app.rolle or "", "app_id": app.id, "match_grund": match_grund}
+                pfx = f"[LI #{app.id}]"
                 if was_created:
                     created += 1
                     if pending_status:
@@ -1200,8 +1204,10 @@ async def _async_sync(cfg_id: int):
                             suggested_main_status=pending_status,
                             status_only=True,
                         ))
+                        log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
                         action_log.append({**raw, **app_info, "aktion": "zur Überprüfung (neu)", "status_db": f"applied → {pending_status}?"})
                     else:
+                        log.info("{} neu angelegt: {} | match={}", pfx, app.main_status, match_grund)
                         action_log.append({**raw, **app_info, "aktion": "neu", "status_db": app.main_status})
                 else:
                     job_url = job.get("stellenanzeige_url") or None
@@ -1253,18 +1259,23 @@ async def _async_sync(cfg_id: int):
                                 suggested_sub_status=sub_hint,
                                 status_only=True,
                             ))
+                            log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
                             pm_note = ""
                         elif already_pending:
+                            log.info("{} Status-Vorschlag übersprungen (bereits ausstehend): {} → {} | match={}", pfx, old_status, target_status, match_grund)
                             pm_note = " (bereits ausstehend)"
                         else:
+                            log.info("{} Status-Vorschlag übersprungen (bereits überprüft: {}): {} → {} | match={}", pfx, already_reviewed.review_status, old_status, target_status, match_grund)
                             pm_note = f" (bereits überprüft: {already_reviewed.review_status})"
                         updated += 1
                         action_log.append({**raw, **app_info, "aktion": "zur Überprüfung" + pm_note, "status_db": f"{old_status} → {target_status}?"})
                     else:
                         skipped += 1
+                        log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
                         action_log.append({**raw, **app_info, "aktion": "unverändert", "status_db": old_status})
             except Exception as e:
                 errors.append(f"{job.get('company', '?')}: {e}")
+                log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)
                 action_log.append({**raw, "firma": job.get("company", ""), "rolle": job.get("title", ""), "aktion": "fehler", "status_db": str(e)})
 
         cfg.last_sync = datetime.now(timezone.utc)
