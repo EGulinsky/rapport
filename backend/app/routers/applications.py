@@ -313,18 +313,31 @@ async def ai_assess_all(db: Session = Depends(get_db)):
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
-@router.post("/extract-from-text")
-async def extract_from_text(payload: schemas.ExtractFromTextRequest, db: Session = Depends(get_db)):
+@router.post("/extract-from-linkedin-url")
+async def extract_from_linkedin_url(payload: schemas.ExtractFromUrlRequest, db: Session = Depends(get_db)):
+    if "linkedin.com" not in payload.url:
+        raise HTTPException(400, "Bitte einen LinkedIn-Job-Link angeben.")
+
+    from app.linkedin_job_description import load_job_description
     from app.ai.tasks import extract_application_from_text
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
+
     try:
-        return await extract_application_from_text(db, payload.text)
+        description = await load_job_description(payload.url, db)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    try:
+        result = await extract_application_from_text(db, description)
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     except AIRateLimited:
         raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
     except AIBadRequest as e:
         raise HTTPException(400, str(e))
+
+    result["stellenanzeige_url"] = payload.url
+    return result
 
 
 @router.get("/{app_id}", response_model=schemas.ApplicationRead)
