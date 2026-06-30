@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp, Network, ChevronDown } from 'lucide-react'
+import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp, Network, ChevronDown, Trash2 } from 'lucide-react'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -48,6 +48,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const [appsFilter, setAppsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [contactsFilter, setContactsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [deleting, setDeleting] = useState(false)
 
   function toggleSelect(id: number, e: React.MouseEvent) {
     e.stopPropagation()
@@ -284,6 +285,25 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     })
   }, [companies, sortKey, sortDir, appsFilter, contactsFilter])
 
+  const allSelected = sorted.length > 0 && sorted.every(c => selectedIds.has(c.id))
+
+  function toggleAll() {
+    setSelectedIds(allSelected ? new Set() : new Set(sorted.map(c => c.id)))
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`${selectedIds.size} ${selectedIds.size === 1 ? 'Firma' : 'Firmen'} löschen?`)) return
+    setDeleting(true)
+    try {
+      await api.companies.bulkDelete([...selectedIds])
+      setSelectedIds(new Set())
+      await load()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const Th = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
     <th
       className={clsx(
@@ -458,6 +478,16 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             {selectedIds.size} zusammenführen
           </button>
         )}
+        {selectedIds.size > 0 && (
+          <button
+            onClick={deleteSelected}
+            disabled={deleting}
+            className="flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 transition-colors shrink-0"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {deleting ? 'Löschen…' : `${selectedIds.size} löschen`}
+          </button>
+        )}
       </div>
 
       {/* Sync status bar */}
@@ -491,7 +521,15 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="w-8 px-3" />
+              <th className="w-8 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && !allSelected }}
+                  onChange={toggleAll}
+                  className="rounded border-gray-300 text-violet-600 cursor-pointer"
+                />
+              </th>
               <Th k="name" label="Name" />
               <Th k="industry" label="Branche" />
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Typ</th>
@@ -607,10 +645,15 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         </table>
       </div>
 
-      <p className="text-xs text-gray-400">
-        {sorted.length} {sorted.length === 1 ? 'Firma' : 'Firmen'}
-        {sorted.length !== companies.length && <span className="ml-1 text-gray-300">von {companies.length}</span>}
-      </p>
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>
+          {sorted.length} {sorted.length === 1 ? 'Firma' : 'Firmen'}
+          {sorted.length !== companies.length && <span className="ml-1 text-gray-300">von {companies.length}</span>}
+        </span>
+        {selectedIds.size > 0 && (
+          <span className="text-violet-600 font-medium">{selectedIds.size} ausgewählt</span>
+        )}
+      </div>
     </div>
   )
 }

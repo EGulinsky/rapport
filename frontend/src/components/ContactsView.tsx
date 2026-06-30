@@ -187,10 +187,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
     })
   }, [contacts, sortKey, sortDir, companyFilter, appsFilter])
 
-  const allSelected = sorted.length > 0 && selected.size === sorted.length
+  const allSelected = sorted.length > 0 && sorted.every(c => selected.has(c.id))
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(contacts.map(c => c.id)))
+    setSelected(allSelected ? new Set() : new Set(sorted.map(c => c.id)))
   }
 
   function toggleOne(id: number) {

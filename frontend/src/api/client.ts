@@ -389,6 +389,8 @@ export const api = {
       request<{ok: boolean}>(`/companies/${companyId}/contacts/${contactId}`, {method: 'POST'}),
     unassignContact: (companyId: number, contactId: number) =>
       request<{ok: boolean}>(`/companies/${companyId}/contacts/${contactId}`, {method: 'DELETE'}),
+    bulkDelete: (ids: number[]) =>
+      request<{ deleted: number }>('/companies/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) }),
   },
 
   startup: {

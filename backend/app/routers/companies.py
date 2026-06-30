@@ -427,3 +427,14 @@ def unassign_contact_from_company(company_id: int, contact_id: int, db: Session 
         contact.company_profile_id = None
         db.commit()
     return {"ok": True}
+
+
+class BulkDeleteCompaniesBody(BaseModel):
+    ids: List[int]
+
+
+@router.delete("/bulk", status_code=200)
+def bulk_delete_companies(body: BulkDeleteCompaniesBody, db: Session = Depends(get_db)):
+    deleted = db.query(CompanyProfile).filter(CompanyProfile.id.in_(body.ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
