@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.30',
+    date: '2026-06-30',
+    changes: [
+      'Cancel-Button für Firmensync und Kontaktverknüpfung — bricht nach dem aktuellen Eintrag graceful ab. Kontaktverknüpfung zeigt jetzt Fortschrittszähler (x/Gesamt).',
+    ],
+  },
+  {
     version: '3.14.29',
     date: '2026-06-30',
     changes: [
