@@ -1374,14 +1374,30 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             # Application links are created only for apps where the contact is
             # explicitly mentioned in events or application text (not just by firma match).
             mention_app_ids = _find_apps_where_contact_mentioned(name, email_val, db)
+            firma_app_ids = _find_apps_for_contact(org_val or "", db) if org_val else []
+
+            # Check whether the org matches a known CompanyProfile
+            company_profile_id = None
+            if org_val:
+                from app.dedup import norm_firma
+                norm = norm_firma(org_val)
+                cp = db.query(models.CompanyProfile).filter_by(name_norm=norm).first()
+                if cp:
+                    company_profile_id = cp.id
+
+            # Skip contacts with no connection to job applications or known companies
+            if not mention_app_ids and not firma_app_ids and not company_profile_id:
+                continue
 
             contact = models.Contact(
                 name=name, email=email_val, telefon=tel_val,
                 firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
+                company_profile_id=company_profile_id,
             )
             db.add(contact)
             db.flush()
-            for aid in mention_app_ids:
+            linked_ids = list({*mention_app_ids, *firma_app_ids})
+            for aid in linked_ids:
                 app_obj = db.query(models.Application).get(aid)
                 if app_obj:
                     contact.applications.append(app_obj)
