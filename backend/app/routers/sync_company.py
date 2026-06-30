@@ -53,22 +53,28 @@ async def _ddg_fetch(name: str) -> dict:
     # Strip pipe/slash separators that confuse DDG (e.g. "Akkodis | inContext AB")
     query = re.split(r"\s*[|/]\s*", name)[0].strip()
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
-                                     follow_redirects=True) as client:
-            resp = await client.get(_DDG_URL, params={
-                "q": query,
-                "format": "json",
-                "no_redirect": "1",
-                "no_html": "1",
-                "skip_disambig": "1",
-            })
-    except httpx.TimeoutException:
-        log.warning("DDG: Timeout für '{}' (Rate-Limit via Connection-Drop) — überspringe", query)
-        return {}
-    except httpx.RequestError as e:
-        log.warning("DDG: Verbindungsfehler für '{}': {} ({})", query, e, type(e).__name__)
-        return {}
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
+                                         follow_redirects=True) as client:
+                resp = await client.get(_DDG_URL, params={
+                    "q": query,
+                    "format": "json",
+                    "no_redirect": "1",
+                    "no_html": "1",
+                    "skip_disambig": "1",
+                })
+            break  # success
+        except httpx.TimeoutException:
+            if attempt == 0:
+                log.warning("DDG: Timeout für '{}' — warte 5s und retry", query)
+                await asyncio.sleep(5.0)
+            else:
+                log.warning("DDG: Timeout für '{}' nach Retry — wird erneut eingereiht", query)
+                raise  # propagiert zum Caller, der pending setzt
+        except httpx.RequestError as e:
+            log.warning("DDG: Verbindungsfehler für '{}': {} ({})", query, e, type(e).__name__)
+            raise
 
     if resp.status_code == 429:
         log.warning("DDG: Rate-limit (429) für '{}' — überspringe", query)
@@ -299,6 +305,9 @@ async def _run_sync_batch(profile_ids: list[int]):
                          data.get("hq_city"),
                          data.get("employee_count"))
 
+            except httpx.TimeoutException:
+                p.sync_status = "pending"
+                p.sync_error = None
             except Exception as e:
                 log.opt(exception=True).error("DDG-Fehler für '{}': {} ({})",
                                               name, e, type(e).__name__)
