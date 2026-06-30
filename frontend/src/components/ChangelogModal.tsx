@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.49',
+    date: '2026-06-30',
+    changes: [
+      'KI: Modelle die kein JSON-Modus unterstützen oder nicht existieren geben jetzt eine klare Fehlermeldung (400) statt einen rohen 502-Stacktrace.',
+    ],
+  },
+  {
     version: '3.14.48',
     date: '2026-06-30',
     changes: [
