@@ -1,5 +1,6 @@
-"""Company profile sync via Wikidata (Search API + SPARQL)."""
+"""Company profile sync via Wikidata (Search API + batch SPARQL)."""
 import asyncio
+import base64
 import re
 from datetime import datetime, timezone
 
@@ -19,9 +20,11 @@ _SYNC_RUNNING = False
 _CURRENT_COMPANY: str | None = None
 
 _UA = "JobTracker/1.0 (personal job-application tracker; contact: private)"
+_SPARQL_BATCH = 40   # Q-IDs per SPARQL query (well under Wikidata's complexity limit)
+_LOGO_CONCURRENCY = 3
 
 
-# ── Wikidata helpers ──────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _employee_range(n: int) -> str:
     for limit, label in ((10, "1-10"), (50, "11-50"), (200, "51-200"), (500, "201-500"),
@@ -31,27 +34,18 @@ def _employee_range(n: int) -> str:
     return "10001+"
 
 
-async def _fetch_logo(url: str) -> str | None:
-    """Download logo from Wikimedia Commons, return base64 data URI or None."""
-    import base64
+def _parse_year(s: str) -> int | None:
+    m = re.search(r"\d{4}", s)
+    if m:
+        y = int(m.group())
+        return y if 1700 <= y <= 2100 else None
+    return None
+
+
+async def _wikidata_search_one(client: httpx.AsyncClient, name: str) -> tuple[str, str] | None:
+    """Return (qid, description) for the top Wikidata hit, or None."""
     try:
-        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
-                                     follow_redirects=True) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            ct = resp.headers.get("content-type", "image/png").split(";")[0].strip()
-            b64 = base64.b64encode(resp.content).decode()
-            return f"data:{ct};base64,{b64}"
-    except Exception as e:
-        log.debug("Logo-Download fehlgeschlagen ({}): {}", url, e)
-        return None
-
-
-async def _wikidata_fetch(name: str) -> dict:
-    """Search Wikidata for a company by name, return normalized field dict."""
-    async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": _UA}) as client:
-        # 1. Entity search → Q-ID + description snippet
-        search = await client.get(
+        resp = await client.get(
             "https://www.wikidata.org/w/api.php",
             params={
                 "action": "wbsearchentities",
@@ -59,29 +53,31 @@ async def _wikidata_fetch(name: str) -> dict:
                 "language": "de",
                 "type": "item",
                 "format": "json",
-                "limit": "3",
+                "limit": "1",
             },
         )
-        search.raise_for_status()
-        hits = search.json().get("search", [])
-        if not hits:
-            return {}
+        resp.raise_for_status()
+        hits = resp.json().get("search", [])
+        if hits:
+            return hits[0]["id"], hits[0].get("description", "")
+    except Exception as e:
+        log.debug("Search-API Fehler für '{}': {}", name, e)
+    return None
 
-        qid = hits[0]["id"]
-        snippet_desc = hits[0].get("description", "")
-        log.debug("Wikidata search '{}' → {} ({})", name, qid, snippet_desc)
 
-        # 2. SPARQL → all structured fields in one shot
-        sparql = f"""
+async def _wikidata_sparql_batch(qids: list[str]) -> dict[str, dict]:
+    """One SPARQL query for all qids. Returns {qid: field_dict}."""
+    values = " ".join(f"wd:{q}" for q in qids)
+    sparql = f"""
 SELECT
-  ?hqLabel ?countryLabel ?founded
+  ?company ?hqLabel ?countryLabel ?founded
   (MAX(?emp) AS ?employees)
   (SAMPLE(?site) AS ?website)
   (SAMPLE(?liId) AS ?linkedinId)
   (SAMPLE(?logo) AS ?logo)
   ?industryLabel
 WHERE {{
-  BIND(wd:{qid} AS ?company)
+  VALUES ?company {{ {values} }}
   OPTIONAL {{ ?company wdt:P159 ?hq . }}
   OPTIONAL {{ ?company wdt:P17 ?country . }}
   OPTIONAL {{ ?company wdt:P571 ?founded . }}
@@ -92,56 +88,63 @@ WHERE {{
   OPTIONAL {{ ?company wdt:P452 ?industry . }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "de,en" . }}
 }}
-GROUP BY ?hqLabel ?countryLabel ?founded ?industryLabel
-LIMIT 1
+GROUP BY ?company ?hqLabel ?countryLabel ?founded ?industryLabel
 """
-        sparql_resp = await client.get(
+    async with httpx.AsyncClient(timeout=30.0, headers={"User-Agent": _UA}) as client:
+        resp = await client.get(
             "https://query.wikidata.org/sparql",
             params={"query": sparql, "format": "json"},
         )
-        sparql_resp.raise_for_status()
-        bindings = sparql_resp.json().get("results", {}).get("bindings", [])
-        row = bindings[0] if bindings else {}
+        resp.raise_for_status()
 
+    result: dict[str, dict] = {}
+    for row in resp.json().get("results", {}).get("bindings", []):
         def v(key: str) -> str:
             return row.get(key, {}).get("value", "")
 
-        result: dict = {}
-
-        if snippet_desc:
-            result["description"] = snippet_desc
+        qid = v("company").split("/")[-1]
+        entry: dict = {}
         if v("hqLabel"):
-            result["hq_city"] = v("hqLabel")
+            entry["hq_city"] = v("hqLabel")
         if v("countryLabel"):
-            result["hq_country"] = v("countryLabel")
+            entry["hq_country"] = v("countryLabel")
         if v("website"):
-            result["website"] = v("website")
-        if v("linkedinId"):
-            li_id = v("linkedinId")
-            result["linkedin_company_url"] = (
-                li_id if li_id.startswith("http") else f"https://www.linkedin.com/company/{li_id}"
-            )
-        if v("industryLabel"):
-            result["industry"] = v("industryLabel")
+            entry["website"] = v("website")
         if v("logo"):
-            result["logo_url"] = v("logo")
+            entry["logo_url"] = v("logo")
+        if v("industryLabel"):
+            entry["industry"] = v("industryLabel")
+        if v("linkedinId"):
+            li = v("linkedinId")
+            entry["linkedin_company_url"] = li if li.startswith("http") \
+                else f"https://www.linkedin.com/company/{li}"
         if v("employees"):
             try:
-                result["employee_count"] = int(float(re.sub(r"[^\d.]", "", v("employees"))))
+                entry["employee_count"] = int(float(re.sub(r"[^\d.]", "", v("employees"))))
             except (ValueError, TypeError):
                 pass
         if v("founded"):
-            m = re.search(r"\d{4}", v("founded"))
-            if m:
-                year = int(m.group())
-                if 1700 <= year <= 2100:
-                    result["founded_year"] = year
+            entry["founded_year"] = _parse_year(v("founded"))
+        result[qid] = entry
 
-        result["_qid"] = qid
-        return result
+    return result
 
 
-# ── Sync endpoints ────────────────────────────────────────────────────────────
+async def _fetch_logo(url: str, sem: asyncio.Semaphore) -> str | None:
+    async with sem:
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
+                                         follow_redirects=True) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                ct = resp.headers.get("content-type", "image/png").split(";")[0].strip()
+                return f"data:{ct};base64,{base64.b64encode(resp.content).decode()}"
+        except Exception as e:
+            log.debug("Logo-Download fehlgeschlagen ({}): {}", url, e)
+            return None
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/status")
 def company_sync_status(db: Session = Depends(get_db)):
@@ -250,75 +253,138 @@ async def _run_sync_batch(profile_ids: list[int]):
     global _SYNC_RUNNING, _CURRENT_COMPANY
     _SYNC_RUNNING = True
     _CURRENT_COMPANY = None
+    now = datetime.now(timezone.utc)
+
     try:
-        for pid in profile_ids:
-            db = SessionLocal()
-            try:
-                profile = db.query(models.CompanyProfile).filter(models.CompanyProfile.id == pid).first()
-                if not profile:
+        # Load all profiles
+        db = SessionLocal()
+        profiles = {
+            p.id: p
+            for p in db.query(models.CompanyProfile)
+                       .filter(models.CompanyProfile.id.in_(profile_ids)).all()
+        }
+        db.close()
+
+        # Phase 1: Search API → Q-IDs (sequential, 0.3s apart — lenient rate limit)
+        qid_map: dict[int, str] = {}       # profile_id → qid
+        desc_map: dict[int, str] = {}      # profile_id → description snippet
+        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA}) as client:
+            for pid in profile_ids:
+                p = profiles.get(pid)
+                if not p:
                     continue
-                _CURRENT_COMPANY = profile.name_display or profile.name_norm
-                await _sync_one_company(db, profile)
+                name = p.name_display or p.name_norm
+                _CURRENT_COMPANY = name
+                hit = await _wikidata_search_one(client, name)
+                if hit:
+                    qid_map[pid], desc_map[pid] = hit
+                    log.debug("'{}' → {}", name, qid_map[pid])
+                else:
+                    log.info("Kein Wikidata-Treffer für '{}'", name)
+                await asyncio.sleep(0.3)
+
+        # Mark not-found profiles
+        db = SessionLocal()
+        for pid in profile_ids:
+            if pid not in qid_map:
+                p = db.query(models.CompanyProfile).get(pid)
+                if p:
+                    p.sync_status = "done"
+                    p.sync_source = "wikidata"
+                    p.sync_error = "Kein Wikidata-Eintrag gefunden"
+                    p.last_synced_at = now
+        db.commit()
+        db.close()
+
+        # Phase 2: Batch SPARQL — _SPARQL_BATCH Q-IDs per query
+        found_pids = list(qid_map.keys())
+        sparql_data: dict[str, dict] = {}  # qid → field dict
+
+        for i in range(0, len(found_pids), _SPARQL_BATCH):
+            chunk_pids = found_pids[i:i + _SPARQL_BATCH]
+            chunk_qids = [qid_map[pid] for pid in chunk_pids]
+            log.info("SPARQL-Batch {}/{}: {} Firmen", i // _SPARQL_BATCH + 1,
+                     -(-len(found_pids) // _SPARQL_BATCH), len(chunk_qids))
+            try:
+                batch_result = await _wikidata_sparql_batch(chunk_qids)
+                sparql_data.update(batch_result)
             except Exception as e:
-                log.error("Sync-Fehler Firma {}: {}", pid, e)
-            finally:
+                log.error("SPARQL-Batch Fehler: {}", e)
+                # Mark affected profiles as failed
+                db = SessionLocal()
+                for pid in chunk_pids:
+                    p = db.query(models.CompanyProfile).get(pid)
+                    if p:
+                        p.sync_status = "failed"
+                        p.sync_error = f"SPARQL: {e}"[:500]
+                        p.last_synced_at = now
+                db.commit()
                 db.close()
-            await asyncio.sleep(1.2)  # Wikidata SPARQL: max 1 req/s
+            if i + _SPARQL_BATCH < len(found_pids):
+                await asyncio.sleep(2.0)  # pause between SPARQL batches
+
+        # Phase 3: Logo downloads — parallel with semaphore
+        sem = asyncio.Semaphore(_LOGO_CONCURRENCY)
+        logo_tasks = {}
+        for pid in found_pids:
+            qid = qid_map[pid]
+            logo_url = sparql_data.get(qid, {}).get("logo_url")
+            p = profiles.get(pid)
+            if logo_url and p and not p.logo_data:
+                logo_tasks[pid] = asyncio.create_task(_fetch_logo(logo_url, sem))
+
+        if logo_tasks:
+            await asyncio.gather(*logo_tasks.values(), return_exceptions=True)
+
+        # Phase 4: Write all results to DB
+        db = SessionLocal()
+        for pid in found_pids:
+            p = db.query(models.CompanyProfile).get(pid)
+            if not p:
+                continue
+            qid = qid_map[pid]
+            data = sparql_data.get(qid, {})
+
+            if desc_map.get(pid) and not p.description:
+                p.description = desc_map[pid][:2000]
+            if data.get("hq_city"):
+                p.hq_city = data["hq_city"][:200]
+            if data.get("hq_country"):
+                p.hq_country = data["hq_country"][:200]
+            if data.get("industry"):
+                p.industry = data["industry"][:200]
+            if data.get("employee_count"):
+                p.employee_count = data["employee_count"]
+                p.employee_range = _employee_range(data["employee_count"])
+            if data.get("founded_year"):
+                p.founded_year = data["founded_year"]
+            if data.get("website") and not p.website:
+                p.website = data["website"][:500]
+            if data.get("linkedin_company_url") and not p.linkedin_company_url:
+                p.linkedin_company_url = data["linkedin_company_url"][:500]
+            logo_result = logo_tasks.get(pid)
+            if logo_result and not logo_result.cancelled():
+                try:
+                    logo_b64 = logo_result.result()
+                    if logo_b64:
+                        p.logo_data = logo_b64
+                except Exception:
+                    pass
+
+            p.sync_source = f"wikidata:{qid}"
+            p.sync_status = "done"
+            p.sync_error = None
+            p.last_synced_at = now
+            log.info("Synced '{}' ({}): hq={}/{} emp={} founded={}",
+                     p.name_display, qid, data.get("hq_city"), data.get("hq_country"),
+                     data.get("employee_count"), data.get("founded_year"))
+
+        db.commit()
+        db.close()
+        log.info("Firmensync abgeschlossen: {} Firmen", len(profile_ids))
+
+    except Exception as e:
+        log.error("Firmensync Fehler: {}", e)
     finally:
         _SYNC_RUNNING = False
         _CURRENT_COMPANY = None
-
-
-async def _sync_one_company(db: Session, profile: models.CompanyProfile):
-    name = profile.name_display or profile.name_norm
-    try:
-        data = await _wikidata_fetch(name)
-
-        if not data:
-            profile.sync_status = "done"
-            profile.sync_source = "wikidata"
-            profile.sync_error = "Kein Wikidata-Eintrag gefunden"
-            profile.last_synced_at = datetime.now(timezone.utc)
-            db.commit()
-            log.info("Wikidata: kein Eintrag für '{}'", name)
-            return
-
-        if data.get("hq_city"):
-            profile.hq_city = str(data["hq_city"])[:200]
-        if data.get("hq_country"):
-            profile.hq_country = str(data["hq_country"])[:200]
-        if data.get("industry"):
-            profile.industry = str(data["industry"])[:200]
-        if data.get("employee_count"):
-            profile.employee_count = data["employee_count"]
-            profile.employee_range = _employee_range(data["employee_count"])
-        if data.get("founded_year"):
-            profile.founded_year = data["founded_year"]
-        if data.get("website") and not profile.website:
-            profile.website = str(data["website"])[:500]
-        if data.get("linkedin_company_url") and not profile.linkedin_company_url:
-            profile.linkedin_company_url = str(data["linkedin_company_url"])[:500]
-        if data.get("description") and not profile.description:
-            profile.description = str(data["description"])[:2000]
-        if data.get("logo_url") and not profile.logo_data:
-            profile.logo_data = await _fetch_logo(data["logo_url"])
-
-        profile.sync_source = f"wikidata:{data['_qid']}"
-        profile.sync_status = "done"
-        profile.sync_error = None
-        profile.last_synced_at = datetime.now(timezone.utc)
-        db.commit()
-        log.info("Wikidata synced '{}' ({}): hq={}/{} emp={} founded={}",
-                 name, data["_qid"], data.get("hq_city"), data.get("hq_country"),
-                 data.get("employee_count"), data.get("founded_year"))
-
-    except httpx.HTTPStatusError as e:
-        profile.sync_status = "failed"
-        profile.sync_error = f"HTTP {e.response.status_code}: {e.request.url}"
-        db.commit()
-        log.warning("Wikidata HTTP-Fehler für '{}': {}", name, e)
-    except Exception as e:
-        profile.sync_status = "failed"
-        profile.sync_error = str(e)[:500]
-        db.commit()
-        log.error("Wikidata Fehler für '{}': {}", name, e)

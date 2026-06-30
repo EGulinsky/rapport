@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.27',
+    date: '2026-06-30',
+    changes: [
+      'Firmensync: Batch-SPARQL — alle Q-IDs werden erst per Search-API gesammelt (0,3s Abstand), dann in einem einzigen SPARQL-Request abgefragt (bis zu 40 Firmen pro Query). Logo-Downloads parallel (max 3 gleichzeitig). Behebt "Too Many Requests" bei größeren Batches.',
+    ],
+  },
+  {
     version: '3.14.26',
     date: '2026-06-30',
     changes: [
