@@ -821,7 +821,7 @@ def _li_job_id_from_url(url: str) -> str | None:
 def _quick_match(job: dict, target_app: "models.Application") -> bool:
     """Fast no-write check: does this LI job belong to target_app?"""
     from app.dedup import norm_firma, norm_rolle
-    li_job_id = job.get("id", "")
+    li_job_id = job.get("id", "") or _li_job_id_from_url(job.get("stellenanzeige_url", "") or "") or ""
     if li_job_id:
         if li_job_id == (target_app.linkedin_job_id or ""):
             return True
@@ -842,7 +842,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     pending_status is set when a new app was created but the LI source implies a status
     that should go through review (currently: 'rejected'). Caller must create PendingMatch.
     """
-    li_job_id = job.get("id", "")
+    li_job_id = job.get("id", "") or _li_job_id_from_url(job.get("stellenanzeige_url", "") or "") or ""
 
     clean_title = job.get("title", "")
 

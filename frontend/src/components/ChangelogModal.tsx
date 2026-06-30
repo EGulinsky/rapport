@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.22',
+    date: '2026-06-30',
+    changes: [
+      'Fix: LI-Sync extrahiert Job-ID aus der gescrapten Stellenanzeige-URL (job["stellenanzeige_url"]) — bisher war job["id"] immer leer, URL-basierter Match schlug deshalb nie an.',
+    ],
+  },
+  {
     version: '3.14.21',
     date: '2026-06-30',
     changes: [
