@@ -60,6 +60,39 @@ const PROVIDERS = [
   },
 ] as const
 
+interface ProviderModel {
+  model: string
+  label: string
+  sublabel?: string
+  badge?: string
+  badgeColor?: string
+}
+
+const PROVIDER_MODELS: Partial<Record<string, ProviderModel[]>> = {
+  groq: [
+    { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',   sublabel: 'Versatile',    badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+    { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',    sublabel: 'Instant',      badge: 'Schnell',   badgeColor: 'bg-gray-100 text-gray-600' },
+    { model: 'groq/llama3-70b-8192',          label: 'Llama 3 70B',     sublabel: '8192 ctx' },
+    { model: 'groq/gemma2-9b-it',             label: 'Gemma 2 9B' },
+    { model: 'groq/mixtral-8x7b-32768',       label: 'Mixtral 8×7B',    sublabel: '32k ctx' },
+  ],
+  gemini: [
+    { model: 'gemini/gemini-2.0-flash',      label: 'Gemini 2.0 Flash',      badge: 'Empfohlen',       badgeColor: 'bg-indigo-100 text-indigo-700' },
+    { model: 'gemini/gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', badge: 'Schnell',          badgeColor: 'bg-gray-100 text-gray-600' },
+    { model: 'gemini/gemini-1.5-flash',      label: 'Gemini 1.5 Flash' },
+    { model: 'gemini/gemini-1.5-pro',        label: 'Gemini 1.5 Pro',        badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700' },
+    { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash', badge: 'Preview', badgeColor: 'bg-purple-100 text-purple-700' },
+  ],
+  anthropic: [
+    { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
+    { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+  ],
+  openai: [
+    { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
+    { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+  ],
+}
+
 interface OllamaModel {
   name: string
   display: string
@@ -461,19 +494,63 @@ export function AiSettingsModal({ onClose }: Props) {
               </>
             )}
 
-            {/* Model (non-Ollama providers) */}
-            {!provider.needsUrl && (
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Modell</p>
-                <input
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={form.model}
-                  onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                  onBlur={() => autoSave({ model: form.model })}
-                  placeholder="z.B. groq/llama-3.3-70b-versatile"
-                />
-              </div>
-            )}
+            {/* Model picker (non-Ollama providers) */}
+            {!provider.needsUrl && (() => {
+              const models = PROVIDER_MODELS[form.provider]
+              const isKnown = models?.some(m => m.model === form.model)
+              return (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Modell</p>
+                  {models && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {models.map(m => (
+                        <button
+                          key={m.model}
+                          type="button"
+                          onClick={() => { setForm(f => ({ ...f, model: m.model })); autoSave({ model: m.model }) }}
+                          className={clsx(
+                            'flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-all',
+                            form.model === m.model
+                              ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50'
+                              : 'border-gray-200 hover:border-gray-300 bg-white'
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {form.model === m.model && <Check className="h-3 w-3 text-indigo-600 shrink-0" />}
+                            <span className="text-sm font-medium text-gray-800">{m.label}</span>
+                          </div>
+                          {(m.sublabel || m.badge) && (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
+                              {m.badge && (
+                                <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
+                                  {m.badge}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {(!models || !isKnown) && (
+                    <>
+                      {models && <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>}
+                      <input
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={form.model}
+                        onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                        onBlur={() => autoSave({ model: form.model })}
+                        placeholder="z.B. groq/llama-3.3-70b-versatile"
+                      />
+                    </>
+                  )}
+                  {models && isKnown && (
+                    <p className="text-xs text-gray-400 mt-1 font-mono">{form.model}</p>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* API Key (not for Ollama) */}
             {!provider.needsUrl && (

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.44',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einstellungen: Modellauswahl per Chip für Groq (5 Modelle), Gemini (5 Modelle), Anthropic und OpenAI — analog Ollama. Ausgewähltes Modell wird unterhalb als ID angezeigt.',
+    ],
+  },
+  {
     version: '3.14.43',
     date: '2026-06-30',
     changes: [
