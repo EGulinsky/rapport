@@ -47,10 +47,10 @@ export const api = {
     aiAssess: (id: number) =>
       request<{ color: string; reasoning: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
     aiAssessAllUrl: () => `${BASE}/applications/ai-assess-all`,
-    extractFromText: (text: string) =>
-      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null }>(
-        '/applications/extract-from-text',
-        { method: 'POST', body: JSON.stringify({ text }) }
+    extractFromLinkedInUrl: (url: string) =>
+      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null; stellenanzeige_url: string }>(
+        '/applications/extract-from-linkedin-url',
+        { method: 'POST', body: JSON.stringify({ url }) }
       ),
 
     deleteEvent: (appId: number, eventId: number) =>

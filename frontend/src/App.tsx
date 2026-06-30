@@ -639,28 +639,31 @@ interface NewApplicationPrefill {
   is_headhunter: boolean
   zielfirma_bei_hh: string | null
   kommentar: string | null
+  stellenanzeige_url?: string
 }
 
 function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; onExtracted: (prefill: NewApplicationPrefill) => void }) {
-  const [text, setText] = useState('')
+  const [url, setUrl] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function extract() {
-    if (!text.trim()) return
+    if (!url.trim()) return
     setExtracting(true)
     setError(null)
     try {
-      const result = await api.applications.extractFromText(text)
+      const result = await api.applications.extractFromLinkedInUrl(url.trim())
       onExtracted(result)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(
         msg.includes('429') || msg.toLowerCase().includes('rate')
           ? 'Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.'
-          : msg.includes('400')
-            ? 'KI-Extraktion fehlgeschlagen — bitte Felder manuell ausfüllen.'
-            : 'Extraktion fehlgeschlagen.'
+          : msg.toLowerCase().includes('linkedin nicht konfiguriert')
+            ? 'LinkedIn ist nicht verbunden — bitte zuerst in den Einstellungen unter "LinkedIn" anmelden.'
+            : msg.includes('400')
+              ? 'Stellenanzeige konnte nicht geladen werden — bitte Link prüfen oder Felder manuell ausfüllen.'
+              : 'Import fehlgeschlagen.'
       )
     } finally {
       setExtracting(false)
@@ -675,15 +678,16 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
           <h2 className="text-lg font-semibold text-gray-900">Aus LinkedIn importieren</h2>
         </div>
         <p className="text-sm text-gray-500">
-          Stellenanzeige von LinkedIn kopieren (gesamter Text der Jobseite) und hier einfügen. Die KI füllt Firma, Rolle und weitere Felder automatisch aus.
+          Link zur LinkedIn-Stellenanzeige einfügen. Die Seite wird automatisch geladen und Firma, Rolle und weitere Felder per KI ausgefüllt.
         </p>
-        <textarea
+        <input
           autoFocus
-          rows={10}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="Stellenanzeige hier einfügen…"
-          value={text}
-          onChange={e => setText(e.target.value)}
+          type="url"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="https://www.linkedin.com/jobs/view/…"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !extracting && url.trim()) extract() }}
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-3 pt-2">
@@ -692,12 +696,12 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
           </button>
           <button
             type="button"
-            disabled={extracting || !text.trim()}
+            disabled={extracting || !url.trim()}
             onClick={extract}
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             <Sparkles className={`h-3.5 w-3.5 ${extracting ? 'animate-pulse' : ''}`} />
-            {extracting ? 'Extrahiere…' : 'Felder extrahieren'}
+            {extracting ? 'Lade & extrahiere…' : 'Importieren'}
           </button>
         </div>
       </div>
@@ -709,7 +713,7 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
 function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewApplicationPrefill | null; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<{
     firma: string; company_profile_id: number | null; rolle: string; quelle: string; is_headhunter: boolean
-    main_status: MainStatus; datum_bewerbung: string; zielfirma_bei_hh: string; kommentar: string
+    main_status: MainStatus; datum_bewerbung: string; zielfirma_bei_hh: string; kommentar: string; stellenanzeige_url: string
   }>({
     firma: initial?.firma ?? '',
     company_profile_id: null,
@@ -720,6 +724,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
     datum_bewerbung: '',
     zielfirma_bei_hh: initial?.zielfirma_bei_hh ?? '',
     kommentar: initial?.kommentar ?? '',
+    stellenanzeige_url: initial?.stellenanzeige_url ?? '',
   })
   const [saving, setSaving] = useState(false)
   const [firmaPicker, setFirmaPicker] = useState(false)
@@ -777,6 +782,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
         datum_bewerbung: form.datum_bewerbung || undefined,
         zielfirma_bei_hh: form.zielfirma_bei_hh || undefined,
         kommentar: form.kommentar || undefined,
+        stellenanzeige_url: form.stellenanzeige_url || undefined,
       })
       onSaved()
     } finally {

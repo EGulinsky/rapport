@@ -99,8 +99,8 @@ class EventRead(EventBase):
     model_config = {"from_attributes": True}
 
 
-class ExtractFromTextRequest(BaseModel):
-    text: str
+class ExtractFromUrlRequest(BaseModel):
+    url: str
 
 
 class ApplicationBase(BaseModel):

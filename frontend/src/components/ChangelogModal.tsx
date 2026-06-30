@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.1',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Import korrigiert: statt Text manuell einzufügen, einfach den Link zur Stellenanzeige eingeben — die Seite wird automatisch über die bestehende LinkedIn-Anmeldung geladen, die KI extrahiert daraus alle Felder.',
+    ],
+  },
+  {
     version: '3.15.0',
     date: '2026-06-30',
     changes: [
