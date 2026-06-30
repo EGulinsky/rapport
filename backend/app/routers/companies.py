@@ -1,14 +1,21 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, date
 import base64
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import CompanyProfile
+from app.logger import get_logger
+
+log = get_logger("sync", source="company")
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
+
+_LINK_RUNNING = False
+_LINK_CANCEL = False
+_LINK_PROGRESS: dict = {"linked": 0, "created": 0, "total": 0, "done": False, "cancelled": False}
 
 
 class CompanyProfileListItem(BaseModel):
@@ -303,29 +310,74 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
     return get_company(company_id, db)
 
 
+@router.get("/link-contacts/status")
+def link_contacts_status():
+    return {"running": _LINK_RUNNING, **_LINK_PROGRESS}
+
+
+@router.post("/link-contacts/cancel")
+def link_contacts_cancel():
+    global _LINK_CANCEL
+    _LINK_CANCEL = True
+    return {"ok": True}
+
+
 @router.post("/link-contacts")
-def link_contacts_to_companies(db: Session = Depends(get_db)):
-    from app.dedup import norm_firma
+def link_contacts_to_companies(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    global _LINK_RUNNING
+    if _LINK_RUNNING:
+        return {"started": False, "message": "Bereits läuft"}
     from app import models
-    contacts = db.query(models.Contact).filter(
+    total = db.query(models.Contact).filter(
         models.Contact.company_profile_id.is_(None),
         models.Contact.firma.isnot(None),
-    ).all()
-    linked = 0
-    created = 0
-    for c in contacts:
-        nname = norm_firma(c.firma)
-        profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
-        if not profile:
-            profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending")
-            db.add(profile)
-            db.flush()
-            created += 1
-        if c.company_profile_id != profile.id:
-            c.company_profile_id = profile.id
-            linked += 1
-    db.commit()
-    return {"linked": linked, "created": created}
+    ).count()
+    background_tasks.add_task(_run_link_contacts)
+    return {"started": True, "total": total}
+
+
+def _run_link_contacts():
+    global _LINK_RUNNING, _LINK_CANCEL, _LINK_PROGRESS
+    from app.dedup import norm_firma
+    from app import models
+    _LINK_RUNNING = True
+    _LINK_CANCEL = False
+    _LINK_PROGRESS = {"linked": 0, "created": 0, "total": 0, "done": False, "cancelled": False}
+    try:
+        db = SessionLocal()
+        contacts = db.query(models.Contact).filter(
+            models.Contact.company_profile_id.is_(None),
+            models.Contact.firma.isnot(None),
+        ).all()
+        _LINK_PROGRESS["total"] = len(contacts)
+        linked = 0
+        created = 0
+        for c in contacts:
+            if _LINK_CANCEL:
+                _LINK_PROGRESS["cancelled"] = True
+                log.info("Kontaktverknüpfung abgebrochen nach {}/{}", linked + created, len(contacts))
+                break
+            nname = norm_firma(c.firma)
+            profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
+            if not profile:
+                profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending")
+                db.add(profile)
+                db.flush()
+                created += 1
+            if c.company_profile_id != profile.id:
+                c.company_profile_id = profile.id
+                linked += 1
+            _LINK_PROGRESS["linked"] = linked
+            _LINK_PROGRESS["created"] = created
+        db.commit()
+        db.close()
+        _LINK_PROGRESS["done"] = True
+        log.info("Kontaktverknüpfung: {} verknüpft, {} erstellt", linked, created)
+    except Exception as e:
+        log.error("Kontaktverknüpfung Fehler: {}", e)
+    finally:
+        _LINK_RUNNING = False
+        _LINK_CANCEL = False
 
 
 @router.post("/{company_id}/logo")

@@ -17,6 +17,7 @@ log = get_logger("sync", source="company")
 router = APIRouter(prefix="/api/sync/company", tags=["sync_company"])
 
 _SYNC_RUNNING = False
+_SYNC_CANCEL = False
 _CURRENT_COMPANY: str | None = None
 
 _UA = "JobTracker/1.0 (personal job-application tracker; contact: private)"
@@ -187,10 +188,18 @@ async def company_sync_run(
     return {"started": True, "count": count}
 
 
+@router.post("/cancel")
+def cancel_sync():
+    global _SYNC_CANCEL
+    _SYNC_CANCEL = True
+    return {"ok": True}
+
+
 @router.post("/reset-lock")
 def reset_lock():
-    global _SYNC_RUNNING, _CURRENT_COMPANY
+    global _SYNC_RUNNING, _SYNC_CANCEL, _CURRENT_COMPANY
     _SYNC_RUNNING = False
+    _SYNC_CANCEL = False
     _CURRENT_COMPANY = None
     return {"ok": True}
 
@@ -224,13 +233,17 @@ def reset_profile(profile_id: int, db: Session = Depends(get_db)):
 # ── Batch runner ──────────────────────────────────────────────────────────────
 
 async def _run_sync_batch(profile_ids: list[int]):
-    global _SYNC_RUNNING, _CURRENT_COMPANY
+    global _SYNC_RUNNING, _SYNC_CANCEL, _CURRENT_COMPANY
     _SYNC_RUNNING = True
+    _SYNC_CANCEL = False
     _CURRENT_COMPANY = None
     now = datetime.now(timezone.utc)
 
     try:
         for pid in profile_ids:
+            if _SYNC_CANCEL:
+                log.info("Firmensync abgebrochen nach {} Firmen", profile_ids.index(pid))
+                break
             db = SessionLocal()
             p = db.query(models.CompanyProfile).get(pid)
             if not p:
@@ -290,4 +303,5 @@ async def _run_sync_batch(profile_ids: list[int]):
         log.error("Firmensync Fehler: {}", e)
     finally:
         _SYNC_RUNNING = False
+        _SYNC_CANCEL = False
         _CURRENT_COMPANY = None
