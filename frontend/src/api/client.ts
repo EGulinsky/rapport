@@ -95,6 +95,12 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
+
+    create: (data: { name: string; vorname?: string; email?: string; telefon?: string; firma?: string; company_profile_id?: number; rolle?: string; typ?: string; linkedin_url?: string }) =>
+      request<{ id: number; name: string; firma: string | null; company_profile_id: number | null }>('/contacts/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   export: {

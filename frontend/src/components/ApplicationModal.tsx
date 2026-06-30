@@ -64,6 +64,20 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [firmaLoading, setFirmaLoading] = useState(false)
   const [firmaCreating, setFirmaCreating] = useState(false)
   const firmaPickerRef = useRef<HTMLDivElement>(null)
+  // Contact "new" firma picker
+  const [cFirmaPicker, setCFirmaPicker] = useState(false)
+  const [cFirmaQuery, setCFirmaQuery] = useState('')
+  const [cFirmaResults, setCFirmaResults] = useState<CompanyProfile[]>([])
+  const [cFirmaLoading, setCFirmaLoading] = useState(false)
+  const [cFirmaCreating, setCFirmaCreating] = useState(false)
+  const cFirmaRef = useRef<HTMLDivElement>(null)
+  // Contact "edit" firma picker
+  const [ecFirmaPicker, setEcFirmaPicker] = useState(false)
+  const [ecFirmaQuery, setEcFirmaQuery] = useState('')
+  const [ecFirmaResults, setEcFirmaResults] = useState<CompanyProfile[]>([])
+  const [ecFirmaLoading, setEcFirmaLoading] = useState(false)
+  const [ecFirmaCreating, setEcFirmaCreating] = useState(false)
+  const ecFirmaRef = useRef<HTMLDivElement>(null)
   const [docAttaching, setDocAttaching] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
@@ -410,6 +424,76 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setFirmaPicker(false)
     } finally {
       setFirmaCreating(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!cFirmaPicker) { setCFirmaQuery(''); setCFirmaResults([]); return }
+    const t = setTimeout(async () => {
+      setCFirmaLoading(true)
+      try { setCFirmaResults(await api.companies.list({ search: cFirmaQuery || undefined })) }
+      finally { setCFirmaLoading(false) }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [cFirmaQuery, cFirmaPicker])
+
+  useEffect(() => {
+    if (!cFirmaPicker) return
+    function handler(e: MouseEvent) {
+      if (cFirmaRef.current && !cFirmaRef.current.contains(e.target as Node)) setCFirmaPicker(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [cFirmaPicker])
+
+  useEffect(() => {
+    if (!ecFirmaPicker) { setEcFirmaQuery(''); setEcFirmaResults([]); return }
+    const t = setTimeout(async () => {
+      setEcFirmaLoading(true)
+      try { setEcFirmaResults(await api.companies.list({ search: ecFirmaQuery || undefined })) }
+      finally { setEcFirmaLoading(false) }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [ecFirmaQuery, ecFirmaPicker])
+
+  useEffect(() => {
+    if (!ecFirmaPicker) return
+    function handler(e: MouseEvent) {
+      if (ecFirmaRef.current && !ecFirmaRef.current.contains(e.target as Node)) setEcFirmaPicker(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [ecFirmaPicker])
+
+  async function pickContactCompany(c: CompanyProfile) {
+    setContactDraft(d => ({ ...d, firma: c.name_display ?? c.name_norm, company_profile_id: c.id }))
+    setCFirmaPicker(false)
+  }
+
+  async function createAndPickContactCompany(name: string) {
+    setCFirmaCreating(true)
+    try {
+      const c = await api.companies.create(name)
+      setContactDraft(d => ({ ...d, firma: c.name_display ?? c.name_norm, company_profile_id: c.id }))
+      setCFirmaPicker(false)
+    } finally {
+      setCFirmaCreating(false)
+    }
+  }
+
+  async function pickEditContactCompany(c: CompanyProfile) {
+    setEditContactDraft(d => ({ ...d, firma: c.name_display ?? c.name_norm, company_profile_id: c.id }))
+    setEcFirmaPicker(false)
+  }
+
+  async function createAndPickEditContactCompany(name: string) {
+    setEcFirmaCreating(true)
+    try {
+      const c = await api.companies.create(name)
+      setEditContactDraft(d => ({ ...d, firma: c.name_display ?? c.name_norm, company_profile_id: c.id }))
+      setEcFirmaPicker(false)
+    } finally {
+      setEcFirmaCreating(false)
     }
   }
 
@@ -1184,7 +1268,44 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
                         <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={editContactDraft.rolle ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, rolle: e.target.value }))} />
-                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={editContactDraft.firma ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, firma: e.target.value }))} />
+                        <div className="relative" ref={ecFirmaRef}>
+                          <div
+                            className="flex items-center justify-between rounded-md border border-gray-200 px-2 py-1 text-sm cursor-pointer hover:border-indigo-300"
+                            onClick={() => setEcFirmaPicker(o => !o)}
+                          >
+                            <span className={editContactDraft.firma ? 'text-gray-900 truncate' : 'text-gray-400'}>
+                              {editContactDraft.firma || 'Firma…'}
+                            </span>
+                            <Building2 className="h-3.5 w-3.5 text-gray-400 shrink-0 ml-1" />
+                          </div>
+                          {ecFirmaPicker && (
+                            <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg">
+                              <div className="p-1.5 border-b border-gray-100">
+                                <input autoFocus value={ecFirmaQuery} onChange={e => setEcFirmaQuery(e.target.value)}
+                                  placeholder="Firma suchen…" className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                              </div>
+                              <div className="max-h-40 overflow-y-auto py-1">
+                                {ecFirmaLoading && <p className="text-xs text-gray-400 px-3 py-1.5">Suche…</p>}
+                                {!ecFirmaLoading && ecFirmaResults.length === 0 && !ecFirmaQuery && (
+                                  <p className="text-xs text-gray-400 px-3 py-1.5 italic">Suchbegriff eingeben…</p>
+                                )}
+                                {ecFirmaResults.slice(0, 8).map(c => (
+                                  <button key={c.id} type="button" onClick={() => pickEditContactCompany(c)}
+                                    className="w-full text-left px-3 py-1 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                                    {c.name_display ?? c.name_norm}
+                                  </button>
+                                ))}
+                                {ecFirmaQuery.trim() && (
+                                  <button type="button" disabled={ecFirmaCreating} onClick={() => createAndPickEditContactCompany(ecFirmaQuery.trim())}
+                                    className="w-full text-left px-3 py-1 text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border-t border-gray-100 mt-1">
+                                    <Plus className="h-3 w-3 shrink-0" />
+                                    {ecFirmaCreating ? 'Anlegen…' : `"${ecFirmaQuery.trim()}" neu anlegen`}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={editContactDraft.typ ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, typ: e.target.value }))}>
                           <option value="">Typ wählen…</option>
                           {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1259,7 +1380,44 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
                     <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
-                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Firma" value={contactDraft.firma ?? ''} onChange={e => setContactDraft(d => ({ ...d, firma: e.target.value }))} />
+                    <div className="relative" ref={cFirmaRef}>
+                      <div
+                        className="flex items-center justify-between rounded-md border border-gray-200 px-2 py-1.5 text-sm cursor-pointer hover:border-indigo-300"
+                        onClick={() => setCFirmaPicker(o => !o)}
+                      >
+                        <span className={contactDraft.firma ? 'text-gray-900 truncate' : 'text-gray-400'}>
+                          {contactDraft.firma || 'Firma…'}
+                        </span>
+                        <Building2 className="h-3.5 w-3.5 text-gray-400 shrink-0 ml-1" />
+                      </div>
+                      {cFirmaPicker && (
+                        <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg">
+                          <div className="p-1.5 border-b border-gray-100">
+                            <input autoFocus value={cFirmaQuery} onChange={e => setCFirmaQuery(e.target.value)}
+                              placeholder="Firma suchen…" className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </div>
+                          <div className="max-h-40 overflow-y-auto py-1">
+                            {cFirmaLoading && <p className="text-xs text-gray-400 px-3 py-1.5">Suche…</p>}
+                            {!cFirmaLoading && cFirmaResults.length === 0 && !cFirmaQuery && (
+                              <p className="text-xs text-gray-400 px-3 py-1.5 italic">Suchbegriff eingeben…</p>
+                            )}
+                            {cFirmaResults.slice(0, 8).map(c => (
+                              <button key={c.id} type="button" onClick={() => pickContactCompany(c)}
+                                className="w-full text-left px-3 py-1 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                                {c.name_display ?? c.name_norm}
+                              </button>
+                            ))}
+                            {cFirmaQuery.trim() && (
+                              <button type="button" disabled={cFirmaCreating} onClick={() => createAndPickContactCompany(cFirmaQuery.trim())}
+                                className="w-full text-left px-3 py-1 text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border-t border-gray-100 mt-1">
+                                <Plus className="h-3 w-3 shrink-0" />
+                                {cFirmaCreating ? 'Anlegen…' : `"${cFirmaQuery.trim()}" neu anlegen`}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={contactDraft.typ ?? ''} onChange={e => setContactDraft(d => ({ ...d, typ: e.target.value }))}>
                       <option value="">Typ wählen…</option>
                       {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}

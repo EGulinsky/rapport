@@ -45,6 +45,28 @@ def list_all_contacts(
     return contacts
 
 
+class ContactCreate(BaseModel):
+    name: str
+    vorname: Optional[str] = None
+    email: Optional[str] = None
+    telefon: Optional[str] = None
+    firma: Optional[str] = None
+    company_profile_id: Optional[int] = None
+    rolle: Optional[str] = None
+    typ: Optional[str] = None
+    linkedin_url: Optional[str] = None
+
+
+@router.post("/", status_code=201)
+def create_contact(body: ContactCreate, db: Session = Depends(get_db)):
+    contact = models.Contact(**body.model_dump())
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return {"id": contact.id, "name": contact.name, "firma": contact.firma,
+            "company_profile_id": contact.company_profile_id}
+
+
 class ContactPatch(BaseModel):
     company_profile_id: Optional[int] = None
     firma: Optional[str] = None
