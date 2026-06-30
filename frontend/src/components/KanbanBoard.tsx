@@ -95,13 +95,24 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
       {!app.abgesagt && app.ai_color && (
-        <div className="flex items-start gap-1.5 mt-1.5">
-          <span className={clsx(
-            'mt-0.5 shrink-0 h-2 w-2 rounded-full',
-            app.ai_color === 'green' ? 'bg-green-500' :
-            app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
-          )} />
-          <p className="text-[10px] leading-tight text-gray-500">{app.ai_next_step}</p>
+        <div className="mt-1.5 space-y-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className={clsx(
+              'shrink-0 h-2 w-2 rounded-full',
+              app.ai_color === 'green' ? 'bg-green-500' :
+              app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+            )} />
+            <span className={clsx(
+              'text-[10px] font-semibold',
+              app.ai_color === 'green' ? 'text-green-700' :
+              app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
+            )}>
+              {app.ai_color === 'green' ? 'Hoch' : app.ai_color === 'red' ? 'Niedrig' : 'Mittel'}
+            </span>
+          </div>
+          {app.ai_next_step && (
+            <p className="text-[10px] leading-tight text-gray-500">{app.ai_next_step}</p>
+          )}
         </div>
       )}
       {!app.abgesagt && !app.ai_color && app.naechster_schritt && (
