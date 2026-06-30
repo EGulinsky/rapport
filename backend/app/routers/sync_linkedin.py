@@ -165,7 +165,7 @@ def debug_excel():
     ws = wb.active
     ws.title = "LinkedIn Sync"
 
-    headers = ["#", "LI Job-ID", "Firma (LI)", "Rolle (LI)", "Datum (LI)", "Kategorie (LI)", "Status-Hint (LI)", "Aktion", "Status DB", "Raw Context (debug)"]
+    headers = ["#", "App-ID", "Match-Grund", "LI Job-ID", "Firma (LI)", "Rolle (LI)", "Datum (LI)", "Kategorie (LI)", "Status-Hint (LI)", "Aktion", "Status DB", "Raw Context (debug)"]
     header_fill = PatternFill("solid", fgColor="1E4078")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -186,6 +186,8 @@ def debug_excel():
     for row_i, entry in enumerate(log, 2):
         row = [
             row_i - 1,
+            entry.get("app_id", ""),
+            entry.get("match_grund", ""),
             entry.get("li_job_id", ""),
             entry.get("firma_li", ""),
             entry.get("rolle_li", ""),
@@ -203,7 +205,7 @@ def debug_excel():
             if fill:
                 cell.fill = fill
 
-    col_widths = [5, 16, 40, 45, 14, 16, 20, 14, 28, 60]
+    col_widths = [5, 10, 28, 16, 38, 42, 14, 16, 20, 22, 28, 60]
     for col, w in enumerate(col_widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = w
 
@@ -935,7 +937,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         if app:
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
-            return app, False, None
+            return app, False, None, f"job_id:{li_job_id}→#{app.id}"
 
     # 2. Normalized-equality match: both company AND role must match after
     # stripping corporate suffixes and gender markers.
@@ -960,7 +962,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
-            return app, False, None
+            return app, False, None, f"firma+rolle→#{app.id}"
 
     # 2.5 Check merge aliases: after a manual merge the loser's identifiers are stored here
     alias = None
@@ -983,7 +985,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         if canonical:
             if li_job_id and not canonical.linkedin_job_id:
                 canonical.linkedin_job_id = li_job_id
-            return canonical, False, None
+            return canonical, False, None, f"alias→#{canonical.id}"
 
     # 3. Create new application
     intended_status = job.get("default_status", "applied")
@@ -1036,7 +1038,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         titel=event_titel,
         source="linkedin",
     ))
-    return new_app, True, intended_status
+    return new_app, True, intended_status, f"neu→#{new_app.id}"
 
 
 def _run_sync_task(cfg_id: int):
@@ -1179,8 +1181,8 @@ async def _async_sync(cfg_id: int):
                 "_raw_context":   job.get("_raw_context", ""),
             }
             try:
-                app, was_created, pending_status = _find_or_create_application(db, job)
-                app_info = {"firma": app.firma or "", "rolle": app.rolle or ""}
+                app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
+                app_info = {"firma": app.firma or "", "rolle": app.rolle or "", "app_id": app.id, "match_grund": match_grund}
                 if was_created:
                     created += 1
                     if pending_status:
@@ -1251,8 +1253,13 @@ async def _async_sync(cfg_id: int):
                                 suggested_sub_status=sub_hint,
                                 status_only=True,
                             ))
+                            pm_note = ""
+                        elif already_pending:
+                            pm_note = " (bereits ausstehend)"
+                        else:
+                            pm_note = f" (bereits überprüft: {already_reviewed.review_status})"
                         updated += 1
-                        action_log.append({**raw, **app_info, "aktion": "zur Überprüfung", "status_db": f"{old_status} → {target_status}?"})
+                        action_log.append({**raw, **app_info, "aktion": "zur Überprüfung" + pm_note, "status_db": f"{old_status} → {target_status}?"})
                     else:
                         skipped += 1
                         action_log.append({**raw, **app_info, "aktion": "unverändert", "status_db": old_status})

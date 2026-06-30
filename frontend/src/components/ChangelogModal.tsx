@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.17',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Sync Debug-Excel: App-ID und Match-Grund (job_id / firma+rolle / alias / neu) pro Eintrag sichtbar.',
+      'Wenn ein Status-Vorschlag übersprungen wird (bereits ausstehend / bereits überprüft), steht das jetzt im Log.',
+    ],
+  },
+  {
     version: '3.14.16',
     date: '2026-06-30',
     changes: [
