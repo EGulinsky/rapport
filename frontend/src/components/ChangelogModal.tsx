@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.34',
+    date: '2026-06-30',
+    changes: [
+      'Firmen: Checkbox "Alle markieren" (filterbewusst), "X löschen"-Button, Anzahl/Auswahl im Footer — analog Kontakte. Kontakte: "Alle markieren" berücksichtigt jetzt aktive Filter.',
+    ],
+  },
+  {
     version: '3.14.33',
     date: '2026-06-30',
     changes: [
