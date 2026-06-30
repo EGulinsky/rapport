@@ -607,7 +607,10 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         </table>
       </div>
 
-      <p className="text-xs text-gray-400">{sorted.length} {sorted.length === 1 ? 'Firma' : 'Firmen'}</p>
+      <p className="text-xs text-gray-400">
+        {sorted.length} {sorted.length === 1 ? 'Firma' : 'Firmen'}
+        {sorted.length !== companies.length && <span className="ml-1 text-gray-300">von {companies.length}</span>}
+      </p>
     </div>
   )
 }
