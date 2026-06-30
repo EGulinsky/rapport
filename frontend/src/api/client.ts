@@ -46,8 +46,7 @@ export const api = {
 
     aiAssess: (id: number) =>
       request<{ color: string; reasoning: string; next_step: string }>(`/applications/${id}/ai-assess`, { method: 'POST' }),
-    aiAssessAll: () =>
-      request<{ updated: number; errors: string[] }>('/applications/ai-assess-all', { method: 'POST' }),
+    aiAssessAllUrl: () => `${BASE}/applications/ai-assess-all`,
 
     deleteEvent: (appId: number, eventId: number) =>
       fetch(`${BASE}/applications/${appId}/events/${eventId}`, { method: 'DELETE' }).then(r => {

@@ -82,6 +82,7 @@ export default function App() {
   const [showReview, setShowReview] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
   const [aiAssessingAll, setAiAssessingAll] = useState(false)
+  const [aiAssessProgress, setAiAssessProgress] = useState<{ done: number; total: number } | null>(null)
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
@@ -291,16 +292,44 @@ export default function App() {
               <button
                 onClick={async () => {
                   setAiAssessingAll(true)
-                  try { await api.applications.aiAssessAll(); load() }
+                  setAiAssessProgress(null)
+                  try {
+                    const resp = await fetch(api.applications.aiAssessAllUrl())
+                    if (!resp.body) throw new Error('Kein Stream')
+                    const reader = resp.body.getReader()
+                    const decoder = new TextDecoder()
+                    let buf = ''
+                    while (true) {
+                      const { done, value } = await reader.read()
+                      if (done) break
+                      buf += decoder.decode(value, { stream: true })
+                      const lines = buf.split('\n')
+                      buf = lines.pop() ?? ''
+                      for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue
+                        try {
+                          const d = JSON.parse(line.slice(6))
+                          if (d.status === 'start') setAiAssessProgress({ done: 0, total: d.total })
+                          if (d.status === 'progress') {
+                            setAiAssessProgress({ done: d.done, total: d.total })
+                            load()
+                          }
+                        } catch { /* ignore parse errors */ }
+                      }
+                    }
+                    load()
+                  }
                   catch (e) { console.error('AI assess all failed', e) }
-                  finally { setAiAssessingAll(false) }
+                  finally { setAiAssessingAll(false); setAiAssessProgress(null) }
                 }}
                 disabled={aiAssessingAll}
                 title="KI-Einschätzung für alle aktiven Bewerbungen aktualisieren"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
               >
                 <Sparkles className={`h-3.5 w-3.5 ${aiAssessingAll ? 'animate-pulse' : ''}`} />
-                {aiAssessingAll ? 'KI läuft…' : 'KI bewerten'}
+                {aiAssessingAll
+                  ? (aiAssessProgress ? `KI: ${aiAssessProgress.done}/${aiAssessProgress.total}` : 'KI läuft…')
+                  : 'KI bewerten'}
               </button>
               <button
                 onClick={() => setShowCleanup(true)}
