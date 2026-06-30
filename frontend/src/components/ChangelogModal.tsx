@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.23',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Sync: Bewerbungsdatum wird für bestehende Apps nachgefüllt, falls noch nicht gesetzt.',
+    ],
+  },
+  {
     version: '3.14.22',
     date: '2026-06-30',
     changes: [

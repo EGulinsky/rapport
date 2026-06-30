@@ -1100,7 +1100,13 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                         job_url = job.get("stellenanzeige_url") or None
                         if job_url and not app.stellenanzeige_url:
                             app.stellenanzeige_url = job_url
-                            db.flush()
+                        if not app.datum_bewerbung and job.get("applied_date"):
+                            from datetime import date as _date
+                            try:
+                                app.datum_bewerbung = _date.fromisoformat(str(job["applied_date"]))
+                            except Exception:
+                                pass
+                        db.flush()
 
                         target_status = job.get("default_status", "applied")
                         if job.get("status_hint"):
