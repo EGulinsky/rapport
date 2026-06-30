@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.51',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einstellungen: Modellauswahl-Chips für Groq, Gemini, Anthropic, OpenAI waren bisher nur in der ungenutzten AiSettingsModal-Komponente implementiert — App.tsx rendert tatsächlich SettingsModal. Chip-Auswahl jetzt dort eingebaut, totes AiSettingsModal.tsx entfernt.',
+      'KI-Bewertung im Bewerbungsmodal: Kanban-Ansicht und Bewerbungsliste aktualisieren sich jetzt sofort nach "Neu bewerten" (onSaved() wurde nicht aufgerufen).',
+    ],
+  },
+  {
     version: '3.14.50',
     date: '2026-06-30',
     changes: [

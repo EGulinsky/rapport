@@ -9,12 +9,71 @@ import clsx from 'clsx'
 interface Props { onClose: () => void }
 
 // ── AI Provider config ────────────────────────────────────────────────────────
-const PROVIDERS = [
-  { id: 'groq',      name: 'Groq',            badge: 'kostenlos',     badgeColor: 'bg-green-100 text-green-700',   model: 'groq/llama-3.3-70b-versatile',       keyPh: 'gsk_…',     keyUrl: 'https://console.groq.com/keys',              needsUrl: false },
-  { id: 'anthropic', name: 'Anthropic Claude', badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700', model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com',               needsUrl: false },
-  { id: 'openai',    name: 'OpenAI',           badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700', model: 'gpt-4o-mini',                         keyPh: 'sk-…',      keyUrl: 'https://platform.openai.com/api-keys',        needsUrl: false },
-  { id: 'gemini',    name: 'Google Gemini',    badge: 'kostenlos',     badgeColor: 'bg-green-100 text-green-700',   model: 'gemini/gemini-2.0-flash',             keyPh: 'AIza…',     keyUrl: 'https://aistudio.google.com/app/apikey',      needsUrl: false },
-  { id: 'ollama',    name: 'Ollama',           badge: 'offline',       badgeColor: 'bg-yellow-100 text-yellow-700', model: 'ollama/llama3.2',                     keyPh: '',          keyUrl: 'https://ollama.com',                          needsUrl: true, defaultUrl: 'http://host.docker.internal:11434'  },
+interface ProviderModel {
+  model: string
+  label: string
+  sublabel?: string
+  badge?: string
+  badgeColor?: string
+}
+
+interface AiProvider {
+  id: string
+  name: string
+  badge: string
+  badgeColor: string
+  model: string
+  keyPh: string
+  keyUrl: string
+  needsUrl: boolean
+  defaultUrl?: string
+  models?: ProviderModel[]
+}
+
+const PROVIDERS: AiProvider[] = [
+  {
+    id: 'groq', name: 'Groq', badge: 'kostenlos', badgeColor: 'bg-green-100 text-green-700',
+    model: 'groq/llama-3.3-70b-versatile', keyPh: 'gsk_…', keyUrl: 'https://console.groq.com/keys', needsUrl: false,
+    models: [
+      { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  sublabel: 'Versatile', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',   sublabel: 'Instant',   badge: 'Schnell',   badgeColor: 'bg-gray-100 text-gray-600' },
+      { model: 'groq/llama3-70b-8192',          label: 'Llama 3 70B',    sublabel: '8192 ctx' },
+      { model: 'groq/gemma2-9b-it',             label: 'Gemma 2 9B' },
+      { model: 'groq/mixtral-8x7b-32768',       label: 'Mixtral 8×7B',   sublabel: '32k ctx' },
+    ],
+  },
+  {
+    id: 'anthropic', name: 'Anthropic Claude', badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700',
+    model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com', needsUrl: false,
+    models: [
+      { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
+      { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+    ],
+  },
+  {
+    id: 'openai', name: 'OpenAI', badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700',
+    model: 'gpt-4o-mini', keyPh: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys', needsUrl: false,
+    models: [
+      { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
+      { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+    ],
+  },
+  {
+    id: 'gemini', name: 'Google Gemini', badge: 'kostenlos', badgeColor: 'bg-green-100 text-green-700',
+    model: 'gemini/gemini-2.0-flash', keyPh: 'AIza…', keyUrl: 'https://aistudio.google.com/app/apikey', needsUrl: false,
+    models: [
+      { model: 'gemini/gemini-2.0-flash',               label: 'Gemini 2.0 Flash',      badge: 'Empfohlen',       badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'gemini/gemini-2.0-flash-lite',          label: 'Gemini 2.0 Flash Lite', badge: 'Schnell',          badgeColor: 'bg-gray-100 text-gray-600' },
+      { model: 'gemini/gemini-1.5-flash',               label: 'Gemini 1.5 Flash' },
+      { model: 'gemini/gemini-1.5-pro',                 label: 'Gemini 1.5 Pro',        badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700' },
+      { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash',      badge: 'Preview',         badgeColor: 'bg-purple-100 text-purple-700' },
+    ],
+  },
+  {
+    id: 'ollama', name: 'Ollama', badge: 'offline', badgeColor: 'bg-yellow-100 text-yellow-700',
+    model: 'ollama/llama3.2', keyPh: '', keyUrl: 'https://ollama.com', needsUrl: true,
+    defaultUrl: 'http://host.docker.internal:11434',
+  },
 ] as const
 
 interface OllamaModel { name: string; display: string; params: string; size_gb: number }
@@ -314,8 +373,8 @@ function AiPanel() {
     }
   }
 
-  function selectProvider(p: typeof PROVIDERS[number]) {
-    const defaultUrl = 'defaultUrl' in p ? p.defaultUrl : 'http://host.docker.internal:11434'
+  function selectProvider(p: AiProvider) {
+    const defaultUrl = p.defaultUrl ?? 'http://host.docker.internal:11434'
     const baseUrl = p.needsUrl ? (form.base_url || defaultUrl) : ''
     const patch = { provider: p.id, model: p.model, base_url: baseUrl }
     setForm(f => ({ ...f, ...patch }))
@@ -388,6 +447,8 @@ function AiPanel() {
   }
 
   const selectedModelBase = form.model.replace(/^ollama\//, '')
+  const providerModels = prov.needsUrl ? null : (prov.models ?? null)
+  const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
 
   if (loading) return <div className="py-8 text-center text-gray-400 text-sm">Lädt…</div>
 
@@ -512,10 +573,46 @@ function AiPanel() {
       {/* Model (non-Ollama) */}
       {!prov.needsUrl && (
         <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Modell</p>
-          <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-            onBlur={() => autoSave({ model: form.model })} />
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Modell</p>
+          {providerModels && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {providerModels.map(m => (
+                <button key={m.model} type="button"
+                  onClick={() => { setForm(f => ({ ...f, model: m.model })); autoSave({ model: m.model }) }}
+                  className={clsx(
+                    'flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-all',
+                    form.model === m.model ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-gray-200 hover:border-gray-300 bg-white'
+                  )}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {form.model === m.model && <Check className="h-3 w-3 text-indigo-600 shrink-0" />}
+                    <span className="text-sm font-medium text-gray-800">{m.label}</span>
+                  </div>
+                  {(m.sublabel || m.badge) && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
+                      {m.badge && (
+                        <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
+                          {m.badge}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {(!providerModels || !isKnownModel) && (
+            <>
+              {providerModels && <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>}
+              <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                onBlur={() => autoSave({ model: form.model })} placeholder="z.B. groq/llama-3.3-70b-versatile" />
+            </>
+          )}
+          {providerModels && isKnownModel && (
+            <p className="text-xs text-gray-400 mt-1 font-mono">{form.model}</p>
+          )}
         </div>
       )}
 

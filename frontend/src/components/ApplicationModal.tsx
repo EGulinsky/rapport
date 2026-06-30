@@ -146,6 +146,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         ai_reasoning: result.reasoning,
         ai_assessed_at: new Date().toISOString(),
       } : prev)
+      onSaved()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
