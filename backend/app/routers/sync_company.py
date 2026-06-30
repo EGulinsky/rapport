@@ -1,8 +1,9 @@
-"""Company profile sync via DuckDuckGo Instant Answer API."""
+"""Company profile sync: DDG → Wikipedia fallback, Clearbit logo fallback."""
 import asyncio
 import base64
 import re
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends
@@ -43,41 +44,49 @@ def _parse_year(s: str) -> int | None:
 
 
 def _parse_employee_count(s: str) -> int | None:
-    # "123,456" / "123.456" / "~50,000" / "50000"
     digits = re.sub(r"[^\d]", "", str(s))
     return int(digits) if digits else None
 
 
-async def _ddg_fetch(name: str) -> dict:
-    """Query DuckDuckGo Instant Answer API. Returns normalized field dict."""
-    # Strip pipe/slash separators that confuse DDG (e.g. "Akkodis | inContext AB")
-    query = re.split(r"\s*[|/]\s*", name)[0].strip()
+def _clean_query(name: str) -> str:
+    """Strip pipe/slash agency suffixes: 'Akkodis | inContext AB' → 'Akkodis'."""
+    return re.split(r"\s*[|/]\s*", name)[0].strip()
 
+
+def _domain_from_url(url: str) -> str | None:
+    try:
+        host = urlparse(url).hostname or ""
+        return host.removeprefix("www.") or None
+    except Exception:
+        return None
+
+
+# ── Source 1: DuckDuckGo ─────────────────────────────────────────────────────
+
+async def _ddg_fetch(name: str) -> dict:
+    query = _clean_query(name)
     for attempt in range(2):
         try:
             async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
                                          follow_redirects=True) as client:
                 resp = await client.get(_DDG_URL, params={
-                    "q": query,
-                    "format": "json",
-                    "no_redirect": "1",
-                    "no_html": "1",
-                    "skip_disambig": "1",
+                    "q": query, "format": "json",
+                    "no_redirect": "1", "no_html": "1", "skip_disambig": "1",
                 })
-            break  # success
+            break
         except httpx.TimeoutException:
             if attempt == 0:
                 log.warning("DDG: Timeout für '{}' — warte 5s und retry", query)
                 await asyncio.sleep(5.0)
             else:
-                log.warning("DDG: Timeout für '{}' nach Retry — wird erneut eingereiht", query)
-                raise  # propagiert zum Caller, der pending setzt
+                log.warning("DDG: Timeout für '{}' nach Retry — Fallback", query)
+                raise
         except httpx.RequestError as e:
             log.warning("DDG: Verbindungsfehler für '{}': {} ({})", query, e, type(e).__name__)
             raise
 
     if resp.status_code == 429:
-        log.warning("DDG: Rate-limit (429) für '{}' — überspringe", query)
+        log.warning("DDG: Rate-limit (429) für '{}'", query)
         return {}
     if resp.status_code != 200:
         log.warning("DDG: HTTP {} für '{}'", resp.status_code, query)
@@ -88,20 +97,18 @@ async def _ddg_fetch(name: str) -> dict:
     try:
         data = resp.json()
     except Exception as e:
-        log.warning("DDG: ungültige JSON-Antwort für '{}' — {} — Anfang: {!r}",
+        log.warning("DDG: ungültige JSON für '{}' — {} — Anfang: {!r}",
                     query, e, resp.content[:120])
         return {}
-    result: dict = {}
 
+    result: dict = {}
     abstract = data.get("AbstractText") or data.get("Abstract") or ""
     if abstract:
         result["description"] = abstract[:2000]
-
     img = data.get("Image") or ""
     if img:
         result["logo_url"] = img if img.startswith("http") else f"https://duckduckgo.com{img}"
 
-    # Infobox: list of {label, value} items from Wikipedia infobox
     for item in (data.get("Infobox") or {}).get("content", []):
         label = (item.get("label") or "").lower()
         value = str(item.get("value") or "").strip()
@@ -123,6 +130,60 @@ async def _ddg_fetch(name: str) -> dict:
     return result
 
 
+# ── Source 2: Wikipedia REST API ─────────────────────────────────────────────
+
+async def _wikipedia_fetch(name: str) -> dict:
+    """Search Wikipedia, then fetch page summary. Returns same field dict as DDG."""
+    query = _clean_query(name)
+    async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA}) as client:
+        # Step 1: find the right page title
+        search = await client.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={"action": "query", "list": "search", "srsearch": query,
+                    "format": "json", "srlimit": "1"},
+        )
+        search.raise_for_status()
+        hits = search.json().get("query", {}).get("search", [])
+        if not hits:
+            log.debug("Wikipedia: kein Treffer für '{}'", query)
+            return {}
+
+        title = hits[0]["title"]
+        # Step 2: fetch structured summary
+        summary = await client.get(
+            f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
+            headers={"User-Agent": _UA},
+        )
+        if summary.status_code != 200:
+            return {}
+        data = summary.json()
+
+    result: dict = {}
+    if data.get("extract"):
+        result["description"] = data["extract"][:2000]
+    thumb = (data.get("thumbnail") or {}).get("source") or \
+            (data.get("originalimage") or {}).get("source")
+    if thumb:
+        result["logo_url"] = thumb
+    return result
+
+
+# ── Logo fallbacks ────────────────────────────────────────────────────────────
+
+async def _clearbit_logo(domain: str) -> str | None:
+    """Fetch logo from Clearbit by domain. Returns base64 data URI or None."""
+    url = f"https://logo.clearbit.com/{domain}"
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200 and resp.content:
+                ct = resp.headers.get("content-type", "image/png").split(";")[0].strip()
+                return f"data:{ct};base64,{base64.b64encode(resp.content).decode()}"
+    except Exception:
+        pass
+    return None
+
+
 async def _fetch_logo(url: str) -> str | None:
     try:
         async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
@@ -134,6 +195,22 @@ async def _fetch_logo(url: str) -> str | None:
     except Exception as e:
         log.warning("Logo-Download fehlgeschlagen ({}): {}", url, e)
         return None
+
+
+async def _fetch_logo_with_clearbit_fallback(logo_url: str | None, website: str | None) -> str | None:
+    """Try logo_url first, then Clearbit if domain known."""
+    if logo_url:
+        result = await _fetch_logo(logo_url)
+        if result:
+            return result
+    if website:
+        domain = _domain_from_url(website)
+        if domain:
+            result = await _clearbit_logo(domain)
+            if result:
+                log.debug("Logo via Clearbit: {}", domain)
+                return result
+    return None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -270,11 +347,31 @@ async def _run_sync_batch(profile_ids: list[int]):
 
             name = p.name_display or p.name_norm
             _CURRENT_COMPANY = name
-            log.debug("DDG-Sync: '{}'", name)
 
             try:
-                data = await _ddg_fetch(name)
+                # Source 1: DDG
+                data: dict = {}
+                source = "duckduckgo"
+                try:
+                    data = await _ddg_fetch(name)
+                except (httpx.TimeoutException, httpx.RequestError):
+                    pass  # fall through to Wikipedia
 
+                # Source 2: Wikipedia fallback when DDG gave nothing useful
+                if not data.get("description"):
+                    log.debug("Wikipedia-Fallback für '{}'", name)
+                    try:
+                        wiki = await _wikipedia_fetch(name)
+                        if wiki:
+                            # merge: wiki fills gaps, doesn't overwrite DDG data
+                            for k, v in wiki.items():
+                                data.setdefault(k, v)
+                            if wiki.get("description"):
+                                source = "wikipedia" if not data.get("description") else "duckduckgo+wikipedia"
+                    except Exception as e:
+                        log.warning("Wikipedia-Fallback Fehler für '{}': {}", name, e)
+
+                # Apply text fields
                 if data.get("description") and not p.description:
                     p.description = data["description"]
                 if data.get("hq_city") and not p.hq_city:
@@ -289,27 +386,30 @@ async def _run_sync_batch(profile_ids: list[int]):
                 if data.get("website") and not p.website:
                     p.website = data["website"][:500]
 
-                if data.get("logo_url") and not p.logo_data:
-                    logo_b64 = await _fetch_logo(data["logo_url"])
+                # Logo: try data source URL, then Clearbit fallback
+                if not p.logo_data:
+                    website = data.get("website") or p.website
+                    logo_b64 = await _fetch_logo_with_clearbit_fallback(
+                        data.get("logo_url"), website
+                    )
                     if logo_b64:
                         p.logo_data = logo_b64
 
-                p.sync_source = "duckduckgo"
+                p.sync_source = source
                 p.sync_status = "done"
                 p.sync_error = None
                 p.last_synced_at = now
-                log.info("Synced '{}': desc={} logo={} hq={} emp={}",
-                         name,
-                         bool(data.get("description")),
-                         bool(data.get("logo_url")),
-                         data.get("hq_city"),
-                         data.get("employee_count"))
+                log.info("Synced '{}' ({}): desc={} logo={} hq={} emp={}",
+                         name, source,
+                         bool(p.description), bool(p.logo_data),
+                         data.get("hq_city"), data.get("employee_count"))
 
             except httpx.TimeoutException:
+                # Both DDG and Wikipedia timed out — retry next run
                 p.sync_status = "pending"
                 p.sync_error = None
             except Exception as e:
-                log.opt(exception=True).error("DDG-Fehler für '{}': {} ({})",
+                log.opt(exception=True).error("Sync-Fehler für '{}': {} ({})",
                                               name, e, type(e).__name__)
                 p.sync_status = "failed"
                 p.sync_error = f"{type(e).__name__}: {e}"[:500]
