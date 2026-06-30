@@ -138,9 +138,14 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     setAiAssessing(true)
     setAiAssessError(null)
     try {
-      await api.applications.aiAssess(appId)
-      const updated = await api.applications.get(appId)
-      setApp(updated)
+      const result = await api.applications.aiAssess(appId)
+      setApp(prev => prev ? {
+        ...prev,
+        ai_color: result.color as 'green' | 'yellow' | 'red',
+        ai_next_step: result.next_step,
+        ai_reasoning: result.reasoning,
+        ai_assessed_at: new Date().toISOString(),
+      } : prev)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
