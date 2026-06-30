@@ -296,6 +296,8 @@ export function AiSettingsModal({ onClose }: Props) {
   }
 
   const selectedModelBase = form.model.replace(/^ollama\//, '')
+  const providerModels = !provider.needsUrl ? (PROVIDER_MODELS[form.provider] ?? null) : null
+  const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -500,62 +502,61 @@ export function AiSettingsModal({ onClose }: Props) {
             )}
 
             {/* Model picker (non-Ollama providers) */}
-            {!provider.needsUrl && (() => {
-              const models = PROVIDER_MODELS[form.provider]
-              const isKnown = models?.some(m => m.model === form.model)
-              return (
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Modell</p>
-                  {models && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {models.map(m => (
-                        <button
-                          key={m.model}
-                          type="button"
-                          onClick={() => { setForm(f => ({ ...f, model: m.model })); autoSave({ model: m.model }) }}
-                          className={clsx(
-                            'flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-all',
-                            form.model === m.model
-                              ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50'
-                              : 'border-gray-200 hover:border-gray-300 bg-white'
-                          )}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            {form.model === m.model && <Check className="h-3 w-3 text-indigo-600 shrink-0" />}
-                            <span className="text-sm font-medium text-gray-800">{m.label}</span>
+            {!provider.needsUrl && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Modell</p>
+                {providerModels && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {providerModels.map(m => (
+                      <button
+                        key={m.model}
+                        type="button"
+                        onClick={() => {
+                          setForm(f => ({ ...f, model: m.model }))
+                          autoSave({ model: m.model })
+                        }}
+                        className={clsx(
+                          'flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-all',
+                          form.model === m.model
+                            ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {form.model === m.model && <Check className="h-3 w-3 text-indigo-600 shrink-0" />}
+                          <span className="text-sm font-medium text-gray-800">{m.label}</span>
+                        </div>
+                        {(m.sublabel || m.badge) && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
+                            {m.badge && (
+                              <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
+                                {m.badge}
+                              </span>
+                            )}
                           </div>
-                          {(m.sublabel || m.badge) && (
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
-                              {m.badge && (
-                                <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
-                                  {m.badge}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {(!models || !isKnown) && (
-                    <>
-                      {models && <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>}
-                      <input
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={form.model}
-                        onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                        onBlur={() => autoSave({ model: form.model })}
-                        placeholder="z.B. groq/llama-3.3-70b-versatile"
-                      />
-                    </>
-                  )}
-                  {models && isKnown && (
-                    <p className="text-xs text-gray-400 mt-1 font-mono">{form.model}</p>
-                  )}
-                </div>
-              )
-            })()}
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {(!providerModels || !isKnownModel) && (
+                  <>
+                    {providerModels && <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>}
+                    <input
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={form.model}
+                      onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                      onBlur={() => autoSave({ model: form.model })}
+                      placeholder="z.B. groq/llama-3.3-70b-versatile"
+                    />
+                  </>
+                )}
+                {providerModels && isKnownModel && (
+                  <p className="text-xs text-gray-400 mt-1 font-mono">{form.model}</p>
+                )}
+              </div>
+            )}
 
             {/* API Key (not for Ollama) */}
             {!provider.needsUrl && (

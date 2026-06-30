@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.47',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einstellungen: Modellauswahl-Fix — IIFE-Pattern durch saubere Variablen ersetzt (providerModels/isKnownModel).',
+    ],
+  },
+  {
     version: '3.14.46',
     date: '2026-06-30',
     changes: [
