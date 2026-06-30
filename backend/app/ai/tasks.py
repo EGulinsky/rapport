@@ -280,7 +280,7 @@ async def test_connection(db: Session) -> str:
 
 
 _ASSESS_SYSTEM = """\
-Du bist ein erfahrener Karrierecoach. Du bewertest Bewerbungssituationen nüchtern und konkret.
+Du bist ein erfahrener Karrierecoach. Du bewertest Bewerbungssituationen nüchtern und präzise.
 Antworte ausschließlich als valides JSON-Objekt, kein Markdown, keine Erklärungen außerhalb des JSON.
 """
 
@@ -295,12 +295,10 @@ _STATUS_LABELS = {
     "rejected": "Absage",
 }
 
-_RELEVANT_EVENT_TYPES = {"bewerbung", "gespräch", "interview", "status", "notiz", "email", "anruf", "angebot", "absage"}
-
 
 async def assess_application(db: Session, app) -> dict:
     """
-    Generate AI assessment for a single application.
+    Generate AI assessment for a single application based on ALL available data.
     Returns: {"color": "green"|"yellow"|"red", "next_step": str}
     """
     from datetime import date as _date
@@ -308,79 +306,82 @@ async def assess_application(db: Session, app) -> dict:
     status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
     today = _date.today()
 
-    # Only process relevant event types, sorted newest first, skip file events
-    all_events = sorted(
-        [e for e in (app.events or []) if e.datum and e.typ not in ("file",)],
+    # All events sorted chronologically (oldest first = narrative order)
+    events = sorted(
+        [e for e in (app.events or []) if e.datum],
         key=lambda e: e.datum,
-        reverse=True,
     )
 
-    # Count interviews (gespräch/status events) for process depth
-    interview_events = [e for e in all_events if e.typ in ("gespräch", "interview") or
-                        (e.typ == "status" and e.titel and "gespräch" in e.titel.lower())]
-    interview_count = len(interview_events)
+    # Computed facts (calculated in Python — no placeholders for the AI to guess)
+    days_since_apply  = (today - app.datum_bewerbung).days if app.datum_bewerbung else None
+    last_event_date   = events[-1].datum if events else None
+    days_since_last   = (today - last_event_date).days if last_event_date else None
 
-    # Last contact date (most recent event with a date)
-    last_event_date = all_events[0].datum if all_events else None
-    days_since_last_contact = (today - last_event_date).days if last_event_date else None
-
-    days_since_apply = (today - app.datum_bewerbung).days if app.datum_bewerbung else None
-
-    # Build timeline — max 12 most recent relevant events, with content
+    # Build full timeline — ALL events, notizen gekürzt auf 400 Zeichen
     timeline_lines = []
-    for e in all_events[:12]:
+    for e in events:
         age = (today - e.datum).days
-        line = f"  {e.datum.strftime('%d.%m.%Y')} (vor {age}d): [{e.typ}]"
+        line = f"{e.datum.strftime('%d.%m.%Y')} (vor {age}d) [{e.typ}]"
+        if e.autor:
+            # shorten autor to just the name part before <email>
+            autor_short = e.autor.split('<')[0].strip().strip('"') or e.autor
+            line += f" | von: {autor_short[:40]}"
         if e.titel:
-            line += f" {e.titel[:80]}"
+            line += f"\n  Betreff: {e.titel[:120]}"
         if e.notiz and e.notiz.strip():
-            line += f"\n    → {e.notiz.strip()[:250]}"
+            notiz = e.notiz.strip()
+            line += f"\n  Inhalt: {notiz[:400]}{'…' if len(notiz) > 400 else ''}"
         timeline_lines.append(line)
-    timeline = "\n".join(timeline_lines) if timeline_lines else "  (keine Ereignisse)"
+    timeline_text = "\n\n".join(timeline_lines) if timeline_lines else "(keine Ereignisse)"
 
-    # Key facts summary for the model
-    facts = []
-    if days_since_apply is not None:
-        facts.append(f"Beworben vor {days_since_apply} Tagen ({app.datum_bewerbung.strftime('%d.%m.%Y') if app.datum_bewerbung else '?'})")
-    if interview_count > 0:
-        facts.append(f"{interview_count} Gespräch{'e' if interview_count > 1 else ''} stattgefunden")
-    if days_since_last_contact is not None:
-        facts.append(f"Letzter Kontakt vor {days_since_last_contact} Tagen ({last_event_date.strftime('%d.%m.%Y') if last_event_date else '?'})")
+    # Application metadata block
+    meta_parts = [
+        f"Firma: {firma}",
+        f"Stelle: {app.rolle}",
+        f"Status: {status_label}",
+    ]
+    if app.quelle:
+        meta_parts.append(f"Quelle: {app.quelle}")
     if app.is_headhunter and app.zielfirma_bei_hh:
-        facts.append(f"Headhunter-Bewerbung für: {app.zielfirma_bei_hh}")
+        meta_parts.append(f"Headhunter für: {app.zielfirma_bei_hh}")
+    if days_since_apply is not None:
+        meta_parts.append(f"Beworben: {app.datum_bewerbung.strftime('%d.%m.%Y')} (vor {days_since_apply} Tagen)")
+    if days_since_last is not None:
+        meta_parts.append(f"Letztes Ereignis: {last_event_date.strftime('%d.%m.%Y')} (vor {days_since_last} Tagen)")
+    if app.kommentar:
+        meta_parts.append(f"Kommentar: {app.kommentar[:300]}")
+    gespraeche = [g for g in [app.gespraech_1, app.gespraech_2, app.gespraech_3, app.gespraech_4, app.gespraech_5] if g]
+    for i, g in enumerate(gespraeche, 1):
+        meta_parts.append(f"Gesprächsnotiz {i}: {g[:300]}")
 
-    prompt = f"""Bewerbungssituation analysieren:
+    meta_text = "\n".join(meta_parts)
 
-Firma: {firma}
-Stelle: {app.rolle}
-Status: {status_label}
-{chr(10).join(facts)}
+    prompt = f"""=== BEWERBUNG ===
+{meta_text}
 
-Timeline (neueste zuerst):
-{timeline}
+=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
+{timeline_text}
 
-Aufgabe:
-1. Schätze die WAHRSCHEINLICHKEIT ein, dass diese Bewerbung zu einem Angebot führt.
-2. Formuliere den NÄCHSTEN SINNVOLLEN SCHRITT — konkret, situationsbezogen, handlungsorientiert.
+=== AUFGABE ===
+Bewerte auf Basis ALLER oben stehenden Daten:
 
-color-Bedeutung (Wahrscheinlichkeit für ein Angebot):
-- "green": Hoch (>60%) — fortgeschrittener Prozess, positive Signale, mehrere Gespräche erfolgreich absolviert, Angebot/Vertragsverhandlung
-- "yellow": Mittel (30-60%) — laufender Prozess, normale Wartezeit, unklar
-- "red": Niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting-Muster, frühe Phase ohne Signale, Absage
+1. color — Wahrscheinlichkeit, dass diese Bewerbung zu einem Stellenangebot führt:
+   - "green": hoch (>60%) — fortgeschrittener Prozess, mehrere Gespräche, positives Signal, Angebot/Verhandlung
+   - "yellow": mittel (30–60%) — laufend, unklar, normale Wartezeit nach 1–2 Gesprächen
+   - "red": niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting, frühe Phase ohne Signal, Absage
 
-next_step: 1-2 konkrete Sätze auf Deutsch. KEINE Platzhalter wie "X Tage" — berechne echte Zahlen aus der Timeline.
-Beziehe dich auf die tatsächliche Situation (z.B. Anzahl Gespräche, letztes Ereignis, Status).
+2. next_step — konkreter nächster Schritt (1–2 Sätze, Deutsch):
+   - Bezug auf die tatsächliche Situation (Ereignisse, Gesprächsanzahl, letzten Kontakt)
+   - Keine Platzhalter — nur echte Zahlen aus den Daten oben
+   - Handlungsempfehlung: was soll der Bewerber JETZT tun?
 
-{{
-  "color": "green"|"yellow"|"red",
-  "next_step": "<situationsspezifischer nächster Schritt>"
-}}"""
+{{"color": "green"|"yellow"|"red", "next_step": "<konkreter Schritt>"}}"""
 
     result = await complete(
         db,
         [{"role": "system", "content": _ASSESS_SYSTEM}, {"role": "user", "content": prompt}],
         json_mode=True,
-        max_tokens=250,
+        max_tokens=300,
     )
 
     color = result.get("color")

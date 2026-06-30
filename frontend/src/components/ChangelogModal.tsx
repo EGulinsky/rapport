@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.39',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einschätzung: bewertet jetzt alle Timeline-Events vollständig (chronologisch, inkl. Betreff und Inhalt). Gesprächsnotizen und Kommentar fließen ebenfalls ein.',
+    ],
+  },
+  {
     version: '3.14.38',
     date: '2026-06-30',
     changes: [
