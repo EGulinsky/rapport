@@ -1,4 +1,5 @@
 """Company profile sync via DuckDuckGo Instant Answer API."""
+import asyncio
 import base64
 import re
 from datetime import datetime, timezone
@@ -60,14 +61,16 @@ async def _ddg_fetch(name: str) -> dict:
             "no_html": "1",
             "skip_disambig": "1",
         })
-        resp.raise_for_status()
+        if resp.status_code not in (200, 429):
+            resp.raise_for_status()
 
-    if not resp.content:
+    if resp.status_code == 429 or not resp.content:
+        log.debug("DDG: Rate-limit oder leere Antwort für '{}', überspringe", query)
         return {}
     try:
         data = resp.json()
     except Exception:
-        log.debug("DDG: leere/ungültige Antwort für '{}'", query)
+        log.debug("DDG: ungültige JSON-Antwort für '{}'", query)
         return {}
     result: dict = {}
 
@@ -279,6 +282,7 @@ async def _run_sync_batch(profile_ids: list[int]):
 
             db.commit()
             db.close()
+            await asyncio.sleep(0.2)
 
         log.info("Firmensync abgeschlossen: {} Firmen", len(profile_ids))
 
