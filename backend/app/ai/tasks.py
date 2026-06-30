@@ -363,19 +363,22 @@ async def assess_application(db: Session, app) -> dict:
 {timeline_text}
 
 === AUFGABE ===
-Bewerte auf Basis ALLER oben stehenden Daten:
+Gib ein JSON-Objekt mit genau zwei Feldern zurück:
 
-1. color — Wahrscheinlichkeit, dass diese Bewerbung zu einem Stellenangebot führt:
+1. "color" — Wie wahrscheinlich führt diese Bewerbung noch zu einem Angebot?
    - "green": hoch (>60%) — fortgeschrittener Prozess, mehrere Gespräche, positives Signal, Angebot/Verhandlung
    - "yellow": mittel (30–60%) — laufend, unklar, normale Wartezeit nach 1–2 Gesprächen
    - "red": niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting, frühe Phase ohne Signal, Absage
 
-2. next_step — konkreter nächster Schritt (1–2 Sätze, Deutsch):
-   - Bezug auf die tatsächliche Situation (Ereignisse, Gesprächsanzahl, letzten Kontakt)
-   - Keine Platzhalter — nur echte Zahlen aus den Daten oben
-   - Handlungsempfehlung: was soll der Bewerber JETZT tun?
+2. "next_step" — Was soll der Bewerber in den nächsten 1–3 Tagen konkret tun?
+   REGELN (strikt einhalten):
+   - Genau 1–2 kurze Sätze auf Deutsch
+   - Formuliere als HANDLUNGSANWEISUNG (Imperativ): "Schreibe...", "Ruf an...", "Warte bis...", "Bereite dich vor auf..."
+   - Verwende ECHTE ZAHLEN aus den Daten: Anzahl der Gespräche, konkretes Datum des letzten Kontakts, tatsächliche Wartezeit in Tagen
+   - VERBOTEN: E-Mail-Betreff oder Timeline-Inhalte kopieren, Status-Labels wiederholen ("Warten auf Entscheidung"), vage Phrasen ohne konkreten Bezug
+   - Wenn der Prozess weit fortgeschritten ist (≥3 Gespräche, Gehaltsverhandlung, Angebot): benenne das explizit
 
-{{"color": "green"|"yellow"|"red", "next_step": "<konkreter Schritt>"}}"""
+{{"color": "green"|"yellow"|"red", "next_step": "<Handlungsanweisung>"}}"""
 
     result = await complete(
         db,
