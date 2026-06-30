@@ -6,7 +6,28 @@ import clsx from 'clsx'
 
 interface Props { onClose: () => void }
 
-const PROVIDERS = [
+interface ProviderModel {
+  model: string
+  label: string
+  sublabel?: string
+  badge?: string
+  badgeColor?: string
+}
+
+interface Provider {
+  id: string
+  name: string
+  badge: string
+  badgeColor: string
+  model: string
+  keyPlaceholder: string
+  keyUrl: string
+  needsUrl: boolean
+  defaultUrl?: string
+  models?: ProviderModel[]
+}
+
+const PROVIDERS: Provider[] = [
   {
     id: 'groq',
     name: 'Groq',
@@ -16,6 +37,13 @@ const PROVIDERS = [
     keyPlaceholder: 'gsk_...',
     keyUrl: 'https://console.groq.com/keys',
     needsUrl: false,
+    models: [
+      { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  sublabel: 'Versatile', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',   sublabel: 'Instant',   badge: 'Schnell',   badgeColor: 'bg-gray-100 text-gray-600' },
+      { model: 'groq/llama3-70b-8192',          label: 'Llama 3 70B',    sublabel: '8192 ctx' },
+      { model: 'groq/gemma2-9b-it',             label: 'Gemma 2 9B' },
+      { model: 'groq/mixtral-8x7b-32768',       label: 'Mixtral 8×7B',   sublabel: '32k ctx' },
+    ],
   },
   {
     id: 'anthropic',
@@ -26,6 +54,10 @@ const PROVIDERS = [
     keyPlaceholder: 'sk-ant-...',
     keyUrl: 'https://console.anthropic.com',
     needsUrl: false,
+    models: [
+      { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
+      { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+    ],
   },
   {
     id: 'openai',
@@ -36,6 +68,10 @@ const PROVIDERS = [
     keyPlaceholder: 'sk-...',
     keyUrl: 'https://platform.openai.com/api-keys',
     needsUrl: false,
+    models: [
+      { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
+      { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+    ],
   },
   {
     id: 'gemini',
@@ -46,6 +82,13 @@ const PROVIDERS = [
     keyPlaceholder: 'AIza...',
     keyUrl: 'https://aistudio.google.com/app/apikey',
     needsUrl: false,
+    models: [
+      { model: 'gemini/gemini-2.0-flash',                   label: 'Gemini 2.0 Flash',      badge: 'Empfohlen',       badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'gemini/gemini-2.0-flash-lite',              label: 'Gemini 2.0 Flash Lite', badge: 'Schnell',          badgeColor: 'bg-gray-100 text-gray-600' },
+      { model: 'gemini/gemini-1.5-flash',                   label: 'Gemini 1.5 Flash' },
+      { model: 'gemini/gemini-1.5-pro',                     label: 'Gemini 1.5 Pro',        badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700' },
+      { model: 'gemini/gemini-2.5-flash-preview-05-20',     label: 'Gemini 2.5 Flash',      badge: 'Preview',         badgeColor: 'bg-purple-100 text-purple-700' },
+    ],
   },
   {
     id: 'ollama',
@@ -58,40 +101,7 @@ const PROVIDERS = [
     needsUrl: true,
     defaultUrl: 'http://host.docker.internal:11434',
   },
-] as const
-
-interface ProviderModel {
-  model: string
-  label: string
-  sublabel?: string
-  badge?: string
-  badgeColor?: string
-}
-
-const PROVIDER_MODELS: Partial<Record<string, ProviderModel[]>> = {
-  groq: [
-    { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',   sublabel: 'Versatile',    badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
-    { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',    sublabel: 'Instant',      badge: 'Schnell',   badgeColor: 'bg-gray-100 text-gray-600' },
-    { model: 'groq/llama3-70b-8192',          label: 'Llama 3 70B',     sublabel: '8192 ctx' },
-    { model: 'groq/gemma2-9b-it',             label: 'Gemma 2 9B' },
-    { model: 'groq/mixtral-8x7b-32768',       label: 'Mixtral 8×7B',    sublabel: '32k ctx' },
-  ],
-  gemini: [
-    { model: 'gemini/gemini-2.0-flash',      label: 'Gemini 2.0 Flash',      badge: 'Empfohlen',       badgeColor: 'bg-indigo-100 text-indigo-700' },
-    { model: 'gemini/gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', badge: 'Schnell',          badgeColor: 'bg-gray-100 text-gray-600' },
-    { model: 'gemini/gemini-1.5-flash',      label: 'Gemini 1.5 Flash' },
-    { model: 'gemini/gemini-1.5-pro',        label: 'Gemini 1.5 Pro',        badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700' },
-    { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash', badge: 'Preview', badgeColor: 'bg-purple-100 text-purple-700' },
-  ],
-  anthropic: [
-    { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
-    { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
-  ],
-  openai: [
-    { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
-    { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
-  ],
-}
+]
 
 interface OllamaModel {
   name: string
@@ -196,8 +206,8 @@ export function AiSettingsModal({ onClose }: Props) {
     }
   }
 
-  function selectProvider(p: typeof PROVIDERS[number]) {
-    const defaultUrl = 'defaultUrl' in p ? p.defaultUrl : 'http://host.docker.internal:11434'
+  function selectProvider(p: Provider) {
+    const defaultUrl = p.defaultUrl ?? 'http://host.docker.internal:11434'
     const baseUrl = p.needsUrl ? (form.base_url || defaultUrl) : ''
     const patch = { provider: p.id, model: p.model, base_url: baseUrl }
     setForm(f => ({ ...f, ...patch }))
@@ -296,7 +306,7 @@ export function AiSettingsModal({ onClose }: Props) {
   }
 
   const selectedModelBase = form.model.replace(/^ollama\//, '')
-  const providerModels = !provider.needsUrl ? (PROVIDER_MODELS[form.provider] ?? null) : null
+  const providerModels = provider.needsUrl ? null : (provider.models ?? null)
   const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
 
   return (
