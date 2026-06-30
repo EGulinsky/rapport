@@ -42,10 +42,31 @@ def _parse_year(s: str) -> int | None:
     return None
 
 
+async def _throttled_get(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict,
+    max_retries: int = 4,
+    base_delay: float = 5.0,
+) -> httpx.Response:
+    """GET with retry on 429/503; respects Retry-After header."""
+    for attempt in range(max_retries):
+        resp = await client.get(url, params=params)
+        if resp.status_code in (429, 503):
+            retry_after = float(resp.headers.get("Retry-After", base_delay * (2 ** attempt)))
+            log.warning("Rate-limit ({}) von {} — warte {:.0f}s", resp.status_code, url, retry_after)
+            await asyncio.sleep(retry_after)
+            continue
+        resp.raise_for_status()
+        return resp
+    raise RuntimeError(f"Max retries erreicht für {url}")
+
+
 async def _wikidata_search_one(client: httpx.AsyncClient, name: str) -> tuple[str, str] | None:
     """Return (qid, description) for the top Wikidata hit, or None."""
     try:
-        resp = await client.get(
+        resp = await _throttled_get(
+            client,
             "https://www.wikidata.org/w/api.php",
             params={
                 "action": "wbsearchentities",
@@ -56,7 +77,6 @@ async def _wikidata_search_one(client: httpx.AsyncClient, name: str) -> tuple[st
                 "limit": "1",
             },
         )
-        resp.raise_for_status()
         hits = resp.json().get("search", [])
         if hits:
             return hits[0]["id"], hits[0].get("description", "")
@@ -90,12 +110,12 @@ WHERE {{
 }}
 GROUP BY ?company ?hqLabel ?countryLabel ?founded ?industryLabel
 """
-    async with httpx.AsyncClient(timeout=30.0, headers={"User-Agent": _UA}) as client:
-        resp = await client.get(
+    async with httpx.AsyncClient(timeout=60.0, headers={"User-Agent": _UA}) as client:
+        resp = await _throttled_get(
+            client,
             "https://query.wikidata.org/sparql",
             params={"query": sparql, "format": "json"},
         )
-        resp.raise_for_status()
 
     result: dict[str, dict] = {}
     for row in resp.json().get("results", {}).get("bindings", []):
@@ -281,7 +301,7 @@ async def _run_sync_batch(profile_ids: list[int]):
                     log.debug("'{}' → {}", name, qid_map[pid])
                 else:
                     log.info("Kein Wikidata-Treffer für '{}'", name)
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(1.0)
 
         # Mark not-found profiles
         db = SessionLocal()
@@ -321,7 +341,7 @@ async def _run_sync_batch(profile_ids: list[int]):
                 db.commit()
                 db.close()
             if i + _SPARQL_BATCH < len(found_pids):
-                await asyncio.sleep(2.0)  # pause between SPARQL batches
+                await asyncio.sleep(5.0)  # pause between SPARQL batches
 
         # Phase 3: Logo downloads — parallel with semaphore
         sem = asyncio.Semaphore(_LOGO_CONCURRENCY)

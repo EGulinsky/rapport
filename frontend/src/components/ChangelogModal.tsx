@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.28',
+    date: '2026-06-30',
+    changes: [
+      'Firmensync: Retry mit Exponential Backoff bei Wikidata 429/503 (bis 4 Versuche, respektiert Retry-After). Search-API-Abstand auf 1s erhöht, SPARQL-Batch-Pause auf 5s.',
+    ],
+  },
+  {
     version: '3.14.27',
     date: '2026-06-30',
     changes: [
