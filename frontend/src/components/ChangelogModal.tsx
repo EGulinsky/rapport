@@ -9,10 +9,17 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.18',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Sync: Debug-Excel entfernt — alle Sync-Details (Match-Grund, Kategorie-Zählungen, Paginierung, Fehler) fließen ins strukturierte Log (Seq, Category: sync).',
+    ],
+  },
+  {
     version: '3.14.17',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Sync Debug-Excel: App-ID und Match-Grund (job_id / firma+rolle / alias / neu) pro Eintrag sichtbar.',
+      'LinkedIn-Sync: Match-Grund (job_id / firma+rolle / alias / neu) pro Eintrag im Log sichtbar.',
       'Wenn ein Status-Vorschlag übersprungen wird (bereits ausstehend / bereits überprüft), steht das jetzt im Log.',
     ],
   },
