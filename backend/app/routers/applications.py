@@ -393,14 +393,18 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
     )
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden")
-    from app.ai.tasks import assess_application
+    from app.ai.tasks import assess_application, assess_rejected_application
     from app.ai.provider import AINotConfigured
     try:
-        result = await assess_application(db, app)
+        if app.abgesagt:
+            result = await assess_rejected_application(db, app)
+        else:
+            result = await assess_application(db, app)
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     app.ai_color = result["color"]
     app.ai_next_step = result["next_step"]
+    app.ai_reasoning = result.get("reasoning", "")
     app.ai_assessed_at = datetime.utcnow()
     db.commit()
     return result
@@ -423,6 +427,7 @@ async def ai_assess_all(db: Session = Depends(get_db)):
             result = await assess_application(db, app)
             app.ai_color = result["color"]
             app.ai_next_step = result["next_step"]
+            app.ai_reasoning = result.get("reasoning", "")
             app.ai_assessed_at = datetime.utcnow()
             updated += 1
         except (AINotConfigured, AIRateLimited) as e:

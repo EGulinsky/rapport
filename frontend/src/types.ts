@@ -89,6 +89,7 @@ export interface Application {
   target_company_name_display?: string | null
   ai_color?: 'green' | 'yellow' | 'red' | null
   ai_next_step?: string | null
+  ai_reasoning?: string | null
   ai_assessed_at?: string | null
 }
 

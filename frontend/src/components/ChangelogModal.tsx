@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.43',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einschätzung: neues Feld "Begründung" erklärt warum die Erfolgschance so bewertet wurde (konkrete Fakten aus der Timeline).',
+      'KI-Absageanalyse: Bei abgesagten Bewerbungen explizit aufgerufen → analysiert Absagegründe + Optimierungsvorschläge für zukünftige Bewerbungen.',
+      'Batch-Bewertung überspringt abgesagte Bewerbungen (main_status=rejected).',
+    ],
+  },
+  {
     version: '3.14.42',
     date: '2026-06-30',
     changes: [
