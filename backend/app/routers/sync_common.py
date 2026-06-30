@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.logger import get_logger
 
-log = get_logger("sync")
+log = get_logger("sync", source="targeted")
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 
