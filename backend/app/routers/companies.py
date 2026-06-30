@@ -128,6 +128,28 @@ def _collect_contacts(p: CompanyProfile) -> list:
     return contacts
 
 
+class CompanyCreateRequest(BaseModel):
+    name: str
+
+
+@router.post("", response_model=CompanyProfileListItem, status_code=201)
+def create_company(body: CompanyCreateRequest, db: Session = Depends(get_db)):
+    from app.dedup import norm_firma
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Name darf nicht leer sein")
+    key = norm_firma(name)
+    existing = db.query(CompanyProfile).filter(CompanyProfile.name_norm == key).first()
+    if existing:
+        return existing
+    profile = CompanyProfile(name_norm=key, name_display=name, sync_status="pending")
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    profile.app_count = 0  # type: ignore[assignment]
+    return profile
+
+
 @router.get("", response_model=List[CompanyProfileListItem])
 def list_companies(
     search: Optional[str] = Query(None),

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2 } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
+import type { CompanyProfile } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
   SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE,
@@ -57,6 +58,12 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [docBrowseItems, setDocBrowseItems] = useState<FileBrowseItem[]>([])
   const [docBrowseLoading, setDocBrowseLoading] = useState(false)
   const [docBrowseError, setDocBrowseError] = useState<string | null>(null)
+  const [firmaPicker, setFirmaPicker] = useState(false)
+  const [firmaQuery, setFirmaQuery] = useState('')
+  const [firmaResults, setFirmaResults] = useState<CompanyProfile[]>([])
+  const [firmaLoading, setFirmaLoading] = useState(false)
+  const [firmaCreating, setFirmaCreating] = useState(false)
+  const firmaPickerRef = useRef<HTMLDivElement>(null)
   const [docAttaching, setDocAttaching] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
@@ -341,6 +348,41 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   }
 
   useEffect(() => {
+    if (!firmaPicker) { setFirmaQuery(''); setFirmaResults([]); return }
+    const t = setTimeout(async () => {
+      setFirmaLoading(true)
+      try { setFirmaResults(await api.companies.list({ search: firmaQuery || undefined })) }
+      finally { setFirmaLoading(false) }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [firmaQuery, firmaPicker])
+
+  useEffect(() => {
+    if (!firmaPicker) return
+    function handler(e: MouseEvent) {
+      if (firmaPickerRef.current && !firmaPickerRef.current.contains(e.target as Node)) setFirmaPicker(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [firmaPicker])
+
+  async function pickCompany(company: CompanyProfile) {
+    setDraft(d => ({ ...d, firma: company.name_display ?? company.name_norm, company_profile_id: company.id }))
+    setFirmaPicker(false)
+  }
+
+  async function createAndPickCompany(name: string) {
+    setFirmaCreating(true)
+    try {
+      const company = await api.companies.create(name)
+      setDraft(d => ({ ...d, firma: company.name_display ?? company.name_norm, company_profile_id: company.id }))
+      setFirmaPicker(false)
+    } finally {
+      setFirmaCreating(false)
+    }
+  }
+
+  useEffect(() => {
     if (addMode !== 'link') return
     if (!linkSearch.trim()) { setLinkResults([]); return }
     const timer = setTimeout(async () => {
@@ -472,12 +514,68 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           <div className="flex-1 min-w-0">
             {editing ? (
               <div className="space-y-2">
-                <input
-                  className="w-full text-lg font-semibold rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={draft.firma ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, firma: e.target.value }))}
-                  placeholder="Firma"
-                />
+                {/* Company picker */}
+                <div className="relative" ref={firmaPickerRef}>
+                  <div className="flex items-center gap-2">
+                    <CompanyLogo
+                      name={draft.firma ?? app?.firma ?? ''}
+                      website={app?.company_website}
+                      size="sm"
+                    />
+                    <span className="text-base font-semibold text-gray-900 truncate flex-1 min-w-0">
+                      {draft.firma || app?.firma || <span className="text-gray-400 font-normal">Firma wählen…</span>}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFirmaPicker(o => !o)}
+                      className="shrink-0 flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50"
+                    >
+                      <Building2 className="h-3.5 w-3.5" />
+                      Ändern
+                    </button>
+                  </div>
+                  {firmaPicker && (
+                    <div className="absolute z-50 top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg">
+                      <div className="p-2 border-b border-gray-100">
+                        <input
+                          autoFocus
+                          value={firmaQuery}
+                          onChange={e => setFirmaQuery(e.target.value)}
+                          placeholder="Firma suchen…"
+                          className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="max-h-52 overflow-y-auto py-1">
+                        {firmaLoading && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+                        {!firmaLoading && firmaResults.length === 0 && !firmaQuery && (
+                          <p className="text-xs text-gray-400 px-3 py-2 italic">Suchbegriff eingeben…</p>
+                        )}
+                        {firmaResults.slice(0, 12).map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => pickCompany(c)}
+                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                          >
+                            <CompanyLogo name={c.name_display ?? c.name_norm} website={c.website ?? undefined} size="sm" />
+                            {c.name_display ?? c.name_norm}
+                          </button>
+                        ))}
+                        {firmaQuery.trim() && (
+                          <button
+                            type="button"
+                            disabled={firmaCreating}
+                            onClick={() => createAndPickCompany(firmaQuery.trim())}
+                            className="w-full text-left px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center gap-2 border-t border-gray-100 mt-1"
+                          >
+                            <Plus className="h-3.5 w-3.5 shrink-0" />
+                            {firmaCreating ? 'Anlegen…' : `"${firmaQuery.trim()}" neu anlegen`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <input
                   className="w-full text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={draft.rolle ?? ''}
