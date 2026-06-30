@@ -98,6 +98,23 @@ _COMPANY_NAME_JS = """() => {
         if (m) return m[1].trim();
     }
 
+    // Fallback for anonymized/"confidential" postings: LinkedIn still shows the
+    // recruiter who posted it ("hiring team" / "hirer card"), whose subtitle
+    // usually reads "<Title> at <Company>" — that company is the headhunter/agency.
+    const hirerSelectors = [
+        '.hirer-card__hirer-information',
+        '.job-details-people-who-can-help__hirer-information',
+        '[data-test-id="hirer-information"]',
+        '.jobs-poster__name',
+    ];
+    for (const sel of hirerSelectors) {
+        const el = document.querySelector(sel);
+        const t = el && el.innerText && el.innerText.trim();
+        if (!t) continue;
+        const m = t.match(/\\b(?:at|bei)\\s+(.+)$/im);
+        if (m && m[1].trim().length > 0 && m[1].trim().length < 120) return m[1].trim();
+    }
+
     return '';
 }"""
 
@@ -197,6 +214,17 @@ async def load_job_description(job_url: str, db: Session) -> dict:
             company = await page.evaluate(_COMPANY_NAME_JS)
         except Exception:
             pass
+
+        # Top-card selectors miss on anonymized/"confidential" postings — the
+        # hiring-team/hirer-card fallback lives further down the page, so give
+        # it a chance to lazy-load before giving up.
+        if not company:
+            try:
+                await page.evaluate("window.scrollBy(0, 1200)")
+                await asyncio.sleep(1.0)
+                company = await page.evaluate(_COMPANY_NAME_JS)
+            except Exception:
+                pass
 
         await browser.close()
 
