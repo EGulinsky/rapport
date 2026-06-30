@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.52',
+    date: '2026-06-30',
+    changes: [
+      'KI-Batchlauf ("KI bewerten"): zeigt jetzt Live-Fortschritt im Button ("KI: 3/27") statt nur einem statischen "KI läuft…" — Backend streamt Fortschritt per SSE, Kanban aktualisiert sich nach jeder Bewertung.',
+    ],
+  },
+  {
     version: '3.14.51',
     date: '2026-06-30',
     changes: [

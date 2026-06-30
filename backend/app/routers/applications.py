@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from typing import List, Optional
@@ -262,6 +265,54 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/ai-assess-all")
+async def ai_assess_all(db: Session = Depends(get_db)):
+    import asyncio
+    from app.models import AiSettings
+    from app.ai.tasks import assess_application
+    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
+
+    cfg = db.query(AiSettings).first()
+    # Throttle: Gemini free tier = 15 RPM, Groq = 30 RPM — use 5s gap to stay safe
+    provider_id = (cfg.provider if cfg else "") or ""
+    delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
+
+    async def _stream():
+        apps = (
+            db.query(models.Application)
+            .options(joinedload(models.Application.events))
+            .filter(models.Application.main_status != "rejected")
+            .all()
+        )
+        total = len(apps)
+        updated = 0
+        errors: list[str] = []
+        yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
+        for i, app in enumerate(apps):
+            if i > 0:
+                await asyncio.sleep(delay_s)
+            try:
+                result = await assess_application(db, app)
+                app.ai_color = result["color"]
+                app.ai_next_step = result["next_step"]
+                app.ai_reasoning = result.get("reasoning", "")
+                app.ai_assessed_at = datetime.utcnow()
+                db.commit()
+                updated += 1
+                yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma})}\n\n"
+            except (AINotConfigured, AIRateLimited, AIBadRequest) as e:
+                errors.append(str(e))
+                yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma, 'error': str(e)})}\n\n"
+                break
+            except Exception as e:
+                errors.append(f"#{app.id} {app.firma}: {e}")
+                yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma, 'error': str(e)})}\n\n"
+        db.commit()
+        yield f"data: {json.dumps({'status': 'done', 'updated': updated, 'errors': errors})}\n\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
 @router.get("/{app_id}", response_model=schemas.ApplicationRead)
 def get_application(app_id: int, db: Session = Depends(get_db)):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
@@ -412,45 +463,6 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
     app.ai_assessed_at = datetime.utcnow()
     db.commit()
     return result
-
-
-@router.post("/ai-assess-all")
-async def ai_assess_all(db: Session = Depends(get_db)):
-    import asyncio
-    from app.models import AiSettings
-    cfg = db.query(AiSettings).first()
-    # Throttle: Gemini free tier = 15 RPM, Groq = 30 RPM — use 5s gap to stay safe
-    provider_id = (cfg.provider if cfg else "") or ""
-    delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
-
-    apps = (
-        db.query(models.Application)
-        .options(joinedload(models.Application.events))
-        .filter(models.Application.main_status != "rejected")
-        .all()
-    )
-    from app.ai.tasks import assess_application
-    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
-    updated = 0
-    errors: list[str] = []
-    for i, app in enumerate(apps):
-        if i > 0:
-            await asyncio.sleep(delay_s)
-        try:
-            result = await assess_application(db, app)
-            app.ai_color = result["color"]
-            app.ai_next_step = result["next_step"]
-            app.ai_reasoning = result.get("reasoning", "")
-            app.ai_assessed_at = datetime.utcnow()
-            db.commit()
-            updated += 1
-        except (AINotConfigured, AIRateLimited, AIBadRequest) as e:
-            errors.append(str(e))
-            break
-        except Exception as e:
-            errors.append(f"#{app.id} {app.firma}: {e}")
-    db.commit()
-    return {"updated": updated, "errors": errors}
 
 
 # ── Events ──────────────────────────────────────────────────────────────
