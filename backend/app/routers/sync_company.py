@@ -65,13 +65,17 @@ async def _ddg_fetch(name: str) -> dict:
         if resp.status_code not in (200, 429):
             resp.raise_for_status()
 
-    if resp.status_code == 429 or not resp.content:
-        log.debug("DDG: Rate-limit oder leere Antwort für '{}', überspringe", query)
+    if resp.status_code == 429:
+        log.warning("DDG: Rate-limit (429) für '{}' — überspringe", query)
+        return {}
+    if not resp.content:
+        log.warning("DDG: leere Antwort (HTTP {}) für '{}'", resp.status_code, query)
         return {}
     try:
         data = resp.json()
-    except Exception:
-        log.debug("DDG: ungültige JSON-Antwort für '{}'", query)
+    except Exception as e:
+        log.warning("DDG: ungültige JSON-Antwort für '{}' — {} — Anfang: {!r}",
+                    query, e, resp.content[:120])
         return {}
     result: dict = {}
 
@@ -114,7 +118,7 @@ async def _fetch_logo(url: str) -> str | None:
             ct = resp.headers.get("content-type", "image/png").split(";")[0].strip()
             return f"data:{ct};base64,{base64.b64encode(resp.content).decode()}"
     except Exception as e:
-        log.debug("Logo-Download fehlgeschlagen ({}): {}", url, e)
+        log.warning("Logo-Download fehlgeschlagen ({}): {}", url, e)
         return None
 
 
