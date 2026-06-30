@@ -328,18 +328,25 @@ async def extract_from_linkedin_url(
     from app.routers.sync_company import _run_sync_batch
 
     try:
-        description = await load_job_description(payload.url, db)
+        page_data = await load_job_description(payload.url, db)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
     try:
-        result = await extract_application_from_text(db, description)
+        result = await extract_application_from_text(db, page_data["description"])
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     except AIRateLimited:
         raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
     except AIBadRequest as e:
         raise HTTPException(400, str(e))
+
+    # The posting company shown in the LinkedIn page header is more reliable than
+    # whatever the AI inferred from the (often anonymized) description text —
+    # e.g. headhunter postings describe the target company without naming it.
+    scraped_company = (page_data.get("company") or "").strip()
+    if scraped_company:
+        result["firma"] = scraped_company
 
     result["stellenanzeige_url"] = payload.url
     result["company_profile_id"] = None

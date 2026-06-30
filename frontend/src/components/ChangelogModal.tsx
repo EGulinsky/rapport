@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.3',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Import: Firmenname wird jetzt strukturell aus dem Seitenkopf der Stellenanzeige gelesen statt von der KI aus dem Beschreibungstext geraten — behebt fehlende Firma bei Headhunter-Postings, die den Auftraggeber im Text anonymisieren ("Ein börsennotierter Technologiekonzern…").',
+    ],
+  },
+  {
     version: '3.15.2',
     date: '2026-06-30',
     changes: [

@@ -72,9 +72,41 @@ _DESCRIPTION_JS = """() => {
     return '';
 }"""
 
+_COMPANY_NAME_JS = """() => {
+    // Stable structural selectors for the job posting's hiring/posting company,
+    // tried in order (logged-in unified top card, public top card, generic fallback).
+    const selectors = [
+        '.job-details-jobs-unified-top-card__company-name a',
+        '.job-details-jobs-unified-top-card__company-name',
+        '.jobs-unified-top-card__company-name a',
+        '.jobs-unified-top-card__company-name',
+        '.topcard__org-name-link',
+        '.topcard__flavor--black-link',
+        'a[data-tracking-control-name="public_jobs_topcard-org-name"]',
+    ];
+    for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        const t = el && el.innerText && el.innerText.trim();
+        if (t && t.length > 0 && t.length < 120) return t;
+    }
 
-async def load_job_description(job_url: str, db: Session) -> str:
-    """Load full job description text from a LinkedIn job posting page."""
+    // Fallback: parse <meta property="og:title"> — usually "<Company> hiring <Title> in <Location>"
+    const og = document.querySelector('meta[property="og:title"]');
+    const ogContent = og && og.getAttribute('content');
+    if (ogContent) {
+        const m = ogContent.match(/^(.+?)\\s+hiring\\s+/i);
+        if (m) return m[1].trim();
+    }
+
+    return '';
+}"""
+
+
+async def load_job_description(job_url: str, db: Session) -> dict:
+    """Load job description text and posting company name from a LinkedIn job posting page.
+
+    Returns {"description": str, "company": str | None}.
+    """
     cfg = db.query(models.LinkedInSync).first()
     if not cfg or not cfg.email or not cfg.password_enc:
         raise ValueError("LinkedIn nicht konfiguriert — bitte zuerst in den Einstellungen unter 'LinkedIn' verbinden.")
@@ -160,9 +192,15 @@ async def load_job_description(job_url: str, db: Session) -> str:
         except Exception:
             pass
 
+        company = ""
+        try:
+            company = await page.evaluate(_COMPANY_NAME_JS)
+        except Exception:
+            pass
+
         await browser.close()
 
     if not description:
         raise ValueError("Stellenbeschreibung konnte nicht extrahiert werden — Seitenstruktur evtl. geändert oder Zugriff verweigert.")
 
-    return description
+    return {"description": description, "company": company or None}
