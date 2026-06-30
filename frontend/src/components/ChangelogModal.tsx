@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.4',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Import: KI-Prompt erkennt Headhunter-Anzeigen jetzt anhand klarer Signale (z.B. "im Auftrag von", "Executive Search" im Firmennamen, anonymisierte Auftraggeber-Beschreibung) und füllt "Zielfirma" mit der verfügbaren Beschreibung statt sie leer zu lassen oder im Kommentar zu verstecken.',
+    ],
+  },
+  {
     version: '3.15.3',
     date: '2026-06-30',
     changes: [

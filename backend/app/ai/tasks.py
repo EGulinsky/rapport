@@ -504,7 +504,7 @@ async def extract_application_from_text(db: Session, raw_text: str) -> dict:
         rolle             – Jobtitel
         quelle            – i.d.R. "LinkedIn"
         is_headhunter     – true wenn über Personalvermittlung/Headhunter ausgeschrieben
-        zielfirma_bei_hh  – Zielfirma falls is_headhunter, sonst null
+        zielfirma_bei_hh  – Zielfirma/Auftraggeber falls is_headhunter, sonst null
         kommentar         – 1–2 Sätze Kurzbeschreibung (Standort, Seniorität, Besonderheiten)
     """
     prompt = f"""\
@@ -513,14 +513,30 @@ Text der Stellenanzeige (von LinkedIn kopiert):
 {raw_text[:4000]}
 ---
 
+Prüfe zuerst, ob die Anzeige von einer Personalvermittlung/einem Headhunter
+geschaltet wurde statt direkt vom Arbeitgeber. Anzeichen dafür:
+- Formulierungen wie "im Auftrag von/für unseren Kunden", "on behalf of our client",
+  "for our client", "for a leading company", "wir suchen für einen Kunden/Mandanten"
+- Die anzeigenschaltende Firma trägt Begriffe wie "Personalberatung", "Executive Search",
+  "Recruiting", "Headhunter", "Search & Selection", "HR Consulting", "Talent Partners"
+  im eigenen Namen
+- Der eigentliche Arbeitgeber wird nur vage/anonymisiert beschrieben
+  (z.B. "ein börsennotierter Technologiekonzern", "ein führendes Unternehmen der Branche X")
+
+Setze in diesem Fall is_headhunter=true und fülle zielfirma_bei_hh mit allem,
+was über den Auftraggeber bekannt ist — auch wenn nur eine anonymisierte
+Beschreibung vorliegt (z.B. "Börsennotierter Technologiekonzern, Branche
+Maschinenbau" statt null). Lass zielfirma_bei_hh nur dann leer, wenn der
+Text wirklich keinerlei Hinweis auf den Auftraggeber enthält.
+
 Extrahiere:
 {{
-  "firma": "<Firmenname>",
+  "firma": "<Firmenname der anzeigenschaltenden Firma — bei Headhunter-Anzeige der Headhunter/die Personalberatung selbst, sonst der direkte Arbeitgeber>",
   "rolle": "<Jobtitel>",
   "quelle": "LinkedIn",
   "is_headhunter": <true|false>,
-  "zielfirma_bei_hh": "<Zielfirma|null>",
-  "kommentar": "<kurze Zusammenfassung, max 2 Sätze|null>"
+  "zielfirma_bei_hh": "<was über den Auftraggeber bekannt ist, ggf. anonymisierte Beschreibung|null>",
+  "kommentar": "<kurze Zusammenfassung, max 2 Sätze — NICHT die Auftraggeber-Beschreibung wiederholen|null>"
 }}"""
 
     result = await complete(
