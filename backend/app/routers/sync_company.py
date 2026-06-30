@@ -31,6 +31,22 @@ def _employee_range(n: int) -> str:
     return "10001+"
 
 
+async def _fetch_logo(url: str) -> str | None:
+    """Download logo from Wikimedia Commons, return base64 data URI or None."""
+    import base64
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
+                                     follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            ct = resp.headers.get("content-type", "image/png").split(";")[0].strip()
+            b64 = base64.b64encode(resp.content).decode()
+            return f"data:{ct};base64,{b64}"
+    except Exception as e:
+        log.debug("Logo-Download fehlgeschlagen ({}): {}", url, e)
+        return None
+
+
 async def _wikidata_fetch(name: str) -> dict:
     """Search Wikidata for a company by name, return normalized field dict."""
     async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": _UA}) as client:
@@ -62,6 +78,7 @@ SELECT
   (MAX(?emp) AS ?employees)
   (SAMPLE(?site) AS ?website)
   (SAMPLE(?liId) AS ?linkedinId)
+  (SAMPLE(?logo) AS ?logo)
   ?industryLabel
 WHERE {{
   BIND(wd:{qid} AS ?company)
@@ -71,6 +88,7 @@ WHERE {{
   OPTIONAL {{ ?company wdt:P1128 ?emp . }}
   OPTIONAL {{ ?company wdt:P856 ?site . }}
   OPTIONAL {{ ?company wdt:P3220 ?liId . }}
+  OPTIONAL {{ ?company wdt:P154 ?logo . }}
   OPTIONAL {{ ?company wdt:P452 ?industry . }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "de,en" . }}
 }}
@@ -105,6 +123,8 @@ LIMIT 1
             )
         if v("industryLabel"):
             result["industry"] = v("industryLabel")
+        if v("logo"):
+            result["logo_url"] = v("logo")
         if v("employees"):
             try:
                 result["employee_count"] = int(float(re.sub(r"[^\d.]", "", v("employees"))))
@@ -280,6 +300,8 @@ async def _sync_one_company(db: Session, profile: models.CompanyProfile):
             profile.linkedin_company_url = str(data["linkedin_company_url"])[:500]
         if data.get("description") and not profile.description:
             profile.description = str(data["description"])[:2000]
+        if data.get("logo_url") and not profile.logo_data:
+            profile.logo_data = await _fetch_logo(data["logo_url"])
 
         profile.sync_source = f"wikidata:{data['_qid']}"
         profile.sync_status = "done"
