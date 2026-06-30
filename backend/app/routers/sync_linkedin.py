@@ -11,7 +11,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -146,8 +146,12 @@ def get_status():
     return dict(_state)
 
 
+class RunSyncRequest(BaseModel):
+    target_app_id: int | None = None
+
+
 @router.post("/run")
-def run_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def run_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db), body: RunSyncRequest = Body(default=RunSyncRequest())):
     cfg = db.query(models.LinkedInSync).first()
     if not cfg:
         raise HTTPException(400, "LinkedIn not configured")
@@ -157,7 +161,7 @@ def run_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     _reset_state()
     _state["status"] = "running"
     _state["started_at"] = datetime.now(timezone.utc).isoformat()
-    background_tasks.add_task(_run_sync_task, cfg.id)
+    background_tasks.add_task(_run_sync_task, cfg.id, body.target_app_id)
     return dict(_state)
 
 
@@ -806,6 +810,14 @@ async def _scrape_messages(page, db: Session, apps_list: list) -> int:
     return created
 
 
+def _li_job_id_from_url(url: str) -> str | None:
+    """Extract LinkedIn job ID from a stellenanzeige_url like .../jobs/view/1234567890/..."""
+    if not url or "linkedin.com" not in url:
+        return None
+    m = re.search(r"/jobs/view/(\d+)", url)
+    return m.group(1) if m else None
+
+
 def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None]:
     """Match job to existing application or create new. Returns (app, created, pending_status).
 
@@ -826,7 +838,18 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         app = db.query(models.Application).filter(
             models.Application.linkedin_job_id == li_job_id
         ).first()
+        if not app:
+            # Also match via stellenanzeige_url that contains the LI job ID
+            candidates = db.query(models.Application).filter(
+                models.Application.stellenanzeige_url.isnot(None)
+            ).all()
+            for c in candidates:
+                if _li_job_id_from_url(c.stellenanzeige_url or "") == li_job_id:
+                    app = c
+                    break
         if app:
+            if li_job_id and not app.linkedin_job_id:
+                app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
             return app, False, None, f"job_id:{li_job_id}→#{app.id}"
@@ -933,12 +956,12 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     return new_app, True, intended_status, f"neu→#{new_app.id}"
 
 
-def _run_sync_task(cfg_id: int):
+def _run_sync_task(cfg_id: int, target_app_id: int | None = None):
     """Blocking wrapper — runs the async scraper from a sync background task."""
-    asyncio.run(_async_sync(cfg_id))
+    asyncio.run(_async_sync(cfg_id, target_app_id))
 
 
-async def _async_sync(cfg_id: int):
+async def _async_sync(cfg_id: int, target_app_id: int | None = None):
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -1063,6 +1086,12 @@ async def _async_sync(cfg_id: int):
             _state["step"] = f"Verarbeite {i + 1}/{len(all_jobs)}"
             try:
                 app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
+
+                # Stop-Early: wenn individueller Sync, nur den Ziel-App verarbeiten
+                if target_app_id is not None and app.id != target_app_id:
+                    log.debug("[LI #{} skip] kein Match für Ziel-App #{} | job_id={} firma={!r}",
+                              app.id, target_app_id, job.get("id", ""), job.get("company", ""))
+                    continue
                 pfx = f"[LI #{app.id}]"
                 log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
                           pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
@@ -1146,6 +1175,13 @@ async def _async_sync(cfg_id: int):
                     else:
                         skipped += 1
                         log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
+
+                # Stop-Early: Ziel-App gefunden und verarbeitet
+                if target_app_id is not None and app.id == target_app_id:
+                    log.info("[LI] Ziel-App #{} gefunden und verarbeitet — stoppe früh nach {}/{} Jobs",
+                             target_app_id, i + 1, len(all_jobs))
+                    break
+
             except Exception as e:
                 errors.append(f"{job.get('company', '?')}: {e}")
                 log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)

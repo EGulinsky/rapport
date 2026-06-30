@@ -257,7 +257,7 @@ export const api = {
     saveConfig: (email: string, password: string) =>
       request('/sync/linkedin/config', { method: 'POST', body: JSON.stringify({ email, password }) }),
     deleteConfig: () => request('/sync/linkedin/config', { method: 'DELETE' }),
-    run: () => request('/sync/linkedin/run', { method: 'POST' }),
+    run: (targetAppId?: number) => request('/sync/linkedin/run', { method: 'POST', body: JSON.stringify({ target_app_id: targetAppId ?? null }) }),
     status: () => request<LinkedInSyncStatus>('/sync/linkedin/status'),
     clearSession: () => request('/sync/linkedin/clear-session', { method: 'POST' }),
     submitTwoFa: (code: string) => request('/sync/linkedin/submit-2fa', { method: 'POST', body: JSON.stringify({ code }) }),

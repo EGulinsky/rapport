@@ -133,7 +133,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       let liRunning = false
       if (liCfg?.configured) {
         try {
-          await api.linkedin.run()
+          await api.linkedin.run(appId)
           liRunning = true
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e)
