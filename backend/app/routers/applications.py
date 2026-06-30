@@ -221,19 +221,23 @@ def list_applications(
         if fixed_any:
             db.commit()
 
-    # Attach company websites for logo display
+    # Attach company website + display name for logo display and name override
     cp_ids = {a.company_profile_id for a in apps if a.company_profile_id}
     tcp_ids = {a.target_company_profile_id for a in apps if a.target_company_profile_id}
     all_ids = cp_ids | tcp_ids
     if all_ids:
-        website_map = dict(
-            db.query(models.CompanyProfile.id, models.CompanyProfile.website)
+        profiles = (
+            db.query(models.CompanyProfile.id, models.CompanyProfile.website, models.CompanyProfile.name_display)
             .filter(models.CompanyProfile.id.in_(all_ids))
             .all()
         )
+        website_map = {p.id: p.website for p in profiles}
+        name_map = {p.id: p.name_display for p in profiles}
         for a in apps:
             a.company_website = website_map.get(a.company_profile_id)
             a.target_company_website = website_map.get(a.target_company_profile_id)
+            a.company_name_display = name_map.get(a.company_profile_id)
+            a.target_company_name_display = name_map.get(a.target_company_profile_id)
 
     return apps
 
@@ -263,6 +267,15 @@ def get_application(app_id: int, db: Session = Depends(get_db)):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+    for cp_id, attr_name, attr_target in [
+        (app.company_profile_id, "company_name_display", "company_website"),
+        (app.target_company_profile_id, "target_company_name_display", "target_company_website"),
+    ]:
+        if cp_id:
+            cp = db.get(models.CompanyProfile, cp_id)
+            if cp:
+                setattr(app, attr_name, cp.name_display)
+                setattr(app, attr_target, cp.website)
     return app
 
 

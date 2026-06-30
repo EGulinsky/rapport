@@ -45,6 +45,7 @@ class ApplicationBrief(BaseModel):
     id: int
     firma: str
     rolle: str
+    company_name_display: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -152,6 +153,10 @@ class ApplicationRead(ApplicationBase):
     updated_at: Optional[datetime] = None
     company_profile_id: Optional[int] = None
     target_company_profile_id: Optional[int] = None
+    company_name_display: Optional[str] = None
+    target_company_name_display: Optional[str] = None
+    company_website: Optional[str] = None
+    target_company_website: Optional[str] = None
     contacts: List[ContactRead] = []
     events: List[EventRead] = []
 
@@ -178,6 +183,8 @@ class ApplicationListItem(BaseModel):
     target_company_profile_id: Optional[int] = None
     company_website: Optional[str] = None
     target_company_website: Optional[str] = None
+    company_name_display: Optional[str] = None
+    target_company_name_display: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

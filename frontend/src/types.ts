@@ -85,6 +85,8 @@ export interface Application {
   target_company_profile_id?: number | null
   company_website?: string | null
   target_company_website?: string | null
+  company_name_display?: string | null
+  target_company_name_display?: string | null
 }
 
 export interface CompanyContactRef {
@@ -144,7 +146,7 @@ export interface Contact {
 }
 
 export interface ContactWithApp extends Contact {
-  applications?: { id: number; firma: string; rolle: string }[]
+  applications?: { id: number; firma: string; rolle: string; company_name_display?: string | null }[]
 }
 
 export interface Attachment {

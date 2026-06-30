@@ -157,7 +157,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
     const id = resolvedAppId(item)
     if (!id) return null
     const a = allApps.find(x => x.id === id)
-    if (a) return `${a.firma} — ${a.rolle}`
+    if (a) return `${a.company_name_display ?? a.firma} — ${a.rolle}`
     if (getOverride(item.id).app_id == null) {
       // fall back to the suggested names from the API
       if (item.suggested_app_firma) return `${item.suggested_app_firma} — ${item.suggested_app_rolle}`
@@ -593,7 +593,7 @@ function AppPicker({ selectedId, allApps, apps, onSearch, onSelect }: AppPickerP
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="font-medium text-gray-800">{a.firma}</span>
+                  <span className="font-medium text-gray-800">{a.company_name_display ?? a.firma}</span>
                   {a.rolle && <span className="text-gray-400 ml-1 text-xs">— {a.rolle}</span>}
                 </div>
                 <span className={clsx('shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full', MAIN_STATUS_COLORS[a.main_status])}>

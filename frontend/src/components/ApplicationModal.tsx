@@ -702,7 +702,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <>
                 <div className="flex items-center gap-2.5">
                   <CompanyLogo
-                    name={app?.is_headhunter ? (app?.zielfirma_bei_hh || app?.firma || '') : (app?.firma || '')}
+                    name={app?.is_headhunter ? ((app?.target_company_name_display ?? app?.zielfirma_bei_hh) || (app?.company_name_display ?? app?.firma) || '') : ((app?.company_name_display ?? app?.firma) || '')}
                     website={app?.is_headhunter ? (app?.target_company_website ?? app?.company_website) : app?.company_website}
                   />
                   <div className="flex items-baseline gap-2 min-w-0">
@@ -710,9 +710,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       <button
                         onClick={() => onOpenCompany(app.company_profile_id!)}
                         className="text-lg font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 hover:underline"
-                      >{app?.firma}{updDot('firma')}</button>
+                      >{app?.company_name_display ?? app?.firma}{updDot('firma')}</button>
                     ) : (
-                      <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.firma}{updDot('firma')}</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 truncate">{app?.company_name_display ?? app?.firma}{updDot('firma')}</h2>
                     )}
                     <span className="text-xs text-gray-300 shrink-0 select-all">#{app?.id}</span>
                   </div>
