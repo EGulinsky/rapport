@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.40',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einschätzung: Prompt schreibt next_step jetzt als Handlungsanweisung (Imperativ) mit echten Zahlen. Verboten: Status-Labels kopieren, E-Mail-Betreff wiederholen, vage Phrasen.',
+      'AI-Logging: Jeder KI-Request und jede Antwort wird mit Kategorie "ai" geloggt (docker logs + Seq).',
+    ],
+  },
+  {
     version: '3.14.39',
     date: '2026-06-30',
     changes: [

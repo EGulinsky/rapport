@@ -10,7 +10,11 @@ import litellm
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
+from app.logger import get_logger
+
 litellm.suppress_debug_info = True
+
+log = get_logger("ai")
 
 _DATA_DIR = pathlib.Path(
     os.getenv("DATABASE_URL", "sqlite:///./data/jobtracker.db")
@@ -68,12 +72,26 @@ async def complete(
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
 
+    log.info(
+        "AI request | model={model} max_tokens={max_tokens}\n{messages}",
+        model=cfg.model,
+        max_tokens=max_tokens,
+        messages=json.dumps(messages, ensure_ascii=False, indent=2),
+    )
+
     try:
         response = await litellm.acompletion(**kwargs)
     except litellm.RateLimitError as e:
+        log.warning("AI rate limited: {}", e)
         raise AIRateLimited(str(e))
 
     content: str = response.choices[0].message.content or ""
+
+    log.info(
+        "AI response | model={model}\n{content}",
+        model=cfg.model,
+        content=content,
+    )
 
     if json_mode:
         return json.loads(content)
