@@ -360,6 +360,9 @@ async def assess_application(db: Session, app) -> dict:
 === VOLLSTÄNDIGE TIMELINE (chronologisch) ===
 {timeline_text}
 
+=== HEUTE ===
+{today.strftime('%d.%m.%Y')} ({today.strftime('%A')})
+
 === AUFGABE ===
 Gib ein JSON-Objekt mit genau zwei Feldern zurück:
 
@@ -368,15 +371,16 @@ Gib ein JSON-Objekt mit genau zwei Feldern zurück:
    - "yellow": mittel (30–60%) — laufend, unklar, normale Wartezeit nach 1–2 Gesprächen
    - "red": niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting, frühe Phase ohne Signal, Absage
 
-2. "next_step" — Was soll der Bewerber in den nächsten 1–3 Tagen konkret tun?
-   REGELN (strikt einhalten):
-   - Genau 1–2 kurze Sätze auf Deutsch
-   - Formuliere als HANDLUNGSANWEISUNG (Imperativ): "Schreibe...", "Ruf an...", "Warte bis...", "Bereite dich vor auf..."
-   - Verwende ECHTE ZAHLEN aus den Daten: Anzahl der Gespräche, konkretes Datum des letzten Kontakts, tatsächliche Wartezeit in Tagen
-   - VERBOTEN: E-Mail-Betreff oder Timeline-Inhalte kopieren, Status-Labels wiederholen ("Warten auf Entscheidung"), vage Phrasen ohne konkreten Bezug
-   - Wenn der Prozess weit fortgeschritten ist (≥3 Gespräche, Gehaltsverhandlung, Angebot): benenne das explizit
+2. "next_step" — Konkrete Situation + Was der Bewerber jetzt tun soll (2–4 Sätze auf Deutsch):
+   - Fasse zuerst kurz zusammen wo der Prozess steht: wie viele Gespräche, wann war der letzte Kontakt (in Tagen), was war der letzte Inhalt
+   - Dann die Handlungsempfehlung im Imperativ: "Schreibe...", "Ruf an...", "Bereite dich vor auf..."
+   STRIKT VERBOTEN:
+   - Daten oder Deadlines erfinden die NICHT in der Timeline stehen
+   - Wochentage nennen (du kennst sie nicht zuverlässig)
+   - Status-Labels wiederholen ("Warten auf Entscheidung")
+   - E-Mail-Betreff wörtlich kopieren
 
-{{"color": "green"|"yellow"|"red", "next_step": "<Handlungsanweisung>"}}"""
+{{"color": "green"|"yellow"|"red", "next_step": "..."}}"""
 
     result = await complete(
         db,
