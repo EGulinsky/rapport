@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.20',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Sync: Bewerbungs-URL (stellenanzeige_url) wird als LI-Job-ID-Quelle genutzt — Match auch wenn linkedin_job_id noch nicht gesetzt.',
+      'LinkedIn-Sync pro Bewerbung: stoppt sobald die Ziel-Bewerbung gefunden wurde, überspringt alle anderen Jobs.',
+    ],
+  },
+  {
     version: '3.14.19',
     date: '2026-06-30',
     changes: [
