@@ -317,20 +317,18 @@ async def assess_application(db: Session, app) -> dict:
     last_event_date   = events[-1].datum if events else None
     days_since_last   = (today - last_event_date).days if last_event_date else None
 
-    # Build full timeline — ALL events, notizen gekürzt auf 400 Zeichen
+    # Build full timeline — ALL events, vollständiger Inhalt
     timeline_lines = []
     for e in events:
         age = (today - e.datum).days
         line = f"{e.datum.strftime('%d.%m.%Y')} (vor {age}d) [{e.typ}]"
         if e.autor:
-            # shorten autor to just the name part before <email>
             autor_short = e.autor.split('<')[0].strip().strip('"') or e.autor
-            line += f" | von: {autor_short[:40]}"
+            line += f" | von: {autor_short[:80]}"
         if e.titel:
-            line += f"\n  Betreff: {e.titel[:120]}"
+            line += f"\n  Betreff: {e.titel}"
         if e.notiz and e.notiz.strip():
-            notiz = e.notiz.strip()
-            line += f"\n  Inhalt: {notiz[:400]}{'…' if len(notiz) > 400 else ''}"
+            line += f"\n  Inhalt: {e.notiz.strip()}"
         timeline_lines.append(line)
     timeline_text = "\n\n".join(timeline_lines) if timeline_lines else "(keine Ereignisse)"
 

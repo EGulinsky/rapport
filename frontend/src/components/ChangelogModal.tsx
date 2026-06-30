@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.41',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einschätzung: Timeline-Events werden jetzt vollständig (ungekürzt) an die KI übergeben — E-Mail-Inhalt, Kalendernotizen etc.',
+      'KI-Einschätzung: Erfolgschance wird jetzt explizit als Text angezeigt ("Hoch / Mittel / Niedrig") in Tabelle, Kanban und Modal.',
+    ],
+  },
+  {
     version: '3.14.40',
     date: '2026-06-30',
     changes: [

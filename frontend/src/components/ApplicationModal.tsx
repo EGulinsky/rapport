@@ -1127,22 +1127,29 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 </button>
               </div>
               {app?.ai_color ? (
-                <div className={`rounded-lg border px-3 py-2.5 flex items-start gap-2.5 ${
+                <div className={`rounded-lg border px-3 py-2.5 ${
                   app.ai_color === 'green' ? 'border-green-200 bg-green-50' :
                   app.ai_color === 'red'   ? 'border-red-200 bg-red-50'     : 'border-yellow-200 bg-yellow-50'
                 }`}>
-                  <span className={`mt-1 shrink-0 h-2.5 w-2.5 rounded-full ${
-                    app.ai_color === 'green' ? 'bg-green-500' :
-                    app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
-                  }`} />
-                  <div>
-                    <p className="text-sm text-gray-700 leading-snug">{app.ai_next_step}</p>
-                    {app.ai_assessed_at && (
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        Bewertet am {new Date(app.ai_assessed_at).toLocaleDateString('de-DE')}
-                      </p>
-                    )}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${
+                      app.ai_color === 'green' ? 'bg-green-500' :
+                      app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+                    }`} />
+                    <span className={`text-xs font-semibold ${
+                      app.ai_color === 'green' ? 'text-green-700' :
+                      app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
+                    }`}>
+                      {app.ai_color === 'green' ? 'Hohe Erfolgschance (>60 %)' :
+                       app.ai_color === 'red'   ? 'Niedrige Erfolgschance (<30 %)' : 'Mittlere Erfolgschance (30–60 %)'}
+                    </span>
                   </div>
+                  <p className="text-sm text-gray-700 leading-snug">{app.ai_next_step}</p>
+                  {app.ai_assessed_at && (
+                    <p className="text-[10px] text-gray-400 mt-1.5">
+                      Bewertet am {new Date(app.ai_assessed_at).toLocaleDateString('de-DE')}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 flex items-center justify-between">

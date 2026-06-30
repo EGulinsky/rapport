@@ -260,13 +260,22 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
               </td>
               <td className="px-4 py-3 text-xs max-w-[240px]">
                 {app.ai_color ? (
-                  <div className="flex items-start gap-1.5">
-                    <span className={clsx(
-                      'mt-0.5 shrink-0 h-2 w-2 rounded-full',
-                      app.ai_color === 'green' ? 'bg-green-500' :
-                      app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
-                    )} />
-                    <span className="text-gray-600 leading-tight">{app.ai_next_step || '—'}</span>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className={clsx(
+                        'shrink-0 h-2 w-2 rounded-full',
+                        app.ai_color === 'green' ? 'bg-green-500' :
+                        app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+                      )} />
+                      <span className={clsx(
+                        'text-[10px] font-semibold',
+                        app.ai_color === 'green' ? 'text-green-700' :
+                        app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
+                      )}>
+                        {app.ai_color === 'green' ? 'Hoch' : app.ai_color === 'red' ? 'Niedrig' : 'Mittel'}
+                      </span>
+                    </div>
+                    <span className="text-gray-600 leading-tight block">{app.ai_next_step || '—'}</span>
                   </div>
                 ) : app.naechster_schritt ? (
                   <span className={clsx(
