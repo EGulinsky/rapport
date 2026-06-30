@@ -159,11 +159,18 @@ def list_applications(
             .all()
         )
 
+        # Calendar events (gcal/icloud_cal) represent scheduled appointments and
+        # should be treated as interview dates — same logic as PDF Terminübersicht.
+        _is_interview = or_(
+            models.Event.typ == "gespräch",
+            models.Event.source.in_(["gcal", "icloud_cal"]),
+        )
+
         next_interviews = dict(
             db.query(models.Event.application_id, func.min(models.Event.datum))
             .filter(
                 models.Event.application_id.in_(app_ids),
-                models.Event.typ == "gespräch",
+                _is_interview,
                 models.Event.datum > today,
             )
             .group_by(models.Event.application_id)
@@ -174,7 +181,7 @@ def list_applications(
             db.query(models.Event.application_id, func.max(models.Event.datum))
             .filter(
                 models.Event.application_id.in_(app_ids),
-                models.Event.typ == "gespräch",
+                _is_interview,
                 models.Event.datum <= today,
             )
             .group_by(models.Event.application_id)
@@ -310,12 +317,28 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
                 add_audit(db, "update", "user", app_id=app_id,
                           field=f, old_value=str(old_v or ""), new_value=str(v or ""))
 
+    # Direct company profile assignment: look up name and skip _ensure_company_profile
+    direct_cp_id = update_data.pop("company_profile_id", None)
+    direct_tcp_id = update_data.pop("target_company_profile_id", None)
+
     firma_changed = "firma" in update_data or "zielfirma_bei_hh" in update_data or "is_headhunter" in update_data
     for field, value in update_data.items():
         setattr(app, field, value)
 
-    if firma_changed:
+    if direct_cp_id is not None:
+        cp = db.get(models.CompanyProfile, direct_cp_id)
+        if cp:
+            app.company_profile_id = cp.id
+            app.firma = cp.name_display or cp.name_norm
+        firma_changed = False  # profile already set, no need to re-derive
+    elif firma_changed:
         _ensure_company_profile(db, app)
+
+    if direct_tcp_id is not None:
+        tcp = db.get(models.CompanyProfile, direct_tcp_id)
+        if tcp:
+            app.target_company_profile_id = tcp.id
+            app.zielfirma_bei_hh = tcp.name_display or tcp.name_norm
 
     new_main = app.main_status
     new_sub  = app.sub_status
@@ -444,6 +467,22 @@ def update_contact(app_id: int, contact_id: int, payload: schemas.ContactUpdate,
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(contact, field, value)
     db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.put("/{app_id}/contacts/{contact_id}", response_model=schemas.ContactRead)
+def link_contact(app_id: int, contact_id: int, db: Session = Depends(get_db)):
+    """Link an existing contact to an application (no-op if already linked)."""
+    app = db.query(models.Application).filter(models.Application.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+    contact = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    if contact not in app.contacts:
+        app.contacts.append(contact)
+        db.commit()
     db.refresh(contact)
     return contact
 

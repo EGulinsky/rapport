@@ -381,6 +381,7 @@ export const api = {
     get: (id: number) => request<CompanyProfile>(`/companies/${id}`),
     update: (id: number, data: Partial<CompanyProfile>) =>
       request<CompanyProfile>(`/companies/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    create: (name: string) => request<CompanyProfile>('/companies', { method: 'POST', body: JSON.stringify({ name }) }),
     linkContacts: () => request<{linked: number; created: number}>('/companies/link-contacts', {method: 'POST'}),
     uploadLogo: async (id: number, file: File): Promise<void> => {
       const form = new FormData()

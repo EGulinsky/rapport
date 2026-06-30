@@ -125,6 +125,8 @@ class ApplicationCreate(ApplicationBase):
 
 class ApplicationUpdate(BaseModel):
     firma: Optional[str] = None
+    company_profile_id: Optional[int] = None
+    target_company_profile_id: Optional[int] = None
     rolle: Optional[str] = None
     main_status: Optional[str] = None
     sub_status: Optional[str] = None

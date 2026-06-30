@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.16',
+    date: '2026-06-30',
+    changes: [
+      'Bewerbung: Firmenname ist kein Freitextfeld mehr — nur Zuordnung aus vorhandenen Firmenprofilen oder Neuanlage (analog Kontakte).',
+    ],
+  },
+  {
     version: '3.14.15',
     date: '2026-06-29',
     changes: [
