@@ -58,6 +58,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
   const [linking, setLinking] = useState(false)
   const [linkMsg, setLinkMsg] = useState<string | null>(null)
+  const [linkProgress, setLinkProgress] = useState<{linked: number; created: number; total: number} | null>(null)
+  const linkPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [parentPickerOpen, setParentPickerOpen] = useState(false)
   const [parentQuery, setParentQuery] = useState('')
   const [parentResults, setParentResults] = useState<CompanyProfile[]>([])
@@ -145,6 +147,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   }, [stopPolling, load])
 
   useEffect(() => () => stopPolling(), [stopPolling])
+  useEffect(() => () => stopLinkPolling(), [])
 
   useEffect(() => {
     if (!syncMenuOpen) return
@@ -176,18 +179,54 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     }
   }
 
+  function stopLinkPolling() {
+    if (linkPollRef.current) { clearInterval(linkPollRef.current); linkPollRef.current = null }
+  }
+
   async function handleLinkContacts() {
     setLinking(true)
     setLinkMsg(null)
+    setLinkProgress(null)
     try {
       const r = await api.companies.linkContacts()
-      setLinkMsg(`${r.linked} verknüpft, ${r.created} neue Profile`)
-      await load()
+      if (!r.started) {
+        setLinkMsg(r.message || 'Bereits läuft')
+        setLinking(false)
+        return
+      }
+      stopLinkPolling()
+      linkPollRef.current = setInterval(async () => {
+        try {
+          const s = await api.companies.linkContactsStatus()
+          setLinkProgress({ linked: s.linked, created: s.created, total: s.total })
+          if (!s.running) {
+            stopLinkPolling()
+            setLinking(false)
+            setLinkProgress(null)
+            if (s.cancelled) {
+              setLinkMsg(`Abgebrochen — ${s.linked} verknüpft, ${s.created} neue Profile`)
+            } else {
+              setLinkMsg(`${s.linked} verknüpft, ${s.created} neue Profile`)
+            }
+            await load()
+          }
+        } catch {
+          stopLinkPolling()
+          setLinking(false)
+        }
+      }, 800)
     } catch (e) {
       setLinkMsg(e instanceof Error ? e.message : 'Fehler')
-    } finally {
       setLinking(false)
     }
+  }
+
+  async function cancelLinkContacts() {
+    await api.companies.linkContactsCancel()
+  }
+
+  async function cancelSync() {
+    await api.companySync.cancel()
   }
 
   async function resetFailed() {
@@ -263,7 +302,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         </div>
         {loading && <span className="text-xs text-gray-400">Laden…</span>}
         {/* Sync dropdown */}
-        <div className="relative shrink-0" ref={syncMenuRef}>
+        <div className="relative shrink-0 flex items-center gap-1" ref={syncMenuRef}>
           <button
             onClick={() => !syncing && setSyncMenuOpen(o => !o)}
             disabled={syncing}
@@ -275,6 +314,15 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             Sync
             {!syncing && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
           </button>
+          {syncing && (
+            <button
+              onClick={cancelSync}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
+              title="Sync abbrechen"
+            >
+              Abbrechen
+            </button>
+          )}
           {syncMenuOpen && (
             <div className="absolute z-50 top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
               <button
@@ -306,16 +354,29 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             </div>
           )}
         </div>
-        <button
-          onClick={handleLinkContacts}
-          disabled={linking}
-          className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-        >
-          {linking
-            ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
-            : null}
-          {linking ? 'Verknüpfe…' : 'Kontakte verknüpfen'}
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleLinkContacts}
+            disabled={linking}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {linking && <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />}
+            {linking
+              ? linkProgress
+                ? `${linkProgress.linked + linkProgress.created}/${linkProgress.total}`
+                : 'Verknüpfe…'
+              : 'Kontakte verknüpfen'}
+          </button>
+          {linking && (
+            <button
+              onClick={cancelLinkContacts}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
+              title="Verknüpfung abbrechen"
+            >
+              Abbrechen
+            </button>
+          )}
+        </div>
         {linkMsg && <span className="text-xs text-violet-600">{linkMsg}</span>}
         {selectedIds.size >= 1 && (
           <div className="relative" ref={parentPickerRef}>
