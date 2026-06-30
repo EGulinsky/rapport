@@ -103,6 +103,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const syncCancelledRef = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -131,11 +132,13 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         const s = await api.companySync.status()
         setSyncLive(s)
         if (!s.running) {
-          if (s.pending > 0) {
+          if (s.pending > 0 && !syncCancelledRef.current) {
             await api.companySync.run()
           } else {
             stopPolling()
             setSyncing(false)
+            setSyncMsg(syncCancelledRef.current ? 'Abgebrochen.' : null)
+            syncCancelledRef.current = false
             load()
           }
         }
@@ -161,6 +164,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   async function startSync(force = false) {
     setSyncMenuOpen(false)
     setSyncing(true)
+    syncCancelledRef.current = false
     setSyncMsg(null)
     setSyncLive(null)
     try {
@@ -226,6 +230,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   }
 
   async function cancelSync() {
+    syncCancelledRef.current = true
     await api.companySync.cancel()
   }
 
