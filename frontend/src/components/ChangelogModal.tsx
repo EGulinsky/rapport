@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.35',
+    date: '2026-06-30',
+    changes: [
+      'iCloud-Kontaktsync: importiert nur noch relevante Kontakte — Name/E-Mail muss in Bewerbungsereignissen oder -feldern vorkommen, oder Firma muss zu einer Bewerbung oder einem Firmenprofil passen. Adressbuch-Kontakte ohne Jobbezug werden übersprungen.',
+    ],
+  },
+  {
     version: '3.14.34',
     date: '2026-06-30',
     changes: [
