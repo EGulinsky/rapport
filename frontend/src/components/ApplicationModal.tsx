@@ -733,31 +733,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   </div>
                 </div>
                 <p className="text-sm text-gray-500 truncate">{app?.rolle}{updDot('rolle')}</p>
-                {app?.ai_color && (
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${
-                      app.ai_color === 'green' ? 'bg-green-500' :
-                      app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
-                    }`} />
-                    <p className="text-xs text-gray-500 leading-tight">{app.ai_next_step}</p>
-                  </div>
-                )}
               </>
             )}
           </div>
           <div className="ml-4 flex items-center gap-1.5">
-            {/* KI-Bewerten button */}
-            {!editing && (
-              <button
-                onClick={runAiAssess}
-                disabled={aiAssessing}
-                title="KI-Einschätzung aktualisieren"
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
-              >
-                <Sparkles className={`h-3.5 w-3.5 ${aiAssessing ? 'animate-pulse' : ''}`} />
-                {aiAssessing ? '…' : 'KI'}
-              </button>
-            )}
             {/* Split sync button */}
             <div className="relative flex rounded-lg border border-indigo-200" ref={syncMenuRef}>
               <button
@@ -1130,6 +1109,54 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   )
                 })}
               </div>
+            </div>
+          )}
+
+          {/* KI-Einschätzung */}
+          {!editing && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">KI-Einschätzung</p>
+                <button
+                  onClick={runAiAssess}
+                  disabled={aiAssessing}
+                  className="flex items-center gap-1 text-[10px] text-purple-600 hover:text-purple-800 disabled:opacity-50"
+                >
+                  <Sparkles className={`h-3 w-3 ${aiAssessing ? 'animate-pulse' : ''}`} />
+                  {aiAssessing ? 'Analysiere…' : 'Neu bewerten'}
+                </button>
+              </div>
+              {app?.ai_color ? (
+                <div className={`rounded-lg border px-3 py-2.5 flex items-start gap-2.5 ${
+                  app.ai_color === 'green' ? 'border-green-200 bg-green-50' :
+                  app.ai_color === 'red'   ? 'border-red-200 bg-red-50'     : 'border-yellow-200 bg-yellow-50'
+                }`}>
+                  <span className={`mt-1 shrink-0 h-2.5 w-2.5 rounded-full ${
+                    app.ai_color === 'green' ? 'bg-green-500' :
+                    app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+                  }`} />
+                  <div>
+                    <p className="text-sm text-gray-700 leading-snug">{app.ai_next_step}</p>
+                    {app.ai_assessed_at && (
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        Bewertet am {new Date(app.ai_assessed_at).toLocaleDateString('de-DE')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 flex items-center justify-between">
+                  <span className="text-sm text-gray-400 italic">Noch keine KI-Einschätzung</span>
+                  <button
+                    onClick={runAiAssess}
+                    disabled={aiAssessing}
+                    className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Jetzt bewerten
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

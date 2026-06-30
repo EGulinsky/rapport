@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.38',
+    date: '2026-06-30',
+    changes: [
+      'KI-Einschätzung: Prompt überarbeitet — berechnet echte Tage, wertet Prozesstiefe (Anzahl Gespräche) und konkrete Timeline aus. Platzierung: im Modal in der Übersicht unten (mit Datum und "Neu bewerten"), in Tabelle/Kanban als Farbpunkt + Text.',
+    ],
+  },
+  {
     version: '3.14.37',
     date: '2026-06-30',
     changes: [

@@ -280,9 +280,8 @@ async def test_connection(db: Session) -> str:
 
 
 _ASSESS_SYSTEM = """\
-Du bist ein Karrierecoach, der Bewerbungssituationen bewertet.
-Analysiere die Bewerbung und ihre Timeline und gib eine prägnante Einschätzung.
-Antworte ausschließlich als valides JSON-Objekt, kein Markdown.
+Du bist ein erfahrener Karrierecoach. Du bewertest Bewerbungssituationen nüchtern und konkret.
+Antworte ausschließlich als valides JSON-Objekt, kein Markdown, keine Erklärungen außerhalb des JSON.
 """
 
 _STATUS_LABELS = {
@@ -296,6 +295,8 @@ _STATUS_LABELS = {
     "rejected": "Absage",
 }
 
+_RELEVANT_EVENT_TYPES = {"bewerbung", "gespräch", "interview", "status", "notiz", "email", "anruf", "angebot", "absage"}
+
 
 async def assess_application(db: Session, app) -> dict:
     """
@@ -305,66 +306,81 @@ async def assess_application(db: Session, app) -> dict:
     from datetime import date as _date
     firma = getattr(app, 'company_name_display', None) or app.firma
     status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
+    today = _date.today()
 
-    events = sorted(
-        [e for e in (app.events or []) if e.datum],
+    # Only process relevant event types, sorted newest first, skip file events
+    all_events = sorted(
+        [e for e in (app.events or []) if e.datum and e.typ not in ("file",)],
         key=lambda e: e.datum,
         reverse=True,
     )
+
+    # Count interviews (gespräch/status events) for process depth
+    interview_events = [e for e in all_events if e.typ in ("gespräch", "interview") or
+                        (e.typ == "status" and e.titel and "gespräch" in e.titel.lower())]
+    interview_count = len(interview_events)
+
+    # Last contact date (most recent event with a date)
+    last_event_date = all_events[0].datum if all_events else None
+    days_since_last_contact = (today - last_event_date).days if last_event_date else None
+
+    days_since_apply = (today - app.datum_bewerbung).days if app.datum_bewerbung else None
+
+    # Build timeline — max 12 most recent relevant events, with content
     timeline_lines = []
-    for e in events[:15]:
-        line = f"  {e.datum.strftime('%d.%m.%Y')}: {e.typ}"
+    for e in all_events[:12]:
+        age = (today - e.datum).days
+        line = f"  {e.datum.strftime('%d.%m.%Y')} (vor {age}d): [{e.typ}]"
         if e.titel:
-            line += f" — {e.titel}"
-        if e.notiz:
-            line += f"\n    {e.notiz[:300]}"
+            line += f" {e.titel[:80]}"
+        if e.notiz and e.notiz.strip():
+            line += f"\n    → {e.notiz.strip()[:250]}"
         timeline_lines.append(line)
     timeline = "\n".join(timeline_lines) if timeline_lines else "  (keine Ereignisse)"
 
-    today = _date.today()
-    days_since_update = (today - app.letztes_update).days if app.letztes_update else None
-    days_since_apply  = (today - app.datum_bewerbung).days if app.datum_bewerbung else None
-
-    meta = f"  Status: {status_label}\n"
-    meta += f"  Beworben: {app.datum_bewerbung.strftime('%d.%m.%Y') if app.datum_bewerbung else '?'}"
+    # Key facts summary for the model
+    facts = []
     if days_since_apply is not None:
-        meta += f" (vor {days_since_apply} Tagen)"
-    meta += f"\n  Letztes Update: {app.letztes_update.strftime('%d.%m.%Y') if app.letztes_update else '?'}"
-    if days_since_update is not None:
-        meta += f" (vor {days_since_update} Tagen)"
+        facts.append(f"Beworben vor {days_since_apply} Tagen ({app.datum_bewerbung.strftime('%d.%m.%Y') if app.datum_bewerbung else '?'})")
+    if interview_count > 0:
+        facts.append(f"{interview_count} Gespräch{'e' if interview_count > 1 else ''} stattgefunden")
+    if days_since_last_contact is not None:
+        facts.append(f"Letzter Kontakt vor {days_since_last_contact} Tagen ({last_event_date.strftime('%d.%m.%Y') if last_event_date else '?'})")
     if app.is_headhunter and app.zielfirma_bei_hh:
-        meta += f"\n  Headhunter für: {app.zielfirma_bei_hh}"
+        facts.append(f"Headhunter-Bewerbung für: {app.zielfirma_bei_hh}")
 
-    prompt = f"""Bewerbung:
-  Firma: {firma}
-  Stelle: {app.rolle}
-{meta}
+    prompt = f"""Bewerbungssituation analysieren:
+
+Firma: {firma}
+Stelle: {app.rolle}
+Status: {status_label}
+{chr(10).join(facts)}
 
 Timeline (neueste zuerst):
 {timeline}
 
-Bewerte die Erfolgschance und schlage den konkret nächsten sinnvollen Schritt vor.
+Aufgabe:
+1. Schätze die WAHRSCHEINLICHKEIT ein, dass diese Bewerbung zu einem Angebot führt.
+2. Formuliere den NÄCHSTEN SINNVOLLEN SCHRITT — konkret, situationsbezogen, handlungsorientiert.
 
-color-Regeln:
-- green: Aktiver positiver Fortschritt — Gespräch geplant, Angebot, gute Rückmeldung
-- yellow: Offen/unklar — warte auf Feedback, wenig Information, kurze Wartezeit normal
-- red: Kritisch — lange Funkstille (>3 Wochen ohne Reaktion), keine Antwort, Ghosting-Verdacht, Absage
+color-Bedeutung (Wahrscheinlichkeit für ein Angebot):
+- "green": Hoch (>60%) — fortgeschrittener Prozess, positive Signale, mehrere Gespräche erfolgreich absolviert, Angebot/Vertragsverhandlung
+- "yellow": Mittel (30-60%) — laufender Prozess, normale Wartezeit, unklar
+- "red": Niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting-Muster, frühe Phase ohne Signale, Absage
 
-next_step: Konkreter Handlungsvorschlag in 1–2 Sätzen auf Deutsch.
-  Beispiele: "Nachfassen per E-Mail, Bewerbung liegt bereits X Tage ohne Rückmeldung vor."
-             "Gesprächstermin bestätigen und Vorbereitung starten."
-             "Abwarten — Feedback wurde für nächste Woche angekündigt."
+next_step: 1-2 konkrete Sätze auf Deutsch. KEINE Platzhalter wie "X Tage" — berechne echte Zahlen aus der Timeline.
+Beziehe dich auf die tatsächliche Situation (z.B. Anzahl Gespräche, letztes Ereignis, Status).
 
 {{
   "color": "green"|"yellow"|"red",
-  "next_step": "<konkreter nächster Schritt>"
+  "next_step": "<situationsspezifischer nächster Schritt>"
 }}"""
 
     result = await complete(
         db,
         [{"role": "system", "content": _ASSESS_SYSTEM}, {"role": "user", "content": prompt}],
         json_mode=True,
-        max_tokens=200,
+        max_tokens=250,
     )
 
     color = result.get("color")
