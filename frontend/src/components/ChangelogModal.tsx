@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.5',
+    date: '2026-06-30',
+    changes: [
+      'LinkedIn-Import: Fallback für anonymisierte/"confidential" Stellenanzeigen — wenn die Firma im Seitenkopf nicht sichtbar ist, wird zusätzlich der "Hiring Team"/Recruiter-Bereich nach dem zugehörigen Firmennamen durchsucht (Headhunter-Name), bevor das Feld leer bleibt.',
+    ],
+  },
+  {
     version: '3.15.4',
     date: '2026-06-30',
     changes: [
