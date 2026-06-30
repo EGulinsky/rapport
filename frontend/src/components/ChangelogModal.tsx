@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.42',
+    date: '2026-06-30',
+    changes: [
+      'KI-Prompt: Heutiges Datum explizit übergeben. Erfundene Daten/Wochentage verboten. next_step verlangt jetzt 2–4 Sätze mit Situationszusammenfassung + Handlungsempfehlung.',
+    ],
+  },
+  {
     version: '3.14.41',
     date: '2026-06-30',
     changes: [
