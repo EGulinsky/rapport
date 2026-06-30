@@ -46,6 +46,9 @@ class AINotConfigured(Exception):
 class AIRateLimited(Exception):
     pass
 
+class AIBadRequest(Exception):
+    pass
+
 
 async def complete(
     db: Session,
@@ -84,8 +87,29 @@ async def complete(
     except litellm.RateLimitError as e:
         log.warning("AI rate limited: {}", e)
         raise AIRateLimited(str(e))
+    except litellm.BadRequestError as e:
+        msg = str(e)
+        log.warning("AI bad request: {}", msg)
+        if "json_validate_failed" in msg or "Failed to validate JSON" in msg:
+            raise AIBadRequest(
+                f"Modell '{cfg.model}' unterstützt keinen JSON-Modus oder hat ungültiges JSON geliefert. "
+                "Versuche ein anderes Modell (z.B. llama-3.3-70b-versatile)."
+            )
+        if "model" in msg.lower() and ("not found" in msg.lower() or "does not exist" in msg.lower()):
+            raise AIBadRequest(f"Modell '{cfg.model}' nicht gefunden beim Anbieter.")
+        raise AIBadRequest(f"Ungültige Anfrage: {msg[:200]}")
+    except litellm.AuthenticationError as e:
+        log.warning("AI auth error: {}", e)
+        raise AIBadRequest("API-Key ungültig oder abgelaufen.")
 
     content: str = response.choices[0].message.content or ""
+
+    if not content.strip():
+        log.warning("AI returned empty content for model={}", cfg.model)
+        raise AIBadRequest(
+            f"Modell '{cfg.model}' hat leere Antwort geliefert — "
+            "möglicherweise nicht verfügbar oder kein JSON-Modus unterstützt."
+        )
 
     log.info(
         "AI response | model={model}\n{content}",
@@ -94,5 +118,12 @@ async def complete(
     )
 
     if json_mode:
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            log.warning("AI response not valid JSON: {}", content[:200])
+            raise AIBadRequest(
+                f"Modell '{cfg.model}' hat kein gültiges JSON geliefert. "
+                "Versuche ein anderes Modell."
+            )
     return content

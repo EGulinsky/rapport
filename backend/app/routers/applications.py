@@ -394,7 +394,7 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden")
     from app.ai.tasks import assess_application, assess_rejected_application
-    from app.ai.provider import AINotConfigured, AIRateLimited
+    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
     try:
         if app.abgesagt:
             result = await assess_rejected_application(db, app)
@@ -404,6 +404,8 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
         raise HTTPException(400, str(e))
     except AIRateLimited:
         raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
+    except AIBadRequest as e:
+        raise HTTPException(400, str(e))
     app.ai_color = result["color"]
     app.ai_next_step = result["next_step"]
     app.ai_reasoning = result.get("reasoning", "")
@@ -428,7 +430,7 @@ async def ai_assess_all(db: Session = Depends(get_db)):
         .all()
     )
     from app.ai.tasks import assess_application
-    from app.ai.provider import AINotConfigured, AIRateLimited
+    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
     updated = 0
     errors: list[str] = []
     for i, app in enumerate(apps):
@@ -442,7 +444,7 @@ async def ai_assess_all(db: Session = Depends(get_db)):
             app.ai_assessed_at = datetime.utcnow()
             db.commit()
             updated += 1
-        except (AINotConfigured, AIRateLimited) as e:
+        except (AINotConfigured, AIRateLimited, AIBadRequest) as e:
             errors.append(str(e))
             break
         except Exception as e:
