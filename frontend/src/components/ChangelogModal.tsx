@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.25',
+    date: '2026-06-30',
+    changes: [
+      'Firmensync: KI entfernt — Daten kommen jetzt aus Wikidata (Search-API + SPARQL). Felder: HQ-Stadt/-Land, Gründungsjahr, Mitarbeiterzahl, Website, LinkedIn-URL, Branche, Beschreibung.',
+    ],
+  },
+  {
     version: '3.14.24',
     date: '2026-06-30',
     changes: [
