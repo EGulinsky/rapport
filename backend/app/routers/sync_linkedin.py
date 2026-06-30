@@ -818,6 +818,24 @@ def _li_job_id_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _quick_match(job: dict, target_app: "models.Application") -> bool:
+    """Fast no-write check: does this LI job belong to target_app?"""
+    from app.dedup import norm_firma, norm_rolle
+    li_job_id = job.get("id", "")
+    if li_job_id:
+        if li_job_id == (target_app.linkedin_job_id or ""):
+            return True
+        if li_job_id == (_li_job_id_from_url(target_app.stellenanzeige_url or "") or ""):
+            return True
+    job_firma = norm_firma(job.get("company", ""))
+    job_rolle = norm_rolle(job.get("title", ""))
+    if (norm_firma(target_app.firma or "") == job_firma
+            or norm_firma(target_app.zielfirma_bei_hh or "") == job_firma):
+        if norm_rolle(target_app.rolle or "") == job_rolle:
+            return True
+    return False
+
+
 def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None]:
     """Match job to existing application or create new. Returns (app, created, pending_status).
 
@@ -1047,144 +1065,171 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             cfg.session_cookies = json.dumps(cookies)
             _commit_with_retry(db)
 
-            # Scrape all categories; seen_ids is per-category to catch scroll-duplicates,
-            # but shared job IDs across categories ARE intentional: ARCHIVED must win
-            # over APPLIED even if the same job ID appeared earlier.
-            # Dedup by firma|title — later categories (higher priority) overwrite earlier ones
-            all_jobs_by_key: dict[str, dict] = {}
-            for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
-                _state["step"] = f"{label}: Seite 1 — lade…"
-                cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label)
-                for j in cat_jobs:
-                    j["_card_type"] = card_type
-                    j["_label"] = label
-                    dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
-                    all_jobs_by_key[dedup_key] = j
-                log.info("[LI kat] {}: {} gefunden (gesamt {})", label, len(cat_jobs), len(all_jobs_by_key))
-                _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_key)})"
-            all_jobs = list(all_jobs_by_key.values())
+            STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
+            created = updated = skipped = 0
+            errors: list[str] = []
 
-            # Scrape messages before closing the browser session
-            apps_for_msg = db.query(models.Application).all()
-            msg_created = await _scrape_messages(page, db, apps_for_msg)
-            _state["msg_created"] = msg_created
-
-            await browser.close()
-
-        if not all_jobs and _state["status"] != "needs_login":
-            _state["step"] = "Keine Jobs gefunden — LinkedIn-Layout evtl. geändert"
-
-        _state["raw_jobs"] = all_jobs  # keep for debug export
-        _state["total"] = len(all_jobs)
-        _state["step"] = f"Verarbeite 0/{len(all_jobs)}…"
-        created = updated = skipped = 0
-        errors: list[str] = []
-        STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
-
-        for i, job in enumerate(all_jobs):
-            _state["processed"] = i + 1
-            _state["step"] = f"Verarbeite {i + 1}/{len(all_jobs)}"
-            try:
-                app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
-
-                # Stop-Early: wenn individueller Sync, nur den Ziel-App verarbeiten
-                if target_app_id is not None and app.id != target_app_id:
-                    log.debug("[LI #{} skip] kein Match für Ziel-App #{} | job_id={} firma={!r}",
-                              app.id, target_app_id, job.get("id", ""), job.get("company", ""))
-                    continue
-                pfx = f"[LI #{app.id}]"
-                log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
-                          pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
-                          job.get("_label", ""), job.get("status_hint", ""), job.get("_raw_context", ""), match_grund)
-                if was_created:
-                    created += 1
-                    if pending_status:
-                        # LI shows this as archived/rejected — queue for review
-                        li_job_id_val = job.get("id", "")
-                        pm_ext_id = f"linkedin_{li_job_id_val}__status__{pending_status}"
-                        db.add(models.PendingMatch(
-                            source="linkedin",
-                            external_id=pm_ext_id,
-                            confidence=90,
-                            event_type="status_change",
-                            datum=date.today(),
-                            titel=f"Neu (LI Archiv): applied → {pending_status}",
-                            suggested_app_id=app.id,
-                            suggested_main_status=pending_status,
-                            status_only=True,
-                        ))
-                        log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
-                    else:
-                        log.info("{} neu angelegt: {} | match={}", pfx, app.main_status, match_grund)
-                else:
-                    job_url = job.get("stellenanzeige_url") or None
-                    if job_url and not app.stellenanzeige_url:
-                        app.stellenanzeige_url = job_url
-                        db.flush()
-
-                    target_status = job.get("default_status", "applied")
-                    if job.get("status_hint"):
-                        target_status = job["status_hint"][0]
-
-                    old_status = app.main_status
-                    cur_idx = STATUS_ORDER.index(old_status) if old_status in STATUS_ORDER else 0
-                    new_idx = STATUS_ORDER.index(target_status) if target_status in STATUS_ORDER else 0
-
-                    status_changed = (
-                        (target_status == "rejected" and old_status != "rejected")
-                        or (target_status != "rejected" and new_idx > cur_idx)
-                    )
-
-                    if status_changed:
-                        # Queue for manual review instead of applying directly
-                        li_job_id = job.get("id", "")
-                        pm_ext_id = f"linkedin_{li_job_id}__status__{target_status}"
-                        already_pending = db.query(models.PendingMatch).filter(
-                            models.PendingMatch.source == "linkedin",
-                            models.PendingMatch.external_id == pm_ext_id,
-                            models.PendingMatch.review_status == "pending",
-                        ).first()
-                        # Don't re-queue if this app+status was already reviewed (approved or
-                        # rejected). Without this check, each sync creates a new match after
-                        # the previous one is reviewed, causing infinite rejection cycles.
-                        already_reviewed = db.query(models.PendingMatch).filter(
-                            models.PendingMatch.suggested_app_id == app.id,
-                            models.PendingMatch.suggested_main_status == target_status,
-                            models.PendingMatch.review_status.in_(["approved", "rejected"]),
-                        ).first()
-                        if not already_pending and not already_reviewed:
-                            sub_hint = job["status_hint"][1] if job.get("status_hint") else None
+            def _process(job: dict) -> None:
+                nonlocal created, updated, skipped
+                try:
+                    app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
+                    pfx = f"[LI #{app.id}]"
+                    log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
+                              pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
+                              job.get("_label", ""), job.get("status_hint", ""), job.get("_raw_context", ""), match_grund)
+                    if was_created:
+                        created += 1
+                        if pending_status:
+                            li_job_id_val = job.get("id", "")
+                            pm_ext_id = f"linkedin_{li_job_id_val}__status__{pending_status}"
                             db.add(models.PendingMatch(
                                 source="linkedin",
                                 external_id=pm_ext_id,
                                 confidence=90,
                                 event_type="status_change",
                                 datum=date.today(),
-                                titel=f"Status: {old_status} → {target_status}",
+                                titel=f"Neu (LI Archiv): applied → {pending_status}",
                                 suggested_app_id=app.id,
-                                suggested_main_status=target_status,
-                                suggested_sub_status=sub_hint,
+                                suggested_main_status=pending_status,
                                 status_only=True,
                             ))
-                            log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
-                        elif already_pending:
-                            log.info("{} Status-Vorschlag übersprungen (bereits ausstehend): {} → {} | match={}", pfx, old_status, target_status, match_grund)
+                            log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
                         else:
-                            log.info("{} Status-Vorschlag übersprungen (bereits überprüft: {}): {} → {} | match={}", pfx, already_reviewed.review_status, old_status, target_status, match_grund)
-                        updated += 1
+                            log.info("{} neu angelegt: {} | match={}", pfx, app.main_status, match_grund)
                     else:
-                        skipped += 1
-                        log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
+                        job_url = job.get("stellenanzeige_url") or None
+                        if job_url and not app.stellenanzeige_url:
+                            app.stellenanzeige_url = job_url
+                            db.flush()
 
-                # Stop-Early: Ziel-App gefunden und verarbeitet
-                if target_app_id is not None and app.id == target_app_id:
-                    log.info("[LI] Ziel-App #{} gefunden und verarbeitet — stoppe früh nach {}/{} Jobs",
-                             target_app_id, i + 1, len(all_jobs))
-                    break
+                        target_status = job.get("default_status", "applied")
+                        if job.get("status_hint"):
+                            target_status = job["status_hint"][0]
 
-            except Exception as e:
-                errors.append(f"{job.get('company', '?')}: {e}")
-                log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)
+                        old_status = app.main_status
+                        cur_idx = STATUS_ORDER.index(old_status) if old_status in STATUS_ORDER else 0
+                        new_idx = STATUS_ORDER.index(target_status) if target_status in STATUS_ORDER else 0
+
+                        status_changed = (
+                            (target_status == "rejected" and old_status != "rejected")
+                            or (target_status != "rejected" and new_idx > cur_idx)
+                        )
+
+                        if status_changed:
+                            li_job_id_val = job.get("id", "")
+                            pm_ext_id = f"linkedin_{li_job_id_val}__status__{target_status}"
+                            already_pending = db.query(models.PendingMatch).filter(
+                                models.PendingMatch.source == "linkedin",
+                                models.PendingMatch.external_id == pm_ext_id,
+                                models.PendingMatch.review_status == "pending",
+                            ).first()
+                            already_reviewed = db.query(models.PendingMatch).filter(
+                                models.PendingMatch.suggested_app_id == app.id,
+                                models.PendingMatch.suggested_main_status == target_status,
+                                models.PendingMatch.review_status.in_(["approved", "rejected"]),
+                            ).first()
+                            if not already_pending and not already_reviewed:
+                                sub_hint = job["status_hint"][1] if job.get("status_hint") else None
+                                db.add(models.PendingMatch(
+                                    source="linkedin",
+                                    external_id=pm_ext_id,
+                                    confidence=90,
+                                    event_type="status_change",
+                                    datum=date.today(),
+                                    titel=f"Status: {old_status} → {target_status}",
+                                    suggested_app_id=app.id,
+                                    suggested_main_status=target_status,
+                                    suggested_sub_status=sub_hint,
+                                    status_only=True,
+                                ))
+                                log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
+                            elif already_pending:
+                                log.info("{} Status-Vorschlag übersprungen (bereits ausstehend): {} → {} | match={}", pfx, old_status, target_status, match_grund)
+                            else:
+                                log.info("{} Status-Vorschlag übersprungen (bereits überprüft: {}): {} → {} | match={}", pfx, already_reviewed.review_status, old_status, target_status, match_grund)
+                            updated += 1
+                        else:
+                            skipped += 1
+                            log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
+                except Exception as e:
+                    errors.append(f"{job.get('company', '?')}: {e}")
+                    log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)
+
+            # ── Individueller Sync: Kategorie für Kategorie, sofort matchen ──────────
+            if target_app_id is not None:
+                target_app = db.query(models.Application).get(target_app_id)
+                target_li_job_id = (target_app.linkedin_job_id if target_app else None) or (
+                    _li_job_id_from_url(target_app.stellenanzeige_url or "") if target_app else None
+                )
+                log.info("[LI] Individueller Sync App #{} — LI-ID: {}", target_app_id, target_li_job_id or "unbekannt")
+
+                found_job: dict | None = None
+                cats_searched = 0
+                for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
+                    _state["step"] = f"{label}: Seite 1 — lade…"
+                    cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label)
+                    for j in cat_jobs:
+                        j["_card_type"] = card_type
+                        j["_label"] = label
+                    cats_searched += 1
+                    log.info("[LI kat] {}: {} gefunden", label, len(cat_jobs))
+                    _state["step"] = f"{label}: {len(cat_jobs)} Jobs — suche Match…"
+
+                    if target_app:
+                        for j in cat_jobs:
+                            if _quick_match(j, target_app):
+                                found_job = j
+                                break
+
+                    if found_job:
+                        log.info("[LI] Match in Kategorie '{}' nach {} Kategorien", label, cats_searched)
+                        break
+
+                await browser.close()
+
+                if found_job:
+                    _state["total"] = 1
+                    _state["processed"] = 1
+                    _state["step"] = "Verarbeite Match…"
+                    _process(found_job)
+                else:
+                    log.info("[LI] Ziel-App #{} nicht in LI-Daten gefunden", target_app_id)
+                    _state["step"] = "Kein LI-Eintrag gefunden"
+
+            # ── Batch-Sync: alle Kategorien sammeln, dann verarbeiten ───────────────
+            else:
+                # Dedup by firma|title — later categories (higher priority) overwrite earlier
+                all_jobs_by_key: dict[str, dict] = {}
+                for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
+                    _state["step"] = f"{label}: Seite 1 — lade…"
+                    cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label)
+                    for j in cat_jobs:
+                        j["_card_type"] = card_type
+                        j["_label"] = label
+                        dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
+                        all_jobs_by_key[dedup_key] = j
+                    log.info("[LI kat] {}: {} gefunden (gesamt {})", label, len(cat_jobs), len(all_jobs_by_key))
+                    _state["step"] = f"{label}: {len(cat_jobs)} gefunden (gesamt {len(all_jobs_by_key)})"
+                all_jobs = list(all_jobs_by_key.values())
+
+                # Scrape messages before closing the browser session
+                apps_for_msg = db.query(models.Application).all()
+                msg_created = await _scrape_messages(page, db, apps_for_msg)
+                _state["msg_created"] = msg_created
+
+                await browser.close()
+
+                if not all_jobs and _state["status"] != "needs_login":
+                    _state["step"] = "Keine Jobs gefunden — LinkedIn-Layout evtl. geändert"
+
+                _state["raw_jobs"] = all_jobs
+                _state["total"] = len(all_jobs)
+                _state["step"] = f"Verarbeite 0/{len(all_jobs)}…"
+
+                for i, job in enumerate(all_jobs):
+                    _state["processed"] = i + 1
+                    _state["step"] = f"Verarbeite {i + 1}/{len(all_jobs)}"
+                    _process(job)
 
         cfg.last_sync = datetime.now(timezone.utc)
         _commit_with_retry(db)
