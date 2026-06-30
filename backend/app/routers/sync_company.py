@@ -48,10 +48,13 @@ def _parse_employee_count(s: str) -> int | None:
 
 async def _ddg_fetch(name: str) -> dict:
     """Query DuckDuckGo Instant Answer API. Returns normalized field dict."""
+    # Strip pipe/slash separators that confuse DDG (e.g. "Akkodis | inContext AB")
+    query = re.split(r"\s*[|/]\s*", name)[0].strip()
+
     async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA},
                                  follow_redirects=True) as client:
         resp = await client.get(_DDG_URL, params={
-            "q": name,
+            "q": query,
             "format": "json",
             "no_redirect": "1",
             "no_html": "1",
@@ -59,7 +62,13 @@ async def _ddg_fetch(name: str) -> dict:
         })
         resp.raise_for_status()
 
-    data = resp.json()
+    if not resp.content:
+        return {}
+    try:
+        data = resp.json()
+    except Exception:
+        log.debug("DDG: leere/ungültige Antwort für '{}'", query)
+        return {}
     result: dict = {}
 
     abstract = data.get("AbstractText") or data.get("Abstract") or ""
