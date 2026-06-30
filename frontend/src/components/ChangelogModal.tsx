@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.26',
+    date: '2026-06-30',
+    changes: [
+      'Firmensync: Logo wird direkt aus Wikidata (P154) geladen und als base64 gespeichert — kein manueller Upload mehr nötig für bekannte Firmen.',
+    ],
+  },
+  {
     version: '3.14.25',
     date: '2026-06-30',
     changes: [
