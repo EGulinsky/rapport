@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.29',
+    date: '2026-06-30',
+    changes: [
+      'Firmensync: Wikidata ersetzt durch DuckDuckGo Instant Answer API — kein Rate-Limit, kein API-Key, kein Warten. Liefert Beschreibung, Logo, HQ, Gründungsjahr, Mitarbeiterzahl und Branche aus Wikipedia-Infoboxen.',
+    ],
+  },
+  {
     version: '3.14.28',
     date: '2026-06-30',
     changes: [
