@@ -135,6 +135,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
   const [showMerge, setShowMerge] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [appsFilter, setAppsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [openContactId, setOpenContactId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
@@ -163,12 +164,14 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
     let list = contacts
     if (companyFilter) {
       const ids = new Set([companyFilter.id, ...(companyFilter.subsidiaryIds ?? [])])
-      list = contacts.filter(c =>
+      list = list.filter(c =>
         ids.has(c.company_profile_id!) ||
         c.firma === companyFilter.name ||
         c.firma?.toLowerCase() === companyFilter.name.toLowerCase()
       )
     }
+    if (appsFilter === 'yes') list = list.filter(c => (c.applications?.length ?? 0) > 0)
+    if (appsFilter === 'no') list = list.filter(c => (c.applications?.length ?? 0) === 0)
     return [...list].sort((a, b) => {
       let av: string
       let bv: string
@@ -182,7 +185,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
       const cmp = av.localeCompare(bv, 'de')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [contacts, sortKey, sortDir, companyFilter])
+  }, [contacts, sortKey, sortDir, companyFilter, appsFilter])
 
   const allSelected = sorted.length > 0 && selected.size === sorted.length
 
@@ -242,6 +245,15 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
         {onCompanyFilterChange && (
           <CompanyFilterPicker value={companyFilter ?? null} onChange={onCompanyFilterChange} />
         )}
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs text-gray-400">Bewerbungen:</span>
+          {(['all', 'yes', 'no'] as const).map(v => (
+            <button key={v} onClick={() => setAppsFilter(v)}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${appsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {v === 'all' ? 'Alle' : v === 'yes' ? 'Ja' : 'Nein'}
+            </button>
+          ))}
+        </div>
 
         {selected.size >= 2 && (
           <button

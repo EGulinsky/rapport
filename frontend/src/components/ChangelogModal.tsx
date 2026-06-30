@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.33',
+    date: '2026-06-30',
+    changes: [
+      'Kontakte: Filter "Bewerbungen vorhanden" (Alle / Ja / Nein). Firmen: Filter "Bewerbungen vorhanden" und "Kontakte vorhanden" — client-seitig, ohne Backend-Anfrage.',
+    ],
+  },
+  {
     version: '3.14.32',
     date: '2026-06-30',
     changes: [

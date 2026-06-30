@@ -45,6 +45,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const [loading, setLoading] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('apps')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [appsFilter, setAppsFilter] = useState<'all' | 'yes' | 'no'>('all')
+  const [contactsFilter, setContactsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   function toggleSelect(id: number, e: React.MouseEvent) {
@@ -255,7 +257,12 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   }
 
   const sorted = useMemo(() => {
-    return [...companies].sort((a, b) => {
+    let list = companies
+    if (appsFilter === 'yes') list = list.filter(c => (c.app_count ?? 0) > 0)
+    if (appsFilter === 'no') list = list.filter(c => (c.app_count ?? 0) === 0)
+    if (contactsFilter === 'yes') list = list.filter(c => (c.contact_count ?? 0) > 0)
+    if (contactsFilter === 'no') list = list.filter(c => (c.contact_count ?? 0) === 0)
+    return [...list].sort((a, b) => {
       let av: string | number
       let bv: string | number
       if (sortKey === 'apps') {
@@ -275,7 +282,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [companies, sortKey, sortDir])
+  }, [companies, sortKey, sortDir, appsFilter, contactsFilter])
 
   const Th = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
     <th
@@ -306,6 +313,24 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           />
         </div>
         {loading && <span className="text-xs text-gray-400">Laden…</span>}
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs text-gray-400">Bewerb.:</span>
+          {(['all', 'yes', 'no'] as const).map(v => (
+            <button key={v} onClick={() => setAppsFilter(v)}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${appsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {v === 'all' ? 'Alle' : v === 'yes' ? 'Ja' : 'Nein'}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs text-gray-400">Kontakte:</span>
+          {(['all', 'yes', 'no'] as const).map(v => (
+            <button key={v} onClick={() => setContactsFilter(v)}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${contactsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {v === 'all' ? 'Alle' : v === 'yes' ? 'Ja' : 'Nein'}
+            </button>
+          ))}
+        </div>
         {/* Sync dropdown */}
         <div className="relative shrink-0 flex items-center gap-1" ref={syncMenuRef}>
           <button
