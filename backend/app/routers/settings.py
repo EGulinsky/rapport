@@ -190,16 +190,29 @@ async def test_ai(payload: Optional[schemas.AiSettingsWrite] = None, db: Session
             content = response.choices[0].message.content or ""
             result = json.loads(content)
             return {"status": "ok", "message": "ok" if result.get("ok") else f"Unerwartete Antwort: {result}"}
+        except litellm.RateLimitError:
+            raise HTTPException(429, "Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal testen.")
+        except litellm.AuthenticationError:
+            raise HTTPException(401, "API-Key ungültig oder abgelaufen.")
         except Exception as e:
-            raise HTTPException(502, f"Provider-Fehler: {e}")
+            msg = str(e)
+            # Truncate long provider error blobs
+            if len(msg) > 300:
+                msg = msg[:300] + "…"
+            raise HTTPException(502, f"Provider-Fehler: {msg}")
 
     try:
         result = await test_connection(db)
         return {"status": "ok", "message": result}
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
+    except litellm.RateLimitError:
+        raise HTTPException(429, "Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal testen.")
     except Exception as e:
-        raise HTTPException(502, f"Provider-Fehler: {e}")
+        msg = str(e)
+        if len(msg) > 300:
+            msg = msg[:300] + "…"
+        raise HTTPException(502, f"Provider-Fehler: {msg}")
 
 
 _POPULAR_OLLAMA_MODELS = [

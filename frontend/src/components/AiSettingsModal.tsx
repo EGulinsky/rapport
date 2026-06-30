@@ -278,7 +278,12 @@ export function AiSettingsModal({ onClose }: Props) {
       const r = await api.settings.testAi(payload)
       setTestResult({ ok: true, msg: `Verbindung OK — Anbieter antwortet (${r.message})` })
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const raw = e instanceof Error ? e.message : String(e)
+      const msg = raw.includes('429') || raw.toLowerCase().includes('rate')
+        ? 'Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal testen.'
+        : raw.includes('401') || raw.toLowerCase().includes('auth')
+          ? 'API-Key ungültig oder abgelaufen.'
+          : raw.length > 200 ? raw.slice(0, 200) + '…' : raw
       setTestResult({ ok: false, msg })
     } finally {
       setTesting(false)

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.46',
+    date: '2026-06-30',
+    changes: [
+      'KI-Optionen: Rate-Limit und Auth-Fehler werden verständlich angezeigt (nicht mehr als roher JSON-Blob).',
+    ],
+  },
+  {
     version: '3.14.45',
     date: '2026-06-30',
     changes: [
