@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.14.19',
+    date: '2026-06-30',
+    changes: [
+      'Sync pro Bewerbung schließt jetzt auch LinkedIn ein — LI läuft parallel, Fortschrittsbalken und Vorschlag-Zähler erscheinen im Modal.',
+    ],
+  },
+  {
     version: '3.14.18',
     date: '2026-06-30',
     changes: [

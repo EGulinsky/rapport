@@ -3,7 +3,7 @@ import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone,
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
-import type { CompanyProfile } from '../types'
+import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
   SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE,
@@ -69,6 +69,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>({})
   const [syncResult, setSyncResult] = useState<{ created: number; errors: string[] } | null>(null)
+  const [liStatus, setLiStatus] = useState<LinkedInSyncStatus | null>(null)
   const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'attachments' | 'contacts'>('overview')
@@ -121,16 +122,46 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     setSyncMenuOpen(false)
     setSyncResult(null)
     setSyncProgress({})
+    setLiStatus(null)
     startPolling()
     try {
       if (reset) await api.targeted.resetForApp(appId)
       await api.targeted.syncForApp(appId)  // returns immediately — sync runs in background
 
-      // Poll for result
+      // Start LinkedIn sync in parallel if configured
+      const liCfg = await api.linkedin.getConfig().catch(() => null) as { configured: boolean } | null
+      let liRunning = false
+      if (liCfg?.configured) {
+        try {
+          await api.linkedin.run()
+          liRunning = true
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e)
+          if (msg.includes('409') || msg.includes('already running')) liRunning = true
+        }
+      }
+
+      // Poll for both targeted and LinkedIn results
       for (let i = 0; i < 600; i++) {   // max 10 min
         await new Promise(r => setTimeout(r, 2000))
+
         const result = await api.targeted.getResult(appId)
-        if (result.done) {
+        if (result.done && !liRunning) {
+          setSyncResult({ created: result.created ?? 0, errors: result.errors ?? [] })
+          await refreshContacts()
+          onSaved()
+          break
+        }
+
+        if (liRunning) {
+          const ls = await api.linkedin.status().catch(() => null) as LinkedInSyncStatus | null
+          if (ls) {
+            setLiStatus(ls)
+            if (['done', 'error', 'needs_login'].includes(ls.status)) liRunning = false
+          }
+        }
+
+        if (result.done && !liRunning) {
           setSyncResult({ created: result.created ?? 0, errors: result.errors ?? [] })
           await refreshContacts()
           onSaved()
@@ -762,7 +793,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         )}
 
         {/* Progress panel */}
-        {syncing && Object.keys(syncProgress).length > 0 && (
+        {syncing && (Object.keys(syncProgress).length > 0 || liStatus?.status === 'running') && (
           <div className="border-b border-indigo-100 bg-indigo-50 px-5 py-3 space-y-2">
             <p className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1.5">
               <Crosshair className="h-3 w-3 animate-spin" /> Sync läuft…
@@ -784,6 +815,23 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <p className="text-[10px] text-gray-400 truncate">{p.step}</p>
               </div>
             ))}
+            {liStatus?.status === 'running' && (
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700">LinkedIn</span>
+                  <span className="text-[10px] text-gray-400 tabular-nums">
+                    {liStatus.total > 0 ? `${liStatus.processed}/${liStatus.total}` : '…'}
+                  </span>
+                </div>
+                <div className="h-1 rounded-full bg-indigo-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#0a66c2] transition-all duration-300"
+                    style={{ width: `${liStatus.total > 0 ? Math.round(liStatus.processed / liStatus.total * 100) : 10}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400 truncate">{liStatus.step}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -795,9 +843,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 ? `Sync: ${syncResult.errors[0]}`
                 : syncResult.created < 0
                   ? `${Math.abs(syncResult.created)} Sync-Events gelöscht`
-                  : `Sync abgeschlossen — ${syncResult.created} neue Einträge`}
+                  : `Sync abgeschlossen — ${syncResult.created} neue Einträge${liStatus && liStatus.status === 'done' ? `, LI: ${liStatus.updated} Vorschläge` : ''}`}
             </span>
-            <button onClick={() => setSyncResult(null)} className="ml-2 opacity-60 hover:opacity-100">✕</button>
+            <button onClick={() => { setSyncResult(null); setLiStatus(null) }} className="ml-2 opacity-60 hover:opacity-100">✕</button>
           </div>
         )}
 
