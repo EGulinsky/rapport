@@ -1115,6 +1115,7 @@ async def _do_sync(app_id: int) -> dict:
                 result = await assess_application(db, app_with_events)
                 app_with_events.ai_color = result["color"]
                 app_with_events.ai_next_step = result["next_step"]
+                app_with_events.ai_reasoning = result.get("reasoning", "")
                 app_with_events.ai_assessed_at = _dt.utcnow()
                 db.commit()
         except (AINotConfigured, AIRateLimited):

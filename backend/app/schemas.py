@@ -159,6 +159,7 @@ class ApplicationRead(ApplicationBase):
     target_company_website: Optional[str] = None
     ai_color: Optional[str] = None
     ai_next_step: Optional[str] = None
+    ai_reasoning: Optional[str] = None
     ai_assessed_at: Optional[datetime] = None
     contacts: List[ContactRead] = []
     events: List[EventRead] = []
@@ -190,6 +191,7 @@ class ApplicationListItem(BaseModel):
     target_company_name_display: Optional[str] = None
     ai_color: Optional[str] = None
     ai_next_step: Optional[str] = None
+    ai_reasoning: Optional[str] = None
     ai_assessed_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

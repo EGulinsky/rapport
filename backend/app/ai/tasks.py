@@ -361,26 +361,29 @@ async def assess_application(db: Session, app) -> dict:
 {timeline_text}
 
 === HEUTE ===
-{today.strftime('%d.%m.%Y')} ({today.strftime('%A')})
+{today.strftime('%d.%m.%Y')}
 
 === AUFGABE ===
-Gib ein JSON-Objekt mit genau zwei Feldern zurück:
+Gib ein JSON-Objekt mit genau drei Feldern zurück:
 
 1. "color" — Wie wahrscheinlich führt diese Bewerbung noch zu einem Angebot?
    - "green": hoch (>60%) — fortgeschrittener Prozess, mehrere Gespräche, positives Signal, Angebot/Verhandlung
    - "yellow": mittel (30–60%) — laufend, unklar, normale Wartezeit nach 1–2 Gesprächen
    - "red": niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting, frühe Phase ohne Signal, Absage
 
-2. "next_step" — Konkrete Situation + Was der Bewerber jetzt tun soll (2–4 Sätze auf Deutsch):
-   - Fasse zuerst kurz zusammen wo der Prozess steht: wie viele Gespräche, wann war der letzte Kontakt (in Tagen), was war der letzte Inhalt
-   - Dann die Handlungsempfehlung im Imperativ: "Schreibe...", "Ruf an...", "Bereite dich vor auf..."
+2. "reasoning" — Warum diese Einschätzung? (2–3 Sätze auf Deutsch)
+   - Nenne konkrete Fakten aus der Timeline: Anzahl Gespräche, Tage seit letztem Kontakt, letzte Signale
+   - Erkläre was für und was gegen eine Zusage spricht
+   - Keine Floskeln, nur faktenbezogene Begründung
+
+3. "next_step" — Was soll der Bewerber konkret tun? (1–2 Sätze auf Deutsch, Imperativ)
    STRIKT VERBOTEN:
    - Daten oder Deadlines erfinden die NICHT in der Timeline stehen
-   - Wochentage nennen (du kennst sie nicht zuverlässig)
+   - Wochentage nennen
    - Status-Labels wiederholen ("Warten auf Entscheidung")
    - E-Mail-Betreff wörtlich kopieren
 
-{{"color": "green"|"yellow"|"red", "next_step": "..."}}"""
+{{"color": "green"|"yellow"|"red", "reasoning": "...", "next_step": "..."}}"""
 
     result = await complete(
         db,
@@ -393,4 +396,91 @@ Gib ein JSON-Objekt mit genau zwei Feldern zurück:
     if color not in ("green", "yellow", "red"):
         color = "yellow"
 
-    return {"color": color, "next_step": result.get("next_step") or ""}
+    return {
+        "color": color,
+        "reasoning": result.get("reasoning") or "",
+        "next_step": result.get("next_step") or "",
+    }
+
+
+async def assess_rejected_application(db: Session, app) -> dict:
+    """
+    Analyse a rejected application: find likely rejection reasons and derive
+    optimization suggestions for future applications.
+    Returns: {"color": "red", "reasoning": str, "next_step": str}
+    """
+    from datetime import date as _date
+    firma = getattr(app, 'company_name_display', None) or app.firma
+    status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
+    today = _date.today()
+
+    events = sorted(
+        [e for e in (app.events or []) if e.datum],
+        key=lambda e: e.datum,
+    )
+
+    timeline_lines = []
+    for e in events:
+        age = (today - e.datum).days
+        line = f"{e.datum.strftime('%d.%m.%Y')} (vor {age}d) [{e.typ}]"
+        if e.autor:
+            autor_short = e.autor.split('<')[0].strip().strip('"') or e.autor
+            line += f" | von: {autor_short[:80]}"
+        if e.titel:
+            line += f"\n  Betreff: {e.titel}"
+        if e.notiz and e.notiz.strip():
+            line += f"\n  Inhalt: {e.notiz.strip()}"
+        timeline_lines.append(line)
+    timeline_text = "\n\n".join(timeline_lines) if timeline_lines else "(keine Ereignisse)"
+
+    meta_parts = [
+        f"Firma: {firma}",
+        f"Stelle: {app.rolle}",
+        f"Status: {status_label}",
+    ]
+    if app.datum_bewerbung:
+        meta_parts.append(f"Beworben: {app.datum_bewerbung.strftime('%d.%m.%Y')}")
+    if app.kommentar:
+        meta_parts.append(f"Kommentar: {app.kommentar[:300]}")
+    gespraeche = [g for g in [app.gespraech_1, app.gespraech_2, app.gespraech_3, app.gespraech_4, app.gespraech_5] if g]
+    for i, g in enumerate(gespraeche, 1):
+        meta_parts.append(f"Gesprächsnotiz {i}: {g[:300]}")
+    meta_text = "\n".join(meta_parts)
+
+    prompt = f"""=== ABGESAGTE BEWERBUNG ===
+{meta_text}
+
+=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
+{timeline_text}
+
+=== HEUTE ===
+{today.strftime('%d.%m.%Y')}
+
+=== AUFGABE ===
+Diese Bewerbung endete mit einer Absage. Analysiere die Timeline und gib ein JSON-Objekt mit drei Feldern zurück:
+
+1. "color": immer "red"
+
+2. "reasoning" — Wahrscheinliche Absagegründe (2–3 Sätze auf Deutsch):
+   - Leite die Gründe aus der Timeline ab (Zeitpunkt der Absage, wie weit der Prozess kam, Signale aus E-Mails)
+   - Unterscheide: Prozesstiefe (frühe/späte Absage), mögliche inhaltliche Gründe, externe Faktoren
+   - Wenn keine klaren Gründe erkennbar: sage das ehrlich
+
+3. "next_step" — Konkrete Optimierungsvorschläge für zukünftige Bewerbungen (2–3 Sätze auf Deutsch):
+   - Was hätte anders laufen können? Was kann der Bewerber beim nächsten Mal besser machen?
+   - Bezug auf den spezifischen Fall (Branche, Rolle, Prozess)
+
+{{"color": "red", "reasoning": "...", "next_step": "..."}}"""
+
+    result = await complete(
+        db,
+        [{"role": "system", "content": _ASSESS_SYSTEM}, {"role": "user", "content": prompt}],
+        json_mode=True,
+        max_tokens=400,
+    )
+
+    return {
+        "color": "red",
+        "reasoning": result.get("reasoning") or "",
+        "next_step": result.get("next_step") or "",
+    }

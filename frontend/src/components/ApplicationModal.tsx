@@ -1116,7 +1116,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           {!editing && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">KI-Einschätzung</p>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  {app?.abgesagt ? 'KI-Absageanalyse' : 'KI-Einschätzung'}
+                </p>
                 <button
                   onClick={runAiAssess}
                   disabled={aiAssessing}
@@ -1131,20 +1133,25 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   app.ai_color === 'green' ? 'border-green-200 bg-green-50' :
                   app.ai_color === 'red'   ? 'border-red-200 bg-red-50'     : 'border-yellow-200 bg-yellow-50'
                 }`}>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${
-                      app.ai_color === 'green' ? 'bg-green-500' :
-                      app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
-                    }`} />
-                    <span className={`text-xs font-semibold ${
-                      app.ai_color === 'green' ? 'text-green-700' :
-                      app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
-                    }`}>
-                      {app.ai_color === 'green' ? 'Hohe Erfolgschance (>60 %)' :
-                       app.ai_color === 'red'   ? 'Niedrige Erfolgschance (<30 %)' : 'Mittlere Erfolgschance (30–60 %)'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-700 leading-snug">{app.ai_next_step}</p>
+                  {!app.abgesagt && (
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${
+                        app.ai_color === 'green' ? 'bg-green-500' :
+                        app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
+                      }`} />
+                      <span className={`text-xs font-semibold ${
+                        app.ai_color === 'green' ? 'text-green-700' :
+                        app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
+                      }`}>
+                        {app.ai_color === 'green' ? 'Hohe Erfolgschance (>60 %)' :
+                         app.ai_color === 'red'   ? 'Niedrige Erfolgschance (<30 %)' : 'Mittlere Erfolgschance (30–60 %)'}
+                      </span>
+                    </div>
+                  )}
+                  {app.ai_reasoning && (
+                    <p className="text-xs text-gray-500 leading-snug mb-2 italic">{app.ai_reasoning}</p>
+                  )}
+                  <p className="text-sm text-gray-700 leading-snug font-medium">{app.ai_next_step}</p>
                   {app.ai_assessed_at && (
                     <p className="text-[10px] text-gray-400 mt-1.5">
                       Bewertet am {new Date(app.ai_assessed_at).toLocaleDateString('de-DE')}

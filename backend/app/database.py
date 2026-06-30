@@ -711,6 +711,8 @@ def _migrate_ai_assessment():
         cur.execute("ALTER TABLE applications ADD COLUMN ai_next_step TEXT")
     if "ai_assessed_at" not in cols:
         cur.execute("ALTER TABLE applications ADD COLUMN ai_assessed_at TIMESTAMP")
+    if "ai_reasoning" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN ai_reasoning TEXT")
     conn.commit()
     conn.close()
 
