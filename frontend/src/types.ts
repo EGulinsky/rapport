@@ -461,40 +461,6 @@ export interface LinkedInSyncStatus {
   finished_at: string | null
 }
 
-export interface JobPortal {
-  id: number
-  name: string
-  portal_type: 'linkedin' | 'link'
-  url_template?: string
-  color?: string
-  enabled: boolean
-  is_builtin: boolean
-  sort_order: number
-}
-
-export interface JobResult {
-  id: string
-  source: string
-  title: string
-  company: string
-  location?: string
-  url: string
-  easy_apply?: boolean
-}
-
-export interface LinkPortal {
-  id: number
-  name: string
-  color?: string
-  url: string
-}
-
-export interface JobSearchResponse {
-  results: JobResult[]
-  portals: LinkPortal[]
-  linkedin_error?: string
-}
-
 export interface AnalyticsFunnelItem {
   status: string
   label: string

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2 } from 'lucide-react'
+import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin } from 'lucide-react'
 import { CompanyFilterPicker, type CompanyFilter } from './components/CompanyFilterPicker'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
@@ -13,7 +13,6 @@ import { ContactsView } from './components/ContactsView'
 import { CompaniesView } from './components/CompaniesView'
 import { CompanyModal } from './components/CompanyModal'
 import { CalendarView } from './components/CalendarView'
-import { JobSearchView } from './components/JobSearchView'
 import { AnalyticsView } from './components/AnalyticsView'
 import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
@@ -27,12 +26,12 @@ import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
   type Application, type Stats, type MainStatus, type CompanyProfile,
 } from './types'
-import { Calendar, Telescope } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import clsx from 'clsx'
 import { LogoProvider } from './context/LogoContext'
 
 type ViewMode = 'table' | 'kanban'
-type MainView = 'jobsearch' | 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
+type MainView = 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
 
 function BackendGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false)
@@ -83,6 +82,10 @@ export default function App() {
   const [showCleanup, setShowCleanup] = useState(false)
   const [aiAssessingAll, setAiAssessingAll] = useState(false)
   const [aiAssessProgress, setAiAssessProgress] = useState<{ done: number; total: number } | null>(null)
+  const [showNewMenu, setShowNewMenu] = useState(false)
+  const [showLinkedInImport, setShowLinkedInImport] = useState(false)
+  const [newApplicationPrefill, setNewApplicationPrefill] = useState<NewApplicationPrefill | null>(null)
+  const newMenuRef = useRef<HTMLDivElement>(null)
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
@@ -107,6 +110,15 @@ export default function App() {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(t)
   }, [search])
+
+  useEffect(() => {
+    if (!showNewMenu) return
+    function onDown(e: MouseEvent) {
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) setShowNewMenu(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [showNewMenu])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -248,12 +260,6 @@ export default function App() {
               </div>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden bg-white">
                 <button
-                  onClick={() => setMainView('jobsearch')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'jobsearch' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
-                >
-                  <Telescope className="h-3.5 w-3.5" /> Jobsuche
-                </button>
-                <button
                   onClick={() => setMainView('applications')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'applications' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
@@ -339,13 +345,34 @@ export default function App() {
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
                 Bereinigen
               </button>
-              <button
-                onClick={() => setSelectedId(-1)}
-                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Neu
-              </button>
+              <div className="relative" ref={newMenuRef}>
+                <button
+                  onClick={() => setShowNewMenu(o => !o)}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Neu
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {showNewMenu && (
+                  <div className="absolute z-50 top-full right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewMenu(false); setNewApplicationPrefill(null); setSelectedId(-1) }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                    >
+                      <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewMenu(false); setShowLinkedInImport(true) }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                    >
+                      <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowReview(true)}
                 className="relative p-1.5 rounded-lg hover:bg-gray-100 text-amber-500"
@@ -378,9 +405,6 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {mainView === 'jobsearch' && (
-          <JobSearchView onImported={load} />
-        )}
         {mainView === 'contacts' && (
           <ContactsView
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
@@ -589,8 +613,17 @@ export default function App() {
       {/* New application modal */}
       {selectedId === -1 && (
         <NewApplicationModal
-          onClose={() => setSelectedId(null)}
-          onSaved={() => { setSelectedId(null); load() }}
+          initial={newApplicationPrefill}
+          onClose={() => { setSelectedId(null); setNewApplicationPrefill(null) }}
+          onSaved={() => { setSelectedId(null); setNewApplicationPrefill(null); load() }}
+        />
+      )}
+
+      {/* LinkedIn import modal */}
+      {showLinkedInImport && (
+        <LinkedInImportModal
+          onClose={() => setShowLinkedInImport(false)}
+          onExtracted={prefill => { setShowLinkedInImport(false); setNewApplicationPrefill(prefill); setSelectedId(-1) }}
         />
       )}
     </div>
@@ -599,12 +632,95 @@ export default function App() {
   )
 }
 
+interface NewApplicationPrefill {
+  firma: string
+  rolle: string
+  quelle: string
+  is_headhunter: boolean
+  zielfirma_bei_hh: string | null
+  kommentar: string | null
+}
 
-function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; onExtracted: (prefill: NewApplicationPrefill) => void }) {
+  const [text, setText] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function extract() {
+    if (!text.trim()) return
+    setExtracting(true)
+    setError(null)
+    try {
+      const result = await api.applications.extractFromText(text)
+      onExtracted(result)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        msg.includes('429') || msg.toLowerCase().includes('rate')
+          ? 'Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.'
+          : msg.includes('400')
+            ? 'KI-Extraktion fehlgeschlagen — bitte Felder manuell ausfüllen.'
+            : 'Extraktion fehlgeschlagen.'
+      )
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Linkedin className="h-5 w-5 text-[#0A66C2]" />
+          <h2 className="text-lg font-semibold text-gray-900">Aus LinkedIn importieren</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Stellenanzeige von LinkedIn kopieren (gesamter Text der Jobseite) und hier einfügen. Die KI füllt Firma, Rolle und weitere Felder automatisch aus.
+        </p>
+        <textarea
+          autoFocus
+          rows={10}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Stellenanzeige hier einfügen…"
+          value={text}
+          onChange={e => setText(e.target.value)}
+        />
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            disabled={extracting || !text.trim()}
+            onClick={extract}
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            <Sparkles className={`h-3.5 w-3.5 ${extracting ? 'animate-pulse' : ''}`} />
+            {extracting ? 'Extrahiere…' : 'Felder extrahieren'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewApplicationPrefill | null; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<{
     firma: string; company_profile_id: number | null; rolle: string; quelle: string; is_headhunter: boolean
-    main_status: MainStatus; datum_bewerbung: string
-  }>({ firma: '', company_profile_id: null, rolle: '', quelle: '', is_headhunter: false, main_status: 'applied', datum_bewerbung: '' })
+    main_status: MainStatus; datum_bewerbung: string; zielfirma_bei_hh: string; kommentar: string
+  }>({
+    firma: initial?.firma ?? '',
+    company_profile_id: null,
+    rolle: initial?.rolle ?? '',
+    quelle: initial?.quelle ?? '',
+    is_headhunter: initial?.is_headhunter ?? false,
+    main_status: 'applied',
+    datum_bewerbung: '',
+    zielfirma_bei_hh: initial?.zielfirma_bei_hh ?? '',
+    kommentar: initial?.kommentar ?? '',
+  })
   const [saving, setSaving] = useState(false)
   const [firmaPicker, setFirmaPicker] = useState(false)
   const [firmaQuery, setFirmaQuery] = useState('')
@@ -659,6 +775,8 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
         is_headhunter: form.is_headhunter,
         main_status: form.main_status,
         datum_bewerbung: form.datum_bewerbung || undefined,
+        zielfirma_bei_hh: form.zielfirma_bei_hh || undefined,
+        kommentar: form.kommentar || undefined,
       })
       onSaved()
     } finally {
@@ -756,6 +874,21 @@ function NewApplicationModal({ onClose, onSaved }: { onClose: () => void; onSave
           />
           Über Headhunter
         </label>
+        {form.is_headhunter && (
+          <input
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="Zielfirma (für wen wird besetzt)"
+            value={form.zielfirma_bei_hh}
+            onChange={e => setForm(f => ({ ...f, zielfirma_bei_hh: e.target.value }))}
+          />
+        )}
+        <textarea
+          rows={2}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Kommentar (optional)"
+          value={form.kommentar}
+          onChange={e => setForm(f => ({ ...f, kommentar: e.target.value }))}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
             Abbrechen

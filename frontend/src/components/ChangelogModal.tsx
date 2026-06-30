@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.0',
+    date: '2026-06-30',
+    changes: [
+      'Jobsuche-Funktion komplett entfernt (Tab, Jobportale-Einstellungen, Backend-Router, Datenmodell). War kein aktiv genutztes Feature mehr.',
+      'Neue Bewerbung: "Neu"-Button ist jetzt ein Dropdown mit "Manuell anlegen" und "Aus LinkedIn importieren" — beim LinkedIn-Import wird der kopierte Stellenanzeigen-Text per KI analysiert und Firma, Rolle, Quelle, Headhunter-Flag und Kommentar automatisch vorausgefüllt.',
+    ],
+  },
+  {
     version: '3.14.52',
     date: '2026-06-30',
     changes: [

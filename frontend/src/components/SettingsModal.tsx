@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw } from 'lucide-react'
 import { api } from '../api/client'
-import { JobPortalSettings } from './JobSearchView'
 import { useLogoKey } from '../context/LogoContext'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus } from '../types'
 import clsx from 'clsx'
@@ -1876,7 +1875,7 @@ function BackupPanel() {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'jobportals' | 'logos'
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos'
 
 const TABS: [Tab, string][] = [
   ['sync',       'Sync'],
@@ -1887,7 +1886,6 @@ const TABS: [Tab, string][] = [
   ['files',      'Dokumente'],
   ['linkedin',   'LinkedIn'],
   ['backup',     'Backup'],
-  ['jobportals', 'Jobportale'],
   ['logos',      'Logos'],
 ]
 
@@ -2006,13 +2004,6 @@ export function SettingsModal({ onClose }: Props) {
             {tab === 'linkedin' && <LinkedInPanel onSynced={onClose} />}
             {tab === 'backup'     && <BackupPanel />}
             {tab === 'logos'      && <LogoPanel />}
-            {tab === 'jobportals' && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">Jobportale</h3>
-                <p className="text-xs text-gray-400 mb-4">Portale für die Jobsuche konfigurieren. LinkedIn wird direkt durchsucht, alle anderen öffnen mit dem passenden Suchbegriff im Browser.</p>
-                <JobPortalSettings />
-              </div>
-            )}
           </div>
         </div>
       </div>
