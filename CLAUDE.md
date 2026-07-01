@@ -1,7 +1,9 @@
 # JobTracker – Claude Code Kontext
 
 Self-hosted Bewerbungs-Tracking-App (Ersatz für `Bewerbungen_Eugen_Gulinsky.xlsx`).  
-Läuft lokal in OrbStack (Docker Compose). Aktueller Stand: v2.0.17.
+Läuft lokal in OrbStack (Docker Compose). Aktueller Stand: siehe `CURRENT_VERSION` in `frontend/src/components/ChangelogModal.tsx`.
+
+Vollständige, laufend gepflegte technische Doku inkl. Mermaid-Diagrammen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Projekt starten
 
@@ -25,67 +27,30 @@ docker compose logs -f frontend
 
 ## Projektstruktur
 
+Detaillierte, gepflegte Übersicht (Router, Komponenten, Datenmodell): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#1-system--und-sw-architektur). Kurzfassung:
+
 ```
 jobtracker/
-├── CLAUDE.md
-├── README.md
-├── docker-compose.yml
-├── .github/workflows/ci.yml     # ruff + tsc + docker buildx, self-hosted runner
-├── docs/
-│   ├── ARCHITECTURE.md          # Technische Architektur (aktuell)
-│   ├── JobTracker_Projektstand.md
-│   └── JobTracker_Konzept_Architektur.md   # Ursprüngliches Planungsdokument
-├── backend/
-│   ├── Dockerfile
-│   ├── Dockerfile.playwright-base   # Separates Base-Image mit Chromium (~10 min Build)
-│   ├── requirements.txt
-│   └── app/
-│       ├── main.py          # FastAPI App + CORS + Lifespan + Background-Sync-Loop
-│       ├── database.py      # SQLAlchemy Engine + SessionLocal
-│       ├── models.py        # ORM-Modelle + Status-Enums + Excel-Maps
-│       ├── schemas.py       # Pydantic Request/Response-Schemas
-│       ├── ai/
-│       │   ├── provider.py  # litellm-Wrapper + Fernet-Kryptographie
-│       │   └── tasks.py     # classify_batch_for_app()
-│       └── routers/
-│           ├── applications.py   # CRUD + Events + Contacts; naechster_schritt berechnet
-│           ├── contacts.py       # Globale Kontaktverwaltung
-│           ├── import_excel.py   # POST /api/import/excel
-│           ├── export_excel.py   # GET /api/export/excel
-│           ├── settings.py       # AI-Settings + Sync-Konfiguration
-│           ├── calendar.py       # GET /api/calendar/events
-│           ├── sync_common.py    # Dedup, AI-Klassifikation, Kontakt-Upsert
-│           ├── sync_google.py    # Google OAuth + Gmail + GCal
-│           ├── sync_icloud.py    # iCloud IMAP + CalDAV + CardDAV
-│           ├── sync_targeted.py  # Pro-App-Sync für alle Quellen
-│           ├── sync_files.py     # Lokale Dokumente (PDF/DOCX via files_bridge)
-│           ├── sync_linkedin.py  # LinkedIn Playwright-Scraper
-│           ├── review.py         # Review-Queue (PendingMatches)
-│           └── cleanup.py        # Datenbereinigung
-└── frontend/
-    ├── Dockerfile
-    └── src/
-        ├── App.tsx              # Root: Filter, Tabs, Views
-        ├── types.ts             # TypeScript-Typen, Status-Labels/Farben
-        ├── api/client.ts        # Fetch-Wrapper für alle Backend-Calls
-        └── components/
-            ├── ApplicationTable.tsx    # Tabelle mit "Nächster Schritt"-Spalte
-            ├── KanbanBoard.tsx         # Drag & Drop Kanban
-            ├── ApplicationModal.tsx    # Detail/Edit mit Lifecycle-Bar + Timeline
-            ├── CalendarView.tsx        # Outlook-ähnliche Kalenderansicht
-            ├── StatsBar.tsx            # KPI-Kacheln
-            ├── StatusBadge.tsx         # Farbige Status-Badges
-            ├── StatusPopover.tsx       # Inline-Statuswechsel in Tabelle
-            ├── ContactsView.tsx        # CRM-Kontaktübersicht
-            ├── ReviewModal.tsx         # Review-Inbox für KI-Vorschläge
-            ├── SettingsModal.tsx       # Einstellungen: Google/iCloud/LinkedIn/Dokumente
-            ├── AiSettingsModal.tsx     # AI-Provider-Konfiguration
-            ├── SyncButton.tsx          # Globaler Sync-Trigger
-            ├── LinkedInSyncButton.tsx  # LinkedIn-Sync mit 2FA-Inline-Dialog
-            ├── ImportButton.tsx        # Excel-Upload
-            ├── ExportButton.tsx        # Excel-Download
-            ├── ChangelogModal.tsx      # Versionsverlauf; CURRENT_VERSION hier pflegen
-            └── CleanupModal.tsx        # Dubletten bereinigen
+├── CLAUDE.md · README.md · docker-compose.yml (Services: backend, frontend, seq)
+├── .github/workflows/ci.yml     # ruff + tsc + docker buildx, self-hosted runner + deploy
+├── docs/ARCHITECTURE.md         # Technische Architektur inkl. Mermaid-Diagrammen
+├── backend/app/
+│   ├── main.py · database.py · models.py · schemas.py
+│   ├── audit.py · dedup.py · logger.py · linkedin_job_description.py
+│   ├── ai/{provider,tasks}.py
+│   └── routers/  applications · contacts · companies · merge · cleanup ·
+│                 import_excel · export_excel · export_pdf · attachments ·
+│                 settings · calendar · analytics · audit_log · backup ·
+│                 sync_{common,google,icloud,targeted,files,linkedin,company} ·
+│                 review · startup_check
+└── frontend/src/
+    ├── App.tsx · types.ts · api/client.ts
+    └── components/  ApplicationTable · KanbanBoard · ApplicationModal ·
+                      CalendarView · StatsBar · StatusBadge/Popover ·
+                      ContactsView/Modal · CompaniesView/Modal/Logo/FilterPicker ·
+                      MergeDialog · CleanupModal · ReviewModal · SettingsModal ·
+                      SyncButton · Import/Export/PdfExportButton · AuditLogModal ·
+                      AnalyticsView · ChangelogModal · StartupWarningBanner
 ```
 
 ## Datenbank

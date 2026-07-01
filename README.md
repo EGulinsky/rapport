@@ -1,7 +1,9 @@
 # JobTracker
 
 Self-hosted Bewerbungs-Tracking-App als Ersatz für die Excel-Bewerbungsliste.  
-Läuft lokal in OrbStack / Docker Compose. Aktueller Stand: **v2.0.17**
+Läuft lokal in OrbStack / Docker Compose. Aktueller Stand: siehe In-App-Changelog (Version in `frontend/src/components/ChangelogModal.tsx`).
+
+Technische Architektur mit Diagrammen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Voraussetzungen
 
@@ -43,7 +45,17 @@ open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
 | **Lokale Dokumente** | PDF/DOCX/TXT/MD via `files_bridge.py` auf Port 9998 |
 | **Review-Queue** | KI-Vorschläge für Events und Statuswechsel freigeben |
 | **Sync-Steuerung** | Quellen einzeln aktivieren / deaktivieren |
-| **AI-Klassifikation** | Provider-agnostisch via LiteLLM (Groq, Ollama, OpenAI) |
+| **AI-Klassifikation** | Provider-agnostisch via LiteLLM (Groq, Ollama, OpenAI, Anthropic) |
+| **KI-Erfolgsbewertung** | Ampel (grün/gelb/rot) je Bewerbung inkl. Begründung + nächstem Schritt; bei Absagen Absagegrund-Analyse |
+| **LinkedIn-Import** | Stellenanzeigen-Link einfügen → Firma/Rolle/Quelle automatisch per KI extrahiert |
+| **Firmenprofile** | Eigene Firmenansicht mit Logo, Branche, Standort, Mitarbeiterzahl (automatisch angereichert) |
+| **Zusammenführen** | Duplikate bei Bewerbungen, Kontakten und Firmen manuell oder automatisch mergen |
+| **Bereinigen** | Kontextsensitive Dublettenerkennung (Bewerbungen/Kontakte/Firmen/Kalender) |
+| **Dateianhänge** | Anhänge aus Sync-Quellen an Timeline-Events, herunterladbar |
+| **PDF-Export** | Export der Eigenbemühungen als PDF |
+| **Auswertungen** | Pipeline-Funnel und Absage-Statistiken |
+| **Audit-Log** | Nachvollziehbare Änderungshistorie je Bewerbung |
+| **Backup** | Konfigurierbare lokale Datenbank-Backups |
 | **Changelog** | Versionsverlauf im App-Header abrufbar |
 
 ## Einstellungen
