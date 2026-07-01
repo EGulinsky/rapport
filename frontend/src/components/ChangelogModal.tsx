@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.16.1',
+    date: '2026-07-01',
+    changes: [
+      'Gmail-/iCloud-Sync einer Bewerbung fand keine Mails, wenn die automatisch angereicherte Firmen-Website die falsche Domain hatte (z.B. hahn-schickard.com statt .de) — die Suche filterte ausschließlich nach dieser einen Domain. Bestätigte Kontakt-E-Mail-Adressen der Bewerbung fließen jetzt zusätzlich in die Domain-Suche ein, unabhängig von der (ggf. fehlerhaften) Firmenanreicherung.',
+    ],
+  },
+  {
     version: '3.16.0',
     date: '2026-07-01',
     changes: [

@@ -90,11 +90,15 @@ def _domain_from_website(website: Optional[str]) -> Optional[str]:
 
 
 def _company_domains_for_app(app: models.Application, terms: list[str], db: Session) -> list[str]:
-    """Email domains for this application, derived from linked CompanyProfile websites.
+    """Email domains for this application, derived from linked CompanyProfile websites
+    AND from already-confirmed contact email addresses.
 
     - Direct application: domain from app.company_profile.website
     - HH application: domain from app.target_company_profile.website (the actual employer),
       plus app.company_profile.website (the HH firm) so HH mails are also captured.
+    - Contact emails (app.contacts) are added too — these are manually verified/confirmed
+      addresses and take precedence over web-enrichment guesses, which can point to the
+      wrong domain (e.g. a similarly-named company with a different TLD).
     Personal/freemail domains are excluded.
     """
     domains: set[str] = set()
@@ -110,6 +114,13 @@ def _company_domains_for_app(app: models.Application, terms: list[str], db: Sess
         _add_profile(app.company_profile)           # HH-Firma
     else:
         _add_profile(app.company_profile)
+
+    for contact in app.contacts:
+        if not contact.email or "@" not in contact.email:
+            continue
+        d = contact.email.split("@", 1)[1].strip().lower()
+        if d and d not in _PERSONAL_DOMAINS:
+            domains.add(d)
 
     return sorted(domains)
 
