@@ -14,6 +14,7 @@ interface Props {
   onOpenContact?: (id: number) => void
   onOpenCompany?: (id: number) => void
   onMergeRequest?: (ids: number[]) => void
+  onSaved?: () => void
 }
 
 const COMPANY_TYPE_COLORS: Record<string, string> = {
@@ -81,7 +82,7 @@ function toEditState(c: CompanyProfile): EditState {
   }
 }
 
-export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onOpenCompany, onMergeRequest }: Props) {
+export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onOpenCompany, onMergeRequest, onSaved }: Props) {
   const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -137,6 +138,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
     await api.companies.assignContact(id, contactId)
     closeAddContact()
     load()
+    onSaved?.()
   }
 
   async function createContact() {
@@ -151,6 +153,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       await api.companies.assignContact(id, contact.id)
       closeAddContact()
       load()
+      onSaved?.()
     } finally {
       setSavingNewContact(false)
     }
@@ -159,6 +162,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   async function unassignContact(contactId: number) {
     await api.companies.unassignContact(id, contactId)
     load()
+    onSaved?.()
   }
 
   function startEdit() {
@@ -196,6 +200,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       setCompany(updated)
       setEditing(false)
       setEditState(null)
+      onSaved?.()
     } catch (e) {
       setSaveError(String(e))
     } finally {
@@ -213,6 +218,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       reader.readAsDataURL(file)
       await api.companies.uploadLogo(company.id, file)
       await load()
+      onSaved?.()
     } catch (e) {
       setSaveError(String(e))
     } finally {
@@ -227,6 +233,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       await api.companies.deleteLogo(company.id)
       setLogoPreview(null)
       await load()
+      onSaved?.()
     } catch (e) {
       setSaveError(String(e))
     } finally {

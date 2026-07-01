@@ -573,6 +573,7 @@ export default function App() {
           onOpenContact={() => { setCompanyModalId(null); setMainView('contacts') }}
           onOpenCompany={id => setCompanyModalId(id)}
           onMergeRequest={ids => { setCompanyModalId(null); setCompanyMergeIds(ids) }}
+          onSaved={() => { setCompanyReloadKey(k => k + 1); load() }}
         />
       )}
 
