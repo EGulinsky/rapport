@@ -154,7 +154,15 @@ def _find_contact_groups(db: Session) -> list[dict]:
 def _find_company_groups(db: Session) -> list[dict]:
     """name_norm is unique at the DB level, so name-collisions can't happen —
     group by website domain instead (same site = same company regardless of
-    how the name was spelled when the profile was created)."""
+    how the name was spelled when the profile was created).
+
+    Subsidiaries oft teilen sich die Website-Domain der Mutterfirma (z.B.
+    "Siemens Digital Industries Software" unter siemens.com) und würden sonst
+    fälschlich als Dublette der Mutter erkannt. Ist die Mutter-Tochter-
+    Beziehung bereits über parent_company_id gepflegt, wird dieses Paar aus
+    der Gruppe entfernt — für die verbleibenden (noch unverknüpften)
+    Mitglieder bleibt es eine echte Dublette, für die neben "Zusammenführen"
+    auch "Als Tochterfirma zuordnen" eine sinnvolle Option ist."""
     profiles = db.query(models.CompanyProfile).filter(models.CompanyProfile.website.isnot(None)).all()
     buckets: dict[str, list[models.CompanyProfile]] = {}
     for p in profiles:
@@ -165,11 +173,16 @@ def _find_company_groups(db: Session) -> list[dict]:
 
     groups = []
     for dups in buckets.values():
-        if len(dups) < 2:
+        bucket_ids = {p.id for p in dups}
+        unresolved = [
+            p for p in dups
+            if not (p.parent_company_id and p.parent_company_id in bucket_ids)
+        ]
+        if len(unresolved) < 2:
             continue
-        dups.sort(key=_company_score, reverse=True)
-        keeper = dups[0]
-        to_remove = dups[1:]
+        unresolved.sort(key=_company_score, reverse=True)
+        keeper = unresolved[0]
+        to_remove = unresolved[1:]
         apps_merged = sum(len(r.applications) + len(r.hh_applications) for r in to_remove)
         contacts_merged = sum(len(r.direct_contacts) for r in to_remove)
         groups.append({
