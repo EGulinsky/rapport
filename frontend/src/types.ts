@@ -505,6 +505,24 @@ export interface AnalyticsHHGroup {
   offer: number
 }
 
+export interface AnalyticsStageConversion {
+  from_status: string
+  from_label: string
+  to_status: string
+  to_label: string
+  rate: number
+  drop_off: number
+}
+
+export interface AnalyticsSuccessGroup {
+  label: string
+  total: number
+  gespräch: number
+  offer: number
+  gespräch_rate: number
+  offer_rate: number
+}
+
 export interface AnalyticsSummary {
   kpis: {
     total: number
@@ -527,6 +545,11 @@ export interface AnalyticsSummary {
   hh_vs_direct: { hh: AnalyticsHHGroup; direct: AnalyticsHHGroup }
   rejection_by_status: Array<{ status: string; label: string; count: number }>
   company_sync: { total: number; pending: number; done: number; failed: number }
+  stage_conversions: AnalyticsStageConversion[]
+  bottleneck: AnalyticsStageConversion | null
+  by_company_type: AnalyticsSuccessGroup[]
+  by_employee_range: AnalyticsSuccessGroup[]
+  by_role_category: AnalyticsSuccessGroup[]
 }
 
 export interface CompanySyncStatus {
