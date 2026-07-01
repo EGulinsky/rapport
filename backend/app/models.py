@@ -59,6 +59,12 @@ PIPELINE_ORDER = [
     MainStatus.rejected,
 ]
 
+# Was als "Kalendereintrag" zählt — geteilt zwischen routers/calendar.py (Anzeige)
+# und routers/cleanup.py (Bereinigen-Scope "calendar"), damit beide exakt dieselben
+# Events meinen.
+CALENDAR_TYPEN = ('gespräch', 'interview', 'termin')
+CALENDAR_SOURCES = ('gcal', 'icloud_cal')
+
 # Excel-Import: old flat status → (main_status, sub_status)
 EXCEL_IMPORT_MAP: dict[str, tuple[str, str | None]] = {
     "00 Anbahnung":                        ("prospecting", None),

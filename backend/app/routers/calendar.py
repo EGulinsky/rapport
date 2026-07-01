@@ -31,16 +31,13 @@ def get_calendar_events(
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    CALENDAR_TYPEN = ('gespräch', 'interview', 'termin')
-    CALENDAR_SOURCES = ('gcal', 'icloud_cal')
-
     q = (
         db.query(models.Event, models.Application)
         .join(models.Application, models.Event.application_id == models.Application.id)
         .filter(models.Event.datum.isnot(None))
         .filter(
-            models.Event.source.in_(CALENDAR_SOURCES)
-            | models.Event.typ.in_(CALENDAR_TYPEN)
+            models.Event.source.in_(models.CALENDAR_SOURCES)
+            | models.Event.typ.in_(models.CALENDAR_TYPEN)
         )
     )
     if from_date:

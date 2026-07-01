@@ -181,7 +181,16 @@ def _find_company_groups(db: Session) -> list[dict]:
     return groups
 
 
-def _find_event_groups(db: Session) -> list[dict]:
+def _calendar_filter(q):
+    """Nur echte Kalendereinträge — exakt dieselbe Definition wie routers/calendar.py,
+    damit die Kalenderansicht und ihr Bereinigen-Button dieselben Events meinen."""
+    return q.filter(
+        models.Event.source.in_(models.CALENDAR_SOURCES)
+        | models.Event.typ.in_(models.CALENDAR_TYPEN)
+    )
+
+
+def _find_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
     """Find within-application event duplicates (same source+datum+titel).
 
     Synced events (source gesetzt) werden bewusst OHNE typ in den Gruppierungs-
@@ -193,8 +202,15 @@ def _find_event_groups(db: Session) -> list[dict]:
     denselben typ hatten. Für manuell angelegte Einträge (source=None) bleibt
     typ Teil des Keys — dort ist es ein bewusst vom User gesetztes Merkmal und
     keine Klassifikations-Variante desselben Sync-Items.
+
+    calendar_only=True beschränkt auf echte Kalendereinträge (siehe
+    _calendar_filter) — genutzt vom "Bereinigen"-Button in der Kalenderansicht,
+    damit dort nicht auch Mail-/Anruf-Duplikate auftauchen.
     """
-    events = db.query(models.Event).all()
+    q = db.query(models.Event)
+    if calendar_only:
+        q = _calendar_filter(q)
+    events = q.all()
     buckets: dict[tuple, list[models.Event]] = {}
     for e in events:
         key = (
@@ -220,13 +236,12 @@ def _find_event_groups(db: Session) -> list[dict]:
     return groups
 
 
-def _find_cross_app_event_groups(db: Session) -> list[dict]:
+def _find_cross_app_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
     """Find cross-application event duplicates by external_id."""
-    events = (
-        db.query(models.Event)
-        .filter(models.Event.external_id.isnot(None))
-        .all()
-    )
+    q = db.query(models.Event).filter(models.Event.external_id.isnot(None))
+    if calendar_only:
+        q = _calendar_filter(q)
+    events = q.all()
     buckets: dict[str, list[models.Event]] = {}
     for e in events:
         key = e.external_id.strip()
@@ -315,8 +330,12 @@ def cleanup_preview(db: Session = Depends(get_db), scope: Scope | None = Query(d
     if scope in (None, "companies"):
         result["companies"] = _find_company_groups(db)
     if scope in (None, "events"):
-        result["events"] = _find_event_groups(db)
-        result["cross_app_events"] = _find_cross_app_event_groups(db)
+        # scope="events" wird ausschließlich vom "Bereinigen"-Button der Kalender-
+        # ansicht ausgelöst → auf echte Kalendereinträge beschränken. Ungescopte
+        # Läufe (scope=None, "alles bereinigen") bleiben bewusst umfassend.
+        calendar_only = scope == "events"
+        result["events"] = _find_event_groups(db, calendar_only=calendar_only)
+        result["cross_app_events"] = _find_cross_app_event_groups(db, calendar_only=calendar_only)
     return result
 
 
@@ -424,9 +443,12 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
 
     # ── 4. Events (same app) → auto-delete ────────────────────────────────────
     if scope in (None, "events"):
+        # Analog zu /preview: scope="events" kommt ausschließlich vom Kalender-
+        # Bereinigen-Button → auf echte Kalendereinträge beschränken.
+        calendar_only = scope == "events"
         update_progress(PROGRESS_KEY, step_i, total_steps, "Timeline-Einträge werden bereinigt…")
         step_i += 1
-        event_groups = _find_event_groups(db)
+        event_groups = _find_event_groups(db, calendar_only=calendar_only)
         for g in event_groups:
             for rem in g["remove"]:
                 ev = db.query(models.Event).get(rem["id"])
@@ -437,7 +459,7 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
         await asyncio.sleep(0)
 
         # Cross-app events → PendingMatch
-        cross_groups = _find_cross_app_event_groups(db)
+        cross_groups = _find_cross_app_event_groups(db, calendar_only=calendar_only)
         for g in cross_groups:
             keeper_ev = g["keep"]
             for rem in g["remove"]:
