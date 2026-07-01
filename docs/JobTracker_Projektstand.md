@@ -1,5 +1,7 @@
 # JobTracker – Projektstand
 
+> **Historische Momentaufnahme vom 16. Juni 2026 (v2.0.17).** Für den laufend gepflegten, aktuellen technischen Stand siehe [ARCHITECTURE.md](ARCHITECTURE.md) — dort sind Router, Datenmodell und Diagramme immer auf dem neuesten Stand. Dieses Dokument bleibt als Snapshot der frühen Entwicklungsphase erhalten.
+
 **Stand:** 16. Juni 2026 · **Version:** v2.0.17  
 **Projekt-Ordner:** `/Users/eugengulinsky/code/jobtracker/`  
 **GitHub:** https://github.com/EGulinsky/jobtracker (privat)  
