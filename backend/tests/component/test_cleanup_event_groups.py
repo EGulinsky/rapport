@@ -86,3 +86,48 @@ class TestFindEventGroups:
 
         assert len(groups) == 1
         assert len(groups[0]["remove"]) == 2
+
+
+class TestCalendarOnlyFilter:
+    """Der 'Bereinigen'-Button der Kalenderansicht ruft scope='events' auf,
+    was jetzt calendar_only=True setzt — nur echte Kalendereinträge
+    (typ in gespräch/interview/termin ODER source in gcal/icloud_cal),
+    keine Mail-/Anruf-Duplikate."""
+
+    def test_positiv_kalender_dublette_wird_mit_calendar_only_gefunden(self, db_session):
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="status", source="gcal", datum=date(2026, 3, 5), titel="Discussion")
+        event_factory(db_session, app, typ="termin", source="gcal", datum=date(2026, 3, 5), titel="Discussion")
+
+        groups = _find_event_groups(db_session, calendar_only=True)
+
+        assert len(groups) == 1
+
+    def test_negativ_mail_dublette_wird_mit_calendar_only_ausgeblendet(self, db_session):
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="status", source="gmail", datum=date(2026, 4, 27), titel="Re: AW: Ihre Bewerbung")
+        event_factory(db_session, app, typ="notiz", source="gmail", datum=date(2026, 4, 27), titel="Re: AW: Ihre Bewerbung")
+
+        groups = _find_event_groups(db_session, calendar_only=True)
+
+        assert groups == []
+
+    def test_negativ_anruf_dublette_wird_mit_calendar_only_ausgeblendet(self, db_session):
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7), titel="Anruf von Natalia Kühne")
+        event_factory(db_session, app, typ="anruf", source="icloud_calls", datum=date(2026, 5, 7), titel="Anruf von Natalia Kühne")
+
+        groups = _find_event_groups(db_session, calendar_only=True)
+
+        assert groups == []
+
+    def test_corner_case_manueller_gespraech_eintrag_zaehlt_als_kalender(self, db_session):
+        # typ="gespräch" gilt auch ohne source (manuell) als Kalendereintrag —
+        # exakt dieselbe Definition wie in routers/calendar.py.
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="gespräch", source=None, datum=date(2026, 1, 1), titel="Notiz-Duplikat")
+        event_factory(db_session, app, typ="gespräch", source=None, datum=date(2026, 1, 1), titel="Notiz-Duplikat")
+
+        groups = _find_event_groups(db_session, calendar_only=True)
+
+        assert len(groups) == 1

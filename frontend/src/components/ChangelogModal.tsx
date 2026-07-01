@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.17.5',
+    date: '2026-07-01',
+    changes: [
+      'Bereinigen in der Kalenderansicht behandelt jetzt nur noch echte Kalendereinträge (gleiche Definition wie die Kalenderansicht selbst: Termine/Interviews oder Google-/iCloud-Kalender-Quelle) statt aller Timeline-Objekte (Mails, Anrufe, Notizen). Live verifiziert: 33 → 15 Duplikate im Kalender-Scope, die restlichen 18 waren Mail-/Anruf-Duplikate und gehören nicht dorthin.',
+    ],
+  },
+  {
     version: '3.17.4',
     date: '2026-07-01',
     changes: [
