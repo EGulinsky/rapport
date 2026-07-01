@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
@@ -236,21 +236,27 @@ async def company_sync_run(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     force: bool = False,
+    company_ids: list[int] | None = Query(default=None),
 ):
     global _SYNC_RUNNING
     if _SYNC_RUNNING:
         return {"started": False, "count": 0, "message": "Sync already running"}
 
+    def _scoped(q):
+        return q.filter(models.CompanyProfile.id.in_(company_ids)) if company_ids else q
+
     if force:
-        db.query(models.CompanyProfile).update({"sync_status": "pending", "sync_error": None})
+        _scoped(db.query(models.CompanyProfile)).update(
+            {"sync_status": "pending", "sync_error": None}, synchronize_session=False
+        )
         db.commit()
 
-    pending = db.query(models.CompanyProfile).filter(
+    pending = _scoped(db.query(models.CompanyProfile)).filter(
         models.CompanyProfile.sync_status == "pending"
     ).all()
 
     if not force:
-        incomplete = db.query(models.CompanyProfile).filter(
+        incomplete = _scoped(db.query(models.CompanyProfile)).filter(
             models.CompanyProfile.sync_status == "done",
             (
                 models.CompanyProfile.description.is_(None)

@@ -323,20 +323,33 @@ def link_contacts_cancel():
 
 
 @router.post("/link-contacts")
-def link_contacts_to_companies(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def link_contacts_to_companies(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    company_ids: list[int] | None = Query(default=None),
+):
     global _LINK_RUNNING
     if _LINK_RUNNING:
         return {"started": False, "message": "Bereits läuft"}
     from app import models
+
+    # Scoped to specific companies: link only unlinked contacts whose firma
+    # normalizes to one of the selected companies' names.
+    allowed_norms: set[str] | None = None
+    if company_ids:
+        allowed_norms = {
+            n for (n,) in db.query(CompanyProfile.name_norm).filter(CompanyProfile.id.in_(company_ids)).all()
+        }
+
     total = db.query(models.Contact).filter(
         models.Contact.company_profile_id.is_(None),
         models.Contact.firma.isnot(None),
     ).count()
-    background_tasks.add_task(_run_link_contacts)
+    background_tasks.add_task(_run_link_contacts, allowed_norms)
     return {"started": True, "total": total}
 
 
-def _run_link_contacts():
+def _run_link_contacts(allowed_norms: set[str] | None = None):
     global _LINK_RUNNING, _LINK_CANCEL, _LINK_PROGRESS
     from app.dedup import norm_firma
     from app import models
@@ -349,6 +362,8 @@ def _run_link_contacts():
             models.Contact.company_profile_id.is_(None),
             models.Contact.firma.isnot(None),
         ).all()
+        if allowed_norms is not None:
+            contacts = [c for c in contacts if norm_firma(c.firma) in allowed_norms]
         _LINK_PROGRESS["total"] = len(contacts)
         linked = 0
         created = 0
@@ -360,6 +375,9 @@ def _run_link_contacts():
             nname = norm_firma(c.firma)
             profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
             if not profile:
+                # Scoped runs must not silently create new profiles outside the selection.
+                if allowed_norms is not None:
+                    continue
                 profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending")
                 db.add(profile)
                 db.flush()
