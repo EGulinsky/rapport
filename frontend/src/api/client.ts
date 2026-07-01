@@ -342,7 +342,13 @@ export const api = {
 
   companySync: {
     status: () => request<import('../types').CompanySyncStatus>('/sync/company/status'),
-    run: (force = false) => request<{ started: boolean; count: number; message?: string }>(`/sync/company/run${force ? '?force=true' : ''}`, { method: 'POST' }),
+    run: (force = false, companyIds?: number[]) => {
+      const qs = new URLSearchParams()
+      if (force) qs.set('force', 'true')
+      for (const id of companyIds ?? []) qs.append('company_ids', String(id))
+      const s = qs.toString()
+      return request<{ started: boolean; count: number; message?: string }>(`/sync/company/run${s ? '?' + s : ''}`, { method: 'POST' })
+    },
     cancel: () => request<{ ok: boolean }>('/sync/company/cancel', { method: 'POST' }),
     resetLock: () => request<{ ok: boolean }>('/sync/company/reset-lock', { method: 'POST' }),
     resetFailed: () => request<{ reset: number }>('/sync/company/reset-failed', { method: 'POST' }),
@@ -365,7 +371,12 @@ export const api = {
     update: (id: number, data: Partial<CompanyProfile>) =>
       request<CompanyProfile>(`/companies/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     create: (name: string) => request<CompanyProfile>('/companies', { method: 'POST', body: JSON.stringify({ name }) }),
-    linkContacts: () => request<{started: boolean; total?: number; message?: string}>('/companies/link-contacts', {method: 'POST'}),
+    linkContacts: (companyIds?: number[]) => {
+      const qs = new URLSearchParams()
+      for (const id of companyIds ?? []) qs.append('company_ids', String(id))
+      const s = qs.toString()
+      return request<{started: boolean; total?: number; message?: string}>(`/companies/link-contacts${s ? '?' + s : ''}`, {method: 'POST'})
+    },
     linkContactsStatus: () => request<{running: boolean; linked: number; created: number; total: number; done: boolean; cancelled: boolean}>('/companies/link-contacts/status'),
     linkContactsCancel: () => request<{ok: boolean}>('/companies/link-contacts/cancel', {method: 'POST'}),
     uploadLogo: async (id: number, file: File): Promise<void> => {

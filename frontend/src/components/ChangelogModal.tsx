@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.8',
+    date: '2026-07-01',
+    changes: [
+      'Firmen: Sync, Re-Sync und "Kontakte verknüpfen" berücksichtigen jetzt die Markierung — bei ausgewählten Firmen laufen alle drei Aktionen nur für die Auswahl statt für die komplette Liste. Ohne Auswahl unverändertes Verhalten (alle Firmen).',
+    ],
+  },
+  {
     version: '3.15.7',
     date: '2026-06-30',
     changes: [

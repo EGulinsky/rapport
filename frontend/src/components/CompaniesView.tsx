@@ -170,11 +170,12 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     syncCancelledRef.current = false
     setSyncMsg(null)
     setSyncLive(null)
+    const scopedIds = selectedIds.size > 0 ? [...selectedIds] : undefined
     try {
       await api.companySync.resetLock()
-      const r = await api.companySync.run(force)
+      const r = await api.companySync.run(force, scopedIds)
       if (r.started) {
-        setSyncMsg(`${r.count} Firmenprofil(e) werden synchronisiert…`)
+        setSyncMsg(`${r.count} Firmenprofil(e)${scopedIds ? ' (Auswahl)' : ''} werden synchronisiert…`)
         startPolling()
       } else {
         setSyncMsg(r.message || 'Kein Sync nötig.')
@@ -194,8 +195,9 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     setLinking(true)
     setLinkMsg(null)
     setLinkProgress(null)
+    const scopedIds = selectedIds.size > 0 ? [...selectedIds] : undefined
     try {
-      const r = await api.companies.linkContacts()
+      const r = await api.companies.linkContacts(scopedIds)
       if (!r.started) {
         setLinkMsg(r.message || 'Bereits läuft')
         setLinking(false)
@@ -361,7 +363,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             {syncing
               ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
               : <RefreshCw className="h-3.5 w-3.5" />}
-            Sync
+            Sync{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
             {!syncing && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
           </button>
           {syncing && (
@@ -379,15 +381,15 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                 onClick={() => startSync(false)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
-                <div className="font-medium">Sync</div>
-                <div className="text-xs text-gray-400">Ausstehende + leere Felder</div>
+                <div className="font-medium">Sync{selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}</div>
+                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? 'Nur ausgewählte Firmen' : 'Ausstehende + leere Felder'}</div>
               </button>
               <button
                 onClick={() => startSync(true)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
-                <div className="font-medium">Re-Sync</div>
-                <div className="text-xs text-gray-400">Alle Firmen neu synchronisieren</div>
+                <div className="font-medium">Re-Sync{selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}</div>
+                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? 'Nur ausgewählte Firmen neu synchronisieren' : 'Alle Firmen neu synchronisieren'}</div>
               </button>
               {failed > 0 && (
                 <>
@@ -415,7 +417,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
               ? linkProgress
                 ? `${linkProgress.linked + linkProgress.created}/${linkProgress.total}`
                 : 'Verknüpfe…'
-              : 'Kontakte verknüpfen'}
+              : `Kontakte verknüpfen${selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}`}
           </button>
           {linking && (
             <button
