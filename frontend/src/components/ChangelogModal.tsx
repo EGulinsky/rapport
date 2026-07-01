@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.18.2',
+    date: '2026-07-01',
+    changes: [
+      'Bereinigen bei Firmen erkannte Tochterfirmen fälschlich als Duplikate, wenn sie sich die Website-Domain der Mutter teilen (z.B. "Siemens Digital Industries Software" unter siemens.com) — selbst wenn die Mutter-Tochter-Beziehung bereits gepflegt war. Bereits verknüpfte Paare werden jetzt ignoriert. Für noch unverknüpfte Duplikate gibt es zusätzlich zum Zusammenführen die neue Option "Als Tochterfirma zuordnen".',
+    ],
+  },
+  {
     version: '3.18.1',
     date: '2026-07-01',
     changes: [

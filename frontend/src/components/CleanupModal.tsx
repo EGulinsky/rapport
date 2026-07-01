@@ -34,11 +34,13 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
 
-  useEffect(() => {
-    api.cleanup.preview(scope)
+  const loadPreview = useCallback(() => {
+    return api.cleanup.preview(scope)
       .then(p => { setPreview(p); setPhase('preview') })
       .catch(e => { setError(String(e)); setPhase('error') })
   }, [scope])
+
+  useEffect(() => { loadPreview() }, [loadPreview])
 
   useEffect(() => () => stopPolling(), [stopPolling])
 
@@ -173,7 +175,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
                   )}
                   {preview.companies.length > 0 && (
                     <Section title="Firmen" count={preview.companies.length} color="green">
-                      {preview.companies.map((g, i) => <CompanyGroupRow key={i} group={g} />)}
+                      {preview.companies.map((g, i) => <CompanyGroupRow key={i} group={g} onAssigned={loadPreview} />)}
                     </Section>
                   )}
                   {preview.events.length > 0 && (
@@ -342,7 +344,21 @@ function ContactGroupRow({ group }: { group: ContactGroup }) {
   )
 }
 
-function CompanyGroupRow({ group }: { group: CompanyGroup }) {
+function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigned: () => void }) {
+  const [assigningId, setAssigningId] = useState<number | null>(null)
+  const [assignedIds, setAssignedIds] = useState<Set<number>>(new Set())
+
+  async function assignAsSubsidiary(childId: number) {
+    setAssigningId(childId)
+    try {
+      await api.companies.update(childId, { parent_company_id: group.keep.id })
+      setAssignedIds(prev => new Set(prev).add(childId))
+      onAssigned()
+    } finally {
+      setAssigningId(null)
+    }
+  }
+
   return (
     <div className="px-4 py-3 text-xs space-y-1.5">
       <div className="flex items-center gap-2">
@@ -351,18 +367,34 @@ function CompanyGroupRow({ group }: { group: CompanyGroup }) {
         {group.keep.website && <span className="text-gray-400 truncate">{group.keep.website}</span>}
         <span className="ml-auto text-gray-400">{group.keep.apps} Bewerbungen · {group.keep.contacts} Kontakte</span>
       </div>
-      {group.remove.map(r => (
-        <div key={r.id} className="flex items-center gap-2 text-gray-400 ml-4">
-          <Trash2 className="h-3 w-3 text-red-400 shrink-0" />
-          <span>{r.name}</span>
-          <span className="ml-auto">{r.apps_count} Bewerbungen · {r.contacts_count} Kontakte</span>
-        </div>
-      ))}
+      {group.remove.map(r => {
+        const isAssigned = assignedIds.has(r.id)
+        return (
+          <div key={r.id} className={clsx('flex items-center gap-2 ml-4', isAssigned ? 'text-emerald-500' : 'text-gray-400')}>
+            {isAssigned ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Trash2 className="h-3 w-3 text-red-400 shrink-0" />}
+            <span>{r.name}</span>
+            <span className="text-gray-300">{r.apps_count} Bewerbungen · {r.contacts_count} Kontakte</span>
+            {isAssigned ? (
+              <span className="ml-auto text-[10px]">Als Tochterfirma zugeordnet</span>
+            ) : (
+              <button
+                type="button"
+                disabled={assigningId === r.id}
+                onClick={() => assignAsSubsidiary(r.id)}
+                className="ml-auto text-[10px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50"
+                title={`${r.name} als Tochterfirma von ${group.keep.name} eintragen, statt zusammenzuführen`}
+              >
+                {assigningId === r.id ? 'Ordne zu…' : 'Als Tochterfirma zuordnen'}
+              </button>
+            )}
+          </div>
+        )
+      })}
       {(group.apps_merged > 0 || group.contacts_merged > 0) && (
         <p className="text-[10px] text-gray-400 ml-4">
           → {group.apps_merged > 0 && `${group.apps_merged} Bewerbungen`}
           {group.apps_merged > 0 && group.contacts_merged > 0 && ' + '}
-          {group.contacts_merged > 0 && `${group.contacts_merged} Kontakte`} werden übertragen
+          {group.contacts_merged > 0 && `${group.contacts_merged} Kontakte`} werden übertragen, falls stattdessen zusammengeführt
         </p>
       )}
     </div>
