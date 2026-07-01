@@ -21,6 +21,7 @@ import re
 import html
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
+from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -1376,17 +1377,31 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             mention_app_ids = _find_apps_where_contact_mentioned(name, email_val, db)
             firma_app_ids = _find_apps_for_contact(org_val or "", db) if org_val else []
 
-            # Check whether the org matches a known CompanyProfile
+            # Check whether the org matches a known CompanyProfile. A text match on the
+            # org field alone is NOT enough to justify import — the user's address book
+            # can contain hundreds of colleagues from a former employer that happens to
+            # share a name with a CompanyProfile (e.g. from an unrelated application),
+            # which previously caused entire company address books to be imported wholesale
+            # (592 contacts, 272 from a single "EDAG Group" match — live-verified bug).
+            # Only accept the company match as a standalone reason if the contact's email
+            # domain also matches the company's website — an org-name match by itself
+            # still populates company_profile_id for display, but doesn't gate import.
             company_profile_id = None
+            company_domain_match = False
             if org_val:
                 from app.dedup import norm_firma
                 norm = norm_firma(org_val)
                 cp = db.query(models.CompanyProfile).filter_by(name_norm=norm).first()
                 if cp:
                     company_profile_id = cp.id
+                    if email_val and cp.website:
+                        host = (urlparse(cp.website if "//" in cp.website else f"//{cp.website}").hostname or "").removeprefix("www.")
+                        email_domain = email_val.split("@", 1)[1].lower() if "@" in email_val else ""
+                        if host and email_domain and (email_domain == host or email_domain.endswith(f".{host}")):
+                            company_domain_match = True
 
-            # Skip contacts with no connection to job applications or known companies
-            if not mention_app_ids and not firma_app_ids and not company_profile_id:
+            # Skip contacts with no real connection to job applications or known companies
+            if not mention_app_ids and not firma_app_ids and not company_domain_match:
                 continue
 
             contact = models.Contact(
