@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronRight, Loader2, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
-import type { CleanupPreview, CleanupResult, AppGroup, ContactGroup, EventGroup } from '../types'
+import type { CleanupPreview, CleanupResult, CleanupScope, AppGroup, ContactGroup, CompanyGroup, EventGroup } from '../types'
 import clsx from 'clsx'
 
 interface Props {
   onClose: () => void
   onDone: () => void
+  scope?: CleanupScope
+  scopeLabel?: string
 }
 
 type Phase = 'loading' | 'preview' | 'running' | 'done' | 'error'
@@ -20,7 +22,7 @@ interface ProgressEntry {
   done: boolean
 }
 
-export function CleanupModal({ onClose, onDone }: Props) {
+export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [preview, setPreview] = useState<CleanupPreview | null>(null)
   const [result, setResult] = useState<CleanupResult | null>(null)
@@ -33,10 +35,10 @@ export function CleanupModal({ onClose, onDone }: Props) {
   }, [])
 
   useEffect(() => {
-    api.cleanup.preview()
+    api.cleanup.preview(scope)
       .then(p => { setPreview(p); setPhase('preview') })
       .catch(e => { setError(String(e)); setPhase('error') })
-  }, [])
+  }, [scope])
 
   useEffect(() => () => stopPolling(), [stopPolling])
 
@@ -53,7 +55,7 @@ export function CleanupModal({ onClose, onDone }: Props) {
     }, 600)
 
     try {
-      const res = await api.cleanup.run()
+      const res = await api.cleanup.run(scope)
       stopPolling()
       setResult(res)
       setPhase('done')
@@ -66,13 +68,15 @@ export function CleanupModal({ onClose, onDone }: Props) {
   }
 
   const totalIssues = preview
-    ? preview.applications.length + preview.contacts.length + preview.events.length
+    ? preview.applications.length + preview.contacts.length + preview.companies.length + preview.events.length + preview.cross_app_events.length
     : 0
 
   const totalRemove = preview
     ? preview.applications.reduce((s, g) => s + g.remove.length, 0)
       + preview.contacts.reduce((s, g) => s + g.remove.length, 0)
+      + preview.companies.reduce((s, g) => s + g.remove.length, 0)
       + preview.events.reduce((s, g) => s + g.remove.length, 0)
+      + preview.cross_app_events.reduce((s, g) => s + g.remove.length, 0)
     : 0
 
   return (
@@ -86,7 +90,7 @@ export function CleanupModal({ onClose, onDone }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-indigo-500" />
-            <h2 className="text-sm font-semibold text-gray-900">Duplikate bereinigen</h2>
+            <h2 className="text-sm font-semibold text-gray-900">Duplikate bereinigen{scopeLabel ? ` — ${scopeLabel}` : ''}</h2>
           </div>
           {phase !== 'running' && (
             <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
@@ -146,14 +150,15 @@ export function CleanupModal({ onClose, onDone }: Props) {
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
                   <CheckCircle className="h-10 w-10 text-green-400" />
                   <p className="text-sm font-medium text-gray-600">Keine Duplikate gefunden</p>
-                  <p className="text-xs">Bewerbungen, Kontakte und Timeline sind sauber.</p>
+                  <p className="text-xs">{scopeLabel ? `${scopeLabel} ist sauber.` : 'Bewerbungen, Kontakte, Firmen und Timeline sind sauber.'}</p>
                 </div>
               ) : (
                 <>
                   <SummaryChips
                     apps={preview.applications.length}
                     contacts={preview.contacts.length}
-                    events={preview.events.length}
+                    companies={preview.companies.length}
+                    events={preview.events.length + preview.cross_app_events.length}
                     totalRemove={totalRemove}
                   />
                   {preview.applications.length > 0 && (
@@ -166,9 +171,19 @@ export function CleanupModal({ onClose, onDone }: Props) {
                       {preview.contacts.map((g, i) => <ContactGroupRow key={i} group={g} />)}
                     </Section>
                   )}
+                  {preview.companies.length > 0 && (
+                    <Section title="Firmen" count={preview.companies.length} color="green">
+                      {preview.companies.map((g, i) => <CompanyGroupRow key={i} group={g} />)}
+                    </Section>
+                  )}
                   {preview.events.length > 0 && (
                     <Section title="Timeline-Einträge" count={preview.events.length} color="amber">
                       {preview.events.map((g, i) => <EventGroupRow key={i} group={g} />)}
+                    </Section>
+                  )}
+                  {preview.cross_app_events.length > 0 && (
+                    <Section title="Bewerbungsübergreifende Einträge" count={preview.cross_app_events.length} color="amber">
+                      {preview.cross_app_events.map((g, i) => <EventGroupRow key={i} group={g} />)}
                     </Section>
                   )}
                 </>
@@ -183,12 +198,13 @@ export function CleanupModal({ onClose, onDone }: Props) {
                 <CheckCircle className="h-5 w-5" />
                 <span className="font-semibold text-sm">Bereinigung abgeschlossen</span>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <ResultChip label="Bewerbungen gelöscht" value={result.deleted_applications} />
-                <ResultChip label="Kontakte gelöscht" value={result.deleted_contacts} />
+              <div className="grid grid-cols-2 gap-3">
+                <ResultChip label="Bewerbungen zusammengeführt" value={result.deleted_applications} />
+                <ResultChip label="Kontakte zur Prüfung vorgemerkt" value={result.queued_contacts} />
+                <ResultChip label="Firmen zusammengeführt" value={result.deleted_companies} />
                 <ResultChip label="Einträge gelöscht" value={result.deleted_events} />
               </div>
-              {result.deleted_applications === 0 && result.deleted_contacts === 0 && result.deleted_events === 0 && (
+              {result.deleted_applications === 0 && result.queued_contacts === 0 && result.deleted_companies === 0 && result.deleted_events === 0 && result.queued_cross_app_events === 0 && (
                 <p className="text-xs text-gray-400 text-center">Nichts zu bereinigen gewesen.</p>
               )}
             </div>
@@ -229,14 +245,15 @@ export function CleanupModal({ onClose, onDone }: Props) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function SummaryChips({ apps, contacts, events, totalRemove }: {
-  apps: number; contacts: number; events: number; totalRemove: number
+function SummaryChips({ apps, contacts, companies, events, totalRemove }: {
+  apps: number; contacts: number; companies: number; events: number; totalRemove: number
 }) {
   return (
     <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl text-xs">
       <span className="text-gray-500">Gefunden:</span>
       {apps > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{apps} Bewerbungsgruppe{apps !== 1 ? 'n' : ''}</span>}
       {contacts > 0 && <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{contacts} Kontaktgruppe{contacts !== 1 ? 'n' : ''}</span>}
+      {companies > 0 && <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">{companies} Firmengruppe{companies !== 1 ? 'n' : ''}</span>}
       {events > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{events} Eintragsgruppe{events !== 1 ? 'n' : ''}</span>}
       <span className="ml-auto text-gray-400">{totalRemove} Zeilen werden gelöscht, Daten zusammengeführt</span>
     </div>
@@ -244,12 +261,13 @@ function SummaryChips({ apps, contacts, events, totalRemove }: {
 }
 
 function Section({ title, count, color, children }: {
-  title: string; count: number; color: 'blue' | 'purple' | 'amber'; children: React.ReactNode
+  title: string; count: number; color: 'blue' | 'purple' | 'green' | 'amber'; children: React.ReactNode
 }) {
   const [open, setOpen] = useState(true)
   const colors = {
     blue:   'text-blue-700 bg-blue-50',
     purple: 'text-purple-700 bg-purple-50',
+    green:  'text-green-700 bg-green-50',
     amber:  'text-amber-700 bg-amber-50',
   }
   return (
@@ -319,6 +337,33 @@ function ContactGroupRow({ group }: { group: ContactGroup }) {
       ))}
       {group.apps_merged > 0 && (
         <p className="text-[10px] text-gray-400 ml-4">→ {group.apps_merged} Bewerbungsverknüpfung{group.apps_merged !== 1 ? 'en' : ''} werden übertragen</p>
+      )}
+    </div>
+  )
+}
+
+function CompanyGroupRow({ group }: { group: CompanyGroup }) {
+  return (
+    <div className="px-4 py-3 text-xs space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">Behalten</span>
+        <span className="font-medium text-gray-800">{group.keep.name}</span>
+        {group.keep.website && <span className="text-gray-400 truncate">{group.keep.website}</span>}
+        <span className="ml-auto text-gray-400">{group.keep.apps} Bewerbungen · {group.keep.contacts} Kontakte</span>
+      </div>
+      {group.remove.map(r => (
+        <div key={r.id} className="flex items-center gap-2 text-gray-400 ml-4">
+          <Trash2 className="h-3 w-3 text-red-400 shrink-0" />
+          <span>{r.name}</span>
+          <span className="ml-auto">{r.apps_count} Bewerbungen · {r.contacts_count} Kontakte</span>
+        </div>
+      ))}
+      {(group.apps_merged > 0 || group.contacts_merged > 0) && (
+        <p className="text-[10px] text-gray-400 ml-4">
+          → {group.apps_merged > 0 && `${group.apps_merged} Bewerbungen`}
+          {group.apps_merged > 0 && group.contacts_merged > 0 && ' + '}
+          {group.contacts_merged > 0 && `${group.contacts_merged} Kontakte`} werden übertragen
+        </p>
       )}
     </div>
   )

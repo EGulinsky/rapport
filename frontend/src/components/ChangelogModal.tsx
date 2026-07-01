@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.16.0',
+    date: '2026-07-01',
+    changes: [
+      'Firmen-Sync: Fix für v3.15.8 — der Auto-Continue-Poller nach einem Sync-Batch ignorierte die Markierung und synchronisierte trotzdem alle ausstehenden Firmen weiter. Scoped Runs stoppen jetzt nach ihrem eigenen Batch.',
+      'LinkedIn-Einrichtung war doppelt (Sync-Dropdown und Options-Menü) — aus dem Sync-Dropdown entfernt, nur noch in den Einstellungen unter "LinkedIn".',
+      'Bereinigen-Funktion ist jetzt kontextsensitiv: der Button zeigt und bereinigt nur die Kategorie der aktuellen Ansicht (Bewerbungen/Kontakte/Firmen/Kalender) statt immer alles. Neu: Firmen-Duplikate werden per Website-Domain erkannt (Namensfeld ist bereits eindeutig in der DB) und über die bestehende Merge-Logik zusammengeführt. Bewerbungs-Matching nutzt jetzt dieselbe normalisierte Firmen-/Rollen-Erkennung wie der Rest der App, Kontakt-Matching berücksichtigt zusätzlich die Firma um Namensgleichheit bei unterschiedlichen Personen nicht mehr fälschlich zusammenzuführen.',
+    ],
+  },
+  {
     version: '3.15.8',
     date: '2026-07-01',
     changes: [
