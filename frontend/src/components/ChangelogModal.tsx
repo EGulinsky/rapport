@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.15.7',
+    date: '2026-06-30',
+    changes: [
+      'Firmenmodal: Änderungen (Bearbeiten, Logo, Kontakte zuordnen) fehlte ein onSaved-Callback — Firmenliste und Bewerbungsansichten zeigten Änderungen erst nach manuellem Reload. Behoben.',
+    ],
+  },
+  {
     version: '3.15.6',
     date: '2026-06-30',
     changes: [
