@@ -1,0 +1,1 @@
+L3 Integration-Tests (Fremdsysteme an der Netzwerkgrenze gemockt) folgen in Phase 4 des Testkonzepts (siehe `docs/TEST_KONZEPT.md`), sobald die Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/KI-Provider steht.

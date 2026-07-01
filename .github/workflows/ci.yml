@@ -25,18 +25,21 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Lint (ruff)
         run: |
           pip install ruff
-          ruff check app/ --select E,F,W --ignore E501
+          ruff check app/ tests/ --select E,F,W --ignore E501
 
       - name: Type check (pyright)
         run: |
           pip install pyright
           pyright app/ --pythonversion 3.11
         continue-on-error: true  # informational only for now
+
+      - name: Tests (unit + component + api)
+        run: pytest -m "unit or component or api"
 
   frontend:
     name: Frontend (Node/TypeScript)
@@ -60,6 +63,9 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Tests (unit + component)
+        run: npm run test
 
       - name: Build
         run: npm run build

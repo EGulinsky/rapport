@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.17.0',
+    date: '2026-07-01',
+    changes: [
+      'Testkonzept Phase 1 umgesetzt: pytest-Grundgerüst mit Test-DB-Isolation, Factories (Bewerbung/Kontakt/Firma/Event), 37 Backend-Tests (Unit/Component/API) und Vitest-Setup mit ersten Frontend-Komponententests. PR-Gate in CI erweitert — läuft in unter 6 Sekunden.',
+    ],
+  },
+  {
     version: '3.16.2',
     date: '2026-07-01',
     changes: [
