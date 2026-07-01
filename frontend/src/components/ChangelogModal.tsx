@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.19.1',
+    date: '2026-07-01',
+    changes: [
+      'iCloud-Kontakte-Sync importierte teils hunderte irrelevante Kontakte (live 592, davon 272 allein mit Firma "EDAG Group") — ein reiner Textmatch des ORG-Felds einer vCard gegen den Namen einer bekannten Firma reichte aus, um praktisch das komplette Adressbuch eines früheren Arbeitgebers zu importieren, unabhängig von jeder echten Verbindung zu einer Bewerbung. Ein Firmen-Namens-Match allein zählt jetzt nicht mehr — zusätzlich muss entweder die E-Mail-Domain des Kontakts zur Firmen-Website passen, oder der Kontakt ist tatsächlich in einer Bewerbung erwähnt bzw. per Firmentext verknüpft.',
+    ],
+  },
+  {
     version: '3.19.0',
     date: '2026-07-01',
     changes: [
