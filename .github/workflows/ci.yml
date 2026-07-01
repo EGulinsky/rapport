@@ -94,6 +94,12 @@ jobs:
       - name: Pull latest code
         run: git -C /Users/eugengulinsky/code/jobtracker pull
 
+      - name: App-Version ermitteln
+        id: version
+        run: |
+          VERSION=$(grep -m1 "version: '" /Users/eugengulinsky/code/jobtracker/frontend/src/components/ChangelogModal.tsx | sed "s/.*version: '\([^']*\)'.*/\1/")
+          echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Rebuild playwright base image if needed
         env:
           DOCKER_BUILDKIT: "1"
@@ -133,7 +139,7 @@ jobs:
       - name: Browser öffnen und Sound
         run: |
           TIME=$(date '+%H:%M')
-          osascript -e "display notification \"Build ${{ github.run_number }} erfolgreich deployt (${TIME})\" with title \"Jobtracker CI ✓\" sound name \"Glass\""
+          osascript -e "display notification \"${{ steps.version.outputs.version }} (Build ${{ github.run_number }}) erfolgreich deployt (${TIME})\" with title \"Jobtracker CI ✓\" sound name \"Glass\""
           osascript -e 'open location "https://frontend.jobtracker.orb.local/"'
 
   notify-failure:

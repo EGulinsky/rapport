@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.16.2',
+    date: '2026-07-01',
+    changes: [
+      'CI: Deploy-Benachrichtigung auf dem Mac zeigt jetzt die volle App-Version (z.B. "v3.16.2") statt nur der Build-Nummer — wie oben links in der App angezeigt.',
+    ],
+  },
+  {
     version: '3.16.1',
     date: '2026-07-01',
     changes: [
