@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.18.0',
+    date: '2026-07-01',
+    changes: [
+      'Neue Auswertungen: Größter Pipeline-Engpass wird jetzt explizit hervorgehoben (Stufe mit dem größten absoluten Bewerbungsverlust, nicht nur niedrigste Rate — vermeidet Fehlschlüsse aus kleinen Stichproben). Neuer Chart "Konversion je Übergang" zeigt die Rate für jeden einzelnen Pipeline-Schritt.',
+      'Erfolg nach Firmentyp (Startup/Konzern/KMU/Beratung/…) und Firmengröße als eigene Auswertung — Gespräch- und Angebotsquote je Gruppe.',
+      'Erfolg nach Rollen-Kategorie: grobe Einordnung aus dem Stellentitel per Keyword-Heuristik (Führung/Senior/Sonstige), da es kein strukturiertes Feld für "Art der Stelle" gibt.',
+    ],
+  },
+  {
     version: '3.17.5',
     date: '2026-07-01',
     changes: [

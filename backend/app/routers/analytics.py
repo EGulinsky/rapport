@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date, timedelta
 from typing import Optional
@@ -25,9 +25,90 @@ def _effective_status(app: models.Application) -> str:
     return app.main_status
 
 
+def _reached(app: models.Application, stage: str) -> bool:
+    """Hat die Bewerbung mindestens die angegebene Pipeline-Stufe erreicht?"""
+    eff = _effective_status(app)
+    return PIPELINE_RANK.get(eff, 0) >= PIPELINE_RANK.get(stage, 999)
+
+
+def _stage_conversions(funnel: list[dict]) -> list[dict]:
+    """Stufe-zu-Stufe-Konversion (nicht kumulativ): von den Bewerbungen, die
+    Stufe N erreicht haben, wie viele haben auch Stufe N+1 erreicht? Macht
+    den größten Engpass sichtbar, den der kumulative Funnel allein verdeckt
+    (dort sieht ein kleiner Drop-off in einer stark gefüllten frühen Stufe
+    größer aus als ein kompletter Stillstand in einer dünn besetzten späten)."""
+    result = []
+    for cur, nxt in zip(funnel, funnel[1:]):
+        rate = round(nxt["count"] / cur["count"], 4) if cur["count"] else 0.0
+        result.append({
+            "from_status": cur["status"],
+            "from_label":  cur["label"],
+            "to_status":   nxt["status"],
+            "to_label":    nxt["label"],
+            "rate":        rate,
+            "drop_off":    cur["count"] - nxt["count"],
+        })
+    return result
+
+
+def _find_bottleneck(stage_conversions: list[dict]) -> Optional[dict]:
+    """Übergang mit dem größten absoluten Verlust (nicht der niedrigsten Rate!):
+    eine 0%-Rate bei 1 Bewerbung ist reines Rauschen, während eine 16%-Rate bei
+    138 Bewerbungen der tatsächliche Hauptengpass ist. Absoluter drop_off ist
+    robust gegen die kleinen Stichproben in späten Pipeline-Stufen."""
+    candidates = [s for s in stage_conversions if s["drop_off"] > 0]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda s: s["drop_off"])
+
+
+_ROLE_LEADERSHIP_KW = (
+    "lead", "head", "director", "leiter", "leitung", "manager", "vp",
+    "chief", "cxo", "geschäftsführ", "bereichsleit",
+)
+_ROLE_SENIOR_KW = ("senior", "principal", "expert", "architekt", "sr.")
+
+
+def _categorize_role(rolle: Optional[str]) -> str:
+    """Grobe Rollen-Kategorie per Keyword-Heuristik aus dem Freitext-Titel.
+    Es gibt kein strukturiertes Feld für 'Art der Stelle' — diese Heuristik
+    ist bewusst konservativ (drei breite Buckets) statt eine unzuverlässige
+    Feinklassifikation vorzutäuschen."""
+    r = f" {(rolle or '').lower()} "
+    if any(kw in r for kw in _ROLE_LEADERSHIP_KW):
+        return "Führung"
+    if any(kw in r for kw in _ROLE_SENIOR_KW):
+        return "Senior (Fachexperte)"
+    return "Sonstige"
+
+
+def _success_by_group(apps: list[models.Application], group_fn) -> list[dict]:
+    """Konversionsrate bis Gespräch/Angebot, gruppiert nach einem beliebigen
+    Merkmal (company_type, employee_range, Rollen-Kategorie, …)."""
+    groups: dict[str, list[models.Application]] = {}
+    for a in apps:
+        key = group_fn(a) or "Unbekannt"
+        groups.setdefault(key, []).append(a)
+
+    result = []
+    for key, group_apps in groups.items():
+        total = len(group_apps)
+        gespraech = sum(1 for a in group_apps if _reached(a, "hr"))
+        offer = sum(1 for a in group_apps if _reached(a, "negotiating"))
+        result.append({
+            "label":          key,
+            "total":          total,
+            "gespräch":       gespraech,
+            "offer":          offer,
+            "gespräch_rate":  round(gespraech / total, 4) if total else 0.0,
+            "offer_rate":     round(offer / total, 4) if total else 0.0,
+        })
+    return sorted(result, key=lambda x: -x["total"])
+
+
 @router.get("/summary")
 def analytics_summary(db: Session = Depends(get_db)):
-    apps = db.query(models.Application).all()
+    apps = db.query(models.Application).options(joinedload(models.Application.company_profile)).all()
 
     if not apps:
         empty_funnel = [
@@ -51,6 +132,11 @@ def analytics_summary(db: Session = Depends(get_db)):
             },
             "rejection_by_status": [],
             "company_sync": {"total": 0, "pending": 0, "done": 0, "failed": 0},
+            "stage_conversions": [],
+            "bottleneck": None,
+            "by_company_type": [],
+            "by_employee_range": [],
+            "by_role_category": [],
         }
 
     total = len(apps)
@@ -167,10 +253,6 @@ def analytics_summary(db: Session = Depends(get_db)):
     ]
 
     # HH vs Direct
-    def _reached(app: models.Application, stage: str) -> bool:
-        eff = _effective_status(app)
-        return PIPELINE_RANK.get(eff, 0) >= PIPELINE_RANK.get(stage, 999)
-
     hh_apps = [a for a in apps if a.is_headhunter]
     direct_apps = [a for a in apps if not a.is_headhunter]
 
@@ -218,6 +300,19 @@ def analytics_summary(db: Session = Depends(get_db)):
         "failed": sync_failed,
     }
 
+    # Stufe-zu-Stufe-Konversion + größter Engpass
+    stage_conversions = _stage_conversions(funnel)
+    bottleneck = _find_bottleneck(stage_conversions)
+
+    # Erfolg nach Firmentyp / Firmengröße / Rollen-Kategorie
+    by_company_type = _success_by_group(
+        apps, lambda a: a.company_profile.company_type if a.company_profile else None
+    )
+    by_employee_range = _success_by_group(
+        apps, lambda a: a.company_profile.employee_range if a.company_profile else None
+    )
+    by_role_category = _success_by_group(apps, lambda a: _categorize_role(a.rolle))
+
     return {
         "kpis": {
             "total": total,
@@ -240,4 +335,9 @@ def analytics_summary(db: Session = Depends(get_db)):
         "hh_vs_direct": hh_vs_direct,
         "rejection_by_status": rejection_by_status,
         "company_sync": company_sync,
+        "stage_conversions": stage_conversions,
+        "bottleneck": bottleneck,
+        "by_company_type": by_company_type,
+        "by_employee_range": by_employee_range,
+        "by_role_category": by_role_category,
     }

@@ -13,12 +13,70 @@ const ROSE = '#f43f5e'
 const AMBER = '#f59e0b'
 const EMERALD = '#10b981'
 
+const COMPANY_TYPE_LABELS: Record<string, string> = {
+  startup:    'Startup',
+  konzern:    'Konzern',
+  kmu:        'KMU',
+  beratung:   'Beratung',
+  headhunter: 'Headhunter',
+  nonprofit:  'Non-Profit',
+  public:     'Öffentlich',
+  other:      'Sonstiges',
+}
+
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
       <p className="text-xs text-gray-500 font-medium mb-1">{label}</p>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    </div>
+  )
+}
+
+function SuccessByGroupChart({
+  title, subtitle, groups, labelFor, minTotal = 2,
+}: {
+  title: string
+  subtitle: string
+  groups: Array<{ label: string; total: number; gespräch_rate: number; offer_rate: number }>
+  labelFor?: (raw: string) => string
+  minTotal?: number
+}) {
+  const filtered = groups.filter(g => g.total >= minTotal)
+  if (filtered.length === 0) return null
+
+  const chartData = filtered.map(g => ({
+    name: labelFor ? labelFor(g.label) : g.label,
+    n: g.total,
+    'Gespräch-Rate': g.gespräch_rate,
+    'Angebot-Rate': g.offer_rate,
+  }))
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <h2 className="text-sm font-semibold text-gray-700 mb-1">{title}</h2>
+      <p className="text-xs text-gray-400 mb-4">{subtitle}</p>
+      <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 40)}>
+        <BarChart data={chartData} layout="vertical" margin={{ left: 140, right: 40 }}>
+          <XAxis type="number" hide domain={[0, 1]} />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={130}
+            tick={{ fontSize: 11 }}
+            tickFormatter={(name: string) => {
+              const row = chartData.find(d => d.name === name)
+              return row ? `${name} (n=${row.n})` : name
+            }}
+          />
+          <Tooltip formatter={(value: number) => pct(value)} />
+          <Legend />
+          <Bar dataKey="Gespräch-Rate" fill={VIOLET} radius={[0, 4, 4, 0]} />
+          <Bar dataKey="Angebot-Rate" fill={EMERALD} radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+      <p className="text-[11px] text-gray-400 mt-2">Gruppen mit weniger als {minTotal} Bewerbungen sind ausgeblendet (zu wenig Datenbasis).</p>
     </div>
   )
 }
@@ -76,7 +134,10 @@ export function AnalyticsView() {
 
   if (!data) return null
 
-  const { kpis, funnel, by_month, by_source, hh_vs_direct, rejection_by_status } = data
+  const {
+    kpis, funnel, by_month, by_source, hh_vs_direct, rejection_by_status,
+    stage_conversions, bottleneck, by_company_type, by_employee_range, by_role_category,
+  } = data
 
   // HH vs Direct chart data
   const hhDirectData = [
@@ -137,6 +198,45 @@ export function AnalyticsView() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Bottleneck-Hinweis */}
+      {bottleneck && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-2xl leading-none">🎯</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-900">
+              Größter Engpass: {bottleneck.from_label} → {bottleneck.to_label}
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Nur {pct(bottleneck.rate)} kommen weiter — {bottleneck.drop_off} Bewerbungen bleiben in dieser Phase hängen. Das ist der größte absolute Verlust in der Pipeline.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Stufe-zu-Stufe-Konversion */}
+      {stage_conversions.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Konversion je Übergang</h2>
+          <p className="text-xs text-gray-400 mb-4">Anteil, der von einer Stufe zur nächsten kommt (nicht kumulativ) — zeigt, wo genau die Pipeline stockt.</p>
+          <ResponsiveContainer width="100%" height={Math.max(160, stage_conversions.length * 40)}>
+            <BarChart
+              data={stage_conversions.map(s => ({ ...s, label: `${s.from_label} → ${s.to_label}` }))}
+              layout="vertical"
+              margin={{ left: 170, right: 60 }}
+            >
+              <XAxis type="number" hide domain={[0, 1]} />
+              <YAxis type="category" dataKey="label" width={160} tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(value: number, _name: string, props: { payload?: AnalyticsSummary['stage_conversions'][number] }) =>
+                  [`${pct(value)} (${props.payload?.drop_off ?? 0} verloren)`, 'Konversion']
+                }
+              />
+              <Bar dataKey="rate" fill={AMBER} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Status Donut + Quelle Bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -228,6 +328,25 @@ export function AnalyticsView() {
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* Erfolg nach Firmentyp / Firmengröße / Rollen-Kategorie */}
+      <SuccessByGroupChart
+        title="Erfolg nach Firmentyp"
+        subtitle="Gespräch-/Angebotsquote je Firmenart (Startup/Konzern/KMU/…)"
+        groups={by_company_type}
+        labelFor={raw => COMPANY_TYPE_LABELS[raw] ?? raw}
+      />
+      <SuccessByGroupChart
+        title="Erfolg nach Firmengröße"
+        subtitle="Gespräch-/Angebotsquote je Mitarbeiterzahl-Bereich"
+        groups={by_employee_range}
+      />
+      <SuccessByGroupChart
+        title="Erfolg nach Rollen-Kategorie"
+        subtitle='Grobe Einordnung aus dem Stellentitel (Keyword-Heuristik, kein strukturiertes Feld) — "Führung": Lead/Head/Director/Manager/Leitung; "Senior (Fachexperte)": Senior/Principal/Architekt; sonst "Sonstige"'
+        groups={by_role_category}
+        minTotal={1}
+      />
 
       {/* Additional KPIs row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
