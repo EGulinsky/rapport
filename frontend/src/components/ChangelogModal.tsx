@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.17.2',
+    date: '2026-07-01',
+    changes: [
+      'CI: Testergebnisse sind jetzt direkt in der GitHub-Actions-Run-Zusammenfassung sichtbar (Pass/Fail-Zahlen + Namen fehlgeschlagener Tests), ohne die Logs aufklappen zu müssen — für Backend (pytest) und Frontend (vitest), beide über JUnit-XML.',
+    ],
+  },
+  {
     version: '3.17.1',
     date: '2026-07-01',
     changes: [

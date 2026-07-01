@@ -39,7 +39,11 @@ jobs:
         continue-on-error: true  # informational only for now
 
       - name: Tests (unit + component + api)
-        run: pytest -m "unit or component or api"
+        run: pytest -m "unit or component or api" --junitxml=test-results.xml
+
+      - name: Test-Zusammenfassung
+        if: always()
+        run: python3 ../.github/scripts/junit_summary.py test-results.xml "Backend" >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     name: Frontend (Node/TypeScript)
@@ -65,7 +69,11 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Tests (unit + component)
-        run: npm run test
+        run: npm run test -- --reporter=default --reporter=junit --outputFile=test-results.xml
+
+      - name: Test-Zusammenfassung
+        if: always()
+        run: python3 ../.github/scripts/junit_summary.py test-results.xml "Frontend" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
         run: npm run build

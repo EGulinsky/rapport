@@ -36,6 +36,7 @@ backend/data/
 .pytest_cache/
 htmlcov/
 .coverage
+test-results.xml
 
 # Playwright base image build tracking (runner-local, not for versioning)
 .playwright-base-hash
