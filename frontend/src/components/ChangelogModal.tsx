@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.18.1',
+    date: '2026-07-01',
+    changes: [
+      'Firmen-Sync (endgültig): "Sync" fand bei jedem Klick immer wieder dieselbe Handvoll kleiner/obskurer Firmen ohne Web-Auftreten, weil "fehlende Beschreibung" weiterhin unbegrenzt als Retry-Grund galt (derselbe Fehlertyp wie beim Logo-Fix in v3.17.3, nur an anderer Stelle wieder eingebaut). Ein "done"-Profil wird jetzt nie mehr automatisch auf "pending" zurückgesetzt — weder wegen fehlendem Logo noch fehlender Beschreibung. "Sync" verarbeitet nur noch wirklich neue Firmen, "Re-Sync" bleibt der bewusste Weg für einen erneuten Versuch.',
+    ],
+  },
+  {
     version: '3.18.0',
     date: '2026-07-01',
     changes: [

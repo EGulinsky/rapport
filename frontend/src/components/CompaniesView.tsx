@@ -388,7 +388,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
                 <div className="font-medium">Sync{selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}</div>
-                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? 'Nur ausgewählte Firmen' : 'Ausstehende + leere Felder'}</div>
+                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? 'Nur ausgewählte Firmen' : 'Nur neue, noch nie synchronisierte Firmen'}</div>
               </button>
               <button
                 onClick={() => startSync(true)}
