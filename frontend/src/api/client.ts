@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
 
 const BASE = '/api'
 
@@ -262,8 +262,8 @@ export const api = {
   },
 
   cleanup: {
-    preview: () => request<CleanupPreview>('/cleanup/preview'),
-    run: () => request<CleanupResult>('/cleanup/run', { method: 'POST' }),
+    preview: (scope?: CleanupScope) => request<CleanupPreview>(`/cleanup/preview${scope ? `?scope=${scope}` : ''}`),
+    run: (scope?: CleanupScope) => request<CleanupResult>(`/cleanup/run${scope ? `?scope=${scope}` : ''}`, { method: 'POST' }),
     progress: () => request<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>('/cleanup/progress'),
   },
 

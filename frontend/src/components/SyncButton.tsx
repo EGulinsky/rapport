@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { RefreshCw, ChevronDown, CheckCircle, AlertCircle, X, ArrowRight, Linkedin } from 'lucide-react'
+import { RefreshCw, ChevronDown, CheckCircle, AlertCircle, X, ArrowRight } from 'lucide-react'
 import { api } from '../api/client'
 import type { LinkedInSyncStatus } from '../types'
 import clsx from 'clsx'
@@ -7,7 +7,6 @@ import clsx from 'clsx'
 interface Props {
   onSynced: () => void
   onReviewOpen?: () => void
-  onLinkedInConfig?: () => void
 }
 
 interface SourceResult {
@@ -45,7 +44,7 @@ const SOURCE_CONFIGS: { key: string; label: string }[] = [
   { key: 'local_files',        label: 'Dokumente' },
 ]
 
-export function SyncButton({ onSynced, onReviewOpen, onLinkedInConfig }: Props) {
+export function SyncButton({ onSynced, onReviewOpen }: Props) {
   const [syncing, setSyncing] = useState(false)
   const [open, setOpen] = useState(false)
   const [summary, setSummary] = useState<SyncSummary | null>(null)
@@ -302,21 +301,6 @@ export function SyncButton({ onSynced, onReviewOpen, onLinkedInConfig }: Props) 
                 <span className="block text-xs text-gray-400">Reset + neu einlesen</span>
               </span>
             </button>
-            {onLinkedInConfig && (
-              <>
-                <div className="my-1 border-t border-gray-100" />
-                <button
-                  onClick={() => { setOpen(false); onLinkedInConfig() }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <Linkedin className="h-3.5 w-3.5 text-[#0077B5]" />
-                  <span>
-                    LinkedIn einrichten
-                    <span className="block text-xs text-gray-400">Zugangsdaten & Session</span>
-                  </span>
-                </button>
-              </>
-            )}
           </div>
         )}
       </div>

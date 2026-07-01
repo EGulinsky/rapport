@@ -304,6 +304,16 @@ export interface DupContactEntry {
   apps_count?: number
 }
 
+export interface DupCompanyEntry {
+  id: number
+  name: string
+  website?: string
+  apps: number
+  contacts: number
+  apps_count?: number
+  contacts_count?: number
+}
+
 export interface DupEventEntry {
   id: number
   application_id: number
@@ -331,19 +341,34 @@ export interface EventGroup {
   remove: DupEventEntry[]
 }
 
+export interface CompanyGroup {
+  keep: DupCompanyEntry
+  remove: DupCompanyEntry[]
+  apps_merged: number
+  contacts_merged: number
+}
+
+export type CleanupScope = 'applications' | 'contacts' | 'companies' | 'events'
+
 export interface CleanupPreview {
   applications: AppGroup[]
   contacts: ContactGroup[]
+  companies: CompanyGroup[]
   events: EventGroup[]
+  cross_app_events: EventGroup[]
 }
 
 export interface CleanupResult {
   deleted_applications: number
-  deleted_contacts: number
+  queued_contacts: number
+  deleted_companies: number
   deleted_events: number
+  queued_cross_app_events: number
   merged_app_groups: number
-  merged_contact_groups: number
+  contact_groups_queued: number
+  merged_company_groups: number
   merged_event_groups: number
+  cross_app_event_groups: number
 }
 
 export interface SyncSettings {

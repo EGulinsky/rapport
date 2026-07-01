@@ -107,6 +107,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
   const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const syncCancelledRef = useRef(false)
+  const syncScopedIdsRef = useRef<number[] | undefined>(undefined)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -135,13 +136,17 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         const s = await api.companySync.status()
         setSyncLive(s)
         if (!s.running) {
-          if (s.pending > 0 && !syncCancelledRef.current) {
+          // Auto-continue only for unscoped runs — s.pending is a global count,
+          // so a scoped (selection-only) run must not pick up unrelated companies.
+          const scoped = syncScopedIdsRef.current
+          if (!scoped && s.pending > 0 && !syncCancelledRef.current) {
             await api.companySync.run()
           } else {
             stopPolling()
             setSyncing(false)
             setSyncMsg(syncCancelledRef.current ? 'Abgebrochen.' : null)
             syncCancelledRef.current = false
+            syncScopedIdsRef.current = undefined
             load()
           }
         }
@@ -171,6 +176,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     setSyncMsg(null)
     setSyncLive(null)
     const scopedIds = selectedIds.size > 0 ? [...selectedIds] : undefined
+    syncScopedIdsRef.current = scopedIds
     try {
       await api.companySync.resetLock()
       const r = await api.companySync.run(force, scopedIds)

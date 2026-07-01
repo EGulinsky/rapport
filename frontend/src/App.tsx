@@ -7,7 +7,6 @@ import { KanbanBoard } from './components/KanbanBoard'
 import { ApplicationModal } from './components/ApplicationModal'
 import { StatsBar } from './components/StatsBar'
 import { SyncButton } from './components/SyncButton'
-import { LinkedInSyncButton } from './components/LinkedInSyncButton'
 import { ImportExportMenu } from './components/ImportExportMenu'
 import { ContactsView } from './components/ContactsView'
 import { CompaniesView } from './components/CompaniesView'
@@ -24,7 +23,7 @@ import { StartupWarningBanner } from './components/StartupWarningBanner'
 import { BUILD_NUMBER } from './version'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
-  type Application, type Stats, type MainStatus, type CompanyProfile,
+  type Application, type Stats, type MainStatus, type CompanyProfile, type CleanupScope,
 } from './types'
 import { Calendar } from 'lucide-react'
 import clsx from 'clsx'
@@ -32,6 +31,13 @@ import { LogoProvider } from './context/LogoContext'
 
 type ViewMode = 'table' | 'kanban'
 type MainView = 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
+
+const CLEANUP_SCOPE_BY_VIEW: Partial<Record<MainView, { scope: CleanupScope; label: string }>> = {
+  applications: { scope: 'applications', label: 'Bewerbungen' },
+  contacts:     { scope: 'contacts',     label: 'Kontakte' },
+  companies:    { scope: 'companies',    label: 'Firmen' },
+  calendar:     { scope: 'events',       label: 'Kalender' },
+}
 
 function BackendGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false)
@@ -93,7 +99,6 @@ export default function App() {
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
   const [appsCompanyFilter, setAppsCompanyFilter] = useState<CompanyFilter | null>(null)
   const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
-  const [showLinkedInConfig, setShowLinkedInConfig] = useState(false)
 
   const prevAppsRef = useRef<Map<number, Application>>(new Map())
   const [updatedAppIds, setUpdatedAppIds] = useState<Set<number>>(new Set())
@@ -293,7 +298,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} onLinkedInConfig={() => setShowLinkedInConfig(true)} />
+              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} />
               <ImportExportMenu onImported={load} />
               <button
                 onClick={async () => {
@@ -339,11 +344,11 @@ export default function App() {
               </button>
               <button
                 onClick={() => setShowCleanup(true)}
-                title="Duplikate in Bewerbungen, Kontakten und Timeline bereinigen"
+                title={CLEANUP_SCOPE_BY_VIEW[mainView] ? `Duplikate in ${CLEANUP_SCOPE_BY_VIEW[mainView]!.label} bereinigen` : 'Duplikate bereinigen'}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                Bereinigen
+                Bereinigen{CLEANUP_SCOPE_BY_VIEW[mainView] ? ` (${CLEANUP_SCOPE_BY_VIEW[mainView]!.label})` : ''}
               </button>
               <div className="relative" ref={newMenuRef}>
                 <button
@@ -585,13 +590,14 @@ export default function App() {
         />
       )}
 
-      <LinkedInSyncButton onSynced={load} open={showLinkedInConfig} onClose={() => setShowLinkedInConfig(false)} />
       {showAiSettings && <SettingsModal onClose={() => setShowAiSettings(false)} />}
       {showAuditLog && <AuditLogModal onClose={() => setShowAuditLog(false)} />}
       {showCleanup && (
         <CleanupModal
           onClose={() => setShowCleanup(false)}
-          onDone={() => { load(); setShowCleanup(false) }}
+          onDone={() => { load(); setCompanyReloadKey(k => k + 1); setShowCleanup(false) }}
+          scope={CLEANUP_SCOPE_BY_VIEW[mainView]?.scope}
+          scopeLabel={CLEANUP_SCOPE_BY_VIEW[mainView]?.label}
         />
       )}
       {showReview && (
