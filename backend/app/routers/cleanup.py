@@ -78,8 +78,15 @@ def _contact_score(c: models.Contact) -> int:
     return len(c.applications) * 3 + filled
 
 
+_GENERIC_EVENT_TYPES = {"status", "notiz"}
+
+
 def _event_score(e: models.Event) -> int:
-    return (1 if e.notiz else 0) * 2 + (1 if e.autor else 0)
+    # Bei Cross-typ-Dubletten (siehe _find_event_groups) einen aussagekräftigen
+    # typ wie "gespräch"/"termin"/"anruf" gegenüber generischen Klassifikations-
+    # Artefakten wie "status"/"notiz" bevorzugen.
+    specific_typ = 0 if (e.typ or "").strip().lower() in _GENERIC_EVENT_TYPES else 1
+    return specific_typ * 4 + (1 if e.notiz else 0) * 2 + (1 if e.autor else 0)
 
 
 def _company_score(c: models.CompanyProfile) -> int:
@@ -175,13 +182,25 @@ def _find_company_groups(db: Session) -> list[dict]:
 
 
 def _find_event_groups(db: Session) -> list[dict]:
-    """Find within-application event duplicates (same typ+datum+titel)."""
+    """Find within-application event duplicates (same source+datum+titel).
+
+    Synced events (source gesetzt) werden bewusst OHNE typ in den Gruppierungs-
+    Key aufgenommen: dieselbe Kalender-/Mail-/Anruf-Quelle liefert bei mehreren
+    Sync-/Klassifikations-Durchläufen für exakt dasselbe reale Ereignis oft
+    unterschiedliche typ-Werte (z.B. "status", "notiz", "gespräch" für denselben
+    gcal-Termin — teils sogar mit identischem external_id belegt). Ein Match nur
+    auf typ+datum+titel übersah diese Duplikate komplett, weil sie nie exakt
+    denselben typ hatten. Für manuell angelegte Einträge (source=None) bleibt
+    typ Teil des Keys — dort ist es ein bewusst vom User gesetztes Merkmal und
+    keine Klassifikations-Variante desselben Sync-Items.
+    """
     events = db.query(models.Event).all()
     buckets: dict[tuple, list[models.Event]] = {}
     for e in events:
         key = (
             e.application_id,
-            (e.typ or "").strip().lower(),
+            (e.typ or "").strip().lower() if not e.source else "",
+            (e.source or "").strip().lower(),
             str(e.datum) if e.datum else "",
             (e.titel or "").strip().lower(),
         )

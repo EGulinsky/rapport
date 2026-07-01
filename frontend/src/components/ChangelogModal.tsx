@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.17.4',
+    date: '2026-07-01',
+    changes: [
+      'Bereinigen (Kalender/Timeline): fand echte Duplikate nicht, wenn derselbe synchronisierte Termin/Anruf/Mail bei mehreren Sync-Durchläufen mit unterschiedlichem Typ gespeichert wurde (z.B. "status" und "gespräch" für denselben Kalendertermin). 33 solcher Duplikate live gefunden, die vorher komplett übersehen wurden. Aussagekräftiger Typ (gespräch/termin/anruf) wird beim Zusammenführen jetzt bevorzugt behalten.',
+    ],
+  },
+  {
     version: '3.17.3',
     date: '2026-07-01',
     changes: [
