@@ -1,0 +1,276 @@
+# JobTracker – Testkonzept (Entwurf zur Diskussion)
+
+> Status: **Diskussionsvorlage**, noch nicht umgesetzt. Ziel dieses Dokuments ist eine gemeinsame Entscheidungsgrundlage — nicht der finale Implementierungsplan. Offene Fragen sind am Ende markiert.
+
+## 0. Ausgangslage
+
+Aktuell existiert **keine** automatisierte Testabdeckung. Die CI-Pipeline (`ci.yml`) prüft nur:
+- Backend: `ruff` (Lint) + `pyright` (informativ, `continue-on-error`)
+- Frontend: `tsc --noEmit` + `vite build`
+- Docker-Buildbarkeit
+
+Es gibt einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping), das wir formalisieren sollten.
+
+Das bedeutet: Jede Regression wird aktuell nur durch manuelles Testen nach dem Deploy gefunden (siehe Session-Historie — mehrere Bugs wie der Firmen-Sync-Scoping-Fehler wurden erst durch Live-Nutzung entdeckt). Das Testkonzept soll das systematisch abfangen.
+
+---
+
+## 1. Ziele
+
+1. **Regressionen verhindern**, bevor sie deployed werden (aktuell: CI grün ≠ Feature funktioniert)
+2. **Schnelles Feedback** für den überwiegenden Teil der Änderungen (Sekunden, nicht Minuten)
+3. **Vertrauen in riskante Bereiche** — Sync-Logik, Statusübergänge, Dublettenerkennung/Merge, Kryptographie — wo stille Datenfehler teuer sind
+4. **Keine Abhängigkeit von echten externen Diensten** im Regelbetrieb (kein echtes Gmail-Konto, kein echter LinkedIn-Login in CI)
+5. **Nicht bei jedem Push die volle Suite** — abgestufte Ausführung nach Risiko/Kosten
+
+---
+
+## 2. Testpyramide / Stufenmodell
+
+```mermaid
+flowchart TB
+    L0["L0 · Unit<br/>reine Funktionen, keine DB/Netzwerk<br/>~Millisekunden, sehr viele"]
+    L1["L1 · Component/Service<br/>DB (temp. SQLite), keine Fremdsysteme<br/>~10–100ms, viele"]
+    L2["L2 · API/Contract<br/>FastAPI TestClient gegen echte Router<br/>~100ms–1s, moderat viele"]
+    L3["L3 · Integration<br/>Volle Sync-Flows, Fremdsysteme gemockt an der Netzwerkgrenze<br/>~1–5s, wenige, gezielt"]
+    L4["L4 · E2E / UI<br/>Playwright gegen echten Docker-Stack, kritische User Journeys<br/>~5–30s, sehr wenige"]
+    L5["L5 · Smoke<br/>Minimaler Health-Check gegen live deployte Instanz<br/>~1–5s, eine Handvoll"]
+
+    L0 --> L1 --> L2 --> L3 --> L4 --> L5
+    style L0 fill:#dcfce7
+    style L1 fill:#dcfce7
+    style L2 fill:#fef9c3
+    style L3 fill:#fed7aa
+    style L4 fill:#fecaca
+    style L5 fill:#e0e7ff
+```
+
+Faustregel: **je höher die Stufe, desto teurer/langsamer, desto weniger Fälle** — aber jede Stufe deckt etwas ab, das die darunterliegende nicht kann.
+
+| Stufe | Beispiel in diesem Projekt | Wieviele? |
+|---|---|---|
+| **L0 Unit** | `norm_firma()`, `dedup_key()`, `_compute_naechster_schritt()`, Statuswechsel-Regeln, Fernet-Ver-/Entschlüsselung | 100+ |
+| **L1 Component** | `_find_company_groups()` gegen echte SQLite-Testdatenbank mit synthetischen Firmenprofilen; `merge_companies()`; Excel-Import-Mapping | 50–100 |
+| **L2 API/Contract** | `POST /api/applications/` → Response-Schema stimmt, Event wird angelegt; `PATCH` löst korrekt `abgesagt`-Flag aus; Fehlerfälle (404, 422) | 80–150 |
+| **L3 Integration** | Targeted-Sync-Lauf mit gemocktem Gmail/GCal/iCloud → korrekte Events + Kontakte + PendingMatches; LinkedIn-Import mit HTML-Fixture; KI-Bewertung mit gemocktem LLM | 20–40 |
+| **L4 E2E** | "Bewerbung anlegen → Status durchklicken → Absage → Reasoning sichtbar"; "LinkedIn-Link importieren → Formular vorausgefüllt → speichern" | 5–10 kritische Journeys |
+| **L5 Smoke** | `GET /health` antwortet, `GET /api/applications/` liefert 200, Frontend lädt, DB erreichbar | 5–8 Checks |
+
+---
+
+## 3. Fallkategorien (Positiv / Negativ / Corner / Fehleingaben)
+
+Für **jede getestete Funktion/jeden Endpoint** wird durchdekliniert, soweit relevant:
+
+| Kategorie | Bedeutung | Beispiel |
+|---|---|---|
+| **Positiv** | Erwarteter Normalfall | Bewerbung mit gültigen Pflichtfeldern anlegen |
+| **Negativ** | Erwarteter Fehlerfall, korrekt abgelehnt | Bewerbung ohne `firma` → 422 |
+| **Corner Case** | Grenzwert, seltene aber gültige Kombination | Firma mit leerem `website`-Feld beim Dedup-Check; Bewerbung ohne jegliche Events; Statuswechsel von `signed` direkt zu `rejected` |
+| **Fehleingabe** | Ungültige/böswillige Eingabe, muss robust behandelt werden | SQL-artiger String in `firma`, Riesentext in `kommentar`, negative IDs, doppeltes JSON-Encoding, XSS-Payload in Freitextfeldern |
+| **Fremdsystem-Fehler** | Externe Abhängigkeit liefert Unerwartetes | Gmail-API 429/500, LinkedIn zeigt geänderte Seitenstruktur, KI-Provider liefert kaputtes JSON, iCloud-2FA-Timeout |
+
+Dies wird nicht als separate Teststufe geführt, sondern als **Pflicht-Checkliste pro Testfall-Gruppe** — z. B. bekommt jeder API-Endpoint-Test mindestens einen Fall aus jeder zutreffenden Kategorie, keine reine Happy-Path-Sammlung.
+
+**Besonders scharf zu testen** (aus der Session-Historie bekannte Fehlerquellen):
+- Race Conditions bei Scoped-Sync (Auto-Continue-Poller-Bug)
+- Leere/`null`-Firmenname bei KI-Extraktion (Headhunter-Anonymisierung)
+- Gehashte/wechselnde externe HTML-Struktur (LinkedIn)
+- Rate-Limit-Verhalten der KI-Provider
+- Gleichzeitige Statusänderung durch Sync + manuellen User-Edit
+
+---
+
+## 4. Synthetische Testdaten
+
+**Prinzip:** Keine echten Namen/E-Mails/Firmen aus der Produktiv-DB in Tests. Realistisch, aber generiert und deterministisch.
+
+- **Backend:** `factory_boy` oder `polyfactory` (Pydantic-nativ) für Model-Factories — `ApplicationFactory`, `ContactFactory`, `CompanyProfileFactory`, `EventFactory` mit sinnvollen Defaults und gezielt überschreibbaren Feldern für Edge Cases
+- **Deterministischer Zufall:** fester Seed pro Testlauf (`Faker.seed(1234)`), damit Fehlschläge reproduzierbar sind
+- **Zeitabhängige Logik einfrieren:** `freezegun`/`time-machine` für alles, was von `date.today()` abhängt (`naechster_schritt`, Ghosting-Erkennung, KI-Prompt-Datum) — sonst werden Tests an bestimmten Wochentagen/Monatsenden flaky
+- **Realistische Volumina für Integrationstests:** z. B. 50 Bewerbungen mit überlappenden Firmennamen, um Dedup-Grenzfälle zu provozieren (ähnlich der echten "Siemens"-Duplikate, die die Cleanup-Funktion heute live gefunden hat)
+- **Kein produktives Datenbank-Backup als Testfixture** — auch nicht anonymisiert, um zu vermeiden, dass reale Bewerbungsdaten (Firmen, Kontakte) versehentlich in Test-Snapshots landen
+
+---
+
+## 5. Mocking-Strategie für externe Systeme
+
+Grundsatz: **Mocken an der Netzwerkgrenze, nicht an der Businesslogik-Grenze** — d. h. wir mocken HTTP-Calls/IMAP-Sockets, nicht `sync_google.py`-Funktionen selbst. Das stellt sicher, dass wir die echte Parsing-/Fehlerbehandlungs-Logik mittesten.
+
+| Externes System | Verbindungsart | Mock-Ansatz |
+|---|---|---|
+| **Gmail / Google Calendar** | REST via `google-api-python-client` | `respx` (httpx-Mocking, da litellm/httpx darunterliegen) oder dediziertes `google-api-python-client`-Transport-Mock mit aufgezeichneten JSON-Fixtures (echte, aber anonymisierte Response-Struktur) |
+| **iCloud Mail (IMAP)** | `imaplib`/IMAP-Protokoll | In-Memory-Fake-IMAP-Server (z. B. `imapclient`-Testserver oder eigener minimaler Mock, der `SEARCH`/`FETCH` bedient) — kein echtes Apple-Konto in CI |
+| **iCloud CalDAV/CardDAV** | XML über HTTP | Lokaler Fake-HTTP-Server mit statischen VCALENDAR/VCARD-Fixtures |
+| **LinkedIn (Playwright-Scraping)** | Browser-Automatisierung gegen echte Website | **Playwright `page.route()`-Interception** oder lokaler Static-File-Server, der aufgezeichnete HTML-Snapshots ausliefert (Formalisierung des bestehenden `test_linkedin_extraction.py`-Musters) — Chromium läuft weiterhin echt (testet reales DOM-Parsing), aber ohne Netzwerkzugriff auf linkedin.com |
+| **AI-Provider (litellm)** | HTTP zu Groq/Anthropic/OpenAI/Ollama | Fake-Provider-Implementierung, die deterministische JSON-Antworten zurückgibt (inkl. gezielt kaputter/leerer Antworten für Fehlerfall-Tests); für L3-Integrationstests zusätzlich `respx`-Mocks auf HTTP-Ebene, um auch das Rate-Limit-/Auth-Error-Handling von `litellm` selbst zu testen |
+| **macOS-Bridges (files_bridge, Calls)** | HTTP lokal | Einfacher Fake-HTTP-Server in Tests (z. B. via `pytest-httpserver`) |
+| **Logo.dev / Clearbit / DuckDuckGo / Wikipedia** (Firmenanreicherung) | HTTP | `respx`-Fixtures mit Beispiel-Antworten, inkl. "nichts gefunden"-Fall |
+
+**Wichtig:** Für jedes gemockte System muss mindestens **ein Fehlerfall-Fixture** existieren (Timeout, 401, 429, kaputtes JSON/XML, leere Antwort) — nicht nur der Erfolgsfall.
+
+---
+
+## 6. Tooling-Vorschlag
+
+| Bereich | Tool | Begründung |
+|---|---|---|
+| Backend Test-Runner | `pytest` + `pytest-asyncio` | Standard, gute FastAPI-Integration |
+| Backend Coverage | `pytest-cov` | Coverage-Reports, Threshold-Gates |
+| Backend Factories | `polyfactory` | Pydantic-/SQLAlchemy-nativ, weniger Boilerplate als factory_boy |
+| Backend HTTP-Mocking | `respx` | Mockt `httpx` (Basis von litellm-Calls und eigenen HTTP-Clients) sauber auf Transport-Ebene |
+| Backend Zeit-Mocking | `freezegun` oder `time-machine` | Deterministische `date.today()`-abhängige Tests |
+| Backend DB-Isolation | SQLite `tmp_path`-Fixture pro Testlauf (kein Testcontainer nötig, da Projekt selbst SQLite nutzt) | Konsistent mit Produktivsetup |
+| Backend API-Tests | `fastapi.testclient.TestClient` / `httpx.AsyncClient` | Kein echter Server nötig |
+| Frontend Unit/Component | `vitest` + `@testing-library/react` | Passt zu Vite-Setup, schnell |
+| Frontend API-Mocking | `msw` (Mock Service Worker) | Fängt `fetch`-Calls von `api/client.ts` ab, funktioniert in Tests und im Dev-Modus gleichermaßen |
+| E2E | `Playwright` (bereits Backend-Dependency, gleiche Sprache/Ökosystem nutzbar) | Steuert echten Browser gegen echten Docker-Compose-Stack |
+| Contract-Absicherung | OpenAPI-Schema-Snapshot-Test (FastAPI generiert automatisch) | Verhindert unbeabsichtigte Breaking Changes an der API, ohne jeden Endpoint einzeln pflegen zu müssen |
+
+---
+
+## 7. Testfall-Matrix pro Funktionsbereich (Auszug — vollständig zu erarbeiten)
+
+| Bereich | L0 Unit | L1 Component | L2 API | L3 Integration | L4 E2E |
+|---|---|---|---|---|---|
+| Statusübergänge | Regelfunktionen (`abgesagt`-Auto-Set, `sub_status`-Reset) | — | PATCH-Endpoint löst Event aus | — | Kanban Drag&Drop ändert Status sichtbar |
+| Dedup/Cleanup | `norm_firma`, `dedup_key` | `_find_*_groups()` gegen Test-DB mit bekannten Dubletten-Mustern | `/cleanup/preview` + `scope`-Filterung | Voller Cleanup-Run inkl. Merge-Reassignment | Bereinigen-Button zeigt richtige Kategorie |
+| Sync (Gmail/GCal/iCloud) | Parsing-Helper (Datum, Footer-Extraktion) | Kontakt-Upsert-Logik | Targeted-Sync-Endpoint-Response-Shape | Voller Sync-Lauf mit Fixture-Daten → korrekte Events/PendingMatches | — (zu langsam/fragil für E2E) |
+| LinkedIn-Import | URL-Validierung, Firmenname-Extraktions-Fallbacks | — | `/extract-from-linkedin-url` mit gemocktem Playwright-Response | Voller Import-Flow mit HTML-Fixture → korrektes Firma-Matching | Import-Button → Formular vorausgefüllt |
+| KI-Bewertung | Prompt-Building, Response-Parsing | `assess_application()` mit Fake-Provider | `/ai-assess`-Endpoint Fehlerfälle (429, kein Provider konfiguriert) | Batch-Lauf mit mehreren Fake-Responses inkl. Rate-Limit-Simulation | "Neu bewerten" aktualisiert UI sofort |
+| Verschlüsselung | `encrypt_api_key`/`decrypt_api_key` Round-Trip, falscher Key | — | Settings-Endpoint speichert nie Klartext in Response | — | — |
+| Merge/Firmen | — | `merge_companies()` Reassignment-Korrektheit | `/merge/companies` Fehlerfälle (nicht existente ID) | — | Merge-Dialog End-to-End |
+
+*(Diese Matrix ist als Startpunkt gedacht — wird in der Umsetzung pro Bereich vervollständigt.)*
+
+---
+
+## 8. Abstufung in der CI (Kernanforderung: nicht jedes Mal alles)
+
+```mermaid
+flowchart LR
+    subgraph PR["Jeder Push / PR (Pflicht-Gate zum Mergen)"]
+        direction TB
+        U["L0 Unit<br/>~5–15s"] --> C["L1 Component<br/>~10–30s"]
+        C --> A["L2 API/Contract<br/>~20–60s"]
+        FU["Frontend Unit/Component<br/>~10–20s"]
+    end
+
+    subgraph Main["Push auf main (vor Deploy)"]
+        direction TB
+        PR2["alles aus PR-Stufe"] --> I["L3 Integration<br/>(kritische Flows)<br/>~1–3min"]
+    end
+
+    subgraph Nightly["Nächtlich (Cron) / manuell"]
+        direction TB
+        FullI["L3 Integration<br/>volle Matrix<br/>~5–10min"] --> E2E["L4 E2E<br/>~5–10min"]
+        E2E --> LI["LinkedIn-Fixture-Regression<br/>(HTML-Snapshots neu abspielen)"]
+    end
+
+    subgraph Deploy["Nach Deploy (self-hosted Runner)"]
+        S["L5 Smoke<br/>gegen echte laufende Instanz<br/>~10–20s"]
+    end
+
+    PR -.->|"grün ⟹ mergebar"| Main
+    Main -.->|"grün ⟹ deploybar"| Deploy
+```
+
+**Umsetzung über pytest-Marker + separate CI-Jobs**, analog zum bestehenden `ci.yml`-Muster:
+
+```python
+@pytest.mark.unit          # L0 — läuft immer
+@pytest.mark.component     # L1 — läuft immer
+@pytest.mark.api           # L2 — läuft immer
+@pytest.mark.integration   # L3 — läuft bei main-Push + nightly
+@pytest.mark.slow          # zusätzliche Markierung für explizit langsame Fälle
+```
+
+```bash
+# PR-Gate:
+pytest -m "unit or component or api"
+
+# Main-Push (vor Deploy):
+pytest -m "unit or component or api or integration"
+
+# Nightly:
+pytest -m "integration" --full-matrix   # erweiterte Fixture-Sets
+pytest tests/e2e/ --headed=false
+```
+
+Frontend analog: `vitest run` (unit/component) immer, `playwright test` nur auf main-Push/nightly.
+
+**Zusätzlicher Job:** `smoke` läuft nach erfolgreichem Deploy (Erweiterung des bestehenden `deploy`-Jobs in `ci.yml`) gegen die echte, gerade deployte Instanz — fängt Docker-/Konfigurationsprobleme ab, die in keiner der vorherigen Stufen sichtbar wären (z. B. fehlende Env-Var, kaputtes Volume-Mount).
+
+---
+
+## 9. Vorgeschlagene Ordnerstruktur
+
+```
+backend/
+└── tests/
+    ├── conftest.py              # geteilte Fixtures: temp-DB, Faker-Seed, Fake-AI-Provider
+    ├── factories.py              # ApplicationFactory, ContactFactory, CompanyProfileFactory, …
+    ├── fixtures/
+    │   ├── linkedin_html/        # aufgezeichnete Job-/Profil-Seiten (formalisiert test_linkedin_extraction.py)
+    │   ├── gmail_responses/      # anonymisierte JSON-Fixtures
+    │   ├── icloud_caldav/        # VCALENDAR/VCARD-Beispiele
+    │   └── ai_responses/         # LLM-JSON-Antworten (gut + kaputt)
+    ├── unit/                     # L0 — 1:1 zu backend/app/-Modulen gespiegelt
+    │   ├── test_dedup.py
+    │   ├── test_status_transitions.py
+    │   └── test_crypto.py
+    ├── component/                 # L1 — mit Test-DB
+    │   ├── test_cleanup_company_groups.py
+    │   └── test_merge_companies.py
+    ├── api/                        # L2 — TestClient
+    │   ├── test_applications_api.py
+    │   └── test_cleanup_api.py
+    └── integration/                 # L3 — gemockte Fremdsysteme
+        ├── test_targeted_sync_flow.py
+        ├── test_linkedin_import_flow.py
+        └── test_ai_assessment_flow.py
+
+frontend/
+├── src/**/*.test.tsx           # Component-Tests neben der Komponente (vitest-Konvention)
+└── e2e/
+    ├── application-lifecycle.spec.ts
+    ├── linkedin-import.spec.ts
+    └── cleanup-flow.spec.ts
+```
+
+---
+
+## 10. Abdeckungsziele (Vorschlag, kein Dogma)
+
+- **L0/L1 (Backend-Logik):** 80 %+ Line-Coverage auf `app/dedup.py`, `app/audit.py`, Statuslogik in `models.py`/`applications.py` — bewusst hoch, weil hier stille Fehler am teuersten sind
+- **L2 (API):** Jeder Endpoint mindestens 1 Positiv- + 1 Negativfall — kein prozentuales Ziel, sondern Checklisten-Vollständigkeit
+- **L3 (Integration):** Kein Coverage-Ziel — Fokus auf die 5–8 kritischsten End-to-End-Datenflüsse (Sync, LinkedIn-Import, KI-Bewertung, Cleanup/Merge)
+- **L4 (E2E):** Bewusst klein gehalten (5–10 Journeys) — teuer in Wartung, nur für Dinge, die sich nicht anders sinnvoll testen lassen (Drag & Drop, Modal-Interaktionen)
+- **Kein globales Coverage-Gate** (z. B. "80 % Gesamt") — führt erfahrungsgemäß zu sinnlosen Tests für Coverage-Zahlen statt echter Fehlerabdeckung
+
+---
+
+## 11. Rollout-Plan (Phasen, da Greenfield)
+
+| Phase | Inhalt | Ergebnis |
+|---|---|---|
+| **1** | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
+| **2** | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert |
+| **3** | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features |
+| **4** | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | Sync-Flows automatisiert testbar |
+| **5** | E2E-Suite (5–10 Journeys) + Smoke-Job nach Deploy | Vollständige Pyramide steht |
+| **6** | Nightly-Job, Fixture-Pflege-Routine (LinkedIn-HTML altert) | Dauerbetrieb |
+
+Reihenfolge ist ein Vorschlag — Diskussionspunkt, ob z. B. Mocking-Infrastruktur früher kommen soll, wenn Sync-Bugs aktuell am schmerzhaftesten sind.
+
+---
+
+## 12. Offene Fragen für die Diskussion
+
+1. **Reihenfolge der Phasen** — mit den "scharfen" Unit-Tests anfangen oder direkt mit der Mocking-Infrastruktur für Sync (da dort historisch die meisten Bugs auftraten)?
+2. **Coverage-Ziele** — reicht der Checklisten-Ansatz (Abschnitt 10) oder soll es doch harte Prozent-Gates geben?
+3. **LinkedIn-Fixture-Pflege** — wer/was aktualisiert die HTML-Snapshots, wenn LinkedIn sein DOM ändert? Manueller Trigger oder automatisierter periodischer Soll-Ist-Abgleich (Warnung statt harter CI-Fehler)?
+4. **E2E-Umfang** — reichen 5–10 Journeys, oder gibt es weitere kritische Pfade, die unbedingt end-to-end abgesichert sein müssen?
+5. **Testdaten-Realismus** — reicht Faker-generierte Fiktion, oder braucht es zusätzlich ein anonymisiertes (aber realistisches) Fixture-Set aus echten Bewerbungsmustern für Dedup-/Merge-Tests?
+6. **CI-Laufzeitbudget** — welche Gesamtlaufzeit ist für das PR-Gate akzeptabel (Vorschlag: < 1 Minute), bevor sie als störend empfunden wird?
+7. **Wer pflegt was** — da Einzelentwickler-Projekt: reicht die vorgeschlagene Struktur, oder ist das für den Wartungsaufwand zu viel des Guten für die aktuelle Projektgröße?
