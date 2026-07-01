@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.17.3',
+    date: '2026-07-01',
+    changes: [
+      'Firmen-Sync: Firmen ohne Clearbit-Logo (v.a. kleine Personalberatungen — 101 von 158 betroffen) wurden bei jedem Sync-Klick erneut als "unvollständig" erkannt und neu synct, obwohl die Liste sie bereits als "Synced" zeigte. Logo-Lookup ist deterministisch — ein einmal fehlendes Logo bleibt fehlend. Nur eine fehlende Firmenbeschreibung löst jetzt noch einen Retry aus.',
+    ],
+  },
+  {
     version: '3.17.2',
     date: '2026-07-01',
     changes: [

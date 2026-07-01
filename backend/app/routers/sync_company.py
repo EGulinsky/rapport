@@ -231,17 +231,20 @@ def company_sync_status(db: Session = Depends(get_db)):
     }
 
 
-@router.post("/run")
-async def company_sync_run(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    force: bool = False,
-    company_ids: list[int] | None = Query(default=None),
-):
-    global _SYNC_RUNNING
-    if _SYNC_RUNNING:
-        return {"started": False, "count": 0, "message": "Sync already running"}
+def _collect_sync_candidates(
+    db: Session, force: bool, company_ids: list[int] | None
+) -> list[models.CompanyProfile]:
+    """Bestimmt, welche CompanyProfiles bei einem /run-Aufruf verarbeitet werden.
 
+    force=True: alle (im Scope) werden zurückgesetzt und neu synct.
+    force=False: alle "pending" + "done"-Profile, denen die Beschreibung fehlt.
+
+    Absichtlich NICHT auf fehlendes Logo geprüft — Logo-Lookups (Clearbit) sind
+    deterministisch; fehlt ein Logo einmal, fehlt es bei jedem weiteren Versuch
+    wieder (typischerweise kleine Firmen/Personalberatungen ohne Clearbit-Eintrag).
+    Würde man das als "unvollständig" werten, fände jeder normale Sync-Klick
+    dieselben Firmen erneut, obwohl das UI sie bereits als "Synced" anzeigt.
+    """
     def _scoped(q):
         return q.filter(models.CompanyProfile.id.in_(company_ids)) if company_ids else q
 
@@ -258,10 +261,7 @@ async def company_sync_run(
     if not force:
         incomplete = _scoped(db.query(models.CompanyProfile)).filter(
             models.CompanyProfile.sync_status == "done",
-            (
-                models.CompanyProfile.description.is_(None)
-                | models.CompanyProfile.logo_data.is_(None)
-            ),
+            models.CompanyProfile.description.is_(None),
         ).all()
         seen = {p.id for p in pending}
         for p in incomplete:
@@ -270,6 +270,22 @@ async def company_sync_run(
                 pending.append(p)
         if incomplete:
             db.commit()
+
+    return pending
+
+
+@router.post("/run")
+async def company_sync_run(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    force: bool = False,
+    company_ids: list[int] | None = Query(default=None),
+):
+    global _SYNC_RUNNING
+    if _SYNC_RUNNING:
+        return {"started": False, "count": 0, "message": "Sync already running"}
+
+    pending = _collect_sync_candidates(db, force, company_ids)
 
     count = len(pending)
     if count == 0:
