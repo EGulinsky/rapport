@@ -1,6 +1,6 @@
-# JobTracker – Testkonzept (Entwurf zur Diskussion)
+# JobTracker – Testkonzept
 
-> Status: **Diskussionsvorlage**, noch nicht umgesetzt. Ziel dieses Dokuments ist eine gemeinsame Entscheidungsgrundlage — nicht der finale Implementierungsplan. Offene Fragen sind am Ende markiert.
+> Status: **Abgestimmt, noch nicht umgesetzt.** Die in Abschnitt 12 aufgeführten Entscheidungen wurden getroffen und sind ab jetzt verbindliche Leitplanken für die Umsetzung.
 
 ## 0. Ausgangslage
 
@@ -143,6 +143,23 @@ Grundsatz: **Mocken an der Netzwerkgrenze, nicht an der Businesslogik-Grenze** �
 
 *(Diese Matrix ist als Startpunkt gedacht — wird in der Umsetzung pro Bereich vervollständigt.)*
 
+### 7.1 E2E-Journey-Liste (erweitert — Entscheidung aus Abschnitt 12)
+
+Bewusst über die ursprünglichen 5–10 hinaus erweitert, da auch Sync-Flüsse, Merge-Dialog und Backup/Restore end-to-end abgesichert werden sollen:
+
+1. Bewerbung anlegen → Status durchklicken → Absage → Reasoning sichtbar
+2. Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset
+3. LinkedIn-Link importieren → Formular vorausgefüllt → Firma gematcht/angelegt → speichern
+4. Bereinigen-Button zeigt kontextabhängige Kategorie, Vorschau → Ausführen → Liste aktualisiert sich
+5. Merge-Dialog (Bewerbungen/Kontakte/Firmen): Auswahl → Zusammenführen → Reassignment sichtbar
+6. Targeted-Sync für eine Bewerbung (mit gemockten Quellen): Start → Fortschritt → Events/Kontakte erscheinen in Timeline
+7. Manuelle Kandidatenzuordnung (Volltextsuche → Multiselect → Zuordnen)
+8. KI-Bewertung: "Neu bewerten" → Ampel + Reasoning erscheinen ohne manuellen Reload
+9. Batch-KI-Bewertung mit Live-Fortschrittsanzeige (inkl. simuliertem Rate-Limit-Fall)
+10. Firmen-Sync mit Markierung: nur ausgewählte Firmen werden synchronisiert (Regressionstest für den Auto-Continue-Poller-Bug)
+11. Backup konfigurieren → manueller Lauf → Restore aus Backup-Datei
+12. Excel-Import (Originalformat) → Bewerbungen korrekt gemappt → Excel-Export → Round-Trip-Vergleich
+
 ---
 
 ## 8. Abstufung in der CI (Kernanforderung: nicht jedes Mal alles)
@@ -265,12 +282,16 @@ Reihenfolge ist ein Vorschlag — Diskussionspunkt, ob z. B. Mocking-Infrastrukt
 
 ---
 
-## 12. Offene Fragen für die Diskussion
+## 12. Entscheidungen (abgestimmt am 2026-07-01)
 
-1. **Reihenfolge der Phasen** — mit den "scharfen" Unit-Tests anfangen oder direkt mit der Mocking-Infrastruktur für Sync (da dort historisch die meisten Bugs auftraten)?
-2. **Coverage-Ziele** — reicht der Checklisten-Ansatz (Abschnitt 10) oder soll es doch harte Prozent-Gates geben?
-3. **LinkedIn-Fixture-Pflege** — wer/was aktualisiert die HTML-Snapshots, wenn LinkedIn sein DOM ändert? Manueller Trigger oder automatisierter periodischer Soll-Ist-Abgleich (Warnung statt harter CI-Fehler)?
-4. **E2E-Umfang** — reichen 5–10 Journeys, oder gibt es weitere kritische Pfade, die unbedingt end-to-end abgesichert sein müssen?
-5. **Testdaten-Realismus** — reicht Faker-generierte Fiktion, oder braucht es zusätzlich ein anonymisiertes (aber realistisches) Fixture-Set aus echten Bewerbungsmustern für Dedup-/Merge-Tests?
-6. **CI-Laufzeitbudget** — welche Gesamtlaufzeit ist für das PR-Gate akzeptabel (Vorschlag: < 1 Minute), bevor sie als störend empfunden wird?
-7. **Wer pflegt was** — da Einzelentwickler-Projekt: reicht die vorgeschlagene Struktur, oder ist das für den Wartungsaufwand zu viel des Guten für die aktuelle Projektgröße?
+| # | Frage | Entscheidung |
+|---|---|---|
+| 1 | Reihenfolge der Phasen | **Scharfe Unit-Tests zuerst** (Dedup, Statuslogik, Krypto) — schnell wirksam, kaum Infra-Vorlauf. Mocking-Infrastruktur für Sync folgt in Phase 4 wie ursprünglich vorgeschlagen. |
+| 2 | Coverage-Ziele | **Checklisten-Ansatz** (siehe Abschnitt 10) — kein globales Prozent-Gate, Fokus auf echte Fehlerabdeckung statt Zahlenkosmetik. |
+| 3 | LinkedIn-Fixture-Pflege | **Manueller Trigger** — HTML-Snapshots werden bei Verdacht auf Scraper-Bruch neu aufgenommen, kein automatisierter Soll-Ist-Abgleich. |
+| 4 | E2E-Umfang | **Erweitert auf 12 Journeys** (statt 5–10) — Sync-Flüsse, Merge-Dialog, Backup/Restore und Excel-Roundtrip sind mit abzudecken. Siehe [Abschnitt 7.1](#71-e2e-journey-liste-erweitert--entscheidung-aus-abschnitt-12). |
+| 5 | Testdaten-Realismus | **Nur Faker-generiert** — kein anonymisierter Produktiv-Snapshot, kein Risiko dass echte Daten in Test-Fixtures landen. |
+| 6 | CI-Laufzeitbudget | **PR-Gate < 1 Minute** (L0+L1+L2) — wie ursprünglich vorgeschlagen. |
+| 7 | Umsetzungsumfang | **Volle Struktur** von L0 bis L5 — kein abgespecktes Grundgerüst, zahlt sich für den Wartungsaufwand mittelfristig aus. |
+
+Diese Entscheidungen sind ab jetzt bindend für die Umsetzung (siehe Rollout-Plan, Abschnitt 11).
