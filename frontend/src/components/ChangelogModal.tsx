@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.17.1',
+    date: '2026-07-01',
+    changes: [
+      'Fix: pytest schlug in echter CI fehl ("No module named app") — lokal mit `python -m pytest` getestet, was das Arbeitsverzeichnis automatisch zu sys.path hinzufügt, CI ruft aber bares `pytest` auf. `pythonpath = .` in pytest.ini ergänzt, gegen exakten CI-Aufruf im Container verifiziert.',
+    ],
+  },
+  {
     version: '3.17.0',
     date: '2026-07-01',
     changes: [
