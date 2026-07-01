@@ -236,14 +236,20 @@ def _collect_sync_candidates(
 ) -> list[models.CompanyProfile]:
     """Bestimmt, welche CompanyProfiles bei einem /run-Aufruf verarbeitet werden.
 
-    force=True: alle (im Scope) werden zurückgesetzt und neu synct.
-    force=False: alle "pending" + "done"-Profile, denen die Beschreibung fehlt.
+    force=True:  alle (im Scope) werden zurückgesetzt und neu synct — die
+                 explizite, absichtliche Art, es nochmal zu versuchen.
+    force=False: nur "pending"-Profile (neu angelegt, noch nie versucht).
 
-    Absichtlich NICHT auf fehlendes Logo geprüft — Logo-Lookups (Clearbit) sind
-    deterministisch; fehlt ein Logo einmal, fehlt es bei jedem weiteren Versuch
-    wieder (typischerweise kleine Firmen/Personalberatungen ohne Clearbit-Eintrag).
-    Würde man das als "unvollständig" werten, fände jeder normale Sync-Klick
-    dieselben Firmen erneut, obwohl das UI sie bereits als "Synced" anzeigt.
+    Ein "done"-Profil wird NIE automatisch wieder auf "pending" gesetzt, egal
+    ob Beschreibung oder Logo fehlen. Beides sind deterministische Lookups
+    (DuckDuckGo/Wikipedia-Suche bzw. Clearbit-Logo-Abruf) — wurde beim ersten
+    Versuch nichts gefunden (last_synced_at ist dann bereits gesetzt), liefert
+    eine identische Wiederholung praktisch garantiert wieder nichts. Frühere
+    Versionen haben genau das für "fehlende Beschreibung" trotzdem versucht
+    ("smarter" Retry) — Ergebnis: derselbe normale Sync-Klick fand dieselbe
+    Handvoll kleiner/obskurer Firmen (kein Web-Auftreten) immer wieder erneut,
+    obwohl sie im UI bereits als "Synced" markiert waren. Wer es trotzdem
+    nochmal versuchen will, nutzt bewusst "Re-Sync" (force=True).
     """
     def _scoped(q):
         return q.filter(models.CompanyProfile.id.in_(company_ids)) if company_ids else q
@@ -254,24 +260,9 @@ def _collect_sync_candidates(
         )
         db.commit()
 
-    pending = _scoped(db.query(models.CompanyProfile)).filter(
+    return _scoped(db.query(models.CompanyProfile)).filter(
         models.CompanyProfile.sync_status == "pending"
     ).all()
-
-    if not force:
-        incomplete = _scoped(db.query(models.CompanyProfile)).filter(
-            models.CompanyProfile.sync_status == "done",
-            models.CompanyProfile.description.is_(None),
-        ).all()
-        seen = {p.id for p in pending}
-        for p in incomplete:
-            if p.id not in seen:
-                p.sync_status = "pending"
-                pending.append(p)
-        if incomplete:
-            db.commit()
-
-    return pending
 
 
 @router.post("/run")
