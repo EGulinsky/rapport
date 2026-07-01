@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.19.0',
+    date: '2026-07-01',
+    changes: [
+      'Beim manuellen Suchen und Zuordnen von Sync-Treffern zu einer Bewerbung ("Manuell zuordnen") lassen sich jetzt mehrere Einträge per Checkbox markieren und in einem Schritt gemeinsam importieren, statt sie einzeln anklicken zu müssen. Konflikte einzelner Einträge (bereits mit einer anderen Bewerbung verknüpft) werden übersprungen und gemeldet, der Rest wird trotzdem importiert.',
+    ],
+  },
+  {
     version: '3.18.2',
     date: '2026-07-01',
     changes: [

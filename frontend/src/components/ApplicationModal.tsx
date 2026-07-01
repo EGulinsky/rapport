@@ -52,6 +52,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [manualCandidates, setManualCandidates] = useState<ManualCandidate[]>([])
   const [manualLoading, setManualLoading] = useState(false)
   const [manualConflict, setManualConflict] = useState<{ candidate: ManualCandidate; conflict_app_firma: string } | null>(null)
+  const [manualSelected, setManualSelected] = useState<Set<string>>(new Set())
+  const [manualBulkBusy, setManualBulkBusy] = useState(false)
+  const [manualBulkErrors, setManualBulkErrors] = useState<string[]>([])
   const [docBrowseOpen, setDocBrowseOpen] = useState(false)
   const [docBrowsePath, setDocBrowsePath] = useState('')
   const [docBrowseRoot, setDocBrowseRoot] = useState('')
@@ -288,11 +291,17 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     }
   }
 
+  function candidateKey(c: ManualCandidate): string {
+    return `${c.source}:${c.external_id ?? c.id}`
+  }
+
   async function openManual() {
     if (!appId) return
     setManualOpen(true)
     setSyncMenuOpen(false)
     setManualLoading(true)
+    setManualSelected(new Set())
+    setManualBulkErrors([])
     try {
       const results = await api.targeted.candidates(appId, '')
       setManualCandidates(results)
@@ -304,12 +313,24 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   async function searchManual() {
     if (!appId) return
     setManualLoading(true)
+    setManualSelected(new Set())
+    setManualBulkErrors([])
     try {
       const results = await api.targeted.candidates(appId, manualQuery)
       setManualCandidates(results)
     } finally {
       setManualLoading(false)
     }
+  }
+
+  function toggleManualSelected(candidate: ManualCandidate) {
+    const key = candidateKey(candidate)
+    setManualSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   async function assignCandidate(candidate: ManualCandidate, removeFromOther = false) {
@@ -329,6 +350,42 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     setManualConflict(null)
     setManualOpen(false)
     await refreshContacts()
+  }
+
+  async function assignSelectedCandidates() {
+    if (!appId || manualSelected.size === 0) return
+    setManualBulkBusy(true)
+    setManualBulkErrors([])
+    const toAssign = manualCandidates.filter(c => manualSelected.has(candidateKey(c)))
+    const errors: string[] = []
+    const assignedKeys = new Set<string>()
+    try {
+      for (const candidate of toAssign) {
+        try {
+          const res = await api.targeted.assign(appId, {
+            match_id: candidate.id,
+            external_id: candidate.external_id,
+            source: candidate.source,
+            datum: candidate.datum ?? undefined,
+            titel: candidate.titel ?? undefined,
+            remove_from_other: false,
+          })
+          if (res.conflict) {
+            errors.push(`"${candidate.titel || candidate.source}" ist bereits mit ${res.conflict_app_firma ?? 'einer anderen Bewerbung'} verknüpft — übersprungen.`)
+            continue
+          }
+          assignedKeys.add(candidateKey(candidate))
+        } catch (e: unknown) {
+          errors.push(`"${candidate.titel || candidate.source}": ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      setManualCandidates(prev => prev.filter(c => !assignedKeys.has(candidateKey(c))))
+      setManualSelected(new Set())
+      setManualBulkErrors(errors)
+      if (assignedKeys.size > 0) await refreshContacts()
+    } finally {
+      setManualBulkBusy(false)
+    }
   }
 
   async function openDocBrowse() {
@@ -1631,6 +1688,28 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <Search className="h-4 w-4" />
                 </button>
               </div>
+              {manualSelected.size > 0 && (
+                <div className="px-5 py-2 border-b border-gray-100 flex items-center justify-between bg-indigo-50/50">
+                  <span className="text-xs text-gray-600">{manualSelected.size} ausgewählt</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setManualSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">
+                      Auswahl aufheben
+                    </button>
+                    <button
+                      onClick={assignSelectedCandidates}
+                      disabled={manualBulkBusy}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {manualBulkBusy ? 'Importiere…' : `${manualSelected.size} importieren`}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {manualBulkErrors.length > 0 && (
+                <div className="px-5 py-2 border-b border-gray-100 bg-amber-50 text-xs text-amber-700 space-y-0.5">
+                  {manualBulkErrors.map((msg, i) => <p key={i}>{msg}</p>)}
+                </div>
+              )}
               <div className="overflow-y-auto flex-1 p-3 space-y-3">
                 {manualLoading && <p className="text-sm text-gray-400 text-center py-4">Lädt…</p>}
                 {!manualLoading && manualCandidates.length === 0 && (
@@ -1662,18 +1741,27 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         </summary>
                         <div className="space-y-1.5 pl-1">
                           {items.map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => assignCandidate(c)}
-                              className="w-full text-left rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 p-3 transition-colors"
+                            <div
+                              key={candidateKey(c)}
+                              className="w-full flex items-start gap-2 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 p-3 transition-colors"
                             >
-                              <div className="min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={manualSelected.has(candidateKey(c))}
+                                onChange={() => toggleManualSelected(c)}
+                                onClick={e => e.stopPropagation()}
+                                className="mt-0.5 flex-shrink-0"
+                              />
+                              <button
+                                onClick={() => assignCandidate(c)}
+                                className="flex-1 min-w-0 text-left"
+                              >
                                 <p className="text-sm font-medium text-gray-800 truncate">{c.titel || c.event_type || c.source}</p>
                                 {c.datum && <p className="text-xs text-gray-500">{new Date(c.datum).toLocaleDateString('de-DE')}</p>}
                                 {c.extract && <p className="text-xs text-gray-400 truncate mt-0.5">{c.extract}</p>}
                                 {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">Vorschlag: {c.suggested_app_firma}</p>}
-                              </div>
-                            </button>
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </details>
