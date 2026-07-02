@@ -1,5 +1,13 @@
 """
-Backup: creates timestamped SQLite snapshots on the host Mac via files_bridge.
+Backup: creates timestamped snapshots on the host Mac via files_bridge.
+
+Backups are a zip bundle of the SQLite DB *and* fernet.key — the key lives
+outside the DB (data/fernet.key) and is never itself stored in the DB, so a
+DB-only backup would restore application data but leave every encrypted
+field (AI API key, iCloud app password, Google client secret, Maps API key)
+permanently undecryptable on a fresh machine/volume. Bundling both keeps a
+backup fully self-contained. Older plain-.db backups (pre-bundle) remain
+listable and restorable for backward compatibility.
 
 GET  /api/backup/status    — config + list of existing backups
 POST /api/backup/settings  — save config
@@ -8,8 +16,10 @@ POST /api/backup/run       — trigger backup now
 from __future__ import annotations
 
 import base64
+import io
 import os
 import sqlite3
+import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +33,9 @@ router = APIRouter(prefix="/api/backup", tags=["backup"])
 
 FILES_BRIDGE_URL = os.getenv("FILES_BRIDGE_URL", "http://host.docker.internal:9998")
 DB_PATH = "/app/data/jobtracker.db"
+FERNET_KEY_PATH = "/app/data/fernet.key"
+DB_ENTRY_NAME = "jobtracker.db"
+KEY_ENTRY_NAME = "fernet.key"
 
 
 class BackupSettings(BaseModel):
@@ -74,12 +87,20 @@ async def do_backup() -> dict:
         disk.close()
         tmp.close()
         with open(tmp_path, "rb") as f:
-            data = f.read()
+            db_bytes = f.read()
         os.unlink(tmp_path)
 
-        data_b64 = base64.b64encode(data).decode()
+        # Bundle DB + fernet.key into one zip so a backup is self-contained —
+        # the key isn't stored in the DB, so a DB-only backup would leave
+        # encrypted fields undecryptable after a restore onto a fresh volume.
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(DB_ENTRY_NAME, db_bytes)
+            if os.path.exists(FERNET_KEY_PATH):
+                zf.write(FERNET_KEY_PATH, KEY_ENTRY_NAME)
+        data_b64 = base64.b64encode(zip_buf.getvalue()).decode()
         ts = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-        filename = f"jobtracker_backup_{ts}.db"
+        filename = f"jobtracker_backup_{ts}.zip"
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -183,15 +204,31 @@ async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
 
     data = base64.b64decode(resp.json()["data_b64"])
 
+    # New backups are a zip bundle (DB + fernet.key); older backups are a raw
+    # .db file (pre-bundle) — support restoring both for backward compatibility.
+    db_bytes = data
+    key_bytes: bytes | None = None
+    if body.filename.endswith(".zip"):
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            db_bytes = zf.read(DB_ENTRY_NAME)
+            if KEY_ENTRY_NAME in zf.namelist():
+                key_bytes = zf.read(KEY_ENTRY_NAME)
+
     tmp_path = "/tmp/_jobtracker_restore.db"
     with open(tmp_path, "wb") as f:
-        f.write(data)
+        f.write(db_bytes)
 
     # Copy backup into live DB via sqlite3 backup API
     src = sqlite3.connect(tmp_path)
     dst = sqlite3.connect(DB_PATH)
     src.backup(dst)
     src.close()
+
+    # Restore fernet.key alongside the DB — key and ciphertext must always
+    # travel together, otherwise encrypted fields become undecryptable.
+    if key_bytes is not None:
+        with open(FERNET_KEY_PATH, "wb") as f:
+            f.write(key_bytes)
     dst.close()
     os.unlink(tmp_path)
 

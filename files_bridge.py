@@ -12,9 +12,10 @@ Endpoints:
   GET  /file?path=/absolute/path/to/file
        Returns: {name, path, text, modified}
   GET  /backups?folder=/path/to/backups
-       Returns: [{name, path, modified, size}]  (only .db files)
+       Returns: [{name, path, modified, size}]  (.db and .zip files)
   POST /backup-write   body: {folder, filename, data_b64, keep_count}
-       Writes backup file; deletes oldest if count exceeds keep_count
+       Writes backup file (opaque bytes — caller decides .db vs .zip);
+       deletes oldest if count exceeds keep_count
 """
 from __future__ import annotations
 
@@ -30,6 +31,9 @@ from urllib.parse import parse_qs, urlparse
 PORT = 9998
 SUPPORTED_EXTS = {".pdf", ".docx", ".txt", ".md", ".rtf", ".odt"}
 MAX_TEXT_CHARS = 4000
+# .db = alte Backups (nur DB, vor dem Zip-Bundle-Wechsel), .zip = aktuelles Format
+# (DB + fernet.key gebündelt) — beide bleiben für Listing/Rotation/Restore sichtbar.
+BACKUP_EXTS = {".db", ".zip"}
 
 
 def extract_text(path: str) -> str:
@@ -71,9 +75,9 @@ class Handler(BaseHTTPRequestHandler):
                 data = base64.b64decode(data_b64)
                 (target_dir / filename).write_bytes(data)
 
-                # Cleanup: keep only the newest keep_count .db files
+                # Cleanup: keep only the newest keep_count backup files
                 backups = sorted(
-                    [f for f in target_dir.iterdir() if f.suffix == ".db" and f.is_file()],
+                    [f for f in target_dir.iterdir() if f.suffix in BACKUP_EXTS and f.is_file()],
                     key=lambda f: f.stat().st_mtime,
                 )
                 for old in backups[:-keep_count]:
@@ -232,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
             target_dir = pathlib.Path(folder)
             backups = []
             for f in sorted(target_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-                if f.is_file() and f.suffix == ".db":
+                if f.is_file() and f.suffix in BACKUP_EXTS:
                     st = f.stat()
                     backups.append({
                         "name": f.name,

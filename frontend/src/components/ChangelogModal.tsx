@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.24.0',
+    date: '2026-07-02',
+    changes: [
+      'Backup/Restore-Lücke geschlossen: der Verschlüsselungsschlüssel (fernet.key) für gespeicherte API-Keys/Passwörter lag außerhalb der Datenbank und wurde bisher nicht mitgesichert — nach einem Restore auf eine neue Maschine/ein frisches Volume wären verschlüsselte Felder (AI-Key, iCloud-Passwort, Google-Client-Secret, Maps-Key) dauerhaft nicht mehr entschlüsselbar gewesen. Backups sind jetzt ein Zip-Bundle aus Datenbank und Schlüssel; Restore stellt beide zusammen wieder her. Ältere reine .db-Backups bleiben weiterhin restorebar. Hinweis: der host-seitige files_bridge-Prozess muss nach diesem Update einmal manuell neu gestartet werden.',
+    ],
+  },
+  {
     version: '3.23.0',
     date: '2026-07-02',
     changes: [
