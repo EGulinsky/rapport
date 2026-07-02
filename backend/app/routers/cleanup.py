@@ -392,9 +392,15 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
                 dup = db.query(models.Application).get(rem["id"])
                 if not dup:
                     continue
-                for ev in list(dup.events):
-                    ev.application_id = keeper_id
                 keeper = db.query(models.Application).get(keeper_id)
+                # Reassign via the relationship attribute, not the raw FK column:
+                # Application.events has cascade="all, delete-orphan", so setting
+                # only ev.application_id leaves dup's in-memory events collection
+                # stale — the subsequent db.delete(dup) then still treats those
+                # events as belonging to dup and cascade-deletes them instead of
+                # keeping them on the keeper (live-reproduced bug, caught by tests).
+                for ev in list(dup.events):
+                    ev.application = keeper
                 keeper_contact_ids = {c.id for c in keeper.contacts}
                 for contact in list(dup.contacts):
                     if contact.id not in keeper_contact_ids:

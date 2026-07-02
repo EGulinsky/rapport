@@ -59,9 +59,14 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
             alias_li_job_id=loser.linkedin_job_id,
         ))
 
-        # Move events from loser to winner
+        # Move events from loser to winner via the relationship attribute, not the
+        # raw FK column: Application.events has cascade="all, delete-orphan", so
+        # setting only event.application_id leaves loser's in-memory events
+        # collection stale — the later db.delete(loser) then still treats these
+        # events as belonging to loser and cascade-deletes them instead of moving
+        # them to winner (live-reproduced bug, caught by tests).
         for event in list(loser.events):
-            event.application_id = winner.id
+            event.application = winner
         db.flush()
 
         # Move contacts (M2M, dedup)
@@ -115,15 +120,21 @@ def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
     winner_name = winner.name_display or winner.name_norm
 
     for loser in losers:
+        # Reassign via the relationship attribute (not the raw FK column): setting
+        # only company_profile_id leaves loser's in-memory relationship collections
+        # (applications/hh_applications/direct_contacts) stale, so the subsequent
+        # db.delete(loser) still treats these children as belonging to loser and
+        # nulls their FK back out on commit — silently undoing the reassignment
+        # (live-reproduced bug, caught by tests, never shipped as a live incident).
         for app in list(loser.applications):
-            app.company_profile_id = winner.id
+            app.company_profile = winner
             app.firma = winner_name
         for app in list(loser.hh_applications):
-            app.target_company_profile_id = winner.id
+            app.target_company_profile = winner
             if app.zielfirma_bei_hh:
                 app.zielfirma_bei_hh = winner_name
         for contact in list(loser.direct_contacts):
-            contact.company_profile_id = winner.id
+            contact.company_profile = winner
             contact.firma = winner_name
         db.flush()
 

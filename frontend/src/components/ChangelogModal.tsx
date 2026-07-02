@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.23.0',
+    date: '2026-07-02',
+    changes: [
+      'Fix (kritisch): Beim Zusammenführen von Bewerbungen ("Merge") sowie beim automatischen Bereinigen von Bewerbungs-Dubletten wurden Timeline-Einträge (Events) der entfernten Bewerbung nicht auf die verbleibende Bewerbung umgehängt, sondern durch eine ORM-Kaskade beim Löschen versehentlich mitgelöscht. Ursache: die Zuordnung erfolgte über das rohe Fremdschlüssel-Feld statt über die Beziehungs-API, wodurch der interne Objekt-Cache veraltet blieb. Beim Firmen-Merge trat dasselbe Problem bei Bewerbungen/Kontakten auf (Zuordnung ging beim Löschen der verlierenden Firma verloren). Beide Stellen sind jetzt korrekt — der Bug wurde durch neue Tests für Phase 3 des Testkonzepts gefunden, bevor er sich weiter auswirken konnte.',
+      'Testkonzept Phase 3 abgeschlossen: L1/L2-Tests für Merge (Bewerbungen/Kontakte/Firmen) sowie für die bisher ungetesteten Cleanup-Dublettenfinder (Bewerbungen, Kontakte) und die /cleanup-Endpoints inkl. scope-Filterung.',
+    ],
+  },
+  {
     version: '3.22.4',
     date: '2026-07-02',
     changes: [
