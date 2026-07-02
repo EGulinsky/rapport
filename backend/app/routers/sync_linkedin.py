@@ -870,6 +870,8 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
+            if job.get("ort") and not app.ort:
+                app.ort = job["ort"]
             return app, False, None, f"job_id:{li_job_id}→#{app.id}"
 
     # 2. Normalized-equality match: both company AND role must match after
@@ -895,6 +897,8 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
                 app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 app.rolle = clean_title
+            if job.get("ort") and not app.ort:
+                app.ort = job["ort"]
             return app, False, None, f"firma+rolle→#{app.id}"
 
     # 2.5 Check merge aliases: after a manual merge the loser's identifiers are stored here
@@ -942,6 +946,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
     new_app = models.Application(
         firma=job["company"],
         rolle=job["title"],
+        ort=job.get("ort") or None,
         datum_bewerbung=applied_date_obj,
         letztes_update=applied_date_obj,
         quelle="LinkedIn",

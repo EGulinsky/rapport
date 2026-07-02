@@ -172,6 +172,7 @@ class Application(Base):
     zielfirma_bei_hh    = Column(String, nullable=True)
     quelle              = Column(String, nullable=True)
     wurde_besetzt_von   = Column(String, nullable=True)
+    ort                 = Column(String, nullable=True)
 
     datum_bewerbung     = Column(Date, nullable=True)
     letztes_update      = Column(Date, nullable=True)

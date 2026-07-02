@@ -113,6 +113,7 @@ class ApplicationBase(BaseModel):
     zielfirma_bei_hh: Optional[str] = None
     quelle: Optional[str] = None
     wurde_besetzt_von: Optional[str] = None
+    ort: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
     kommentar: Optional[str] = None
@@ -139,6 +140,7 @@ class ApplicationUpdate(BaseModel):
     zielfirma_bei_hh: Optional[str] = None
     quelle: Optional[str] = None
     wurde_besetzt_von: Optional[str] = None
+    ort: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
     kommentar: Optional[str] = None

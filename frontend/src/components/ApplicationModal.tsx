@@ -3,6 +3,7 @@ import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone,
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
+import { LocationSearchInput } from './LocationSearchInput'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
@@ -1099,6 +1100,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
                 />
               ))}
+              <LocationSearchInput
+                value={draft.ort ?? ''}
+                onChange={v => setDraft(d => ({ ...d, ort: v }))}
+                placeholder="Ort"
+              />
               <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-500">
                 <span className="text-xs text-gray-400 mr-1">Bewerbungsdatum:</span>
                 {app?.datum_bewerbung ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE') : <span className="italic">über Timeline "Bewerbung" setzen</span>}
@@ -1107,6 +1113,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           ) : (
             <dl className="grid grid-cols-2 gap-3">
               {field('Quelle', app?.quelle, 'quelle')}
+              {field('Ort', app?.ort, 'ort')}
               {field('Datum Bewerbung', app?.datum_bewerbung)}
               {field('Letztes Update', app?.letztes_update)}
               {field('Zielfirma (HH)', app?.zielfirma_bei_hh, 'zielfirma_bei_hh')}

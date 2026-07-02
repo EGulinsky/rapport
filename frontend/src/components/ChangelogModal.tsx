@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.21.0',
+    date: '2026-07-02',
+    changes: [
+      'Neues Feld "Ort" bei Bewerbungen (optional, sichtbar im Übersicht-Tab). Manuelle Eingabe mit Autocomplete über eine kostenlose Karten-API (OpenStreetMap/Nominatim, kein API-Key nötig). Wird beim LinkedIn-Sync automatisch aus dem Stellenangebot übernommen, ohne einen bereits manuell gepflegten Ort zu überschreiben.',
+    ],
+  },
+  {
     version: '3.20.0',
     date: '2026-07-02',
     changes: [

@@ -396,6 +396,10 @@ export const api = {
   startup: {
     check: () => request<{ checks: StartupCheck[]; all_ok: boolean; errors: StartupCheck[] }>('/startup-check'),
   },
+
+  geo: {
+    search: (q: string) => request<{ label: string }[]>(`/geo/search?q=${encodeURIComponent(q)}`),
+  },
 }
 
 export interface StartupCheck {
