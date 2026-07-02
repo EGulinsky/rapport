@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_BUILD_NUMBER: string
+  readonly VITE_ENV_LABEL?: string
 }
 
 interface ImportMeta {

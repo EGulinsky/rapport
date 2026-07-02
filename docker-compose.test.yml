@@ -1,0 +1,53 @@
+# Isolierte 1:1-Testumgebung — eigene, leere Datenbank, eigenes Volume,
+# eigenes Netzwerk, eigene Ports. Berührt nie die Produktivinstanz
+# (docker-compose.yml). Über das Frontend ganz normal bedienbar, deutlich
+# als Testumgebung markiert (roter Banner oben, via VITE_ENV_LABEL).
+#
+# Start:   docker compose -p jobtracker-test -f docker-compose.test.yml up -d --build
+# Stop:    docker compose -p jobtracker-test -f docker-compose.test.yml down
+# Reset:   docker compose -p jobtracker-test -f docker-compose.test.yml down -v   (löscht auch die Test-DB)
+#
+# GUI:     http://localhost:3001
+# API:     http://localhost:8001/docs
+
+services:
+  backend-test:
+    build: ./backend
+    container_name: jobtracker-backend-test
+    environment:
+      - DATABASE_URL=sqlite:////app/data/jobtracker.db
+      - TZ=Europe/Berlin
+      - LOG_LEVEL=INFO
+      - SEQ_URL=http://seq-not-used:5341
+      - FILES_BRIDGE_URL=http://host.docker.internal:9998
+    volumes:
+      - jobtracker-test-data:/app/data
+    ports:
+      - "8001:8000"
+    networks:
+      default:
+        ipv4_address: 192.168.118.10
+
+  frontend-test:
+    build:
+      context: ./frontend
+      args:
+        ENV_LABEL: "⚠ TESTUMGEBUNG — nicht die echten Daten"
+        NGINX_CONF: nginx.test.conf
+    container_name: jobtracker-frontend-test
+    ports:
+      - "3001:80"
+    networks:
+      default:
+        ipv4_address: 192.168.118.11
+    depends_on:
+      - backend-test
+
+volumes:
+  jobtracker-test-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 192.168.118.0/24

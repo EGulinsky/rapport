@@ -20,6 +20,7 @@ import { ChangelogModal, CURRENT_VERSION } from './components/ChangelogModal'
 import { AppMergeDialog, CompanyMergeDialog } from './components/MergeDialog'
 import AuditLogModal from './components/AuditLogModal'
 import { StartupWarningBanner } from './components/StartupWarningBanner'
+import { EnvironmentBanner } from './components/EnvironmentBanner'
 import { BUILD_NUMBER } from './version'
 import {
   MAIN_PIPELINE, MAIN_STATUS_LABELS,
@@ -233,6 +234,7 @@ export default function App() {
     <BackendGate>
     <LogoProvider>
     <div className="min-h-screen bg-gray-50">
+      <EnvironmentBanner />
       <StartupWarningBanner />
       {/* Header */}
       <header className="border-b border-gray-200 bg-white shadow-sm sticky top-0 z-30">
