@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.22.4',
+    date: '2026-07-02',
+    changes: [
+      'Testkonzept Phase 2 abgeschlossen: Round-Trip-Tests für die Fernet-Verschlüsselung gespeicherter API-Keys (encrypt/decrypt, automatische Schlüsselerzeugung, Fehlerfälle bei kaputtem/falschem Schlüssel). Damit sind alle drei "scharfen" Bereiche aus dem Testkonzept (Dedup, Statuslogik, Krypto) mit L0-Unit-Tests abgesichert.',
+    ],
+  },
+  {
     version: '3.22.3',
     date: '2026-07-02',
     changes: [

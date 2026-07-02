@@ -271,9 +271,9 @@ frontend/
 
 | Phase | Inhalt | Ergebnis |
 |---|---|---|
-| **1** | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
-| **2** | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert |
-| **3** | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features |
+| **1** ✅ | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
+| **2** ✅ | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert — `test_dedup.py`, `test_naechster_schritt.py`, `test_crypto.py` |
+| **3** (läuft) | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features — bereits teilweise durch organisch entstandene Bugfix-Tests abgedeckt (Companies-Dedup, Event-Groups, iCloud-Kontakte-Sync, Applications-API) |
 | **4** | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | Sync-Flows automatisiert testbar |
 | **5** | E2E-Suite (5–10 Journeys) + Smoke-Job nach Deploy | Vollständige Pyramide steht |
 | **6** | Nightly-Job, Fixture-Pflege-Routine (LinkedIn-HTML altert) | Dauerbetrieb |
