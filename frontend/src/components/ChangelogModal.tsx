@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.22.1',
+    date: '2026-07-02',
+    changes: [
+      'Sicherheits-Bereinigung: eine versehentlich committete DB-Sicherung mit echten Kontakt- und Bewerbungsdaten wurde vollständig aus der Git-Historie entfernt (Voraussetzung für eine geplante Veröffentlichung des Repos). Der Deploy-Schritt in der CI nutzt jetzt "fetch + reset --hard" statt "git pull", damit Force-Pushes wie dieser den Auto-Deploy nicht mehr brechen.',
+    ],
+  },
+  {
     version: '3.22.0',
     date: '2026-07-02',
     changes: [
