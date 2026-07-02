@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin } from 'lucide-react'
-import { CompanyFilterPicker, type CompanyFilter } from './components/CompanyFilterPicker'
+import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin } from 'lucide-react'
+import { CompanySearchInput } from './components/CompanySearchInput'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
@@ -97,8 +97,7 @@ export default function App() {
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
-  const [appsCompanyFilter, setAppsCompanyFilter] = useState<CompanyFilter | null>(null)
-  const [contactsCompanyFilter, setContactsCompanyFilter] = useState<CompanyFilter | null>(null)
+  const [contactsSearch, setContactsSearch] = useState('')
 
   const prevAppsRef = useRef<Map<number, Application>>(new Map())
   const [updatedAppIds, setUpdatedAppIds] = useState<Set<number>>(new Set())
@@ -206,18 +205,7 @@ export default function App() {
     }
   }, [selectedId])
 
-  const companyFilteredApps = appsCompanyFilter
-    ? (() => {
-        const ids = new Set([appsCompanyFilter.id, ...(appsCompanyFilter.subsidiaryIds ?? [])])
-        return apps.filter(a =>
-          ids.has(a.company_profile_id!) ||
-          ids.has(a.target_company_profile_id!) ||
-          a.firma === appsCompanyFilter.name ||
-          a.zielfirma_bei_hh === appsCompanyFilter.name
-        )
-      })()
-    : apps
-  const visibleApps = showGhostingOnly ? companyFilteredApps.filter(a => a.ghosting) : companyFilteredApps
+  const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
 
   // Rejected apps appear in their last-active column, not a separate "Abgesagt" column
   const kanbanColumns: MainStatus[] = MAIN_PIPELINE
@@ -414,8 +402,8 @@ export default function App() {
           <ContactsView
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
-            companyFilter={contactsCompanyFilter}
-            onCompanyFilterChange={setContactsCompanyFilter}
+            search={contactsSearch}
+            onSearchChange={setContactsSearch}
           />
         )}
         {mainView === 'companies' && (
@@ -423,8 +411,8 @@ export default function App() {
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
             onMergeRequest={ids => setCompanyMergeIds(ids)}
-            onNavigateToApps={f => { setAppsCompanyFilter(f); setSearch(''); setMainView('applications') }}
-            onNavigateToContacts={f => { setContactsCompanyFilter(f); setMainView('contacts') }}
+            onNavigateToApps={name => { setSearch(name); setMainView('applications') }}
+            onNavigateToContacts={name => { setContactsSearch(name); setMainView('contacts') }}
             reloadKey={companyReloadKey}
           />
         )}
@@ -438,19 +426,8 @@ export default function App() {
         {/* Stats */}
         {stats && <StatsBar stats={stats} />}
 
-        {/* Search bar + company filter */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Firma oder Rolle suchen…"
-              className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            />
-          </div>
-          <CompanyFilterPicker value={appsCompanyFilter} onChange={setAppsCompanyFilter} />
-        </div>
+        {/* Search bar (mit Firmen-Autocomplete) */}
+        <CompanySearchInput value={search} onChange={setSearch} placeholder="Firma oder Rolle suchen…" />
 
         {/* Controls row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">

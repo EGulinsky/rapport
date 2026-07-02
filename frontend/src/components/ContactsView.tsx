@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X } from 'lucide-react'
+import { Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X } from 'lucide-react'
 import { api } from '../api/client'
 import type { ContactWithApp, CompanyProfile } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
 import { ContactModal, displayName } from './ContactModal'
 import { CompanyLogo } from './CompanyLogo'
-import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
+import { CompanySearchInput } from './CompanySearchInput'
 import clsx from 'clsx'
 
 function CompanyCell({ contact, onOpenCompany, onChanged }: {
@@ -122,13 +122,12 @@ type SortKey = 'name' | 'firma' | 'typ' | 'letzter_kontakt'
 interface Props {
   onOpenApplication: (id: number) => void
   onOpenCompany?: (id: number) => void
-  companyFilter?: CompanyFilter | null
-  onCompanyFilterChange?: (v: CompanyFilter | null) => void
+  search: string
+  onSearchChange: (v: string) => void
 }
 
-export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, onCompanyFilterChange }: Props) {
+export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearchChange: setSearch }: Props) {
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
-  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -162,14 +161,6 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
 
   const sorted = useMemo(() => {
     let list = contacts
-    if (companyFilter) {
-      const ids = new Set([companyFilter.id, ...(companyFilter.subsidiaryIds ?? [])])
-      list = list.filter(c =>
-        ids.has(c.company_profile_id!) ||
-        c.firma === companyFilter.name ||
-        c.firma?.toLowerCase() === companyFilter.name.toLowerCase()
-      )
-    }
     if (appsFilter === 'yes') list = list.filter(c => (c.applications?.length ?? 0) > 0)
     if (appsFilter === 'no') list = list.filter(c => (c.applications?.length ?? 0) === 0)
     return [...list].sort((a, b) => {
@@ -185,7 +176,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
       const cmp = av.localeCompare(bv, 'de')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [contacts, sortKey, sortDir, companyFilter, appsFilter])
+  }, [contacts, sortKey, sortDir, appsFilter])
 
   const allSelected = sorted.length > 0 && sorted.every(c => selected.has(c.id))
 
@@ -233,18 +224,13 @@ export function ContactsView({ onOpenApplication, onOpenCompany, companyFilter, 
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Name, E-Mail oder Firma…"
-            className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        {onCompanyFilterChange && (
-          <CompanyFilterPicker value={companyFilter ?? null} onChange={onCompanyFilterChange} />
-        )}
+        <CompanySearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Name, E-Mail oder Firma…"
+          containerClassName="relative flex-1 max-w-sm"
+          inputClassName="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-xs text-gray-400">Bewerbungen:</span>
           {(['all', 'yes', 'no'] as const).map(v => (
