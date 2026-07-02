@@ -5,6 +5,7 @@ import {
   useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
+import { MapPin } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
@@ -125,12 +126,27 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
           → {app.naechster_schritt}
         </p>
       )}
-      {(app.letztes_update || app.datum_bewerbung) && (
-        <p className="text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100">
-          {app.letztes_update
-            ? new Date(app.letztes_update).toLocaleDateString('de-DE')
-            : new Date(app.datum_bewerbung!).toLocaleDateString('de-DE')}
-        </p>
+      {(app.letztes_update || app.datum_bewerbung || app.ort) && (
+        <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+          <p className="text-[10px] text-gray-400 shrink-0">
+            {app.letztes_update
+              ? new Date(app.letztes_update).toLocaleDateString('de-DE')
+              : app.datum_bewerbung ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE') : ''}
+          </p>
+          {app.ort && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(app.ort)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              title={app.ort}
+              className="inline-flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 hover:underline truncate min-w-0"
+            >
+              <MapPin className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{app.ort}</span>
+            </a>
+          )}
+        </div>
       )}
     </div>
   )
