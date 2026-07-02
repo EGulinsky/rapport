@@ -94,6 +94,19 @@ class TestListApplicationsSearch:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_positiv_ort_ist_in_der_liste_enthalten(self, client, db_session):
+        # Regressionsfall: ApplicationListItem (Response-Schema der Listen-Route, die
+        # auch die Kanban-Karten befüllt) deklarierte "ort" nicht — Pydantic hat das
+        # Feld deshalb aus der Antwort gefiltert, obwohl es in der DB gesetzt war.
+        # Live-verifiziert: Ort war im Modal sichtbar, aber nicht auf der Kanban-Karte.
+        application_factory(db_session, firma="Contoso AG", ort="Berlin, Deutschland")
+        db_session.commit()
+
+        resp = client.get("/api/applications/")
+
+        assert resp.status_code == 200
+        assert resp.json()[0]["ort"] == "Berlin, Deutschland"
+
 
 class TestGetApplication:
     def test_positiv_bewerbung_abrufen(self, client, db_session):

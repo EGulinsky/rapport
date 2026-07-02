@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.21.2',
+    date: '2026-07-02',
+    changes: [
+      'Fix: Der Ort war zwar im Übersicht-Tab sichtbar, aber nicht auf der Kanban-Karte — das Response-Schema der Bewerbungsliste (die auch die Kanban-Karten befüllt) deklarierte das Feld "ort" nicht, wodurch es aus der Antwort gefiltert wurde, obwohl es in der Datenbank gesetzt war.',
+    ],
+  },
+  {
     version: '3.21.1',
     date: '2026-07-02',
     changes: [
