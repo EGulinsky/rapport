@@ -132,6 +132,7 @@ def list_applications(
                 models.Application.firma.ilike(term),
                 models.Application.rolle.ilike(term),
                 models.Application.quelle.ilike(term),
+                models.Application.zielfirma_bei_hh.ilike(term),
             )
         )
 

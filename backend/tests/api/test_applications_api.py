@@ -41,6 +41,43 @@ class TestCreateApplication:
         assert resp.status_code == 201
 
 
+class TestListApplicationsSearch:
+    def test_positiv_suche_matcht_firma(self, client, db_session):
+        application_factory(db_session, firma="Contoso AG")
+        application_factory(db_session, firma="Andere Firma GmbH")
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"search": "Contoso"})
+
+        assert resp.status_code == 200
+        assert [a["firma"] for a in resp.json()] == ["Contoso AG"]
+
+    def test_positiv_suche_matcht_zielfirma_bei_headhunter(self, client, db_session):
+        # Regressionsfall: die entfernte "Firmenfilter"-UI matchte zusätzlich zur
+        # firma auch die zielfirma_bei_hh (Kunde eines Headhunters). Damit die
+        # normale Textsuche diese Funktion vollständig übernehmen kann, muss das
+        # Suchfeld dasselbe Feld ebenfalls durchsuchen.
+        application_factory(
+            db_session, firma="Headhunter XY", is_headhunter=True, zielfirma_bei_hh="Zielfirma GmbH",
+        )
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"search": "Zielfirma"})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["zielfirma_bei_hh"] == "Zielfirma GmbH"
+
+    def test_negativ_suche_ohne_treffer(self, client, db_session):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"search": "Nichts Passendes"})
+
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+
 class TestGetApplication:
     def test_positiv_bewerbung_abrufen(self, client, db_session):
         app = application_factory(db_session, firma="Abruf GmbH")

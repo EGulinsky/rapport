@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.20.0',
+    date: '2026-07-02',
+    changes: [
+      'Der separate Firmenfilter (Dropdown-Button) in der Bewerbungs- und Kontaktansicht ist entfallen. Stattdessen bieten die normalen Suchfelder jetzt eine Firmen-Autocomplete: beim Tippen erscheinen passende Firmen zur Auswahl, die den Suchtext direkt übernimmt. Der Sprung von einer Firma zu ihren Bewerbungen/Kontakten (Firmenansicht) funktioniert weiterhin, setzt jetzt aber einfach den Suchtext statt eines separaten Filters.',
+    ],
+  },
+  {
     version: '3.19.2',
     date: '2026-07-01',
     changes: [
