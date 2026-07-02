@@ -226,6 +226,10 @@ export interface AiSettingsWrite {
   enabled: boolean
 }
 
+export interface MapsSettings {
+  has_key: boolean
+}
+
 export interface GoogleSyncStatus {
   connected: boolean
   client_id?: string

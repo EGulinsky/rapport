@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, MapsSettings, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
 
 const BASE = '/api'
 
@@ -165,6 +165,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ api_key }),
     }),
+    getMaps: () => request<MapsSettings>('/settings/maps'),
+    saveMaps: (api_key: string | null) => request<MapsSettings>('/settings/maps', {
+      method: 'POST',
+      body: JSON.stringify({ api_key }),
+    }),
+    clearMapsKey: () => request<MapsSettings>('/settings/maps/key', { method: 'DELETE' }),
     getSync: () => request<SyncSettings>('/settings/sync'),
     saveSync: (data: Partial<SyncSettings>) => request<SyncSettings>('/settings/sync', {
       method: 'POST',

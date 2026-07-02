@@ -70,6 +70,38 @@ def clear_api_key(db: Session = Depends(get_db)):
     raise HTTPException(404, "Keine Einstellungen vorhanden")
 
 
+@router.get("/maps", response_model=schemas.MapsSettingsRead)
+def get_maps_settings(db: Session = Depends(get_db)):
+    cfg = db.query(models.MapsSettings).first()
+    return schemas.MapsSettingsRead(has_key=bool(cfg and cfg.api_key_enc))
+
+
+@router.post("/maps", response_model=schemas.MapsSettingsRead)
+def save_maps_settings(payload: schemas.MapsSettingsWrite, db: Session = Depends(get_db)):
+    cfg = db.query(models.MapsSettings).first()
+    if not cfg:
+        cfg = models.MapsSettings()
+        db.add(cfg)
+
+    if payload.api_key and payload.api_key.strip():
+        cfg.api_key_enc = encrypt_api_key(payload.api_key.strip())
+    else:
+        cfg.api_key_enc = None
+
+    db.commit()
+    db.refresh(cfg)
+    return schemas.MapsSettingsRead(has_key=bool(cfg.api_key_enc))
+
+
+@router.delete("/maps/key", response_model=schemas.MapsSettingsRead)
+def clear_maps_key(db: Session = Depends(get_db)):
+    cfg = db.query(models.MapsSettings).first()
+    if cfg:
+        cfg.api_key_enc = None
+        db.commit()
+    return schemas.MapsSettingsRead(has_key=False)
+
+
 @router.get("/logo")
 def get_logo_settings(db: Session = Depends(get_db)):
     cfg = db.query(models.LogoSettings).first()

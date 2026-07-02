@@ -270,6 +270,16 @@ class AiSettingsWrite(BaseModel):
     enabled: bool = True
 
 
+class MapsSettingsRead(BaseModel):
+    has_key: bool   # true if an encrypted Google Maps API key is stored
+
+    model_config = {"from_attributes": True}
+
+
+class MapsSettingsWrite(BaseModel):
+    api_key: Optional[str] = None   # plain text; None/empty = clear existing key
+
+
 class ImportResult(BaseModel):
     imported: int
     skipped: int
