@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.21.1',
+    date: '2026-07-02',
+    changes: [
+      'Der Ort einer Bewerbung wird jetzt auch in der Kanban-Karte unten rechts angezeigt — als Link, der die Adresse direkt in Google Maps öffnet.',
+    ],
+  },
+  {
     version: '3.21.0',
     date: '2026-07-02',
     changes: [
