@@ -173,3 +173,57 @@ class TestRestoreBackup:
                     backup_module.RestoreRequest(filename="nicht_da.zip", folder="/backups"), db=db_session,
                 )
         assert "404" in str(exc_info.value) or getattr(exc_info.value, "status_code", None) == 404
+
+
+class TestRestoreFromFile:
+    """Manueller Restore-Weg (Datei-Picker) — muss ohne jede BackupConfig
+    funktionieren, insbesondere ohne enabled=True/backup_folder gesetzt."""
+
+    async def test_positiv_restore_funktioniert_ohne_backup_config_ueberhaupt(self, db_session, tmp_path):
+        # Bewusst: kein BackupConfig-Eintrag angelegt, kein _enable_backup() Aufruf.
+        assert db_session.query(models.BackupConfig).count() == 0
+        _make_sqlite_file(backup_module.DB_PATH, rows=("alter_zustand",))
+
+        src_db = tmp_path / "irgendwo.db"
+        _make_sqlite_file(src_db, rows=("manuell_wiederhergestellt",))
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.write(src_db, "jobtracker.db")
+            zf.writestr("fernet.key", b"manueller-schluessel")
+        data_b64 = __import__("base64").b64encode(zip_buf.getvalue()).decode()
+
+        async def fake_get(self, url, params=None, **kwargs):
+            assert url.endswith("/backup-read")
+            assert params == {"path": "/Users/test/Desktop/mein_backup.zip"}
+            return _mock_response({"data_b64": data_b64})
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await backup_module.restore_from_file(
+                backup_module.RestoreFileRequest(path="/Users/test/Desktop/mein_backup.zip"),
+            )
+
+        assert result["success"] is True
+        assert result["filename"] == "mein_backup.zip"
+        conn = sqlite3.connect(backup_module.DB_PATH)
+        rows = conn.execute("SELECT x FROM t").fetchall()
+        conn.close()
+        assert rows == [("manuell_wiederhergestellt",)]
+        assert open(backup_module.FERNET_KEY_PATH, "rb").read() == b"manueller-schluessel"
+
+    async def test_negativ_leerer_pfad_liefert_400(self):
+        with pytest.raises(Exception) as exc_info:
+            await backup_module.restore_from_file(backup_module.RestoreFileRequest(path=""))
+        assert getattr(exc_info.value, "status_code", None) == 400
+
+    async def test_negativ_bridge_nicht_erreichbar_liefert_500(self, db_session, tmp_path):
+        _make_sqlite_file(backup_module.DB_PATH)
+
+        async def fake_get(self, url, params=None, **kwargs):
+            return _mock_response({"error": "not found"}, status=404)
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            with pytest.raises(Exception) as exc_info:
+                await backup_module.restore_from_file(
+                    backup_module.RestoreFileRequest(path="/does/not/exist.zip"),
+                )
+        assert getattr(exc_info.value, "status_code", None) == 500

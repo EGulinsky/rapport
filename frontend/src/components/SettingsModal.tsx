@@ -1639,6 +1639,12 @@ function BackupPanel() {
   const [restoring, setRestoring] = useState<string | null>(null)
   const [restoreConfirm, setRestoreConfirm] = useState<string | null>(null)
   const [restoreResult, setRestoreResult] = useState<string | null>(null)
+  const [pickingFile, setPickingFile] = useState(false)
+  const [pickedFilePath, setPickedFilePath] = useState<string | null>(null)
+  const [manualRestoring, setManualRestoring] = useState(false)
+  const [manualRestoreConfirm, setManualRestoreConfirm] = useState(false)
+  const [manualRestoreResult, setManualRestoreResult] = useState<string | null>(null)
+  const [manualError, setManualError] = useState<string | null>(null)
 
   useEffect(() => {
     api.backup.status().then(s => {
@@ -1703,6 +1709,28 @@ function BackupPanel() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setRestoring(null) }
+  }
+
+  async function pickFile() {
+    setPickingFile(true); setManualError(null); setManualRestoreResult(null)
+    try {
+      const r = await api.backup.pickFile()
+      setPickedFilePath(r.path)
+    } catch (e) {
+      setManualError(e instanceof Error ? e.message : String(e))
+    } finally { setPickingFile(false) }
+  }
+
+  async function doManualRestore() {
+    if (!pickedFilePath) return
+    setManualRestoring(true); setManualRestoreConfirm(false); setManualError(null); setManualRestoreResult(null)
+    try {
+      const r = await api.backup.restoreFromFile(pickedFilePath)
+      setManualRestoreResult(r.filename)
+      setPickedFilePath(null)
+    } catch (e) {
+      setManualError(e instanceof Error ? e.message : String(e))
+    } finally { setManualRestoring(false) }
   }
 
   const fmtDate = (ts?: string | number) => {
@@ -1840,6 +1868,59 @@ function BackupPanel() {
           </div>
         </div>
       )}
+
+      {/* Manuelle Wiederherstellung — unabhängig von automatischem Backup/backup_folder */}
+      <div className="border-t border-gray-100 pt-4 space-y-2">
+        <div className="text-xs font-medium text-gray-700">Manuell wiederherstellen</div>
+        <p className="text-xs text-gray-400">
+          Beliebige Backup-Datei (.zip oder .db) auswählen und wiederherstellen — funktioniert unabhängig davon, ob automatisches Backup aktiviert oder ein Backup-Ordner eingerichtet ist.
+        </p>
+        <div className="flex gap-2">
+          <button onClick={pickFile} disabled={pickingFile}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            {pickingFile ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5 text-indigo-500" />}
+            Datei auswählen…
+          </button>
+          {pickedFilePath && (
+            <button onClick={() => setManualRestoreConfirm(true)} disabled={manualRestoring}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-red-50 hover:border-red-200 hover:text-red-700 disabled:opacity-50">
+              {manualRestoring ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              Wiederherstellen
+            </button>
+          )}
+        </div>
+        {pickedFilePath && (
+          <p className="text-xs text-gray-500 font-mono truncate">{pickedFilePath}</p>
+        )}
+        {manualError && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {manualError}
+          </div>
+        )}
+        {manualRestoreResult && (
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
+            <span>Wiederhergestellt aus <strong>{manualRestoreResult}</strong> — bitte Seite neu laden.</span>
+          </div>
+        )}
+        {manualRestoreConfirm && pickedFilePath && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
+            <p className="text-xs font-semibold text-red-800">Backup wirklich wiederherstellen?</p>
+            <p className="text-xs text-red-700">Alle aktuellen Daten werden durch den Inhalt dieser Datei ersetzt. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+            <div className="flex gap-2">
+              <button onClick={doManualRestore}
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
+                Ja, wiederherstellen
+              </button>
+              <button onClick={() => setManualRestoreConfirm(false)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Existing backups */}
       {status && status.backups.length > 0 && (

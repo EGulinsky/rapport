@@ -182,33 +182,18 @@ async def pick_folder():
         raise HTTPException(status_code=503, detail=f"files_bridge nicht erreichbar: {e}")
 
 
-class RestoreRequest(BaseModel):
-    filename: str
-    folder: str
-
-
-@router.post("/restore")
-async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
-    import httpx
+def _apply_restore(data: bytes, filename: str) -> dict:
+    """Write backup bytes into the live DB (+ fernet.key if bundled). Shared by
+    both restore paths (folder-scan lookup and direct-file picker) — restore
+    works regardless of whether automatic backups are configured/enabled,
+    since it only needs the raw bytes of a chosen file."""
     from app.database import engine
-
-    backups = await _list_backups(body.folder)
-    target = next((b for b in backups if b["name"] == body.filename), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="Backup-Datei nicht gefunden")
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{FILES_BRIDGE_URL}/backup-read", params={"path": target["path"]})
-    if resp.status_code != 200:
-        raise HTTPException(status_code=500, detail="Backup-Datei konnte nicht gelesen werden")
-
-    data = base64.b64decode(resp.json()["data_b64"])
 
     # New backups are a zip bundle (DB + fernet.key); older backups are a raw
     # .db file (pre-bundle) — support restoring both for backward compatibility.
     db_bytes = data
     key_bytes: bytes | None = None
-    if body.filename.endswith(".zip"):
+    if filename.endswith(".zip"):
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             db_bytes = zf.read(DB_ENTRY_NAME)
             if KEY_ENTRY_NAME in zf.namelist():
@@ -235,4 +220,63 @@ async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
     # Reset SQLAlchemy connection pool so next requests use restored data
     engine.dispose()
 
-    return {"success": True, "filename": body.filename}
+    return {"success": True, "filename": filename}
+
+
+async def _read_bridge_file(path: str) -> bytes:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(f"{FILES_BRIDGE_URL}/backup-read", params={"path": path})
+    if resp.status_code != 200:
+        raise HTTPException(status_code=500, detail="Backup-Datei konnte nicht gelesen werden")
+    return base64.b64decode(resp.json()["data_b64"])
+
+
+class RestoreRequest(BaseModel):
+    filename: str
+    folder: str
+
+
+@router.post("/restore")
+async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
+    backups = await _list_backups(body.folder)
+    target = next((b for b in backups if b["name"] == body.filename), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Backup-Datei nicht gefunden")
+
+    data = await _read_bridge_file(target["path"])
+    return _apply_restore(data, body.filename)
+
+
+class RestoreFileRequest(BaseModel):
+    path: str
+
+
+@router.get("/pick-file")
+async def pick_file():
+    """Native macOS file picker for a single backup file — manual restore path
+    that works without any backup_folder/enabled configuration at all."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=65) as client:
+            resp = await client.get(f"{FILES_BRIDGE_URL}/pick-file")
+        data = resp.json()
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=data.get("error", "Keine Datei ausgewählt"))
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"files_bridge nicht erreichbar: {e}")
+
+
+@router.post("/restore-file")
+async def restore_from_file(body: RestoreFileRequest):
+    """Manual restore from an arbitrary, freely picked file path — independent
+    of the automatic-backup settings (no backup_folder/enabled required)."""
+    if not body.path:
+        raise HTTPException(status_code=400, detail="Kein Pfad angegeben")
+    data = await _read_bridge_file(body.path)
+    filename = body.path.rsplit("/", 1)[-1]
+    return _apply_restore(data, filename)
