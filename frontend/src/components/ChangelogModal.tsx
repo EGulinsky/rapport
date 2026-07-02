@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.22.3',
+    date: '2026-07-02',
+    changes: [
+      'LICENSE-Datei hinzugefügt (Business Source License 1.1): freie Nutzung für private, nicht-kommerzielle Zwecke, kommerzielle Nutzung erfordert eine separate Lizenz. Wandelt sich am 2030-07-02 automatisch in Apache License 2.0 um.',
+    ],
+  },
+  {
     version: '3.22.2',
     date: '2026-07-02',
     changes: [
