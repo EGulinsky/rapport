@@ -108,3 +108,7 @@ cd frontend
 npm install
 npm run dev                      # http://localhost:5173
 ```
+
+## Lizenz
+
+[Business Source License 1.1](LICENSE) — freie Nutzung für private, nicht-kommerzielle Zwecke. Für eine kommerzielle Nutzung ist eine separate Lizenz erforderlich.
