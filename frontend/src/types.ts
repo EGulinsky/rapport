@@ -67,6 +67,7 @@ export interface Application {
   zielfirma_bei_hh?: string
   quelle?: string
   wurde_besetzt_von?: string
+  ort?: string
   datum_bewerbung?: string
   letztes_update?: string
   naechster_schritt?: string

@@ -40,6 +40,23 @@ class TestCreateApplication:
         })
         assert resp.status_code == 201
 
+    def test_positiv_ort_ist_optional_und_wird_gespeichert(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH",
+            "rolle": "Engineer",
+            "ort": "München, Deutschland",
+        })
+        assert resp.status_code == 201
+        assert resp.json()["ort"] == "München, Deutschland"
+
+    def test_negativ_ort_ist_kein_pflichtfeld(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH",
+            "rolle": "Engineer",
+        })
+        assert resp.status_code == 201
+        assert resp.json()["ort"] is None
+
 
 class TestListApplicationsSearch:
     def test_positiv_suche_matcht_firma(self, client, db_session):
@@ -119,3 +136,12 @@ class TestUpdateApplication:
     def test_negativ_update_nicht_existierender_bewerbung(self, client):
         resp = client.patch("/api/applications/999999", json={"main_status": "applied"})
         assert resp.status_code == 404
+
+    def test_positiv_ort_kann_nachtraeglich_gesetzt_werden(self, client, db_session):
+        app = application_factory(db_session, ort=None)
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"ort": "Berlin, Deutschland"})
+
+        assert resp.status_code == 200
+        assert resp.json()["ort"] == "Berlin, Deutschland"
