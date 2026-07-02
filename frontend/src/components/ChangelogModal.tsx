@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.22.0',
+    date: '2026-07-02',
+    changes: [
+      'Orts-Autocomplete läuft jetzt optional über Google Maps (Places API) statt nur OpenStreetMap — inklusive konkreter Orte/POIs (z.B. Firmenstandorte), nicht nur Städtenamen. Neuer Einstellungen-Tab "Karten" zum Hinterlegen eines Google Maps API-Keys (verschlüsselt gespeichert, verlässt den Server nie). Ohne Key funktioniert die Ortssuche weiterhin wie bisher über Nominatim/OpenStreetMap.',
+    ],
+  },
+  {
     version: '3.21.2',
     date: '2026-07-02',
     changes: [

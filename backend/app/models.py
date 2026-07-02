@@ -415,6 +415,16 @@ class AiSettings(Base):
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class MapsSettings(Base):
+    __tablename__ = "maps_settings"
+
+    id          = Column(Integer, primary_key=True)
+    api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted Google Maps API key
+
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
 class SyncSettings(Base):
     __tablename__ = "sync_settings"
 
