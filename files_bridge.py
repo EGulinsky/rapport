@@ -16,6 +16,11 @@ Endpoints:
   POST /backup-write   body: {folder, filename, data_b64, keep_count}
        Writes backup file (opaque bytes — caller decides .db vs .zip);
        deletes oldest if count exceeds keep_count
+  GET  /pick-folder    Native macOS folder picker → {path}
+  GET  /pick-file      Native macOS file picker (.zip/.db) → {path} — used
+       for manual restore independent of the backup_folder setting
+  GET  /backup-read?path=/absolute/path
+       Returns: {data_b64, name}
 """
 from __future__ import annotations
 
@@ -212,6 +217,25 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"error": "Kein Ordner ausgewählt"}, 400)
             except subprocess.TimeoutExpired:
                 self._json({"error": "Timeout — kein Ordner ausgewählt"}, 400)
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+            return
+
+        if parsed.path == "/pick-file":
+            try:
+                result = subprocess.run(
+                    ['osascript', '-e',
+                     'POSIX path of (choose file with prompt "Backup-Datei wählen:" '
+                     'of type {"zip", "db"})'],
+                    capture_output=True, text=True, timeout=60,
+                )
+                path = result.stdout.strip()
+                if path:
+                    self._json({"path": path})
+                else:
+                    self._json({"error": "Keine Datei ausgewählt"}, 400)
+            except subprocess.TimeoutExpired:
+                self._json({"error": "Timeout — keine Datei ausgewählt"}, 400)
             except Exception as e:
                 self._json({"error": str(e)}, 500)
             return

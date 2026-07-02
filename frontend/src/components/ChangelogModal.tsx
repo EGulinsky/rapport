@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.25.0',
+    date: '2026-07-02',
+    changes: [
+      'Neue manuelle Restore-Funktion in Einstellungen → Backup: beliebige Backup-Datei (.zip oder .db) über einen nativen Datei-Picker auswählen und wiederherstellen — funktioniert unabhängig davon, ob automatisches Backup aktiviert oder überhaupt ein Backup-Ordner eingerichtet ist. Praktisch z.B. um ein Produktiv-Backup gezielt in die neue isolierte Testumgebung zu laden.',
+    ],
+  },
+  {
     version: '3.24.1',
     date: '2026-07-02',
     changes: [

@@ -340,6 +340,8 @@ export const api = {
     run: () => request<{ success: boolean; filename: string }>('/backup/run', { method: 'POST' }),
     pickFolder: () => request<{ path: string }>('/backup/pick-folder'),
     restore: (filename: string, folder: string) => request<{ success: boolean; filename: string }>('/backup/restore', { method: 'POST', body: JSON.stringify({ filename, folder }) }),
+    pickFile: () => request<{ path: string }>('/backup/pick-file'),
+    restoreFromFile: (path: string) => request<{ success: boolean; filename: string }>('/backup/restore-file', { method: 'POST', body: JSON.stringify({ path }) }),
   },
 
   analytics: {
