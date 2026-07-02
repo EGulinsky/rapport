@@ -106,7 +106,9 @@ jobs:
 
     steps:
       - name: Pull latest code
-        run: git -C /Users/eugengulinsky/code/jobtracker pull
+        run: |
+          git -C /Users/eugengulinsky/code/jobtracker fetch origin main
+          git -C /Users/eugengulinsky/code/jobtracker reset --hard origin/main
 
       - name: App-Version ermitteln
         id: version
