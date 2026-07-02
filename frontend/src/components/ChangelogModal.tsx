@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.24.1',
+    date: '2026-07-02',
+    changes: [
+      'Neue isolierte 1:1-Testumgebung (docker-compose.test.yml): eigene leere Datenbank, eigenes Volume, eigener Port (GUI unter :3001, API unter :8001), komplett getrennt von der Produktivinstanz. Über die GUI ganz normal bedienbar, aber deutlich mit einem roten "TESTUMGEBUNG"-Banner oben markiert, damit sie nie mit den echten Daten verwechselt wird — gedacht z.B. zum gefahrlosen Testen von Restore aus einem Produktiv-Backup.',
+    ],
+  },
+  {
     version: '3.24.0',
     date: '2026-07-02',
     changes: [

@@ -87,6 +87,23 @@ Dann Einstellungen → Dokumente → Ordnerpfad setzen.
 
 Swagger UI: `http://localhost:8000/docs`
 
+## Isolierte Testumgebung
+
+Für gefahrloses Testen (z.B. Restore aus einem Produktiv-Backup) gibt es eine separate 1:1-Umgebung mit eigener, leerer Datenbank — komplett getrennt von den echten Daten und im Frontend deutlich mit einem roten "TESTUMGEBUNG"-Banner markiert.
+
+```bash
+docker compose -p jobtracker-test -f docker-compose.test.yml up -d --build
+```
+
+- GUI: `http://localhost:3001`
+- API/Swagger: `http://localhost:8001/docs`
+
+Zurücksetzen (löscht auch die Test-Datenbank):
+
+```bash
+docker compose -p jobtracker-test -f docker-compose.test.yml down -v
+```
+
 ## App stoppen
 
 ```bash
