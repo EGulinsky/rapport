@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.22.2',
+    date: '2026-07-02',
+    changes: [
+      'Sicherheits-Härtung für die geplante Public-Stellung: die self-hosted-CI-Jobs (Deploy, Fehler-Benachrichtigung), die auf diesem Mac laufen, sind jetzt explizit auf push-Events beschränkt und können nie mehr durch einen pull_request (auch nicht von einem Fork) ausgelöst werden. Test-/Build-Jobs für Pull Requests laufen weiterhin wie gewohnt auf GitHub-gehosteten Runnern.',
+    ],
+  },
+  {
     version: '3.22.1',
     date: '2026-07-02',
     changes: [
