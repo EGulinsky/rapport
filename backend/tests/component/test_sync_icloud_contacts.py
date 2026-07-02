@@ -53,8 +53,24 @@ class TestSyncContactsHttp:
         assert created == 0
         assert db_session.query(sync_icloud.models.Contact).count() == 0
 
-    async def test_positiv_email_domain_matcht_firmen_website_wird_importiert(self, db_session):
+    async def test_negativ_domain_match_ohne_bewerbung_zur_firma_importiert_nicht(self, db_session):
+        # Regressionsfall (Follow-up): EDAG-Domain-Kontakte wurden weiter importiert,
+        # obwohl es zu EDAG gar keine Bewerbung gibt — die CompanyProfile existierte nur
+        # noch als Datenleiche. Ein Domain-Match reicht nicht, wenn die Firma nicht
+        # tatsächlich mit einer Bewerbung verknüpft ist (live: 32 EDAG-Kontakte trotz 0
+        # Bewerbungen zu EDAG).
         company_profile_factory(db_session, name_display="EDAG Group", name_norm="edag", website="https://www.edag.de/")
+        vcards = [_vcard("Ehemaliger Kollege", email="kollege@edag.de", org="EDAG Group")]
+
+        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
+
+        assert created == 0
+        assert db_session.query(sync_icloud.models.Contact).count() == 0
+
+    async def test_positiv_email_domain_matcht_firmen_website_mit_echter_bewerbung_wird_importiert(self, db_session):
+        cp = company_profile_factory(db_session, name_display="EDAG Group", name_norm="edag", website="https://www.edag.de/")
+        application_factory(db_session, firma="EDAG Group", company_profile_id=cp.id)
         vcards = [_vcard("Recruiterin Muster", email="muster@edag.de", org="EDAG Group")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
