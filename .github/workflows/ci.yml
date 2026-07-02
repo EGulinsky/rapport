@@ -99,7 +99,9 @@ jobs:
     name: Deploy (local)
     runs-on: self-hosted
     needs: [backend, frontend]
-    if: github.ref == 'refs/heads/main'
+    # event_name-Guard zusätzlich zum ref-Check: self-hosted-Jobs dürfen nie durch einen
+    # pull_request-Event (auch von einem Fork) getriggert werden können.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     env:
       GIT_SSH_COMMAND: ssh -i /Users/eugengulinsky/.ssh/id_ed25519_github_runner -o StrictHostKeyChecking=no
@@ -162,7 +164,7 @@ jobs:
     name: Fehler-Benachrichtigung
     runs-on: self-hosted
     needs: [backend, frontend, docker, deploy]
-    if: always() && contains(needs.*.result, 'failure')
+    if: github.event_name == 'push' && always() && contains(needs.*.result, 'failure')
     steps:
       - name: macOS-Notification + Claude-Signal
         run: |
