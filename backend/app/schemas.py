@@ -183,6 +183,7 @@ class ApplicationListItem(BaseModel):
     is_headhunter: bool
     zielfirma_bei_hh: Optional[str] = None
     quelle: Optional[str] = None
+    ort: Optional[str] = None
     datum_bewerbung: Optional[date] = None
     letztes_update: Optional[date] = None
     abgesagt: bool
