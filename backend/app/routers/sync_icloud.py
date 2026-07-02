@@ -1386,6 +1386,12 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             # Only accept the company match as a standalone reason if the contact's email
             # domain also matches the company's website — an org-name match by itself
             # still populates company_profile_id for display, but doesn't gate import.
+            # Additionally, the CompanyProfile must actually be tied to a real application —
+            # a CompanyProfile can exist standalone (e.g. leftover from an old/removed
+            # application, LinkedIn import, etc.) without ever having been applied to. An
+            # email-domain match against such a profile still isn't a real connection: it
+            # imported 32 EDAG-domain contacts even though EDAG has zero applications
+            # (live-verified follow-up to the bug above).
             company_profile_id = None
             company_domain_match = False
             if org_val:
@@ -1394,7 +1400,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
                 cp = db.query(models.CompanyProfile).filter_by(name_norm=norm).first()
                 if cp:
                     company_profile_id = cp.id
-                    if email_val and cp.website:
+                    if email_val and cp.website and (cp.applications or cp.hh_applications):
                         host = (urlparse(cp.website if "//" in cp.website else f"//{cp.website}").hostname or "").removeprefix("www.")
                         email_domain = email_val.split("@", 1)[1].lower() if "@" in email_val else ""
                         if host and email_domain and (email_domain == host or email_domain.endswith(f".{host}")):

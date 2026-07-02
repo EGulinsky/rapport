@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.19.2',
+    date: '2026-07-01',
+    changes: [
+      'iCloud-Kontakte-Sync (Follow-up zu v3.19.1): Ein Domain-Match der E-Mail-Adresse gegen die Firmen-Website reichte allein aus, um Kontakte zu importieren — auch wenn zu dieser Firma gar keine Bewerbung existiert (live: 32 EDAG-Kontakte importiert, obwohl 0 Bewerbungen zu EDAG bestehen; die CompanyProfile war nur noch eine Datenleiche). Der Domain-Match zählt jetzt nur noch, wenn die Firma auch tatsächlich mit mindestens einer Bewerbung verknüpft ist.',
+    ],
+  },
+  {
     version: '3.19.1',
     date: '2026-07-01',
     changes: [
