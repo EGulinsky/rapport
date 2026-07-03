@@ -24,7 +24,8 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
@@ -1296,10 +1297,57 @@ async def fetch_all_vcards(cfg: models.ICloudSync) -> list[str]:
     return all_vcards
 
 
-async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int, list[str]]:
-    """CardDAV sync via HTTP using fetch_all_vcards helper."""
+def _parse_vcard(raw_vcard: str) -> Optional[dict]:
+    """Parse one raw vCard string into a plain field dict, or None if unparsable/empty.
+
+    Shared by the automatic CardDAV sync and the manual contact search — keeping this
+    in one place avoids the parsing logic drifting apart between the two call sites.
+    """
     import vobject
 
+    try:
+        card = vobject.readOne(raw_vcard)
+    except Exception:
+        return None
+
+    name = str(card.fn.value) if hasattr(card, "fn") else ""
+    if not name:
+        return None
+
+    email_val = str(card.email.value) if hasattr(card, "email") else None
+    tel_val = None
+    _tel_props = card.contents.get("tel", [])
+    if _tel_props:
+        _cell = None
+        _first = str(_tel_props[0].value)
+        for _tp in _tel_props:
+            _type_str = str(getattr(_tp, "params", {}).get("TYPE", "")).upper()
+            if any(t in _type_str for t in ("CELL", "IPHONE", "MOBILE")):
+                _cell = str(_tp.value)
+                break
+        tel_val = _cell or _first
+    org_val = None
+    if hasattr(card, "org"):
+        parts = card.org.value
+        org_val = parts[0] if isinstance(parts, list) and parts else str(parts)
+        org_val = org_val.strip() or None
+    title_val = str(card.title.value) if hasattr(card, "title") else None
+
+    linkedin_url = None
+    for url_prop in card.contents.get("url", []) + card.contents.get("item1.url", []):
+        val = str(url_prop.value)
+        if "linkedin.com" in val:
+            linkedin_url = val
+            break
+
+    return {
+        "name": name, "email": email_val, "telefon": tel_val,
+        "firma": org_val, "rolle": title_val, "linkedin_url": linkedin_url,
+    }
+
+
+async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int, list[str]]:
+    """CardDAV sync via HTTP using fetch_all_vcards helper."""
     processed = created = 0
     errors: list[str] = []
 
@@ -1316,41 +1364,17 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
 
     for idx, raw_vcard in enumerate(vcards_raw):
         update_progress("icloud_contacts", idx, total_vcards, f"Kontakt {idx + 1}/{total_vcards}")
-        try:
-            card = vobject.readOne(raw_vcard)
-        except Exception:
+        parsed = _parse_vcard(raw_vcard)
+        if not parsed:
             continue
 
         try:
-            name = str(card.fn.value) if hasattr(card, "fn") else ""
-            if not name:
-                continue
-
-            email_val = str(card.email.value) if hasattr(card, "email") else None
-            tel_val = None
-            _tel_props = card.contents.get("tel", [])
-            if _tel_props:
-                _cell = None
-                _first = str(_tel_props[0].value)
-                for _tp in _tel_props:
-                    _type_str = str(getattr(_tp, "params", {}).get("TYPE", "")).upper()
-                    if any(t in _type_str for t in ("CELL", "IPHONE", "MOBILE")):
-                        _cell = str(_tp.value)
-                        break
-                tel_val = _cell or _first
-            org_val = None
-            if hasattr(card, "org"):
-                parts = card.org.value
-                org_val = parts[0] if isinstance(parts, list) and parts else str(parts)
-                org_val = org_val.strip() or None
-            title_val = str(card.title.value) if hasattr(card, "title") else None
-
-            linkedin_url = None
-            for url_prop in card.contents.get("url", []) + card.contents.get("item1.url", []):
-                val = str(url_prop.value)
-                if "linkedin.com" in val:
-                    linkedin_url = val
-                    break
+            name = parsed["name"]
+            email_val = parsed["email"]
+            tel_val = parsed["telefon"]
+            org_val = parsed["firma"]
+            title_val = parsed["rolle"]
+            linkedin_url = parsed["linkedin_url"]
 
             existing = None
             if email_val:
@@ -1425,6 +1449,109 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             errors.append(f"Kontakt: {e}")
 
     return created, errors
+
+
+@router.get("/contacts/search")
+async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depends(get_db)):
+    """Volltextsuche im kompletten iCloud-Adressbuch, unabhängig von der
+    Relevanz-Prüfung des automatischen Syncs (_sync_contacts_http). Für den
+    manuellen Import sucht der User gezielt nach einer Person und entscheidet
+    selbst, ob sie importiert wird — die "hat eine echte Verbindung zu einer
+    Bewerbung"-Gate gilt hier bewusst nicht.
+    """
+    cfg = _get_cfg(db)
+    if not cfg:
+        raise HTTPException(status_code=400, detail="iCloud nicht konfiguriert")
+
+    try:
+        vcards_raw = await fetch_all_vcards(cfg)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"CardDAV HTTP-Fehler: {e}")
+
+    q_lower = q.strip().lower()
+    results: list[dict] = []
+    seen_keys: set[str] = set()
+    for raw in vcards_raw:
+        parsed = _parse_vcard(raw)
+        if not parsed:
+            continue
+        haystack = " ".join(filter(None, [parsed["name"], parsed["email"], parsed["firma"]])).lower()
+        if q_lower not in haystack:
+            continue
+
+        existing = None
+        if parsed["email"]:
+            existing = db.query(models.Contact).filter_by(email=parsed["email"]).first()
+        if not existing:
+            existing = db.query(models.Contact).filter_by(name=parsed["name"]).first()
+        if existing:
+            continue  # bereits als Kontakt vorhanden — kein Importkandidat mehr
+
+        key = f"{parsed['email'] or ''}|{parsed['name']}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        results.append(parsed)
+        if len(results) >= 30:
+            break
+
+    return results
+
+
+class ContactImportCandidate(BaseModel):
+    name: str
+    email: Optional[str] = None
+    telefon: Optional[str] = None
+    firma: Optional[str] = None
+    rolle: Optional[str] = None
+    linkedin_url: Optional[str] = None
+
+
+class ContactImportPayload(BaseModel):
+    candidates: list[ContactImportCandidate]
+    application_id: Optional[int] = None
+
+
+@router.post("/contacts/import")
+def import_contacts(body: ContactImportPayload, db: Session = Depends(get_db)):
+    """Importiert vom User ausgewählte Kandidaten (aus /contacts/search) als
+    echte Contact-Zeilen. Explizite User-Aktion, deshalb ohne die
+    Relevanz-Prüfung des automatischen Syncs — der User hat die Auswahl
+    bereits selbst getroffen.
+    """
+    app_obj = None
+    if body.application_id:
+        app_obj = db.query(models.Application).filter(
+            models.Application.id == body.application_id
+        ).first()
+        if not app_obj:
+            raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+
+    imported = 0
+    skipped = 0
+    for cand in body.candidates:
+        existing = None
+        if cand.email:
+            existing = db.query(models.Contact).filter_by(email=cand.email).first()
+        if not existing:
+            existing = db.query(models.Contact).filter_by(name=cand.name).first()
+        if existing:
+            skipped += 1
+            if app_obj and app_obj not in existing.applications:
+                existing.applications.append(app_obj)
+            continue
+        contact = models.Contact(
+            name=cand.name, email=cand.email, telefon=cand.telefon,
+            firma=cand.firma, rolle=cand.rolle, linkedin_url=cand.linkedin_url,
+        )
+        db.add(contact)
+        db.flush()
+        if app_obj:
+            contact.applications.append(app_obj)
+        imported += 1
+
+    db.commit()
+    return {"imported": imported, "skipped": skipped}
 
 
 # ── Anrufliste (via JobTracker Agent) ─────────────────────────────────────────

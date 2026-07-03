@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.31.0',
+    date: '2026-07-03',
+    changes: [
+      'Kontakteübersicht: neben manueller Neuanlage jetzt auch gezielter Import aus dem vollen iCloud-Adressbuch ("Aus iCloud") und aus LinkedIn-Personensuche ("Aus LinkedIn") — mit Suche, Mehrfachauswahl und "N importieren". Anders als der automatische Sync gilt hier keine Relevanz-Prüfung: der User sucht bewusst nach einer bestimmten Person und entscheidet selbst. Neue LinkedIn-Personensuche nutzt die bestehende Session (kein zusätzlicher Login) und splittet Headlines wie "Senior Engineer at Contoso" automatisch in Rolle/Firma. Live verifiziert, dabei einen Bug beim Verbindungsgrad-Text ("• 3rd+", der teils direkt am Namen klebte) gefunden und behoben.',
+    ],
+  },
+  {
     version: '3.30.0',
     date: '2026-07-03',
     changes: [
