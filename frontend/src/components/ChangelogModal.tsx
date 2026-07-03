@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.26.0',
+    date: '2026-07-03',
+    changes: [
+      'JobTracker Agent: die drei separaten Hintergrund-Bridges (Dateien, Notizen, Anrufe) sind durch einen einzigen, echt installierbaren Hintergrund-Dienst ersetzt — mit Bearer-Token-Auth statt offener Ports, als .app/.dmg mit Menüleisten-Icon und automatischer Selbstregistrierung als Autostart (kein manuelles Terminal-Fenster mehr). Neuer "Agent"-Tab in den Einstellungen zum Verbinden (Token einfügen, Live-Status je Modul). Architektur ist bewusst plattformübergreifend angelegt (macOS jetzt, Windows später über dieselbe Provider-Schnittstelle). Die alten drei Bridge-Skripte laufen als Übergang noch parallel.',
+    ],
+  },
+  {
     version: '3.25.0',
     date: '2026-07-02',
     changes: [

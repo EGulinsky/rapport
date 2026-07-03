@@ -102,6 +102,47 @@ def clear_maps_key(db: Session = Depends(get_db)):
     return schemas.MapsSettingsRead(has_key=False)
 
 
+@router.get("/agent", response_model=schemas.AgentSettingsRead)
+def get_agent_settings(db: Session = Depends(get_db)):
+    cfg = db.query(models.AgentSettings).first()
+    return schemas.AgentSettingsRead(url=cfg.url if cfg else None, has_token=bool(cfg and cfg.token_enc))
+
+
+@router.post("/agent", response_model=schemas.AgentSettingsRead)
+def save_agent_settings(payload: schemas.AgentSettingsWrite, db: Session = Depends(get_db)):
+    cfg = db.query(models.AgentSettings).first()
+    if not cfg:
+        cfg = models.AgentSettings()
+        db.add(cfg)
+
+    cfg.url = payload.url.strip() if payload.url and payload.url.strip() else None
+    if payload.token and payload.token.strip():
+        cfg.token_enc = encrypt_api_key(payload.token.strip())
+    else:
+        cfg.token_enc = None
+
+    db.commit()
+    db.refresh(cfg)
+    return schemas.AgentSettingsRead(url=cfg.url, has_token=bool(cfg.token_enc))
+
+
+@router.delete("/agent/token", response_model=schemas.AgentSettingsRead)
+def clear_agent_token(db: Session = Depends(get_db)):
+    cfg = db.query(models.AgentSettings).first()
+    if cfg:
+        cfg.token_enc = None
+        db.commit()
+        return schemas.AgentSettingsRead(url=cfg.url, has_token=False)
+    return schemas.AgentSettingsRead(url=None, has_token=False)
+
+
+@router.get("/agent/health", response_model=schemas.AgentHealth)
+async def get_agent_health(db: Session = Depends(get_db)):
+    from app.agent_client import agent_health
+    data = await agent_health(db)
+    return schemas.AgentHealth(**data)
+
+
 @router.get("/logo")
 def get_logo_settings(db: Session = Depends(get_db)):
     cfg = db.query(models.LogoSettings).first()

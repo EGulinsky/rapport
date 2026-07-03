@@ -230,6 +230,26 @@ export interface MapsSettings {
   has_key: boolean
 }
 
+export interface AgentSettings {
+  url?: string
+  has_token: boolean
+}
+
+export interface AgentHealthModule {
+  ok: boolean
+  error?: string
+  phone_accessible?: boolean
+  whatsapp_accessible?: boolean
+}
+
+export interface AgentHealth {
+  reachable: boolean
+  version?: string
+  platform?: string
+  modules: Record<string, AgentHealthModule>
+  error?: string
+}
+
 export interface GoogleSyncStatus {
   connected: boolean
   client_id?: string

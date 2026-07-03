@@ -1,50 +1,42 @@
 """
-GET /api/startup-check  — checks all local bridges and external connections.
+GET /api/startup-check  — checks the JobTracker Agent and external connections.
 Returns a list of check results, each with {name, ok, message}.
 """
 from __future__ import annotations
 
-import asyncio
-import os
-import httpx
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.agent_client import agent_health
 from app.database import get_db
 from app import models
 
 router = APIRouter(prefix="/api", tags=["startup"])
 
-FILES_BRIDGE  = os.getenv("FILES_BRIDGE_URL",  "http://host.docker.internal:9998")
-NOTES_BRIDGE  = "http://host.docker.internal:9999"
-CALLS_BRIDGE  = "http://host.docker.internal:9997"
 
+async def _check_agent_modules(db: Session) -> list[dict]:
+    """One /health call to the agent, split back into the same three rows
+    (Files/Notes/Calls) the old three-bridge checks produced — the frontend
+    banner doesn't need to change."""
+    health = await agent_health(db)
+    if not health["reachable"]:
+        detail = health.get("error", "nicht erreichbar")
+        return [
+            {"name": "Agent: Dateien", "group": "bridges", "ok": False, "message": f"Agent nicht erreichbar: {detail}"},
+            {"name": "Agent: Notizen", "group": "bridges", "ok": False, "message": f"Agent nicht erreichbar: {detail}"},
+            {"name": "Agent: Anrufe", "group": "bridges", "ok": False, "message": f"Agent nicht erreichbar: {detail}"},
+        ]
 
-async def _http_ok(url: str, timeout: float = 3.0) -> tuple[bool, str]:
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.get(url)
-            return r.status_code < 500, f"HTTP {r.status_code}"
-    except Exception as e:
-        return False, str(e)[:80]
-
-
-async def _check_files_bridge() -> dict:
-    ok, msg = await _http_ok(f"{FILES_BRIDGE}/health")
-    return {"name": "Files Bridge", "group": "bridges", "ok": ok,
-            "message": None if ok else f"Nicht erreichbar: {msg}"}
-
-
-async def _check_notes_bridge() -> dict:
-    ok, msg = await _http_ok(f"{NOTES_BRIDGE}/notes")
-    return {"name": "Notes Bridge", "group": "bridges", "ok": ok,
-            "message": None if ok else f"Nicht erreichbar: {msg}"}
-
-
-async def _check_calls_bridge() -> dict:
-    ok, msg = await _http_ok(f"{CALLS_BRIDGE}/health")
-    return {"name": "Calls Bridge", "group": "bridges", "ok": ok,
-            "message": None if ok else f"Nicht erreichbar: {msg}"}
+    modules = health.get("modules", {})
+    results = []
+    for key, label in (("files", "Agent: Dateien"), ("notes", "Agent: Notizen"), ("calls", "Agent: Anrufe")):
+        mod = modules.get(key, {})
+        ok = bool(mod.get("ok"))
+        results.append({
+            "name": label, "group": "bridges", "ok": ok,
+            "message": None if ok else (mod.get("error") or "Nicht verfügbar"),
+        })
+    return results
 
 
 def _check_google(db: Session) -> dict:
@@ -81,14 +73,8 @@ def _check_files_config(db: Session) -> dict:
 
 @router.get("/startup-check")
 async def startup_check(db: Session = Depends(get_db)):
-    # Bridges in parallel
-    bridge_results = await asyncio.gather(
-        _check_files_bridge(),
-        _check_notes_bridge(),
-        _check_calls_bridge(),
-    )
+    bridge_results = await _check_agent_modules(db)
 
-    # Connection checks (sync, fast)
     connection_results = [
         _check_google(db),
         _check_icloud(db),

@@ -41,3 +41,8 @@ test-results.xml
 
 # Playwright base image build tracking (runner-local, not for versioning)
 .playwright-base-hash
+
+# Agent packaging build artifacts (built via agent/packaging/build_dmg.sh)
+.venv_test/
+*.dmg
+agent/packaging/dmg_staging/

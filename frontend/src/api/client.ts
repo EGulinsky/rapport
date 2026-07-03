@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, MapsSettings, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
+import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
 
 const BASE = '/api'
 
@@ -171,6 +171,13 @@ export const api = {
       body: JSON.stringify({ api_key }),
     }),
     clearMapsKey: () => request<MapsSettings>('/settings/maps/key', { method: 'DELETE' }),
+    getAgent: () => request<AgentSettings>('/settings/agent'),
+    saveAgent: (data: { url?: string | null; token?: string | null }) => request<AgentSettings>('/settings/agent', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    clearAgentToken: () => request<AgentSettings>('/settings/agent/token', { method: 'DELETE' }),
+    getAgentHealth: () => request<AgentHealth>('/settings/agent/health'),
     getSync: () => request<SyncSettings>('/settings/sync'),
     saveSync: (data: Partial<SyncSettings>) => request<SyncSettings>('/settings/sync', {
       method: 'POST',

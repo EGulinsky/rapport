@@ -425,6 +425,21 @@ class MapsSettings(Base):
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class AgentSettings(Base):
+    """Connection to the host-side JobTracker Agent (replaces the three old
+    unauthenticated bridges: files/notes/calls). Token is Fernet-encrypted,
+    same pattern as AiSettings/MapsSettings — the agent generates it on
+    first run, the user pastes it in once."""
+    __tablename__ = "agent_settings"
+
+    id          = Column(Integer, primary_key=True)
+    url         = Column(String, nullable=True)   # override; None = default AGENT_URL env var
+    token_enc   = Column(Text, nullable=True)
+
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
 class SyncSettings(Base):
     __tablename__ = "sync_settings"
 

@@ -486,10 +486,9 @@ async def verify_notes_2fa(payload: schemas.ICloud2FAVerify, db: Session = Depen
     return await _sync_notes_with_api(api, cfg, db)
 
 
-NOTES_BRIDGE_URL = "http://host.docker.internal:9999/notes"
-
-
 async def _do_icloud_notes() -> dict:
+    from app.agent_client import agent_get
+
     db = SessionLocal()
     processed = created = skipped = 0
     errors: list[str] = []
@@ -501,20 +500,18 @@ async def _do_icloud_notes() -> dict:
 
         _, term_to_apps = build_firm_index(db)
 
-        update_progress("icloud_notes", 0, 0, "Notes Bridge wird abgefragt…")
+        update_progress("icloud_notes", 0, 0, "Agent wird abgefragt…")
         try:
-            import httpx
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(NOTES_BRIDGE_URL)
+            resp = await agent_get(db, "/notes", timeout=30)
             if resp.status_code != 200:
                 err = resp.json().get('error', resp.text)
                 finish_progress("icloud_notes")
-                return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Notes Bridge Fehler: {err}"]}
+                return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Agent-Fehler (Notizen): {err}"]}
             notes = resp.json()
         except Exception as e:
             finish_progress("icloud_notes")
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [
-                f"Notes Bridge nicht erreichbar ({e}). Starte notes_bridge.py auf deinem Mac."
+                f"JobTracker Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
             ]}
 
         total = len(notes)
@@ -1430,10 +1427,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
     return created, errors
 
 
-# ── Anrufliste (Calls Bridge) ────────────────────────────────────────────────
-
-CALLS_BRIDGE_URL = os.getenv("CALLS_BRIDGE_URL", "http://host.docker.internal:9997/calls")
-
+# ── Anrufliste (via JobTracker Agent) ─────────────────────────────────────────
 
 def _get_calls_cfg(db: Session) -> models.CallsConfig:
     cfg = db.query(models.CallsConfig).first()
@@ -1445,39 +1439,32 @@ def _get_calls_cfg(db: Session) -> models.CallsConfig:
     return cfg
 
 
+async def _agent_reachable(db: Session) -> bool:
+    from app.agent_client import agent_get
+    try:
+        resp = await agent_get(db, "/health", timeout=3)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 @router.get("/calls/status", response_model=schemas.CallsStatus)
 async def calls_status(db: Session = Depends(get_db)):
-    import httpx
     cfg = _get_calls_cfg(db)
-    reachable = False
-    try:
-        async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(CALLS_BRIDGE_URL.replace("/calls", "/health"))
-            reachable = resp.status_code == 200
-    except Exception:
-        pass
     return schemas.CallsStatus(
         enabled=cfg.enabled,
         last_sync=cfg.last_sync,
-        bridge_reachable=reachable,
+        bridge_reachable=await _agent_reachable(db),
     )
 
 
 @router.post("/calls/settings", response_model=schemas.CallsStatus)
 async def calls_settings(body: dict, db: Session = Depends(get_db)):
-    import httpx
     cfg = _get_calls_cfg(db)
     if "enabled" in body:
         cfg.enabled = bool(body["enabled"])
         db.commit()
-    reachable = False
-    try:
-        async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(CALLS_BRIDGE_URL.replace("/calls", "/health"))
-            reachable = resp.status_code == 200
-    except Exception:
-        pass
-    return schemas.CallsStatus(enabled=cfg.enabled, last_sync=cfg.last_sync, bridge_reachable=reachable)
+    return schemas.CallsStatus(enabled=cfg.enabled, last_sync=cfg.last_sync, bridge_reachable=await _agent_reachable(db))
 
 
 def _normalize_phone(phone: str) -> str:
@@ -1546,7 +1533,8 @@ def reset_calls_sync(db: Session = Depends(get_db)):
 
 
 async def _do_icloud_calls() -> dict:
-    import httpx
+    from app.agent_client import agent_get
+
     db = SessionLocal()
     processed = created = skipped = 0
     errors: list[str] = []
@@ -1558,13 +1546,12 @@ async def _do_icloud_calls() -> dict:
 
         update_progress("icloud_calls", 0, 0, "Anrufe werden geladen…")
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(CALLS_BRIDGE_URL)
-                resp.raise_for_status()
-                calls: list[dict] = resp.json()
+            resp = await agent_get(db, "/calls", timeout=30)
+            resp.raise_for_status()
+            calls: list[dict] = resp.json()
         except Exception as e:
             finish_progress("icloud_calls")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Calls bridge nicht erreichbar: {e}"]}
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"JobTracker Agent nicht erreichbar: {e}"]}
 
         total = len(calls)
         update_progress("icloud_calls", 0, total, f"{total} Anrufe gefunden")

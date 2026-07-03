@@ -199,7 +199,7 @@ class TestRestoreFromFile:
 
         with patch("httpx.AsyncClient.get", new=fake_get):
             result = await backup_module.restore_from_file(
-                backup_module.RestoreFileRequest(path="/Users/test/Desktop/mein_backup.zip"),
+                backup_module.RestoreFileRequest(path="/Users/test/Desktop/mein_backup.zip"), db=db_session,
             )
 
         assert result["success"] is True
@@ -224,6 +224,6 @@ class TestRestoreFromFile:
         with patch("httpx.AsyncClient.get", new=fake_get):
             with pytest.raises(Exception) as exc_info:
                 await backup_module.restore_from_file(
-                    backup_module.RestoreFileRequest(path="/does/not/exist.zip"),
+                    backup_module.RestoreFileRequest(path="/does/not/exist.zip"), db=db_session,
                 )
         assert getattr(exc_info.value, "status_code", None) == 500
