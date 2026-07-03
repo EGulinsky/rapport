@@ -223,16 +223,20 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                   disabled={batchBusy}
                   className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  <Check className="h-3.5 w-3.5" />
-                  {selected.size} annehmen
+                  {batchBusy
+                    ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
+                    : <Check className="h-3.5 w-3.5" />}
+                  {batchBusy ? 'Wird verarbeitet…' : `${selected.size} annehmen`}
                 </button>
                 <button
                   onClick={batchReject}
                   disabled={batchBusy}
                   className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  <X className="h-3.5 w-3.5" />
-                  {selected.size} ablehnen
+                  {batchBusy
+                    ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-gray-400 rounded-full" />
+                    : <X className="h-3.5 w-3.5" />}
+                  {batchBusy ? 'Wird verarbeitet…' : `${selected.size} ablehnen`}
                 </button>
               </>
             )}
@@ -305,8 +309,10 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                       disabled={busy || !canApprove}
                       className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Check className="h-3.5 w-3.5" />
-                      Annehmen
+                      {busy
+                        ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
+                        : <Check className="h-3.5 w-3.5" />}
+                      {busy ? 'Wird verarbeitet…' : 'Annehmen'}
                     </button>
                     <button
                       onClick={() => reject(item)}
@@ -314,8 +320,10 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                       className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                       title={isCompanyCandidate ? 'Keiner davon — Wikidata-Fallback versuchen' : undefined}
                     >
-                      <X className="h-3.5 w-3.5" />
-                      {isCompanyCandidate ? 'Keiner davon' : 'Ablehnen'}
+                      {busy
+                        ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-gray-400 rounded-full" />
+                        : <X className="h-3.5 w-3.5" />}
+                      {busy ? 'Wird verarbeitet…' : (isCompanyCandidate ? 'Keiner davon' : 'Ablehnen')}
                     </button>
                   </div>
                 </div>
