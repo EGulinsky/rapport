@@ -1484,8 +1484,13 @@ async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depen
             existing = db.query(models.Contact).filter_by(email=parsed["email"]).first()
         if not existing:
             existing = db.query(models.Contact).filter_by(name=parsed["name"]).first()
-        if existing:
-            continue  # bereits als Kontakt vorhanden — kein Importkandidat mehr
+        # Bereits vorhandene Kontakte weiterhin mit anzeigen (nur als "schon
+        # importiert" markiert), statt sie stillschweigend aus dem Ergebnis zu
+        # werfen — sonst wirkt eine Suche, deren einzige Treffer bereits
+        # importiert sind, wie ein kaputtes "0 Treffer". Live beobachtet: Suche
+        # nach "qorix" fand 3 echte vCards, aber alle drei waren schon
+        # importierte Kontakte → Ergebnis war fälschlich leer.
+        parsed["already_imported"] = existing is not None
 
         key = f"{parsed['email'] or ''}|{parsed['name']}"
         if key in seen_keys:

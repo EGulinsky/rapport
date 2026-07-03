@@ -35,7 +35,7 @@ def _fake_search_page(anchor_specs: list[tuple[str, str]]):
 
 class TestLinkedinSearchPeople:
     async def test_positiv_extrahiert_name_und_headline(self):
-        card_text = "\n".join(["Max Mustermann", "1st", "Senior Engineer at Contoso GmbH", "Connect"])
+        card_text = "\n".join(["Max Mustermann", "• 1st", "Senior Engineer at Contoso GmbH", "Connect"])
         page = _fake_search_page([("https://www.linkedin.com/in/max-mustermann/?trk=x", card_text)])
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
@@ -70,8 +70,8 @@ class TestLinkedinSearchPeople:
 
     async def test_corner_case_dedupliziert_gleiche_profil_url(self):
         page = _fake_search_page([
-            ("https://www.linkedin.com/in/max/?trk=a", "Max"),
-            ("https://www.linkedin.com/in/max/?trk=b", "Max"),
+            ("https://www.linkedin.com/in/max/?trk=a", "Max\n• 1st"),
+            ("https://www.linkedin.com/in/max/?trk=b", "Max\n• 1st"),
         ])
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
@@ -81,7 +81,7 @@ class TestLinkedinSearchPeople:
         assert len(result) == 1
 
     async def test_corner_case_kein_headline_treffer_ohne_zweite_zeile(self):
-        page = _fake_search_page([("https://www.linkedin.com/in/max/", "Max Mustermann")])
+        page = _fake_search_page([("https://www.linkedin.com/in/max/", "Max Mustermann\n• 2nd")])
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
 
@@ -91,7 +91,7 @@ class TestLinkedinSearchPeople:
 
     async def test_negativ_rauschen_wird_nicht_als_headline_verwendet(self):
         # "1st"/"Connect"/etc. sind Verbindungsgrad- bzw. Button-Text, keine Headline.
-        card_text = "\n".join(["Max Mustermann", "1st", "Connect"])
+        card_text = "\n".join(["Max Mustermann", "• 1st", "Connect"])
         page = _fake_search_page([("https://www.linkedin.com/in/max/", card_text)])
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
@@ -113,6 +113,34 @@ class TestLinkedinSearchPeople:
 
         assert result[0]["name"] == "Satya Nadella"
         assert result[0]["headline"] == "Technical Support Specialist at Contoso Inc."
+
+    async def test_negativ_gemeinsame_kontakte_erwaehnung_wird_nicht_als_treffer_gezaehlt(self):
+        # Live-Regressionsfall (Suche nach 'Michael Schmidt'): LinkedIns
+        # Ergebnisliste verlinkt auch Personen, die nur als "X, Y und 20
+        # weitere gemeinsame Kontakte" innerhalb einer FREMDEN Karte erwähnt
+        # werden. Diese Erwähnungs-Links haben dieselbe /in/-Struktur wie
+        # echte Suchergebnisse, aber nur den nackten Namen als Text (kein
+        # Verbindungsgrad) — ohne Filter landeten sie als Kandidaten ohne
+        # Firma/Headline und verbrauchten das `limit`-Kontingent, sodass es
+        # wirkte, als käme nur die erste Trefferseite zurück.
+        real_card = "\n".join([
+            "Michael Schmidt • 2nd", "Team Lead at Contoso GmbH", "Fulda, Germany",
+            "Connect", "Anna Muster, Tom Beispiel and 20 other mutual connections",
+        ])
+        page = _fake_search_page([
+            ("https://www.linkedin.com/in/michael-schmidt-real/", real_card),
+            ("https://www.linkedin.com/in/michael-schmidt-real/", "Michael Schmidt"),  # doppelter Link, nur Name
+            ("https://www.linkedin.com/in/anna-muster/", "Anna Muster"),  # gemeinsamer Kontakt, kein echter Treffer
+            ("https://www.linkedin.com/in/tom-beispiel/", "Tom Beispiel"),  # dito
+        ])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_people(context, "Michael Schmidt")
+
+        assert len(result) == 1
+        assert result[0]["name"] == "Michael Schmidt"
+        assert result[0]["headline"] == "Team Lead at Contoso GmbH"
 
 
 class TestSplitHeadline:
