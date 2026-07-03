@@ -1,23 +1,32 @@
-"""L0/L1 Unit — Wikidata-Parsing, company_type-Heuristik, LinkedIn-Fallback-Regex.
+"""L0/L1 Unit — LinkedIn-Suche/Scrape, Wikidata-Parsing, company_type-Heuristik, Feld-Anwendung.
 
-Firmensync wurde von DuckDuckGo+Wikipedia auf Wikidata (primär) + LinkedIn-
-Company-Page (Fallback bei Wikidata-Fehltreffer) umgestellt. Grund: DDGs
-Infobox-Label-Matching mischte über den generischen Keyword "type" die
-Rechtsform (Public/Private) mit der Branche — 127 von 183 Firmen landeten
-dadurch bei identisch "Softwareentwicklung". Wikidatas P452-Property hat
-dieses Problem nicht.
+Firmensync-Reihenfolge: LinkedIn-Firmenseite ist primär, Wikidata (Search API +
+SPARQL) ist Fallback bei 0 (eindeutigen) LinkedIn-Treffern. Bei mehreren
+LinkedIn-Treffern wird nicht geraten — die Firma landet als "needs_review" mit
+einem PendingMatch in der bestehenden "Manuelle Überprüfung"-Queue
+(app/routers/review.py), bis der User einen Kandidaten wählt oder "keiner
+davon" klickt (siehe test_sync_company_review.py für diesen Teil).
+
+Historischer Kontext für die Quellenwahl: DuckDuckGos Infobox-Label-Matching
+mischte über den generischen Keyword "type" die Rechtsform (Public/Private)
+mit der Branche — 127 von 183 Firmen landeten dadurch bei identisch
+"Softwareentwicklung". Wikidatas P452-Property hat dieses Problem nicht.
 """
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from app.routers.sync_company import (
+    _apply_linkedin_fields,
+    _apply_wikidata_fields,
     _classify_company_type,
     _clean_query,
     _domain_from_url,
     _employee_range,
-    _linkedin_company_fallback,
+    _linkedin_scrape_about,
+    _linkedin_search_candidates,
     _parse_year,
     _wikidata_search_one,
     _wikidata_sparql_batch,
@@ -33,6 +42,17 @@ def _mock_response(json_data, status=200):
     resp.json.return_value = json_data
     resp.headers = {}
     return resp
+
+
+def _fake_profile(**overrides):
+    defaults = dict(
+        description=None, hq_city=None, hq_country=None, industry=None,
+        employee_count=None, employee_range=None, founded_year=None,
+        website=None, linkedin_company_url=None, company_type=None,
+        logo_data=None,
+    )
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
 
 
 class TestEmployeeRange:
@@ -84,13 +104,61 @@ class TestClassifyCompanyType:
         assert _classify_company_type(50, 2022) == "startup"
 
     def test_positiv_alte_kleine_firma_ist_kein_startup(self):
-        # Regressionsfall des ursprünglichen Bugs: alteingesessene kleine
-        # Firmen (z.B. 40 Jahre alter Handwerksbetrieb) dürfen nicht als
-        # "startup" klassifiziert werden, nur weil sie wenige Mitarbeiter haben.
         assert _classify_company_type(50, 1985) == "kmu"
 
     def test_corner_case_mittelgrosse_firma_ist_kmu(self):
         assert _classify_company_type(400, 2000) == "kmu"
+
+
+class TestApplyLinkedinFields:
+    def test_positiv_setzt_felder_und_company_type(self):
+        p = _fake_profile()
+        _apply_linkedin_fields(p, {
+            "industry": "Maschinenbau", "employee_count": 50,
+            "founded_year": 2022, "website": "https://x.example",
+            "linkedin_company_url": "https://www.linkedin.com/company/x",
+        })
+        assert p.industry == "Maschinenbau"
+        assert p.employee_count == 50
+        assert p.employee_range == "11-50"
+        assert p.founded_year == 2022
+        assert p.website == "https://x.example"
+        assert p.company_type == "startup"
+
+    def test_negativ_website_wird_nicht_ueberschrieben_wenn_vorhanden(self):
+        p = _fake_profile(website="https://schon-da.example")
+        _apply_linkedin_fields(p, {"website": "https://neu.example"})
+        assert p.website == "https://schon-da.example"
+
+    def test_corner_case_kein_hq_city_feld_wird_je_gesetzt(self):
+        # _linkedin_scrape_about liefert nie "hq_city" (siehe eigene Testklasse) —
+        # _apply_linkedin_fields liest es entsprechend auch nirgends.
+        p = _fake_profile()
+        _apply_linkedin_fields(p, {"hq_city": "Berlin", "industry": "IT"})
+        assert p.hq_city is None
+
+
+class TestApplyWikidataFields:
+    def test_positiv_ueberschreibt_industrie_und_hq(self):
+        p = _fake_profile(industry="Alt", hq_city="Alt-Stadt")
+        _apply_wikidata_fields(p, "Beschreibung", {
+            "industry": "Maschinenbau", "hq_city": "München", "hq_country": "Deutschland",
+            "employee_count": 20000, "founded_year": 1990,
+        })
+        assert p.industry == "Maschinenbau"
+        assert p.hq_city == "München"
+        assert p.company_type == "konzern"
+
+    def test_negativ_website_wird_nicht_ueberschrieben_wenn_vorhanden(self):
+        p = _fake_profile(website="https://schon-da.example")
+        _apply_wikidata_fields(p, "", {"website": "https://neu.example"})
+        assert p.website == "https://schon-da.example"
+
+    def test_negativ_leeres_data_dict_aendert_nichts(self):
+        p = _fake_profile(industry="Bestand")
+        _apply_wikidata_fields(p, "", {})
+        assert p.industry == "Bestand"
+        assert p.company_type is None
 
 
 class TestWikidataSearchOne:
@@ -128,9 +196,6 @@ class TestWikidataSearchOne:
 
 class TestWikidataSparqlBatch:
     async def test_positiv_industrie_kommt_aus_p452_nicht_aus_rechtsform(self):
-        # Der ursprüngliche Bug (DDG) mischte die Rechtsform ("Public company")
-        # mit der Branche. Wikidatas P452 (industryLabel) ist sauber getrennt
-        # von der Rechtsform (die hier gar nicht abgefragt wird).
         bindings = [{
             "company": {"value": "http://www.wikidata.org/entity/Q12345"},
             "hqLabel": {"value": "München"},
@@ -175,28 +240,123 @@ class TestWikidataSparqlBatch:
         assert result == {}
 
 
-def _fake_page(main_text: str, company_href: str | None):
+def _fake_search_page(anchor_specs: list[tuple[str, str]]):
+    """anchor_specs: Liste von (href, sichtbarer Name)."""
     page = MagicMock()
     page.goto = AsyncMock()
     page.wait_for_timeout = AsyncMock()
     page.close = AsyncMock()
 
+    anchors = []
+    for href, text in anchor_specs:
+        a = MagicMock()
+        a.get_attribute = AsyncMock(return_value=href)
+        a.inner_text = AsyncMock(return_value=text)
+        anchors.append(a)
+
     locator = MagicMock()
-    first = MagicMock()
-    first.get_attribute = AsyncMock(return_value=company_href)
-    locator.first = first
-
-    main_locator = MagicMock()
-    main_locator.inner_text = AsyncMock(return_value=main_text)
-
-    def _locator(selector):
-        return main_locator if selector == "main" else locator
-
-    page.locator = MagicMock(side_effect=_locator)
+    locator.all = AsyncMock(return_value=anchors)
+    page.locator = MagicMock(return_value=locator)
     return page
 
 
-class TestLinkedInCompanyFallback:
+class TestLinkedinSearchCandidates:
+    async def test_positiv_mehrere_eindeutige_treffer(self):
+        page = _fake_search_page([
+            ("https://www.linkedin.com/company/contoso-gmbh/?trk=x", "Contoso GmbH"),
+            ("https://www.linkedin.com/company/contoso-inc/", "Contoso Inc."),
+        ])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Contoso")
+
+        assert result == [
+            {"name": "Contoso GmbH", "url": "https://www.linkedin.com/company/contoso-gmbh"},
+            {"name": "Contoso Inc.", "url": "https://www.linkedin.com/company/contoso-inc"},
+        ]
+
+    async def test_negativ_kein_treffer_liefert_leere_liste(self):
+        page = _fake_search_page([])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Unbekannte Firma XYZ")
+
+        assert result == []
+
+    async def test_negativ_exception_liefert_leere_liste_statt_crash(self):
+        page = MagicMock()
+        page.goto = AsyncMock(side_effect=RuntimeError("Timeout"))
+        page.close = AsyncMock()
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Contoso GmbH")
+
+        assert result == []
+
+    async def test_corner_case_dedupliziert_gleiche_url_trotz_tracking_params(self):
+        page = _fake_search_page([
+            ("https://www.linkedin.com/company/contoso/?trk=a", "Contoso"),
+            ("https://www.linkedin.com/company/contoso/?trk=b", "Contoso"),
+        ])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Contoso")
+
+        assert len(result) == 1
+
+    async def test_corner_case_limit_wird_respektiert(self):
+        anchors = [(f"https://www.linkedin.com/company/c{i}/", f"C{i}") for i in range(10)]
+        page = _fake_search_page(anchors)
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "C", limit=3)
+
+        assert len(result) == 3
+
+    async def test_corner_case_fehlender_name_faellt_auf_url_slug_zurueck(self):
+        page = _fake_search_page([("https://www.linkedin.com/company/contoso-gmbh/", "")])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Contoso")
+
+        assert result[0]["name"] == "Contoso Gmbh"
+
+    async def test_negativ_mehrzeilige_suchergebnis_karte_liefert_nur_ersten_zeile(self):
+        # Live-Regressionsfall ('GitLab'): der Suchergebnis-Link umschließt die
+        # ganze Karte (Name, Branche, Ort, "Follow"-Button, Beschreibung) —
+        # inner_text() lieferte den kompletten Kartentext statt nur den Namen.
+        card_text = "\n".join([
+            "GitLab", "", "IT Services and IT Consulting", "",
+            "San Francisco, California", "", "Follow", "",
+            "GitLab is the Intelligent Orchestration Platform…",
+        ])
+        page = _fake_search_page([("https://www.linkedin.com/company/gitlab-com/", card_text)])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "GitLab")
+
+        assert result[0]["name"] == "GitLab"
+
+
+def _fake_about_page(main_text: str):
+    page = MagicMock()
+    page.goto = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+    page.close = AsyncMock()
+    main_locator = MagicMock()
+    main_locator.inner_text = AsyncMock(return_value=main_text)
+    page.locator = MagicMock(return_value=main_locator)
+    return page
+
+
+class TestLinkedinScrapeAbout:
     async def test_positiv_extrahiert_felder_aus_about_seite(self):
         about_text = "\n".join([
             "Contoso GmbH",
@@ -211,11 +371,11 @@ class TestLinkedInCompanyFallback:
             "Website",
             "https://contoso.example",
         ])
-        page = _fake_page(about_text, "https://www.linkedin.com/company/contoso-gmbh/?trk=x")
+        page = _fake_about_page(about_text)
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
 
-        result = await _linkedin_company_fallback(context, "Contoso GmbH")
+        result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/contoso-gmbh")
 
         assert result["industry"] == "Maschinenbau"
         assert result["employee_count"] == 51
@@ -224,15 +384,6 @@ class TestLinkedInCompanyFallback:
         assert result["website"] == "https://contoso.example"
         assert result["linkedin_company_url"] == "https://www.linkedin.com/company/contoso-gmbh"
 
-    async def test_negativ_kein_suchtreffer_liefert_leeres_dict(self):
-        page = _fake_page("", None)
-        context = MagicMock()
-        context.new_page = AsyncMock(return_value=page)
-
-        result = await _linkedin_company_fallback(context, "Unbekannte Firma XYZ")
-
-        assert result == {}
-
     async def test_negativ_exception_liefert_leeres_dict_statt_crash(self):
         page = MagicMock()
         page.goto = AsyncMock(side_effect=RuntimeError("Timeout"))
@@ -240,7 +391,7 @@ class TestLinkedInCompanyFallback:
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
 
-        result = await _linkedin_company_fallback(context, "Contoso GmbH")
+        result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/contoso-gmbh")
 
         assert result == {}
 
@@ -249,11 +400,11 @@ class TestLinkedInCompanyFallback:
             "Industry", "Softwareentwicklung",
             "Company size", "10,001+ employees",
         ])
-        page = _fake_page(about_text, "https://www.linkedin.com/company/bigcorp/")
+        page = _fake_about_page(about_text)
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
 
-        result = await _linkedin_company_fallback(context, "BigCorp")
+        result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/bigcorp")
 
         assert result["employee_count"] == 10001
 
@@ -269,10 +420,10 @@ class TestLinkedInCompanyFallback:
             "Hauptsitz-Stadt",
             "Oberkochen, Baden-Württemberg",
         ])
-        page = _fake_page(about_text, "https://www.linkedin.com/company/zeiss/")
+        page = _fake_about_page(about_text)
         context = MagicMock()
         context.new_page = AsyncMock(return_value=page)
 
-        result = await _linkedin_company_fallback(context, "ZEISS Group")
+        result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/zeiss")
 
         assert "hq_city" not in result

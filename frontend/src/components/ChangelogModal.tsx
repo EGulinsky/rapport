@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.29.0',
+    date: '2026-07-03',
+    changes: [
+      'Firmensync-Reihenfolge umgedreht: LinkedIn-Firmenseite ist jetzt primär, Wikidata nur noch Fallback bei 0 LinkedIn-Treffern. Bei mehreren plausiblen LinkedIn-Treffern für eine Firma wird nicht mehr automatisch geraten — sie landet als offener Eintrag in der bestehenden "Manuelle Überprüfung"-Queue (Einstellungen-Glocke), wo man den richtigen Kandidaten auswählt oder "Keiner davon" klickt (löst dann den Wikidata-Fallback für genau diese eine Firma aus). Live an "GitLab" verifiziert und dabei einen echten Bug gefunden und behoben: LinkedIns Suchergebnis-Link umschließt die komplette Ergebniskarte (Name, Branche, Ort, Beschreibung), wodurch der erkannte Firmenname anfangs den ganzen Kartentext statt nur den Namen enthielt.',
+    ],
+  },
+  {
     version: '3.28.1',
     date: '2026-07-03',
     changes: [

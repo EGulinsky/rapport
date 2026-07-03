@@ -53,10 +53,24 @@ def list_pending(db: Session = Depends(get_db)):
 
 
 @router.post("/{match_id}/approve")
-def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_db)):
+async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_db)):
     match = db.query(PendingMatch).filter(PendingMatch.id == match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
+
+    # ── Firmensync: mehrdeutiger LinkedIn-Treffer, User hat einen gewählt ────
+    if match.event_type == "company_candidate":
+        from app.routers.sync_company import resolve_company_candidate
+        try:
+            payload = json.loads(match.raw_content or "{}")
+            profile_id = payload.get("company_profile_id")
+        except Exception:
+            profile_id = None
+        if profile_id and body.linkedin_url:
+            await resolve_company_candidate(db, profile_id, body.linkedin_url)
+        match.review_status = "approved"
+        db.commit()
+        return {"status": "approved", "event_id": None}
 
     # ── Cleanup duplicates (no application required) ─────────────────────────
     if match.event_type == "duplicate_contact":
@@ -147,10 +161,25 @@ def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_d
 
 
 @router.delete("/{match_id}")
-def reject_match(match_id: int, db: Session = Depends(get_db)):
+async def reject_match(match_id: int, db: Session = Depends(get_db)):
     match = db.query(PendingMatch).filter(PendingMatch.id == match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
+
+    # ── Firmensync: "keiner davon" → Wikidata-Fallback für diese eine Firma ──
+    if match.event_type == "company_candidate":
+        from app.routers.sync_company import resolve_company_candidate
+        try:
+            payload = json.loads(match.raw_content or "{}")
+            profile_id = payload.get("company_profile_id")
+        except Exception:
+            profile_id = None
+        if profile_id:
+            await resolve_company_candidate(db, profile_id, None)
+        match.review_status = "rejected"
+        db.commit()
+        return {"status": "rejected"}
+
     match.review_status = "rejected"
     db.commit()
     return {"status": "rejected"}
