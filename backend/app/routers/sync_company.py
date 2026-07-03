@@ -537,13 +537,24 @@ async def _run_sync_batch(profile_ids: list[int]):
                 log.debug("LinkedIn-Fallback übersprungen: keine gültige Session konfiguriert")
 
         # Phase 3: Batch SPARQL für gefundene Wikidata-Treffer
+        # sparql_attempted_pids trackt, für welche gefundenen Q-IDs überhaupt
+        # eine SPARQL-Abfrage lief. Bei Cancel mitten in Phase 1/2 (Suche/
+        # LinkedIn-Fallback) bricht die Schleife unten sofort ab, OHNE dass
+        # für die bereits gefundenen Q-IDs je SPARQL abgefragt wurde — diese
+        # dürfen NICHT als "done, kein Datensatz" enden (das würde einen
+        # echten, aber nie abgefragten Treffer für immer wie einen bestätigten
+        # Fehltreffer aussehen lassen). Live beobachtet: nach einem vom User
+        # abgebrochenen Lauf landeten so 150+ Firmen fälschlich "done" mit
+        # "Kein Wikidata-Datensatz", obwohl SPARQL nie lief.
         found_pids = list(qid_map.keys())
+        sparql_attempted_pids: set[int] = set()
         sparql_failed_pids: set[int] = set()
         sparql_data: dict[str, dict] = {}
         for i in range(0, len(found_pids), _SPARQL_BATCH):
             if _SYNC_CANCEL:
                 break
             chunk_pids = found_pids[i:i + _SPARQL_BATCH]
+            sparql_attempted_pids.update(chunk_pids)
             chunk_qids = [qid_map[pid] for pid in chunk_pids]
             log.info("SPARQL-Batch {}/{}: {} Firmen", i // _SPARQL_BATCH + 1,
                      -(-len(found_pids) // _SPARQL_BATCH), len(chunk_qids))
@@ -592,6 +603,13 @@ async def _run_sync_batch(profile_ids: list[int]):
                 continue  # bereits als "failed" committed (SPARQL-Batch-Fehler)
             p = db.query(models.CompanyProfile).get(pid)
             if not p:
+                continue
+
+            if pid in qid_map and pid not in sparql_attempted_pids:
+                # Q-ID gefunden, aber SPARQL nie abgefragt (Cancel vor Phase 3) —
+                # bleibt "pending", damit der nächste Lauf es richtig fertig macht.
+                p.sync_status = "pending"
+                p.sync_error = None
                 continue
 
             if pid in qid_map:

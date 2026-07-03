@@ -53,6 +53,28 @@ class TestRunSyncBatchCancel:
         assert p3.sync_status == "pending"
         assert p3.sync_error is None
 
+    async def test_negativ_gefundene_qid_ohne_sparql_bleibt_pending_bei_cancel(self, db_session):
+        # Live-Regressionsfall: Cancel kam nach Phase 1 (Wikidata-Suche fand
+        # bereits eine Q-ID), aber vor Phase 3 (SPARQL-Abfrage der Q-ID-Daten).
+        # Ohne Fix landete das Profil "done" mit "Kein Wikidata-Datensatz (nur
+        # Basistreffer)" — obwohl SPARQL für diese Q-ID nie abgefragt wurde.
+        # In Produktion betraf das nach einem User-Abbruch über 150 Firmen.
+        p1 = company_profile_factory(db_session, sync_status="pending")
+        db_session.commit()
+
+        async def fake_search_one(client, name):
+            sync_company._SYNC_CANCEL = True
+            return ("Q12345", "Beschreibung")
+
+        with patch.object(sync_company, "_wikidata_search_one", new=fake_search_one), \
+             patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
+            await sync_company._run_sync_batch([p1.id])
+
+        db_session.expire_all()
+        assert p1.sync_status == "pending"
+        assert p1.sync_error is None
+        assert p1.sync_source is None
+
     async def test_positiv_ohne_cancel_werden_alle_profile_verarbeitet(self, db_session):
         p1 = company_profile_factory(db_session, sync_status="pending")
         p2 = company_profile_factory(db_session, sync_status="pending")

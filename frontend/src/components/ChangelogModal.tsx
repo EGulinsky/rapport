@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.28.1',
+    date: '2026-07-03',
+    changes: [
+      'Fix: ein abgebrochener Firmensync (Cancel während des Laufs) hat Firmen, für die bereits ein Wikidata-Eintrag gefunden, aber dessen Detaildaten noch nicht abgefragt waren, fälschlich als "fertig, kein Datensatz" markiert statt sie für den nächsten Lauf erneut vorzumerken — durch die "done wird nie automatisch wiederholt"-Regel wären sie sonst dauerhaft mit leeren Daten hängen geblieben. Live beim ersten produktiven Sync-Lauf nach der Wikidata-Umstellung aufgefallen (über 150 betroffene Firmen), jetzt mit Regressionstest abgesichert.',
+    ],
+  },
+  {
     version: '3.28.0',
     date: '2026-07-03',
     changes: [
