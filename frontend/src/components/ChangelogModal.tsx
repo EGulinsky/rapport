@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.28.0',
+    date: '2026-07-03',
+    changes: [
+      'Firmensync grundlegend überarbeitet: Wikidata (Suche + strukturierte Firmendaten) ist jetzt die primäre Quelle statt DuckDuckGo/Wikipedia — behebt einen Datenqualitätsbug, bei dem 127 von 183 Firmen identisch "Softwareentwicklung" als Branche zeigten (ein zu allgemeines Suchwort hatte die Rechtsform mit der Branche verwechselt). Neu: LinkedIn-Firmenseiten-Fallback für Firmen ohne Wikidata-Eintrag (nutzt die bestehende LinkedIn-Session, kein zusätzlicher Login). Neu: automatische grobe Startup/KMU/Konzern-Einstufung aus Mitarbeiterzahl + Gründungsjahr, sobald frische Daten vorliegen. Live an Produktivdaten verifiziert (Siemens, ZEISS Group, Mpowering People) und dabei zwei echte Bugs gefunden und behoben: ein Abbruch-Bug, der nie versuchte Firmen fälschlich als "fertig, kein Treffer" markiert hätte, und eine LinkedIn-Sonderzeichen-Falle bei der Hauptsitz-Extraktion (deshalb bewusst nicht mehr aus LinkedIn übernommen, Hauptsitz kommt zuverlässig aus Wikidata).',
+    ],
+  },
+  {
     version: '3.27.0',
     date: '2026-07-03',
     changes: [
