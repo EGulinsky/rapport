@@ -65,7 +65,7 @@ def _check_ai(db: Session) -> dict:
 
 def _check_files_config(db: Session) -> dict:
     cfg = db.query(models.FilesConfig).first()
-    if not cfg or not cfg.enabled or not cfg.folder:
+    if not cfg or not cfg.enabled or not cfg.folder_path:
         return {"name": "Lokale Dateien", "group": "connections", "ok": False,
                 "message": "Kein Ordner konfiguriert — in Einstellungen einrichten"}
     return {"name": "Lokale Dateien", "group": "connections", "ok": True, "message": None}

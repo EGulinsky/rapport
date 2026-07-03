@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.26.1',
+    date: '2026-07-03',
+    changes: [
+      'Fix: /api/startup-check stürzte mit einem 500er ab, sobald der lokale Dateien-Sync aktiviert war — der Code las das falsche Feldnamen (FilesConfig.folder statt .folder_path). Beim Live-Verifizieren des neuen Agenten aufgefallen und behoben; bisher ungetestet, jetzt mit 7 neuen Tests abgesichert.',
+    ],
+  },
+  {
     version: '3.26.0',
     date: '2026-07-03',
     changes: [
