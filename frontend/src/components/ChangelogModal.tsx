@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.29.1',
+    date: '2026-07-03',
+    changes: [
+      'Fix: In der "Manuelle Überprüfung" (Review-Modal) gab es nach Klick auf "Annehmen"/"Ablehnen" (einzeln oder als Batch) keine sichtbare Rückmeldung, solange die Anfrage lief (z.B. bei Firmensync-Auswahlen mit LinkedIn-Scrape/Wikidata-Fallback im Hintergrund) — wirkte wie ein Hänger. Buttons zeigen jetzt einen Spinner und "Wird verarbeitet…", solange die Aktion läuft.',
+    ],
+  },
+  {
     version: '3.29.0',
     date: '2026-07-03',
     changes: [
