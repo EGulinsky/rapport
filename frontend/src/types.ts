@@ -154,6 +154,21 @@ export interface ContactWithApp extends Contact {
   applications?: { id: number; firma: string; rolle: string; company_name_display?: string | null }[]
 }
 
+export interface ICloudContactCandidate {
+  name: string
+  email?: string | null
+  telefon?: string | null
+  firma?: string | null
+  rolle?: string | null
+  linkedin_url?: string | null
+}
+
+export interface LinkedInPeopleCandidate {
+  name: string
+  headline?: string | null
+  profile_url: string
+}
+
 export interface Attachment {
   id: number
   filename: string

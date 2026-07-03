@@ -110,6 +110,22 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+
+    searchICloud: (q: string) =>
+      request<import('../types').ICloudContactCandidate[]>(`/sync/icloud/contacts/search?q=${encodeURIComponent(q)}`),
+    importFromICloud: (candidates: import('../types').ICloudContactCandidate[], applicationId?: number) =>
+      request<{ imported: number; skipped: number }>('/sync/icloud/contacts/import', {
+        method: 'POST',
+        body: JSON.stringify({ candidates, application_id: applicationId }),
+      }),
+
+    searchLinkedIn: (q: string) =>
+      request<import('../types').LinkedInPeopleCandidate[]>(`/sync/linkedin/people/search?q=${encodeURIComponent(q)}`),
+    importFromLinkedIn: (candidates: import('../types').LinkedInPeopleCandidate[], applicationId?: number) =>
+      request<{ imported: number; skipped: number }>('/sync/linkedin/people/import', {
+        method: 'POST',
+        body: JSON.stringify({ candidates, application_id: applicationId }),
+      }),
   },
 
   export: {

@@ -10,8 +10,9 @@ import re
 import time
 from datetime import date, datetime, timezone
 from typing import Optional
+from urllib.parse import quote_plus
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -1264,3 +1265,152 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
         _state["errors"] = [str(e)]
     finally:
         db.close()
+
+
+# ── Manuelle Personensuche + Kontakt-Import ──────────────────────────────────
+# Reine on-demand Suche (kein Hintergrund-Batch) — reuse _get_linkedin_context
+# aus sync_company.py: nutzt nur eine bestehende, gültige Session, kein
+# Login-Versuch (soll nicht in den 2FA-Flow des Job-Syncs oben eingreifen).
+
+_PEOPLE_NOISE = {"1st", "2nd", "3rd", "connect", "follow", "message", "pending",
+                 "view profile", "status is offline", "status is reachable"}
+# Live beobachtet (Suche nach 'Satya Nadella'): der Verbindungsgrad steht nicht
+# immer als eigene Zeile ("• 3rd+"), sondern klebt teils direkt am Namen
+# ("Satya Nadella • 3rd+") — reines Zeilen-Filtern gegen _PEOPLE_NOISE reicht
+# dann nicht, das Suffix muss aus jeder Zeile herausgeschnitten werden.
+_DEGREE_SUFFIX_RE = re.compile(r"\s*•\s*(1st|2nd|3rd\+?)\s*$", re.IGNORECASE)
+
+
+async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[dict]:
+    """Sucht LinkedIn-Personen, liefert bis zu `limit` Kandidaten
+    ({"name","headline","profile_url"}). Best-effort — jeder Fehler (Layout-
+    Änderung, Rate-Limit, keine Treffer) liefert eine leere Liste statt den
+    Aufruf abzubrechen.
+
+    Wie beim Firmen-Suchscraper (sync_company.py) umschließt der Ergebnis-
+    Link oft die ganze Karte (Name, Verbindungsgrad, Headline, Buttons) —
+    deshalb wird nur die erste Zeile als Name genommen und Rauschen
+    (Verbindungsgrad, Button-Beschriftungen) explizit herausgefiltert statt
+    blind die zweite Zeile als Headline zu vertrauen.
+    """
+    candidates: list[dict] = []
+    page = await context.new_page()
+    try:
+        search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(query)}"
+        await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(1500)
+        anchors = await page.locator("a[href*='/in/']").all()
+        seen_urls: set[str] = set()
+        for a in anchors:
+            href = await a.get_attribute("href")
+            if not href or "/in/" not in href:
+                continue
+            url = href.split("?")[0].rstrip("/")
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            raw_text = await a.inner_text()
+            lines = []
+            for ln in raw_text.splitlines():
+                ln = _DEGREE_SUFFIX_RE.sub("", ln).strip()
+                if ln and ln.lower() not in _PEOPLE_NOISE:
+                    lines.append(ln)
+            if not lines:
+                continue
+            name = lines[0]
+            headline = lines[1] if len(lines) > 1 else None
+
+            candidates.append({
+                "name": name[:200],
+                "headline": (headline[:300] if headline else None),
+                "profile_url": url,
+            })
+            if len(candidates) >= limit:
+                break
+    except Exception as e:
+        log.debug("LinkedIn-Personensuche Fehler für '{}': {}", query, e)
+    finally:
+        await page.close()
+    return candidates
+
+
+def _split_headline(headline: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """'Senior Engineer at Contoso' → (rolle, firma). Best-effort, keine
+    Firma erkannt wenn kein 'at'/'bei'-Trenner gefunden wird."""
+    if not headline:
+        return None, None
+    for sep in (" at ", " bei "):
+        if sep in headline:
+            rolle, firma = headline.split(sep, 1)
+            return rolle.strip() or None, firma.strip() or None
+    return headline.strip() or None, None
+
+
+@router.get("/people/search")
+async def search_people(q: str = Query(..., min_length=2)):
+    from app.routers.sync_company import _get_linkedin_context
+
+    li_ctx = None
+    try:
+        li_ctx = await _get_linkedin_context()
+    except Exception as e:
+        log.warning("Personensuche: LinkedIn-Browser-Start fehlgeschlagen: {}", e)
+    if not li_ctx:
+        raise HTTPException(status_code=400, detail="Keine gültige LinkedIn-Session konfiguriert")
+
+    playwright, browser, context = li_ctx
+    try:
+        candidates = await _linkedin_search_people(context, q)
+    finally:
+        await browser.close()
+        await playwright.stop()
+    return candidates
+
+
+class PeopleImportCandidate(BaseModel):
+    name: str
+    headline: Optional[str] = None
+    profile_url: str
+
+
+class PeopleImportPayload(BaseModel):
+    candidates: list[PeopleImportCandidate]
+    application_id: Optional[int] = None
+
+
+@router.post("/people/import")
+def import_people(body: PeopleImportPayload, db: Session = Depends(get_db)):
+    """Importiert vom User ausgewählte LinkedIn-Personen (aus /people/search)
+    als echte Contact-Zeilen. Explizite User-Aktion, keine Relevanz-Prüfung."""
+    app_obj = None
+    if body.application_id:
+        app_obj = db.query(models.Application).filter(
+            models.Application.id == body.application_id
+        ).first()
+        if not app_obj:
+            raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+
+    imported = 0
+    skipped = 0
+    for cand in body.candidates:
+        existing = db.query(models.Contact).filter_by(linkedin_url=cand.profile_url).first()
+        if not existing:
+            existing = db.query(models.Contact).filter_by(name=cand.name).first()
+        if existing:
+            skipped += 1
+            if app_obj and app_obj not in existing.applications:
+                existing.applications.append(app_obj)
+            continue
+        rolle, firma = _split_headline(cand.headline)
+        contact = models.Contact(
+            name=cand.name, linkedin_url=cand.profile_url, rolle=rolle, firma=firma,
+        )
+        db.add(contact)
+        db.flush()
+        if app_obj:
+            contact.applications.append(app_obj)
+        imported += 1
+
+    db.commit()
+    return {"imported": imported, "skipped": skipped}
