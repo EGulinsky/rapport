@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.32.3',
+    date: '2026-07-03',
+    changes: [
+      'Fix: Kontakt speichern (z.B. beim manuellen Aufteilen in Vorname/Nachname) schlug mit Fehler 500 fehl, sobald "Letzter Kontakt" ein Datum enthielt — das Feld war im Bearbeiten-Endpunkt falsch typisiert (Text statt Datum) und die Datenbank hat den rohen Text abgelehnt. Betraf jede Kontakt-Bearbeitung mit gesetztem Datum, nicht nur den Namens-Split.',
+    ],
+  },
+  {
     version: '3.32.2',
     date: '2026-07-03',
     changes: [
