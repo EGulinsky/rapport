@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.31.2',
+    date: '2026-07-03',
+    changes: [
+      'Fix: iCloud-Kontaktsuche lieferte 0 Treffer, wenn alle gefundenen vCards bereits importierte Kontakte waren (Suche nach "qorix" fand 3 echte Treffer, zeigte aber fälschlich ein leeres Ergebnis). Bereits vorhandene Kontakte werden jetzt weiterhin angezeigt, nur als "bereits vorhanden" markiert statt versteckt.',
+      'Fix: LinkedIn-Personensuche zeigte oft Treffer ohne Firma/Headline — Ursache waren Personen, die nur als "X, Y und 20 weitere gemeinsame Kontakte" innerhalb einer fremden Karte erwähnt werden; sie wurden fälschlich als eigene Suchergebnisse gewertet und verbrauchten das Ergebnis-Kontingent, wodurch es wirkte, als käme nur die erste Trefferseite zurück. Echte Suchergebnisse werden jetzt am Verbindungsgrad ("• 1st/2nd/3rd") erkannt, reine Erwähnungen werden verworfen.',
+    ],
+  },
+  {
     version: '3.31.1',
     date: '2026-07-03',
     changes: [

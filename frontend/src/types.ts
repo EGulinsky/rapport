@@ -161,6 +161,7 @@ export interface ICloudContactCandidate {
   firma?: string | null
   rolle?: string | null
   linkedin_url?: string | null
+  already_imported?: boolean
 }
 
 export interface LinkedInPeopleCandidate {

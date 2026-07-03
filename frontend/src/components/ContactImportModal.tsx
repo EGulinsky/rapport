@@ -152,22 +152,32 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
           {candidates.map(c => {
             const key = candidateKey(source, c)
             const subtitle = candidateSubtitle(source, c)
+            const alreadyImported = source === 'icloud' && (c as ICloudContactCandidate).already_imported
             return (
               <label
                 key={key}
                 className={clsx(
-                  'flex items-start gap-2.5 rounded-lg border p-2.5 cursor-pointer transition-colors',
-                  selected.has(key) ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
+                  'flex items-start gap-2.5 rounded-lg border p-2.5 transition-colors',
+                  alreadyImported ? 'cursor-not-allowed opacity-60 border-gray-200' :
+                    selected.has(key) ? 'cursor-pointer border-indigo-300 bg-indigo-50' : 'cursor-pointer border-gray-200 hover:bg-gray-50'
                 )}
               >
                 <input
                   type="checkbox"
                   className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
                   checked={selected.has(key)}
+                  disabled={alreadyImported}
                   onChange={() => toggle(c)}
                 />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{c.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-gray-800 truncate">{c.name}</p>
+                    {alreadyImported && (
+                      <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                        bereits vorhanden
+                      </span>
+                    )}
+                  </div>
                   {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
                 </div>
               </label>

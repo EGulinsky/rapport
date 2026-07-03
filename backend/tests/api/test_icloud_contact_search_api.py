@@ -49,7 +49,12 @@ class TestSearchContacts:
         assert results[0]["name"] == "Irrelevante Person"
         assert results[0]["email"] == "irrelevant@example.com"
 
-    def test_negativ_bereits_vorhandener_kontakt_wird_nicht_als_kandidat_gezeigt(self, client, db_session):
+    def test_positiv_bereits_vorhandener_kontakt_wird_markiert_statt_versteckt(self, client, db_session):
+        # Live-Regressionsfall: Suche nach "qorix" fand 3 echte vCard-Treffer,
+        # aber alle drei waren bereits importierte Kontakte — das alte
+        # Verhalten (stillschweigend verstecken) lieferte dadurch fälschlich
+        # ein leeres Ergebnis, obwohl echte Treffer existierten. Jetzt werden
+        # sie weiterhin gezeigt, nur als "already_imported" markiert.
         _icloud_cfg(db_session)
         contact_factory(db_session, name="Schon Da", email="schonda@example.com")
         vcards = [_vcard("Schon Da", email="schonda@example.com")]
@@ -58,7 +63,20 @@ class TestSearchContacts:
             resp = client.get("/api/sync/icloud/contacts/search?q=Schon")
 
         assert resp.status_code == 200
-        assert resp.json() == []
+        results = resp.json()
+        assert len(results) == 1
+        assert results[0]["already_imported"] is True
+
+    def test_negativ_neuer_kandidat_ist_nicht_als_already_imported_markiert(self, client, db_session):
+        _icloud_cfg(db_session)
+        vcards = [_vcard("Neue Person", email="neu@example.com")]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.get("/api/sync/icloud/contacts/search?q=Neue")
+
+        assert resp.status_code == 200
+        results = resp.json()
+        assert results[0]["already_imported"] is False
 
     def test_negativ_ohne_icloud_config_liefert_400(self, client, db_session):
         resp = client.get("/api/sync/icloud/contacts/search?q=Test")

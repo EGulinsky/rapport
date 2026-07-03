@@ -1279,6 +1279,7 @@ _PEOPLE_NOISE = {"1st", "2nd", "3rd", "connect", "follow", "message", "pending",
 # ("Satya Nadella • 3rd+") — reines Zeilen-Filtern gegen _PEOPLE_NOISE reicht
 # dann nicht, das Suffix muss aus jeder Zeile herausgeschnitten werden.
 _DEGREE_SUFFIX_RE = re.compile(r"\s*•\s*(1st|2nd|3rd\+?)\s*$", re.IGNORECASE)
+_DEGREE_MARKER_RE = re.compile(r"•\s*(1st|2nd|3rd\+?)", re.IGNORECASE)
 
 
 async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[dict]:
@@ -1308,9 +1309,22 @@ async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[
             url = href.split("?")[0].rstrip("/")
             if url in seen_urls:
                 continue
-            seen_urls.add(url)
 
             raw_text = await a.inner_text()
+            # LinkedIns Ergebnisseite verlinkt auch Personen, die nur als
+            # "X, Y und 20 weitere gemeinsame Kontakte" in einer FREMDEN Karte
+            # erwähnt werden — diese Erwähnungs-Links haben dieselbe /in/-URL-
+            # Struktur wie echte Suchergebnisse, aber nur den nackten Namen als
+            # Text (kein Verbindungsgrad). Live beobachtet (Suche nach 'Michael
+            # Schmidt'): ohne Filter landeten diese Erwähnungen als Kandidaten
+            # ohne Firma/Headline im Ergebnis und verbrauchten das `limit`-
+            # Kontingent, bevor echte weitere Treffer gescannt wurden — wirkte
+            # wie "nur die erste Trefferseite". Ein echtes Suchergebnis hat
+            # immer einen Verbindungsgrad ("• 1st/2nd/3rd") im Kartentext.
+            if not _DEGREE_MARKER_RE.search(raw_text):
+                continue
+            seen_urls.add(url)
+
             lines = []
             for ln in raw_text.splitlines():
                 ln = _DEGREE_SUFFIX_RE.sub("", ln).strip()
