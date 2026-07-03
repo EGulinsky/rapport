@@ -1,3 +1,4 @@
+from datetime import date
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -81,7 +82,7 @@ class ContactPatch(BaseModel):
     rolle: Optional[str] = None
     typ: Optional[str] = None
     notizen: Optional[str] = None
-    letzter_kontakt: Optional[str] = None
+    letzter_kontakt: Optional[date] = None
 
 
 @router.patch("/{contact_id}")
