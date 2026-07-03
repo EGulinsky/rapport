@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin } from 'lucide-react'
+import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud } from 'lucide-react'
 import { CompanySearchInput } from './components/CompanySearchInput'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
@@ -9,6 +9,8 @@ import { StatsBar } from './components/StatsBar'
 import { SyncButton } from './components/SyncButton'
 import { ImportExportMenu } from './components/ImportExportMenu'
 import { ContactsView } from './components/ContactsView'
+import { NewContactModal } from './components/NewContactModal'
+import { ContactImportModal } from './components/ContactImportModal'
 import { CompaniesView } from './components/CompaniesView'
 import { CompanyModal } from './components/CompanyModal'
 import { CalendarView } from './components/CalendarView'
@@ -99,6 +101,9 @@ export default function App() {
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
   const [contactsSearch, setContactsSearch] = useState('')
+  const [showNewContact, setShowNewContact] = useState(false)
+  const [contactImportSource, setContactImportSource] = useState<'icloud' | 'linkedin' | null>(null)
+  const [contactsReloadKey, setContactsReloadKey] = useState(0)
 
   const prevAppsRef = useRef<Map<number, Application>>(new Map())
   const [updatedAppIds, setUpdatedAppIds] = useState<Set<number>>(new Set())
@@ -351,20 +356,48 @@ export default function App() {
                 </button>
                 {showNewMenu && (
                   <div className="absolute z-50 top-full right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewMenu(false); setNewApplicationPrefill(null); setSelectedId(-1) }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
-                    >
-                      <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewMenu(false); setShowLinkedInImport(true) }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
-                    >
-                      <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
-                    </button>
+                    {mainView === 'contacts' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setShowNewContact(true) }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setContactImportSource('icloud') }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Cloud className="h-3.5 w-3.5 shrink-0" /> Aus iCloud importieren
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setContactImportSource('linkedin') }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setNewApplicationPrefill(null); setSelectedId(-1) }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setShowLinkedInImport(true) }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -406,6 +439,7 @@ export default function App() {
             onOpenCompany={id => setCompanyModalId(id)}
             search={contactsSearch}
             onSearchChange={setContactsSearch}
+            reloadKey={contactsReloadKey}
           />
         )}
         {mainView === 'companies' && (
@@ -610,6 +644,21 @@ export default function App() {
         <LinkedInImportModal
           onClose={() => setShowLinkedInImport(false)}
           onExtracted={prefill => { setShowLinkedInImport(false); setNewApplicationPrefill(prefill); setSelectedId(-1) }}
+        />
+      )}
+
+      {showNewContact && (
+        <NewContactModal
+          onClose={() => setShowNewContact(false)}
+          onCreated={() => setContactsReloadKey(k => k + 1)}
+        />
+      )}
+
+      {contactImportSource && (
+        <ContactImportModal
+          source={contactImportSource}
+          onClose={() => setContactImportSource(null)}
+          onImported={() => setContactsReloadKey(k => k + 1)}
         />
       )}
     </div>

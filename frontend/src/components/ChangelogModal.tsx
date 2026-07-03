@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.31.1',
+    date: '2026-07-03',
+    changes: [
+      'Kontakt-Import aus iCloud/LinkedIn nutzt jetzt den bereits bestehenden globalen "Neu"-Knopf statt eigener Buttons in der Kontakteübersicht — das "Neu"-Menü zeigt kontextabhängig die passenden Optionen (in der Kontaktansicht: Manuell anlegen / Aus iCloud / Aus LinkedIn statt der Bewerbungs-Optionen). "Aus LinkedIn importieren" bedeutet damit in der Kontaktansicht jetzt korrekt Personen-Import statt Stellenanzeigen-Import.',
+    ],
+  },
+  {
     version: '3.31.0',
     date: '2026-07-03',
     changes: [
