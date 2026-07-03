@@ -3,7 +3,7 @@ import { Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X } fr
 import { api } from '../api/client'
 import type { ContactWithApp, CompanyProfile } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
-import { ContactModal, displayName } from './ContactModal'
+import { ContactModal } from './ContactModal'
 import { CompanyLogo } from './CompanyLogo'
 import { CompanySearchInput } from './CompanySearchInput'
 import clsx from 'clsx'
@@ -117,7 +117,7 @@ const TYPE_COLORS: Record<string, string> = {
   Netzwerk:    'bg-green-100 text-green-700',
 }
 
-type SortKey = 'name' | 'firma' | 'typ' | 'letzter_kontakt'
+type SortKey = 'vorname' | 'name' | 'firma' | 'typ' | 'letzter_kontakt'
 
 interface Props {
   onOpenApplication: (id: number) => void
@@ -285,7 +285,8 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                   className="rounded border-gray-300 text-indigo-600 cursor-pointer"
                 />
               </th>
-              <Th k="name" label="Name" />
+              <Th k="vorname" label="Vorname" />
+              <Th k="name" label="Nachname" />
               <Th k="firma" label="Firma" />
               <Th k="typ" label="Typ" className="w-28" />
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Kontakt</th>
@@ -296,12 +297,12 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
           <tbody className="divide-y divide-gray-50">
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">Laden…</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">Laden…</td>
               </tr>
             )}
             {!loading && sorted.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400 italic">Keine Kontakte gefunden</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 italic">Keine Kontakte gefunden</td>
               </tr>
             )}
             {sorted.map(c => (
@@ -319,7 +320,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900">{displayName(c)}</p>
+                  <p className="text-gray-700">{c.vorname || <span className="text-gray-300">—</span>}</p>
+                </td>
+                <td className="px-4 py-3">
+                  <p className="font-medium text-gray-900">{c.name}</p>
                   {c.rolle && <p className="text-xs text-gray-500">{c.rolle}</p>}
                 </td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>

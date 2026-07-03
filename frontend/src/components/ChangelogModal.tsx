@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.32.1',
+    date: '2026-07-03',
+    changes: [
+      'Kontakteübersicht: Vorname und Nachname jetzt als eigene, sortierbare Spalten statt eines kombinierten Namens. Getrennte Bearbeitung war im Detail-Modal bereits möglich, ist jetzt auch in der Übersicht direkt sichtbar.',
+    ],
+  },
+  {
     version: '3.32.0',
     date: '2026-07-03',
     changes: [
