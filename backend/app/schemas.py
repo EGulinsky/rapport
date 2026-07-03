@@ -246,10 +246,11 @@ class PendingMatchRead(BaseModel):
 
 
 class ApproveMatch(BaseModel):
-    application_id: int
+    application_id: Optional[int] = None  # nicht nötig für event_type="company_candidate"
     event_type: Optional[str] = None
     datum: Optional[date] = None
     titel: Optional[str] = None
+    linkedin_url: Optional[str] = None  # nur für event_type="company_candidate": gewählter Kandidat
 
 
 class AiSettingsRead(BaseModel):

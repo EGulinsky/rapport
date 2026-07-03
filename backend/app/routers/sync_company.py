@@ -1,4 +1,8 @@
-"""Company profile sync: Wikidata (primary, Search API + batch SPARQL) → LinkedIn company page (fallback), Clearbit logo fallback."""
+"""Company profile sync: LinkedIn company page (primary) → Wikidata (fallback, Search API + batch SPARQL), Clearbit logo fallback.
+
+Bei mehreren plausiblen LinkedIn-Treffern für eine Firma wird nicht geraten:
+das Profil landet auf sync_status="needs_review" mit den Kandidaten in
+sync_candidates, bis der User über /needs-review + /resolve entscheidet."""
 import asyncio
 import base64
 import json
@@ -73,7 +77,50 @@ def _classify_company_type(employee_count: int | None, founded_year: int | None)
     return "konzern"
 
 
-# ── Source 1: Wikidata (Search API + batch SPARQL) ───────────────────────────
+def _apply_wikidata_fields(p: "models.CompanyProfile", desc: str, data: dict) -> None:
+    """Schreibt Wikidata-Felder ins Profil (überschreibt hq/industry/employee/founded,
+    da Wikidata hier die vertrauenswürdige, strukturierte Quelle ist)."""
+    if desc and not p.description:
+        p.description = desc[:2000]
+    if data.get("hq_city"):
+        p.hq_city = data["hq_city"][:200]
+    if data.get("hq_country"):
+        p.hq_country = data["hq_country"][:200]
+    if data.get("industry"):
+        p.industry = data["industry"][:200]
+    if data.get("employee_count"):
+        p.employee_count = data["employee_count"]
+        p.employee_range = _employee_range(data["employee_count"])
+    if data.get("founded_year"):
+        p.founded_year = data["founded_year"]
+    if data.get("website") and not p.website:
+        p.website = data["website"][:500]
+    if data.get("linkedin_company_url") and not p.linkedin_company_url:
+        p.linkedin_company_url = data["linkedin_company_url"][:500]
+    new_type = _classify_company_type(data.get("employee_count"), data.get("founded_year"))
+    if new_type:
+        p.company_type = new_type
+
+
+def _apply_linkedin_fields(p: "models.CompanyProfile", data: dict) -> None:
+    """Schreibt LinkedIn-Felder ins Profil. Kein hq_city (siehe _linkedin_scrape_about)."""
+    if data.get("industry"):
+        p.industry = data["industry"]
+    if data.get("employee_count"):
+        p.employee_count = data["employee_count"]
+        p.employee_range = _employee_range(data["employee_count"])
+    if data.get("founded_year"):
+        p.founded_year = data["founded_year"]
+    if data.get("website") and not p.website:
+        p.website = data["website"]
+    if data.get("linkedin_company_url") and not p.linkedin_company_url:
+        p.linkedin_company_url = data["linkedin_company_url"]
+    new_type = _classify_company_type(data.get("employee_count"), data.get("founded_year"))
+    if new_type:
+        p.company_type = new_type
+
+
+# ── Source 2: Wikidata (Fallback bei 0 LinkedIn-Treffern, Search API + batch SPARQL)
 
 async def _throttled_get(
     client: httpx.AsyncClient,
@@ -183,7 +230,7 @@ GROUP BY ?company ?hqLabel ?countryLabel ?founded ?industryLabel
     return result
 
 
-# ── Source 2: LinkedIn company page (fallback für Wikidata-Fehltreffer) ─────
+# ── Source 1: LinkedIn company page (primär) ─────────────────────────────────
 
 async def _get_linkedin_context():
     """Startet einen Playwright-Browser mit der gespeicherten LinkedIn-Session.
@@ -235,25 +282,59 @@ async def _get_linkedin_context():
     return playwright, browser, context
 
 
-async def _linkedin_company_fallback(context, name: str) -> dict:
-    """Best-effort Scrape der öffentlichen LinkedIn 'About'-Seite einer Firma.
-
-    Nutzt Text-Muster statt CSS-Klassen (LinkedIn rotiert gehashte Klassennamen
-    laufend) — dieselbe Strategie wie sync_linkedin.py. Gibt bei jedem Fehler
-    (kein Suchtreffer, Layout-Änderung, Rate-Limit) einfach ein leeres/teilweises
-    Dict zurück statt den Sync abzubrechen.
+async def _linkedin_search_candidates(context, name: str, limit: int = 5) -> list[dict]:
+    """Sucht LinkedIn-Firmenseiten für `name`, liefert bis zu `limit` eindeutige
+    Kandidaten ({"name","url"}) aus der Ergebnisliste. Leere Liste bei keinem
+    Treffer. Best-effort — jeder Fehler (Layout-Änderung, Rate-Limit, keine
+    Session) liefert einfach eine leere Liste statt den Sync abzubrechen.
     """
     query = _clean_query(name)
-    result: dict = {}
+    candidates: list[dict] = []
     page = await context.new_page()
     try:
         search_url = f"https://www.linkedin.com/search/results/companies/?keywords={query}"
         await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1500)
-        link = await page.locator("a[href*='/company/']").first.get_attribute("href")
-        if not link:
-            return result
-        company_url = link.split("?")[0].rstrip("/")
+        anchors = await page.locator("a[href*='/company/']").all()
+        seen_urls: set[str] = set()
+        for a in anchors:
+            href = await a.get_attribute("href")
+            if not href:
+                continue
+            url = href.split("?")[0].rstrip("/")
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            # Der Suchergebnis-Link umschließt oft die ganze Karte (Name,
+            # Branche, Ort, "Follow"-Button, Beschreibungs-Snippet) — nur die
+            # erste nicht-leere Zeile ist der eigentliche Firmenname. Live
+            # beobachtet bei 'GitLab': inner_text() lieferte den kompletten
+            # mehrzeiligen Kartentext statt nur "GitLab".
+            raw_label = await a.inner_text()
+            label = next((line.strip() for line in raw_label.splitlines() if line.strip()), "")
+            if not label:
+                label = url.rsplit("/company/", 1)[-1].replace("-", " ").title()
+            candidates.append({"name": label[:200], "url": url})
+            if len(candidates) >= limit:
+                break
+    except Exception as e:
+        log.debug("LinkedIn-Suche Fehler für '{}': {}", name, e)
+    finally:
+        await page.close()
+    return candidates
+
+
+async def _linkedin_scrape_about(context, company_url: str) -> dict:
+    """Best-effort Scrape der öffentlichen LinkedIn 'About'-Seite einer bereits
+    bekannten Firmen-URL. Nutzt Text-Muster statt CSS-Klassen (LinkedIn rotiert
+    gehashte Klassennamen laufend) — dieselbe Strategie wie sync_linkedin.py.
+    Gibt bei jedem Fehler (Layout-Änderung, Rate-Limit) ein leeres/teilweises
+    Dict zurück statt den Sync abzubrechen.
+    """
+    result: dict = {}
+    page = await context.new_page()
+    try:
+        company_url = company_url.rstrip("/")
         about_url = company_url + "/about/"
         await page.goto(about_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1500)
@@ -293,7 +374,7 @@ async def _linkedin_company_fallback(context, name: str) -> dict:
 
         result["linkedin_company_url"] = company_url
     except Exception as e:
-        log.debug("LinkedIn-Fallback Fehler für '{}': {}", name, e)
+        log.debug("LinkedIn-Scrape Fehler für '{}': {}", company_url, e)
     finally:
         await page.close()
     return result
@@ -344,20 +425,101 @@ async def _fetch_logo_with_clearbit_fallback(logo_url: str | None, website: str 
     return None
 
 
+# ── Manuelle Auflösung mehrdeutiger LinkedIn-Treffer ─────────────────────────
+# Wird vom Review-Modal aufgerufen (app/routers/review.py, event_type=
+# "company_candidate") — NICHT live während des Batch-Syncs. Bei mehreren
+# LinkedIn-Treffern landet die Firma dort als PendingMatch in der bestehenden
+# "Manuelle Überprüfung"-Queue; der User wählt einen Kandidaten (annehmen) oder
+# "keiner davon" (ablehnen → Wikidata-Fallback für genau diese eine Firma).
+
+async def resolve_company_candidate(db: Session, profile_id: int, linkedin_url: str | None) -> None:
+    """linkedin_url gesetzt: genau diese LinkedIn-Seite scrapen und übernehmen.
+    linkedin_url=None ('keiner davon'): Wikidata-Fallback für dieses eine Profil."""
+    profile = db.query(models.CompanyProfile).filter(models.CompanyProfile.id == profile_id).first()
+    if not profile:
+        return
+    name = profile.name_display or profile.name_norm
+    now = datetime.now(timezone.utc)
+
+    if linkedin_url:
+        data: dict = {}
+        li_ctx = None
+        try:
+            li_ctx = await _get_linkedin_context()
+        except Exception as e:
+            log.warning("Resolve: LinkedIn-Browser-Start fehlgeschlagen: {}", e)
+        if li_ctx:
+            playwright, browser, context = li_ctx
+            try:
+                data = await _linkedin_scrape_about(context, linkedin_url)
+            finally:
+                await browser.close()
+                await playwright.stop()
+        _apply_linkedin_fields(profile, data)
+        if not profile.logo_data:
+            logo_b64 = await _fetch_logo_with_clearbit_fallback(None, profile.website)
+            if logo_b64:
+                profile.logo_data = logo_b64
+        profile.sync_source = "linkedin"
+        profile.sync_status = "done"
+        profile.sync_error = None if data else "LinkedIn-Auswahl übernommen, aber Scrape fehlgeschlagen"
+        profile.last_synced_at = now
+        log.info("'{}': manuell aufgelöst → LinkedIn {}", name, linkedin_url)
+        return
+
+    # "keiner davon" → Wikidata-Fallback für genau dieses eine Profil
+    async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA}) as client:
+        hit = await _wikidata_search_one(client, name)
+    if not hit:
+        profile.sync_source = "wikidata"
+        profile.sync_status = "done"
+        profile.sync_error = "Kein LinkedIn-/Wikidata-Treffer gefunden"
+        profile.last_synced_at = now
+        log.info("'{}': manuell aufgelöst → 'keiner davon', auch kein Wikidata-Treffer", name)
+        return
+
+    qid, desc = hit
+    try:
+        sparql_data = await _wikidata_sparql_batch([qid])
+    except Exception as e:
+        profile.sync_status = "failed"
+        profile.sync_error = f"SPARQL: {e}"[:500]
+        profile.last_synced_at = now
+        return
+
+    data = sparql_data.get(qid, {})
+    _apply_wikidata_fields(profile, desc, data)
+    if not profile.logo_data and data.get("logo_url"):
+        logo_b64 = await _fetch_logo(data["logo_url"])
+        if logo_b64:
+            profile.logo_data = logo_b64
+    if not profile.logo_data:
+        logo_b64 = await _fetch_logo_with_clearbit_fallback(None, profile.website)
+        if logo_b64:
+            profile.logo_data = logo_b64
+    profile.sync_source = f"wikidata:{qid}" if data else "wikidata"
+    profile.sync_status = "done"
+    profile.sync_error = None if data else "Kein Wikidata-Datensatz (nur Basistreffer)"
+    profile.last_synced_at = now
+    log.info("'{}': manuell aufgelöst → 'keiner davon', Wikidata {}", name, profile.sync_source)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/status")
 def company_sync_status(db: Session = Depends(get_db)):
     profiles = db.query(models.CompanyProfile).all()
-    pending = [p for p in profiles if p.sync_status == "pending"]
-    done    = [p for p in profiles if p.sync_status == "done"]
-    failed  = [p for p in profiles if p.sync_status == "failed"]
+    pending      = [p for p in profiles if p.sync_status == "pending"]
+    done         = [p for p in profiles if p.sync_status == "done"]
+    failed       = [p for p in profiles if p.sync_status == "failed"]
+    needs_review = [p for p in profiles if p.sync_status == "needs_review"]
     return {
         "running": _SYNC_RUNNING,
         "current_company": _CURRENT_COMPANY,
         "pending": len(pending),
         "done": len(done),
         "failed": len(failed),
+        "needs_review": len(needs_review),
         "profiles": [
             {
                 "id": p.id,
@@ -480,72 +642,97 @@ async def _run_sync_batch(profile_ids: list[int]):
         }
         db.close()
 
-        # Phase 1: Wikidata Search API → Q-IDs (sequential, 1s apart — lenient rate limit)
-        # attempted_pids trackt, welche Profile überhaupt angefasst wurden — bei Abbruch
-        # (Cancel) dürfen NIE angefasste Profile NICHT als "done"/"kein Treffer" enden,
-        # sonst würden sie beim nächsten normalen Sync nie wieder aufgegriffen
-        # (_collect_sync_candidates rührt "done"-Profile nie automatisch an).
-        attempted_pids: list[int] = []
+        # Phase 1: LinkedIn-Suche (primär) — sequenziell, 1s Abstand.
+        # li_attempted_pids trackt, welche Profile überhaupt angefasst wurden — bei
+        # Abbruch (Cancel) dürfen NIE angefasste Profile NICHT als "done"/"kein
+        # Treffer" enden, sonst würden sie beim nächsten normalen Sync nie wieder
+        # aufgegriffen (_collect_sync_candidates rührt "done"-Profile nie an).
+        li_attempted_pids: list[int] = []
+        li_single_data: dict[int, dict] = {}     # genau 1 Treffer, direkt gescraped
+        needs_review_map: dict[int, list[dict]] = {}  # 2+ Treffer, User muss wählen
+        wikidata_fallback_pids: list[int] = []   # 0 Treffer oder Scrape fehlgeschlagen
+
+        li_ctx = None
+        try:
+            li_ctx = await _get_linkedin_context()
+        except Exception as e:
+            log.warning("LinkedIn: Browser-Start fehlgeschlagen: {}", e)
+
+        if li_ctx:
+            playwright, browser, context = li_ctx
+            try:
+                for pid in profile_ids:
+                    if _SYNC_CANCEL:
+                        break
+                    p = profiles.get(pid)
+                    if not p:
+                        continue
+                    li_attempted_pids.append(pid)
+                    name = p.name_display or p.name_norm
+                    _CURRENT_COMPANY = name
+                    try:
+                        candidates = await _linkedin_search_candidates(context, name)
+                    except Exception as e:
+                        log.debug("LinkedIn-Suche Fehler für '{}': {}", name, e)
+                        candidates = []
+
+                    if len(candidates) == 0:
+                        wikidata_fallback_pids.append(pid)
+                    elif len(candidates) == 1:
+                        try:
+                            data = await _linkedin_scrape_about(context, candidates[0]["url"])
+                        except Exception as e:
+                            log.debug("LinkedIn-Scrape Fehler für '{}': {}", name, e)
+                            data = {}
+                        if data:
+                            li_single_data[pid] = data
+                        else:
+                            wikidata_fallback_pids.append(pid)
+                    else:
+                        needs_review_map[pid] = candidates
+                        log.info("'{}': {} LinkedIn-Treffer — braucht manuelle Auswahl",
+                                 name, len(candidates))
+                    await asyncio.sleep(1.0)
+            finally:
+                await browser.close()
+                await playwright.stop()
+        else:
+            log.debug("LinkedIn übersprungen: keine gültige Session konfiguriert — nutze Wikidata direkt")
+            wikidata_fallback_pids = list(profile_ids)
+
+        # Phase 2: Wikidata-Fallback für Firmen ohne (eindeutigen) LinkedIn-Treffer.
+        # wikidata_attempted_pids trackt, für welche Firmen die Wikidata-Suche
+        # wirklich lief — dieselbe Cancel-Sicherheit wie oben bei li_attempted_pids.
+        wikidata_attempted_pids: list[int] = []
         qid_map: dict[int, str] = {}
         desc_map: dict[int, str] = {}
-        async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA}) as client:
-            for pid in profile_ids:
-                if _SYNC_CANCEL:
-                    break
-                p = profiles.get(pid)
-                if not p:
-                    continue
-                attempted_pids.append(pid)
-                name = p.name_display or p.name_norm
-                _CURRENT_COMPANY = name
-                hit = await _wikidata_search_one(client, name)
-                if hit:
-                    qid_map[pid], desc_map[pid] = hit
-                else:
-                    log.info("Kein Wikidata-Treffer für '{}'", name)
-                await asyncio.sleep(1.0)
+        if wikidata_fallback_pids and not _SYNC_CANCEL:
+            async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": _UA}) as client:
+                for pid in wikidata_fallback_pids:
+                    if _SYNC_CANCEL:
+                        break
+                    p = profiles.get(pid)
+                    if not p:
+                        continue
+                    wikidata_attempted_pids.append(pid)
+                    name = p.name_display or p.name_norm
+                    _CURRENT_COMPANY = name
+                    hit = await _wikidata_search_one(client, name)
+                    if hit:
+                        qid_map[pid], desc_map[pid] = hit
+                    else:
+                        log.info("Kein Wikidata-Treffer für '{}'", name)
+                    await asyncio.sleep(1.0)
 
-        # Phase 2: LinkedIn-Fallback für Firmen ohne Wikidata-Treffer
-        fallback_data: dict[int, dict] = {}
-        missing_pids = [pid for pid in attempted_pids if pid not in qid_map]
-        if missing_pids and not _SYNC_CANCEL:
-            li_ctx = None
-            try:
-                li_ctx = await _get_linkedin_context()
-            except Exception as e:
-                log.warning("LinkedIn-Fallback: Browser-Start fehlgeschlagen: {}", e)
-            if li_ctx:
-                playwright, browser, context = li_ctx
-                try:
-                    for pid in missing_pids:
-                        if _SYNC_CANCEL:
-                            break
-                        p = profiles[pid]
-                        name = p.name_display or p.name_norm
-                        _CURRENT_COMPANY = name
-                        try:
-                            data = await _linkedin_company_fallback(context, name)
-                            if data:
-                                fallback_data[pid] = data
-                        except Exception as e:
-                            log.debug("LinkedIn-Fallback Fehler für '{}': {}", name, e)
-                        await asyncio.sleep(1.0)
-                finally:
-                    await browser.close()
-                    await playwright.stop()
-            else:
-                log.debug("LinkedIn-Fallback übersprungen: keine gültige Session konfiguriert")
-
-        # Phase 3: Batch SPARQL für gefundene Wikidata-Treffer
-        # sparql_attempted_pids trackt, für welche gefundenen Q-IDs überhaupt
-        # eine SPARQL-Abfrage lief. Bei Cancel mitten in Phase 1/2 (Suche/
-        # LinkedIn-Fallback) bricht die Schleife unten sofort ab, OHNE dass
-        # für die bereits gefundenen Q-IDs je SPARQL abgefragt wurde — diese
-        # dürfen NICHT als "done, kein Datensatz" enden (das würde einen
-        # echten, aber nie abgefragten Treffer für immer wie einen bestätigten
-        # Fehltreffer aussehen lassen). Live beobachtet: nach einem vom User
-        # abgebrochenen Lauf landeten so 150+ Firmen fälschlich "done" mit
-        # "Kein Wikidata-Datensatz", obwohl SPARQL nie lief.
+        # Phase 3: Batch SPARQL für gefundene Wikidata-Treffer.
+        # sparql_attempted_pids trackt, für welche gefundenen Q-IDs überhaupt eine
+        # SPARQL-Abfrage lief. Bei Cancel mitten in Phase 1/2 bricht die Schleife
+        # unten sofort ab, OHNE dass für die bereits gefundenen Q-IDs je SPARQL
+        # abgefragt wurde — diese dürfen NICHT als "done, kein Datensatz" enden
+        # (das würde einen echten, aber nie abgefragten Treffer für immer wie
+        # einen bestätigten Fehltreffer aussehen lassen). Live beobachtet: nach
+        # einem vom User abgebrochenen Lauf landeten so 150+ Firmen fälschlich
+        # "done" mit "Kein Wikidata-Datensatz", obwohl SPARQL nie lief.
         found_pids = list(qid_map.keys())
         sparql_attempted_pids: set[int] = set()
         sparql_failed_pids: set[int] = set()
@@ -594,15 +781,44 @@ async def _run_sync_batch(profile_ids: list[int]):
         if logo_tasks:
             await asyncio.gather(*logo_tasks.values(), return_exceptions=True)
 
-        # Phase 5: Ergebnisse schreiben — nur für tatsächlich versuchte Profile
-        # (siehe attempted_pids-Kommentar in Phase 1: bei Cancel bleiben nicht
-        # versuchte Profile "pending" und werden beim nächsten Lauf erneut erfasst)
+        # Phase 5: Ergebnisse schreiben — nur für tatsächlich versuchte Profile.
+        attempted_pids = list(dict.fromkeys(li_attempted_pids + wikidata_attempted_pids))
         db = SessionLocal()
         for pid in attempted_pids:
             if pid in sparql_failed_pids:
                 continue  # bereits als "failed" committed (SPARQL-Batch-Fehler)
             p = db.query(models.CompanyProfile).get(pid)
             if not p:
+                continue
+
+            if pid in needs_review_map:
+                candidates = needs_review_map[pid]
+                # Vorherigen offenen Review-Eintrag für diese Firma entfernen
+                # (z.B. bei Re-Sync), damit die Queue nicht dupliziert.
+                db.query(models.PendingMatch).filter(
+                    models.PendingMatch.event_type == "company_candidate",
+                    models.PendingMatch.external_id == f"company:{pid}",
+                    models.PendingMatch.review_status == "pending",
+                ).delete(synchronize_session=False)
+                db.add(models.PendingMatch(
+                    source="linkedin",
+                    external_id=f"company:{pid}",
+                    confidence=0,
+                    event_type="company_candidate",
+                    titel=p.name_display or p.name_norm,
+                    raw_content=json.dumps({"company_profile_id": pid, "candidates": candidates}),
+                    status_only=False,
+                ))
+                p.sync_status = "needs_review"
+                p.sync_error = None
+                p.last_synced_at = now
+                continue
+
+            if pid in wikidata_fallback_pids and pid not in wikidata_attempted_pids:
+                # War für Wikidata vorgesehen (kein/fehlgeschlagener LI-Treffer),
+                # aber Wikidata-Suche nie erreicht (Cancel) — bleibt pending.
+                p.sync_status = "pending"
+                p.sync_error = None
                 continue
 
             if pid in qid_map and pid not in sparql_attempted_pids:
@@ -612,29 +828,22 @@ async def _run_sync_batch(profile_ids: list[int]):
                 p.sync_error = None
                 continue
 
-            if pid in qid_map:
+            if pid in li_single_data:
+                data = li_single_data[pid]
+                _apply_linkedin_fields(p, data)
+                if not p.logo_data:
+                    logo_b64 = await _fetch_logo_with_clearbit_fallback(None, p.website)
+                    if logo_b64:
+                        p.logo_data = logo_b64
+                p.sync_source = "linkedin"
+                p.sync_status = "done"
+                p.sync_error = None
+                p.last_synced_at = now
+
+            elif pid in qid_map:
                 qid = qid_map[pid]
                 data = sparql_data.get(qid, {})
-                source = f"wikidata:{qid}" if data else "wikidata"
-                error = None if data else "Kein Wikidata-Datensatz (nur Basistreffer)"
-
-                if desc_map.get(pid) and not p.description:
-                    p.description = desc_map[pid][:2000]
-                if data.get("hq_city"):
-                    p.hq_city = data["hq_city"][:200]
-                if data.get("hq_country"):
-                    p.hq_country = data["hq_country"][:200]
-                if data.get("industry"):
-                    p.industry = data["industry"][:200]
-                if data.get("employee_count"):
-                    p.employee_count = data["employee_count"]
-                    p.employee_range = _employee_range(data["employee_count"])
-                if data.get("founded_year"):
-                    p.founded_year = data["founded_year"]
-                if data.get("website") and not p.website:
-                    p.website = data["website"][:500]
-                if data.get("linkedin_company_url") and not p.linkedin_company_url:
-                    p.linkedin_company_url = data["linkedin_company_url"][:500]
+                _apply_wikidata_fields(p, desc_map.get(pid, ""), data)
 
                 logo_result = logo_tasks.get(pid)
                 if logo_result and not logo_result.cancelled():
@@ -649,53 +858,22 @@ async def _run_sync_batch(profile_ids: list[int]):
                     if logo_b64:
                         p.logo_data = logo_b64
 
-                new_type = _classify_company_type(data.get("employee_count"), data.get("founded_year"))
-                if new_type:
-                    p.company_type = new_type
-
-                p.sync_source = source
+                p.sync_source = f"wikidata:{qid}" if data else "wikidata"
                 p.sync_status = "done"
-                p.sync_error = error
-                p.last_synced_at = now
-
-            elif pid in fallback_data:
-                data = fallback_data[pid]
-                if data.get("hq_city") and not p.hq_city:
-                    p.hq_city = data["hq_city"]
-                if data.get("industry"):
-                    p.industry = data["industry"]
-                if data.get("employee_count"):
-                    p.employee_count = data["employee_count"]
-                    p.employee_range = _employee_range(data["employee_count"])
-                if data.get("founded_year"):
-                    p.founded_year = data["founded_year"]
-                if data.get("website") and not p.website:
-                    p.website = data["website"]
-                if data.get("linkedin_company_url") and not p.linkedin_company_url:
-                    p.linkedin_company_url = data["linkedin_company_url"]
-
-                if not p.logo_data:
-                    logo_b64 = await _fetch_logo_with_clearbit_fallback(None, p.website)
-                    if logo_b64:
-                        p.logo_data = logo_b64
-
-                new_type = _classify_company_type(data.get("employee_count"), data.get("founded_year"))
-                if new_type:
-                    p.company_type = new_type
-
-                p.sync_source = "linkedin"
-                p.sync_status = "done"
-                p.sync_error = None
+                p.sync_error = None if data else "Kein Wikidata-Datensatz (nur Basistreffer)"
                 p.last_synced_at = now
 
             else:
+                # Weder LinkedIn (eindeutig) noch Wikidata hatten einen Treffer.
+                li_tried = pid in li_attempted_pids
                 p.sync_source = "wikidata"
                 p.sync_status = "done"
-                p.sync_error = "Kein Wikidata-/LinkedIn-Treffer gefunden"
+                p.sync_error = ("Kein LinkedIn-/Wikidata-Treffer gefunden" if li_tried
+                                 else "Kein Wikidata-Treffer gefunden")
                 p.last_synced_at = now
 
-            log.info("Synced '{}' ({}): hq={} industry={} emp={}",
-                     p.name_display, p.sync_source, p.hq_city, p.industry, p.employee_count)
+            log.info("Synced '{}' ({}): industry={} emp={}",
+                     p.name_display, p.sync_source, p.industry, p.employee_count)
 
         db.commit()
         db.close()

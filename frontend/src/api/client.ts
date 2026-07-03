@@ -266,7 +266,7 @@ export const api = {
   review: {
     count: () => request<{ count: number }>('/review/count'),
     list: () => request<PendingMatch[]>('/review/'),
-    approve: (id: number, data: { application_id: number; event_type?: string; datum?: string; titel?: string }) =>
+    approve: (id: number, data: { application_id?: number; event_type?: string; datum?: string; titel?: string; linkedin_url?: string }) =>
       request<{ status: string; event_id: number }>(`/review/${id}/approve`, {
         method: 'POST',
         body: JSON.stringify(data),

@@ -140,8 +140,8 @@ class CompanyProfile(Base):
     logo_data            = Column(Text, nullable=True)
 
     # Sync bookkeeping
-    sync_source          = Column(String, nullable=True)   # "linkedin"|"web"|"manual"
-    sync_status          = Column(String, default="pending", nullable=False)  # pending|done|failed
+    sync_source          = Column(String, nullable=True)   # "linkedin"|"wikidata"|"manual"
+    sync_status          = Column(String, default="pending", nullable=False)  # pending|done|failed|needs_review
     sync_error           = Column(Text, nullable=True)
     last_synced_at       = Column(DateTime(timezone=True), nullable=True)
 

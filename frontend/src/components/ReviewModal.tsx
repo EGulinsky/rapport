@@ -26,7 +26,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
   const [saving, setSaving] = useState<number | null>(null)
   const [batchBusy, setBatchBusy] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [overrides, setOverrides] = useState<Record<number, { app_id?: number; event_type?: string; datum?: string; titel?: string }>>({})
+  const [overrides, setOverrides] = useState<Record<number, { app_id?: number; event_type?: string; datum?: string; titel?: string; linkedin_url?: string }>>({})
   const [allApps, setAllApps] = useState<Application[]>([])
   const [appSearch, setAppSearch] = useState<Record<number, string>>({})
 
@@ -74,6 +74,21 @@ export function ReviewModal({ onClose, onApproved }: Props) {
 
   async function approve(item: PendingMatch) {
     const ov = getOverride(item.id)
+    if (item.event_type === 'company_candidate') {
+      if (!ov.linkedin_url) return
+      setSaving(item.id)
+      try {
+        await api.review.approve(item.id, { linkedin_url: ov.linkedin_url })
+        setItems(prev => prev.filter(i => i.id !== item.id))
+        setSelected(s => { const n = new Set(s); n.delete(item.id); return n })
+        onApproved()
+      } catch (e) {
+        alert(String(e))
+      } finally {
+        setSaving(null)
+      }
+      return
+    }
     const app_id = ov.app_id ?? item.suggested_app_id
     if (!app_id) return
     setSaving(item.id)
@@ -106,13 +121,22 @@ export function ReviewModal({ onClose, onApproved }: Props) {
     }
   }
 
+  function canApproveItem(item: PendingMatch): boolean {
+    const ov = getOverride(item.id)
+    if (item.event_type === 'company_candidate') return !!ov.linkedin_url
+    return !!(ov.app_id ?? item.suggested_app_id)
+  }
+
   async function batchApprove() {
-    const targets = items.filter(i => selected.has(i.id) && (getOverride(i.id).app_id ?? i.suggested_app_id))
+    const targets = items.filter(i => selected.has(i.id) && canApproveItem(i))
     if (!targets.length) return
     setBatchBusy(true)
     try {
       await Promise.allSettled(targets.map(item => {
         const ov = getOverride(item.id)
+        if (item.event_type === 'company_candidate') {
+          return api.review.approve(item.id, { linkedin_url: ov.linkedin_url })
+        }
         const app_id = ov.app_id ?? item.suggested_app_id!
         return api.review.approve(item.id, {
           application_id: app_id,
@@ -187,7 +211,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
             <div>
               <h2 className="text-base font-semibold text-gray-900">Manuelle Überprüfung</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                {selected.size > 0 ? `${selected.size} ausgewählt` : `KI-Treffer mit <60% Konfidenz`}
+                {selected.size > 0 ? `${selected.size} ausgewählt` : `KI-Treffer mit <60% Konfidenz, mehrdeutige Firmen-Treffer`}
               </p>
             </div>
           </div>
@@ -232,8 +256,9 @@ export function ReviewModal({ onClose, onApproved }: Props) {
           {items.map(item => {
             const ov = getOverride(item.id)
             const busy = saving === item.id
+            const isCompanyCandidate = item.event_type === 'company_candidate'
             const appId = resolvedAppId(item)
-            const canApprove = !!appId
+            const canApprove = isCompanyCandidate ? !!ov.linkedin_url : !!appId
             const appLabel = resolvedAppLabel(item)
             const noSuggestion = !item.suggested_app_id
             const isStatusOnly = !!item.status_only
@@ -242,6 +267,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
               <div key={item.id} className={clsx(
                 "rounded-xl border p-4 space-y-3",
                 isStatusOnly ? "border-violet-200 bg-violet-50/30" : "border-gray-200",
+                isCompanyCandidate && "border-blue-200 bg-blue-50/30",
                 selected.has(item.id) && "ring-2 ring-indigo-300"
               )}>
                 {/* Top row */}
@@ -259,6 +285,10 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                     {isStatusOnly ? (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
                         Status-Vorschlag
+                      </span>
+                    ) : isCompanyCandidate ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                        Firma: mehrere Treffer
                       </span>
                     ) : (
                       <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full', confidenceColor(item.confidence))}>
@@ -282,12 +312,22 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                       onClick={() => reject(item)}
                       disabled={busy}
                       className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      title={isCompanyCandidate ? 'Keiner davon — Wikidata-Fallback versuchen' : undefined}
                     >
                       <X className="h-3.5 w-3.5" />
-                      Ablehnen
+                      {isCompanyCandidate ? 'Keiner davon' : 'Ablehnen'}
                     </button>
                   </div>
                 </div>
+
+                {/* Firmensync: Kandidatenauswahl */}
+                {isCompanyCandidate && (
+                  <CompanyCandidatePicker
+                    item={item}
+                    selectedUrl={ov.linkedin_url}
+                    onSelect={url => setOverride(item.id, { linkedin_url: url })}
+                  />
+                )}
 
                 {/* Status change proposal */}
                 {isStatusOnly && item.suggested_main_status && (
@@ -311,8 +351,8 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                   </div>
                 )}
 
-                {/* Suggested / selected app (non-status-only items) */}
-                {!isStatusOnly && noSuggestion && (
+                {/* Suggested / selected app (non-status-only, non-company-candidate items) */}
+                {!isStatusOnly && !isCompanyCandidate && noSuggestion && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
                     <p className="text-xs font-medium text-amber-700">Keine Stelle erkannt — bitte manuell zuordnen:</p>
                     <AppPicker
@@ -325,18 +365,18 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                     />
                   </div>
                 )}
-                {!isStatusOnly && !noSuggestion && (
+                {!isStatusOnly && !isCompanyCandidate && !noSuggestion && (
                   <div className="text-sm">
                     <span className="text-gray-500 text-xs">Zugeordnete Stelle: </span>
                     <span className="font-medium text-gray-800">{appLabel}</span>
                   </div>
                 )}
 
-                {/* Content preview (not for status-only) */}
-                {!isStatusOnly && <ContentPreview item={item} />}
+                {/* Content preview (not for status-only / company-candidate) */}
+                {!isStatusOnly && !isCompanyCandidate && <ContentPreview item={item} />}
 
-                {/* Editable fields (not for status-only) */}
-                {!isStatusOnly && (
+                {/* Editable fields (not for status-only / company-candidate) */}
+                {!isStatusOnly && !isCompanyCandidate && (
                   <details className="group">
                     <summary className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600 list-none">
                       <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
@@ -524,6 +564,55 @@ function ContentPreview({ item }: { item: PendingMatch }) {
           </div>
         ))}
       </dl>
+    </div>
+  )
+}
+
+// ── Firmensync: Kandidatenauswahl bei mehreren LinkedIn-Treffern ────────────
+
+interface CompanyCandidate {
+  name: string
+  url: string
+}
+
+function CompanyCandidatePicker({
+  item, selectedUrl, onSelect,
+}: { item: PendingMatch; selectedUrl?: string; onSelect: (url: string) => void }) {
+  let candidates: CompanyCandidate[] = []
+  try {
+    const payload = JSON.parse(item.raw_content ?? '{}')
+    candidates = payload.candidates ?? []
+  } catch {
+    candidates = []
+  }
+
+  if (candidates.length === 0) {
+    return <p className="text-xs text-amber-600">Keine Kandidaten gefunden — nur "Keiner davon" möglich.</p>
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-blue-700">Welche LinkedIn-Seite ist die richtige?</p>
+      <div className="space-y-1">
+        {candidates.map(c => (
+          <button
+            key={c.url}
+            onClick={() => onSelect(c.url)}
+            className={clsx(
+              'w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors',
+              selectedUrl === c.url
+                ? 'border-blue-400 bg-blue-100 text-blue-900 font-medium'
+                : 'border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 text-gray-700'
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span>{c.name}</span>
+              <Linkedin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+            </div>
+            <span className="text-xs text-gray-400 break-all">{c.url}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
