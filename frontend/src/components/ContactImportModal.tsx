@@ -146,7 +146,7 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
             <p className="text-sm text-gray-400 text-center py-6">
               {source === 'icloud'
                 ? 'Durchsucht dein gesamtes iCloud-Adressbuch, nicht nur bereits verknüpfte Kontakte.'
-                : 'Sucht LinkedIn-Personen nach Namen (benötigt eine gültige LinkedIn-Session).'}
+                : 'Sucht LinkedIn-Personen nach Namen (benötigt eine gültige LinkedIn-Session). Firma wird aus der Kurzbeschreibung erkannt — bei individuell angepassten Beschreibungen ohne Firmenerwähnung bleibt sie leer und muss ggf. nach dem Import ergänzt werden.'}
             </p>
           )}
           {candidates.map(c => {

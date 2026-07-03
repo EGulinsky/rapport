@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.31.3',
+    date: '2026-07-03',
+    changes: [
+      'LinkedIn-Kontaktimport: Firmenerkennung aus der Kurzbeschreibung erkennt jetzt auch "Rolle @ Firma" (nicht nur "at"/"bei"). Bewusst NICHT ergänzt: Trennung an "|", da viele Kurzbeschreibungen das für Skill-Listen statt "Rolle | Firma" nutzen — das hätte falsche Firmen erzeugt. Für Profile mit individuell angepasster Kurzbeschreibung ohne jede Firmenerwähnung (z.B. nur "Head of Customer Program Management") bleibt die Firma leer statt geraten — LinkedIns Zugriffsbeschränkung für nicht direkt verbundene Profile ("Nur mit Premium sichtbar") verhindert einen zuverlässigen Blick auf die volle Profilseite als Fallback. Import-Dialog weist jetzt auf diese Einschränkung hin.',
+    ],
+  },
+  {
     version: '3.31.2',
     date: '2026-07-03',
     changes: [
