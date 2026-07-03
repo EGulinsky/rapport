@@ -1310,9 +1310,25 @@ def _parse_vcard(raw_vcard: str) -> Optional[dict]:
     except Exception:
         return None
 
-    name = str(card.fn.value) if hasattr(card, "fn") else ""
-    if not name:
+    fn = str(card.fn.value) if hasattr(card, "fn") else ""
+    if not fn:
         return None
+
+    # Vor-/Nachname aus dem strukturierten N:-Feld (Family;Given;;;) statt aus
+    # FN (Anzeigename) zu raten: FN-Reihenfolge ist uneinheitlich ("Vorname
+    # Nachname", "NACHNAME Vorname", "Nachname, Vorname" — je nach Quelle/
+    # Adressbuch-Konvention), aber N: ist von Apple Contacts strukturiert und
+    # damit zuverlässig — auch wenn FN z.B. "Bayer Sarah" zeigt, steht in N:
+    # korrekt "Bayer;Sarah". Bei reinen Firmen-Einträgen ist N: leer (";;;;")
+    # und FN bleibt als Ganzes stehen (kein Rate-Split für Firmennamen).
+    name = fn
+    vorname_val: Optional[str] = None
+    if hasattr(card, "n"):
+        family = str(getattr(card.n.value, "family", "") or "").strip()
+        given = str(getattr(card.n.value, "given", "") or "").strip()
+        if family:
+            name = family
+            vorname_val = given or None
 
     email_val = str(card.email.value) if hasattr(card, "email") else None
     tel_val = None
@@ -1341,7 +1357,7 @@ def _parse_vcard(raw_vcard: str) -> Optional[dict]:
             break
 
     return {
-        "name": name, "email": email_val, "telefon": tel_val,
+        "name": name, "vorname": vorname_val, "fn": fn, "email": email_val, "telefon": tel_val,
         "firma": org_val, "rolle": title_val, "linkedin_url": linkedin_url,
     }
 
@@ -1370,6 +1386,8 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
 
         try:
             name = parsed["name"]
+            vorname_val = parsed["vorname"]
+            fn = parsed["fn"]
             email_val = parsed["email"]
             tel_val = parsed["telefon"]
             org_val = parsed["firma"]
@@ -1381,6 +1399,11 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
                 existing = db.query(models.Contact).filter_by(email=email_val).first()
             if not existing:
                 existing = db.query(models.Contact).filter_by(name=name).first()
+            if not existing and name != fn:
+                # Kontakte von vor dem Vorname/Nachname-Split (name enthielt den
+                # vollen Anzeigenamen statt nur den Nachnamen) sonst hier nicht
+                # finden und fälschlich als Duplikat neu anlegen.
+                existing = db.query(models.Contact).filter_by(name=fn).first()
             if existing:
                 if linkedin_url and not existing.linkedin_url:
                     existing.linkedin_url = linkedin_url
@@ -1390,12 +1413,23 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
                     existing.firma = org_val
                 if title_val and not existing.rolle:
                     existing.rolle = title_val
+                if vorname_val and not existing.vorname:
+                    # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
+                    # nutzt das strukturierte N:-Feld der vCard (echte Adress-
+                    # buch-Daten), kein Rate-Heuristik-Backfill über den
+                    # bisherigen (evtl. schon falsch zusammengesetzten) Namen.
+                    existing.vorname = vorname_val
+                    existing.name = name
                 continue
 
             # Always import the contact so it appears in the company Kontakte tab.
             # Application links are created only for apps where the contact is
             # explicitly mentioned in events or application text (not just by firma match).
-            mention_app_ids = _find_apps_where_contact_mentioned(name, email_val, db)
+            # Volltext-Erwähnungssuche braucht den vollen Anzeigenamen (fn), nicht
+            # nur den seit dem Vorname/Nachname-Split isolierten Nachnamen — sonst
+            # würden z.B. Erwähnungen von "Volker Häussler" im Bewerbungstext nicht
+            # mehr gefunden.
+            mention_app_ids = _find_apps_where_contact_mentioned(fn, email_val, db)
             firma_app_ids = _find_apps_for_contact(org_val or "", db) if org_val else []
 
             # Check whether the org matches a known CompanyProfile. A text match on the
@@ -1432,7 +1466,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
                 continue
 
             contact = models.Contact(
-                name=name, email=email_val, telefon=tel_val,
+                name=name, vorname=vorname_val, email=email_val, telefon=tel_val,
                 firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
                 company_profile_id=company_profile_id,
             )
@@ -1475,7 +1509,7 @@ async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depen
         parsed = _parse_vcard(raw)
         if not parsed:
             continue
-        haystack = " ".join(filter(None, [parsed["name"], parsed["email"], parsed["firma"]])).lower()
+        haystack = " ".join(filter(None, [parsed["fn"], parsed["email"], parsed["firma"]])).lower()
         if q_lower not in haystack:
             continue
 
@@ -1484,6 +1518,8 @@ async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depen
             existing = db.query(models.Contact).filter_by(email=parsed["email"]).first()
         if not existing:
             existing = db.query(models.Contact).filter_by(name=parsed["name"]).first()
+        if not existing and parsed["name"] != parsed["fn"]:
+            existing = db.query(models.Contact).filter_by(name=parsed["fn"]).first()
         # Bereits vorhandene Kontakte weiterhin mit anzeigen (nur als "schon
         # importiert" markiert), statt sie stillschweigend aus dem Ergebnis zu
         # werfen — sonst wirkt eine Suche, deren einzige Treffer bereits
@@ -1496,6 +1532,7 @@ async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depen
         if key in seen_keys:
             continue
         seen_keys.add(key)
+        parsed.pop("fn", None)
         results.append(parsed)
         if len(results) >= 30:
             break
@@ -1505,6 +1542,7 @@ async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depen
 
 class ContactImportCandidate(BaseModel):
     name: str
+    vorname: Optional[str] = None
     email: Optional[str] = None
     telefon: Optional[str] = None
     firma: Optional[str] = None
@@ -1546,7 +1584,7 @@ def import_contacts(body: ContactImportPayload, db: Session = Depends(get_db)):
                 existing.applications.append(app_obj)
             continue
         contact = models.Contact(
-            name=cand.name, email=cand.email, telefon=cand.telefon,
+            name=cand.name, vorname=cand.vorname, email=cand.email, telefon=cand.telefon,
             firma=cand.firma, rolle=cand.rolle, linkedin_url=cand.linkedin_url,
         )
         db.add(contact)

@@ -15,8 +15,11 @@ from tests.factories import application_factory, contact_factory
 pytestmark = pytest.mark.api
 
 
-def _vcard(fn: str, email: str | None = None, org: str | None = None) -> str:
+def _vcard(fn: str, email: str | None = None, org: str | None = None, n: tuple[str, str] | None = None) -> str:
+    """n: optionales (family, given) für das strukturierte N:-Feld."""
     lines = ["BEGIN:VCARD", "VERSION:3.0", f"FN:{fn}"]
+    if n:
+        lines.append(f"N:{n[0]};{n[1]};;;")
     if email:
         lines.append(f"EMAIL:{email}")
     if org:

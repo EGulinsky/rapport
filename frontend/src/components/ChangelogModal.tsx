@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.32.2',
+    date: '2026-07-03',
+    changes: [
+      'Fix: die letzte Änderung (getrennte Vorname/Nachname-Spalten) zeigte bei fast allen Bestandskontakten den vollen Namen in der Nachname-Spalte, weil der iCloud-Import nie das strukturierte Vor-/Nachname-Feld der vCard gelesen hat, nur den (uneinheitlich formatierten) Anzeigenamen. Jetzt wird das echte Adressbuch-Feld verwendet — zuverlässig unabhängig davon, ob der Anzeigename "Vorname Nachname" oder "Nachname Vorname" lautet. 169 von 198 Bestandskontakten wurden aus den echten Adressbuch-Daten automatisch korrigiert, der Rest bewusst unverändert gelassen statt geraten (z.B. bei Firmen-Einträgen).',
+    ],
+  },
+  {
     version: '3.32.1',
     date: '2026-07-03',
     changes: [
