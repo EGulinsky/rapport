@@ -1350,11 +1350,17 @@ async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[
 
 
 def _split_headline(headline: Optional[str]) -> tuple[Optional[str], Optional[str]]:
-    """'Senior Engineer at Contoso' → (rolle, firma). Best-effort, keine
-    Firma erkannt wenn kein 'at'/'bei'-Trenner gefunden wird."""
+    """'Senior Engineer at Contoso' → (rolle, firma). Best-effort — viele
+    LinkedIn-Headlines (v.a. individuell angepasste, ohne Firmenerwähnung,
+    z.B. nur "Head of Customer Program Management") enthalten die Firma
+    überhaupt nicht im Text; dann bleibt firma bewusst None statt geraten zu
+    werden. Ein Blick auf die volle Profilseite als Fallback wurde geprüft,
+    scheitert aber am LinkedIn-Suchlimit für nicht verbundene Profile
+    ("Explore Premium profiles"-Wall) — kein zuverlässiger Weg mit einem
+    normalen Account."""
     if not headline:
         return None, None
-    for sep in (" at ", " bei "):
+    for sep in (" at ", " bei ", " @ "):
         if sep in headline:
             rolle, firma = headline.split(sep, 1)
             return rolle.strip() or None, firma.strip() or None

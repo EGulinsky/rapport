@@ -150,8 +150,26 @@ class TestSplitHeadline:
     def test_positiv_deutsches_bei(self):
         assert _split_headline("Senior Entwicklerin bei Contoso GmbH") == ("Senior Entwicklerin", "Contoso GmbH")
 
+    def test_positiv_klammeraffe(self):
+        assert _split_headline("Head of Sales @ Contoso GmbH") == ("Head of Sales", "Contoso GmbH")
+
     def test_negativ_kein_trenner_liefert_ganze_headline_als_rolle(self):
         assert _split_headline("Freiberuflich") == ("Freiberuflich", None)
+
+    def test_negativ_headline_ohne_firmenerwaehnung_liefert_keine_firma(self):
+        # Live-Regressionsfall (Philip Knöpfle): viele individuell angepasste
+        # Headlines enthalten die Firma überhaupt nicht — kein Trenner heißt
+        # hier nicht "geraten", sondern "firma bleibt None".
+        assert _split_headline("Head of Customer Program Management") == ("Head of Customer Program Management", None)
+
+    def test_negativ_pipe_getrennte_skill_liste_wird_nicht_als_firma_geraten(self):
+        # Live beobachtet: Pipe-Zeichen trennen bei vielen Headlines Skills/
+        # Schlagworte, nicht "Rolle | Firma" — ein Split auf " | " würde z.B.
+        # "Ms Excel" fälschlich als Firma extrahieren.
+        headline = "Data Analyst | Ms Excel | Power BI | Datastage | Netezza | Db2"
+        rolle, firma = _split_headline(headline)
+        assert firma is None
+        assert rolle == headline
 
     def test_negativ_none_liefert_none_none(self):
         assert _split_headline(None) == (None, None)
