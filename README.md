@@ -42,7 +42,7 @@ open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
 | **iCloud Mail** | IMAP-Sync (App-Specific Password) |
 | **iCloud Kalender** | CalDAV-Sync |
 | **iCloud Kontakte** | CardDAV-Import |
-| **Lokale Dokumente** | PDF/DOCX/TXT/MD via `files_bridge.py` auf Port 9998 |
+| **Lokale Dokumente** | PDF/DOCX/TXT/MD über den JobTracker Agent |
 | **Review-Queue** | KI-Vorschläge für Events und Statuswechsel freigeben |
 | **Sync-Steuerung** | Quellen einzeln aktivieren / deaktivieren |
 | **AI-Klassifikation** | Provider-agnostisch via LiteLLM (Groq, Ollama, OpenAI, Anthropic) |
@@ -72,12 +72,8 @@ open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
 1. Apple ID → Sicherheit → App-spezifische Passwörter → neues Passwort generieren
 2. Einstellungen → iCloud: Apple-ID + App-Passwort eintragen
 
-### Lokale Dokumente
-```bash
-# Bridge separat starten (auf dem Mac, nicht in Docker)
-python3 files_bridge.py   # Port 9998
-```
-Dann Einstellungen → Dokumente → Ordnerpfad setzen.
+### Lokale Dokumente (+ Notizen, Anrufe, Backup)
+Erfordert den JobTracker Agent auf dem Mac (siehe [agent/README.md](agent/README.md) — als `.app`/`.dmg` installierbar, läuft dauerhaft im Hintergrund mit Menüleisten-Icon, keine manuellen Terminal-Fenster mehr). Nach der Installation: Einstellungen → Agent → Token einfügen (wird beim ersten Start des Agenten in der Menüleiste angezeigt). Dann Einstellungen → Dokumente → Ordnerpfad setzen.
 
 ### AI-Provider
 - **Groq** (empfohlen, kostenlos): API-Key von [console.groq.com](https://console.groq.com), Modell `groq/llama-3.3-70b-versatile`

@@ -69,13 +69,21 @@ Self-hosted Webanwendung als Ersatz für die Excel-Bewerbungsliste. Läuft lokal
 - **Archived → abgesagt**: Immer, unabhängig vom bisherigen Status
 - **Bug (behoben v2.0.17):** `seen_ids` war global geteilt → ARCHIVED wurde durch APPLIED-Pass überschrieben. Jetzt per-Kategorie.
 
-#### Bridge-Skripte (laufen auf dem Mac, nicht in Docker)
+#### JobTracker Agent (`agent/`, läuft auf dem Mac, nicht in Docker)
 
-| Skript | Port | Funktion |
-|---|---|---|
-| `files_bridge.py` | 9998 | Lokale Bewerbungsunterlagen (PDF, DOCX, TXT, MD) |
-| `calls_bridge.py` | 9997 | iPhone-Anrufliste (CallHistoryDB) + WhatsApp-Anrufe |
-| `notes_bridge.py` | 9999 | iCloud-Notizen via AppleScript (JXA) |
+Ein einzelner Hintergrund-Dienst (Port 9996, Bearer-Token-Auth) ersetzt die
+früheren drei separaten Bridge-Skripte (`files_bridge.py`, `calls_bridge.py`,
+`notes_bridge.py` — entfernt v3.27.0). Als `.app`/`.dmg` installierbar
+(`agent/packaging/`), Menüleisten-Icon, registriert sich beim ersten Start
+selbst als `launchd`-LaunchAgent (Autostart + Neustart bei Absturz).
+OS-Adapter-Grenze (`agent/providers/`) für einen geplanten Windows-Port.
+Details: [agent/README.md](../agent/README.md).
+
+| Modul | Funktion |
+|---|---|
+| Dateien | Lokale Bewerbungsunterlagen (PDF, DOCX, TXT, MD), Backup-Dateizugriff |
+| Anrufe | iPhone-Anrufliste (CallHistoryDB) + WhatsApp-Anrufe |
+| Notizen | iCloud-Notizen via AppleScript (JXA) |
 
 ---
 
@@ -134,10 +142,8 @@ docker compose up -d
 # Rebuild nach Code-Änderungen (CI/CD macht das automatisch)
 docker compose up -d --build
 
-# Bridge-Skripte (separat, auf dem Mac)
-python3 files_bridge.py   # Port 9998
-python3 calls_bridge.py   # Port 9997 (optional)
-python3 notes_bridge.py   # Port 9999 (optional)
+# JobTracker Agent (separat, auf dem Mac) — installiert als .app, läuft dauerhaft
+# im Hintergrund (Menüleiste), kein manueller Start nötig. Siehe agent/README.md.
 ```
 
 **Docker-Services:**
@@ -167,7 +173,7 @@ python3 notes_bridge.py   # Port 9999 (optional)
 - [x] Google OAuth 2.0 + Gmail + Google Calendar Sync
 - [x] iCloud Mail (IMAP) + Kalender (CalDAV) + Kontakte (CardDAV) Sync
 - [x] LinkedIn Playwright-Scraper (Session-gecacht, Archived→abgesagt, 2FA inline)
-- [x] Lokale Dokumente Sync (files_bridge.py, Port 9998)
+- [x] Lokale Dokumente/Notizen/Anrufe Sync über den JobTracker Agent (agent/)
 - [x] AI-Klassifikation via LiteLLM (Groq, Ollama, OpenAI-kompatibel)
 - [x] Review-Queue für KI-Vorschläge
 - [x] Sync-Steuerung: Quellen ein-/ausschaltbar
@@ -187,8 +193,7 @@ python3 notes_bridge.py   # Port 9999 (optional)
 - [ ] **Alembic-Migrationen**: Aktuell `create_all()` beim Start; beim nächsten Schema-Breaking-Change nötig
 - [ ] **Auth**: Kein Login für MVP (Single-User lokal)
 - [ ] **CORS einschränken**: Aktuell `allow_origins=["*"]`
-- [ ] **calls_bridge.py**: Erfordert macOS Full Disk Access; noch nicht produktiv getestet
-- [ ] **Apple Notes Sync**: Bridge vorhanden (`notes_bridge.py`), UI-Anbindung ausstehend
+- [ ] **JobTracker Agent Windows-Port**: Architektur ist plattformübergreifend angelegt (Provider-Interfaces in `agent/providers/`), Windows-Adapter noch nicht implementiert
 
 ---
 
@@ -199,9 +204,7 @@ python3 notes_bridge.py   # Port 9999 (optional)
 ├── CLAUDE.md                          ← Claude Code Kontext (wird auto-gelesen)
 ├── README.md                          ← Quick-Start
 ├── docker-compose.yml
-├── files_bridge.py                    ← Mac-Bridge für lokale Dokumente (Port 9998)
-├── calls_bridge.py                    ← Mac-Bridge für Anrufe (Port 9997)
-├── notes_bridge.py                    ← Mac-Bridge für Notizen (Port 9999)
+├── agent/                              ← JobTracker Agent (Mac-Hintergrunddienst, ersetzt die alten Bridges)
 ├── .github/workflows/ci.yml           ← GitHub Actions CI/CD (self-hosted runner)
 ├── docs/
 │   ├── ARCHITECTURE.md               ← Technische Architektur (aktuell)
