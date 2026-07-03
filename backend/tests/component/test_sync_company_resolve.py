@@ -7,7 +7,6 @@ eine Firma).
 """
 from unittest.mock import AsyncMock, patch
 
-import httpx
 import pytest
 
 from app.routers.sync_company import resolve_company_candidate
