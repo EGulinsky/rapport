@@ -14,6 +14,7 @@ interface Props {
   onNavigateToApps?: (name: string) => void
   onNavigateToContacts?: (name: string) => void
   reloadKey?: number
+  onReviewOpen?: () => void
 }
 
 const COMPANY_TYPE_COLORS: Record<string, string> = {
@@ -38,7 +39,7 @@ const COMPANY_TYPE_LABELS: Record<string, string> = {
   other:       'Sonstiges',
 }
 
-export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey }: Props) {
+export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey, onReviewOpen }: Props) {
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -147,6 +148,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             syncCancelledRef.current = false
             syncScopedIdsRef.current = undefined
             load()
+            onReviewOpen?.()
           }
         }
       } catch {
@@ -154,7 +156,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         setSyncing(false)
       }
     }, 1500)
-  }, [stopPolling, load])
+  }, [stopPolling, load, onReviewOpen])
 
   useEffect(() => () => stopPolling(), [stopPolling])
   useEffect(() => () => stopLinkPolling(), [])

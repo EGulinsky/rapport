@@ -187,6 +187,18 @@ export default function App() {
     } catch { /* ignore */ }
   }, [])
 
+  // Nach JEDEM abgeschlossenen Sync (egal welche Quelle) automatisch die
+  // "Manuelle Überprüfung" öffnen, falls es etwas zu entscheiden gibt —
+  // statt nur die Badge-Zahl zu aktualisieren und darauf zu warten, dass der
+  // User die Glocke von selbst anklickt.
+  const checkReviewAfterSync = useCallback(async () => {
+    try {
+      const { count } = await api.review.count()
+      setReviewCount(count)
+      if (count > 0) setShowReview(true)
+    } catch { /* ignore */ }
+  }, [])
+
   useEffect(() => { loadReviewCount() }, [loadReviewCount])
 
   useEffect(() => {
@@ -293,7 +305,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={() => setShowReview(true)} />
+              <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={checkReviewAfterSync} />
               <ImportExportMenu onImported={load} />
               <button
                 onClick={async () => {
@@ -450,6 +462,7 @@ export default function App() {
             onNavigateToApps={name => { setSearch(name); setMainView('applications') }}
             onNavigateToContacts={name => { setContactsSearch(name); setMainView('contacts') }}
             reloadKey={companyReloadKey}
+            onReviewOpen={checkReviewAfterSync}
           />
         )}
         {mainView === 'calendar' && (
@@ -580,6 +593,7 @@ export default function App() {
           onSaved={() => { load(); loadReviewCount() }}
           onOpenCompany={id => setCompanyModalId(id)}
           updatedFields={changedFields.get(selectedId) ?? undefined}
+          onReviewOpen={checkReviewAfterSync}
         />
       )}
 
@@ -603,7 +617,7 @@ export default function App() {
         />
       )}
 
-      {showAiSettings && <SettingsModal onClose={() => setShowAiSettings(false)} />}
+      {showAiSettings && <SettingsModal onClose={() => setShowAiSettings(false)} onReviewOpen={checkReviewAfterSync} />}
       {showAuditLog && <AuditLogModal onClose={() => setShowAuditLog(false)} />}
       {showCleanup && (
         <CleanupModal

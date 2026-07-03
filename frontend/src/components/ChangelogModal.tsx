@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.32.0',
+    date: '2026-07-03',
+    changes: [
+      'Nach jedem abgeschlossenen Sync (Haupt-Sync, Firmensync, Bewerbungs-Sync, LinkedIn-Sync aus den Einstellungen) öffnet sich die "Manuelle Überprüfung" jetzt automatisch, sobald es etwas zu entscheiden gibt — bisher musste man selbst auf die Glocke klicken, auch wenn dort schon länger etwas offen war.',
+      'Firmen-Disambiguierung im Review-Dialog: bei mehreren LinkedIn-Treffern wird jetzt neben Name und Link auch ein Einzeiler mit Branche und Ort angezeigt (z.B. "IT Services and IT Consulting · San Francisco, California") — hilft z.B. "GitLab" von "GitLab Foundation" oder "Peach Tech (Acquired by GitLab)" zu unterscheiden.',
+    ],
+  },
+  {
     version: '3.31.3',
     date: '2026-07-03',
     changes: [

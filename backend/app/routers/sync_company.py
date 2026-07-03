@@ -282,11 +282,15 @@ async def _get_linkedin_context():
     return playwright, browser, context
 
 
+_CANDIDATE_NOISE = {"follow", "connect", "message", "pending", "view profile"}
+
+
 async def _linkedin_search_candidates(context, name: str, limit: int = 5) -> list[dict]:
     """Sucht LinkedIn-Firmenseiten für `name`, liefert bis zu `limit` eindeutige
-    Kandidaten ({"name","url"}) aus der Ergebnisliste. Leere Liste bei keinem
-    Treffer. Best-effort — jeder Fehler (Layout-Änderung, Rate-Limit, keine
-    Session) liefert einfach eine leere Liste statt den Sync abzubrechen.
+    Kandidaten ({"name","url","snippet"}) aus der Ergebnisliste. Leere Liste
+    bei keinem Treffer. Best-effort — jeder Fehler (Layout-Änderung,
+    Rate-Limit, keine Session) liefert einfach eine leere Liste statt den
+    Sync abzubrechen.
     """
     query = _clean_query(name)
     candidates: list[dict] = []
@@ -311,10 +315,19 @@ async def _linkedin_search_candidates(context, name: str, limit: int = 5) -> lis
             # beobachtet bei 'GitLab': inner_text() lieferte den kompletten
             # mehrzeiligen Kartentext statt nur "GitLab".
             raw_label = await a.inner_text()
-            label = next((line.strip() for line in raw_label.splitlines() if line.strip()), "")
+            lines = [ln.strip() for ln in raw_label.splitlines() if ln.strip()]
+            lines = [ln for ln in lines if ln.lower() not in _CANDIDATE_NOISE]
+            label = lines[0] if lines else ""
             if not label:
                 label = url.rsplit("/company/", 1)[-1].replace("-", " ").title()
-            candidates.append({"name": label[:200], "url": url})
+            # Einzeiler aus Branche/Ort (nächste 1-2 Zeilen) — hilft im
+            # Review-Modal, mehrere Treffer zu unterscheiden (z.B. "GitLab"
+            # von "GitLab Foundation" oder "Peach Tech (Acquired by GitLab)").
+            snippet = " · ".join(lines[1:3]) if len(lines) > 1 else None
+            candidates.append({
+                "name": label[:200], "url": url,
+                "snippet": snippet[:200] if snippet else None,
+            })
             if len(candidates) >= limit:
                 break
     except Exception as e:
