@@ -230,11 +230,12 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
       const totalErrors = sources.reduce((s, r) => s + r.errors.length, 0)
 
       onSynced()
-      if (newPending > 0 && onReviewOpen) {
-        onReviewOpen()
-      } else {
-        setSummary({ sources, totalCreated, newPending, totalErrors })
-      }
+      setSummary({ sources, totalCreated, newPending, totalErrors })
+      // Öffnet die "Manuelle Überprüfung" automatisch, wenn danach IRGENDETWAS
+      // offen ist (nicht nur neu entstandene Einträge) — der User soll nie
+      // manuell auf die Glocke klicken müssen, um zu sehen, dass es was zu
+      // entscheiden gibt.
+      if (onReviewOpen) onReviewOpen()
     } catch {
       setSummary({ sources: [], totalCreated: 0, newPending: 0, totalErrors: 1 })
     } finally {

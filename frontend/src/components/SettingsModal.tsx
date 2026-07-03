@@ -5,7 +5,7 @@ import { useLogoKey } from '../context/LogoContext'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
-interface Props { onClose: () => void }
+interface Props { onClose: () => void; onReviewOpen?: () => void }
 
 // ── AI Provider config ────────────────────────────────────────────────────────
 interface ProviderModel {
@@ -2281,7 +2281,7 @@ function AgentPanel() {
   )
 }
 
-export function SettingsModal({ onClose }: Props) {
+export function SettingsModal({ onClose, onReviewOpen }: Props) {
   const [tab, setTab] = useState<Tab>('sync')
 
   return (
@@ -2322,7 +2322,7 @@ export function SettingsModal({ onClose }: Props) {
             {tab === 'icloud'   && <ICloudSyncPanel />}
             {tab === 'calls'    && <CallsPanel />}
             {tab === 'files'    && <FilesPanel />}
-            {tab === 'linkedin' && <LinkedInPanel onSynced={onClose} />}
+            {tab === 'linkedin' && <LinkedInPanel onSynced={() => { onClose(); onReviewOpen?.() }} />}
             {tab === 'backup'     && <BackupPanel />}
             {tab === 'logos'      && <LogoPanel />}
             {tab === 'maps'       && <MapsPanel />}

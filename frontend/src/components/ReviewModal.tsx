@@ -581,6 +581,7 @@ function ContentPreview({ item }: { item: PendingMatch }) {
 interface CompanyCandidate {
   name: string
   url: string
+  snippet?: string | null
 }
 
 function CompanyCandidatePicker({
@@ -617,6 +618,7 @@ function CompanyCandidatePicker({
               <span>{c.name}</span>
               <Linkedin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
             </div>
+            {c.snippet && <p className="text-xs text-gray-500 truncate">{c.snippet}</p>}
             <span className="text-xs text-gray-400 break-all">{c.url}</span>
           </button>
         ))}

@@ -23,12 +23,13 @@ interface Props {
   onSaved: () => void
   onOpenCompany?: (id: number) => void
   updatedFields?: Set<string>
+  onReviewOpen?: () => void
 }
 
 const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
-export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields }: Props) {
+export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields, onReviewOpen }: Props) {
   const [app, setApp] = useState<Application | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Application>>({})
@@ -204,6 +205,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           setSyncResult({ created: result.created ?? 0, errors: result.errors ?? [] })
           await refreshContacts()
           onSaved()
+          onReviewOpen?.()
           break
         }
 
@@ -219,6 +221,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           setSyncResult({ created: result.created ?? 0, errors: result.errors ?? [] })
           await refreshContacts()
           onSaved()
+          onReviewOpen?.()
           break
         }
       }

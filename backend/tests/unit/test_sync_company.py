@@ -272,8 +272,8 @@ class TestLinkedinSearchCandidates:
         result = await _linkedin_search_candidates(context, "Contoso")
 
         assert result == [
-            {"name": "Contoso GmbH", "url": "https://www.linkedin.com/company/contoso-gmbh"},
-            {"name": "Contoso Inc.", "url": "https://www.linkedin.com/company/contoso-inc"},
+            {"name": "Contoso GmbH", "url": "https://www.linkedin.com/company/contoso-gmbh", "snippet": None},
+            {"name": "Contoso Inc.", "url": "https://www.linkedin.com/company/contoso-inc", "snippet": None},
         ]
 
     async def test_negativ_kein_treffer_liefert_leere_liste(self):
@@ -343,6 +343,31 @@ class TestLinkedinSearchCandidates:
         result = await _linkedin_search_candidates(context, "GitLab")
 
         assert result[0]["name"] == "GitLab"
+
+    async def test_positiv_snippet_aus_branche_und_ort_fuer_disambiguierung(self):
+        # Hilft im Review-Modal, mehrere Treffer zu unterscheiden (z.B.
+        # "GitLab" von "GitLab Foundation").
+        card_text = "\n".join([
+            "GitLab", "", "IT Services and IT Consulting", "",
+            "San Francisco, California", "", "Follow", "",
+            "GitLab is the Intelligent Orchestration Platform…",
+        ])
+        page = _fake_search_page([("https://www.linkedin.com/company/gitlab-com/", card_text)])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "GitLab")
+
+        assert result[0]["snippet"] == "IT Services and IT Consulting · San Francisco, California"
+
+    async def test_negativ_kein_snippet_bei_nur_einer_zeile(self):
+        page = _fake_search_page([("https://www.linkedin.com/company/contoso/", "Contoso")])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Contoso")
+
+        assert result[0]["snippet"] is None
 
 
 def _fake_about_page(main_text: str):
