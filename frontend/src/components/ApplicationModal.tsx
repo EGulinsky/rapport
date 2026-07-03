@@ -48,6 +48,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [addingBewerbung, setAddingBewerbung] = useState(false)
   const [bewerbungDraft, setBewerbungDraft] = useState({ datum: '', titel: 'Bewerbung eingereicht' })
   const [savingBewerbung, setSavingBewerbung] = useState(false)
+  const [addingOther, setAddingOther] = useState(false)
+  const [otherDraft, setOtherDraft] = useState({ typ: 'status', datum: '', titel: '', notiz: '' })
+  const [savingOther, setSavingOther] = useState(false)
+  const [addingFile, setAddingFile] = useState(false)
+  const [fileDraft, setFileDraft] = useState<{ datum: string; titel: string; file: File | null }>({ datum: '', titel: '', file: null })
+  const [savingFile, setSavingFile] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [manualOpen, setManualOpen] = useState(false)
   const [manualQuery, setManualQuery] = useState('')
   const [manualCandidates, setManualCandidates] = useState<ManualCandidate[]>([])
@@ -449,6 +456,43 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setAddingBewerbung(false)
     } finally {
       setSavingBewerbung(false)
+    }
+  }
+
+  async function saveOther() {
+    if (!appId) return
+    setSavingOther(true)
+    try {
+      await api.applications.addEvent(appId, {
+        typ: otherDraft.typ,
+        datum: otherDraft.datum || new Date().toISOString().slice(0, 10),
+        titel: otherDraft.titel.trim() || undefined,
+        notiz: otherDraft.notiz.trim() || undefined,
+      })
+      await refreshContacts()
+      setOtherDraft({ typ: 'status', datum: '', titel: '', notiz: '' })
+      setAddingOther(false)
+    } finally {
+      setSavingOther(false)
+    }
+  }
+
+  async function saveFile() {
+    if (!appId || !fileDraft.file) return
+    setSavingFile(true)
+    try {
+      const event = await api.applications.addEvent(appId, {
+        typ: 'file',
+        datum: fileDraft.datum || new Date().toISOString().slice(0, 10),
+        titel: fileDraft.titel.trim() || fileDraft.file.name,
+      })
+      await api.attachments.upload(event.id, fileDraft.file)
+      await refreshContacts()
+      setFileDraft({ datum: '', titel: '', file: null })
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      setAddingFile(false)
+    } finally {
+      setSavingFile(false)
     }
   }
 
@@ -1291,14 +1335,20 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           </div>
 
           <div className="overflow-y-auto flex-1 p-6 space-y-3">
-            {/* Add note / Bewerbung */}
-            {!addingNote && !addingBewerbung && (
-              <div className="flex items-center gap-3 mb-1">
+            {/* Add note / Bewerbung / Weiteres / Anhang */}
+            {!addingNote && !addingBewerbung && !addingOther && !addingFile && (
+              <div className="flex items-center gap-3 mb-1 flex-wrap">
                 <button onClick={() => setAddingNote(true)} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
                   <Plus className="h-3 w-3" /> Notiz
                 </button>
                 <button onClick={() => setAddingBewerbung(true)} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700">
                   <Plus className="h-3 w-3" /> Bewerbung
+                </button>
+                <button onClick={() => setAddingOther(true)} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700">
+                  <Plus className="h-3 w-3" /> Weiteres
+                </button>
+                <button onClick={() => setAddingFile(true)} className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700">
+                  <Paperclip className="h-3 w-3" /> Anhang
                 </button>
               </div>
             )}
@@ -1348,7 +1398,78 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               </div>
             )}
 
-            {timelineEvents.length === 0 && !addingNote && !addingBewerbung ? (
+            {addingOther && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+                <select autoFocus
+                  className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={otherDraft.typ} onChange={e => setOtherDraft(d => ({ ...d, typ: e.target.value }))}
+                >
+                  {OTHER_EVENT_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                <input
+                  className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Titel (optional)" value={otherDraft.titel}
+                  onChange={e => setOtherDraft(d => ({ ...d, titel: e.target.value }))}
+                />
+                <textarea rows={2}
+                  className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Notiz (optional)" value={otherDraft.notiz}
+                  onChange={e => setOtherDraft(d => ({ ...d, notiz: e.target.value }))}
+                />
+                <div className="flex items-center justify-between">
+                  <input type="date"
+                    className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    value={otherDraft.datum} onChange={e => setOtherDraft(d => ({ ...d, datum: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setAddingOther(false); setOtherDraft({ typ: 'status', datum: '', titel: '', notiz: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" disabled={savingOther} onClick={saveOther} className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50">
+                      {savingOther ? 'Speichern…' : 'Speichern'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {addingFile && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0] ?? null; setFileDraft(d => ({ ...d, file: f, titel: d.titel || f?.name || '' })) }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                  {fileDraft.file ? fileDraft.file.name : 'Datei auswählen…'}
+                </button>
+                <input
+                  className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder="Titel (optional, Dateiname als Standard)" value={fileDraft.titel}
+                  onChange={e => setFileDraft(d => ({ ...d, titel: e.target.value }))}
+                />
+                <div className="flex items-center justify-between">
+                  <input type="date"
+                    className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    value={fileDraft.datum} onChange={e => setFileDraft(d => ({ ...d, datum: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setAddingFile(false); setFileDraft({ datum: '', titel: '', file: null }); if (fileInputRef.current) fileInputRef.current.value = '' }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" disabled={!fileDraft.file || savingFile} onClick={saveFile} className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                      {savingFile ? 'Hochladen…' : 'Hochladen'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {timelineEvents.length === 0 && !addingNote && !addingBewerbung && !addingOther && !addingFile ? (
               <p className="text-sm text-gray-400 italic">
                 {rawTimelineEvents.length > 0 ? 'Keine Einträge für diesen Filter' : 'Noch keine Einträge'}
               </p>
@@ -1888,7 +2009,21 @@ const EVENT_STYLES: Record<string, { dot: string; label: string }> = {
   status:    { dot: 'bg-indigo-500', label: 'Status' },
   notiz:     { dot: 'bg-gray-400',   label: 'Notiz' },
   gespräch:  { dot: 'bg-purple-500', label: 'Gespräch' },
+  mail:      { dot: 'bg-red-400',    label: 'Mail' },
+  anruf:     { dot: 'bg-teal-500',   label: 'Anruf' },
+  angebot:   { dot: 'bg-emerald-500',label: 'Angebot' },
+  absage:    { dot: 'bg-rose-500',   label: 'Absage' },
+  file:      { dot: 'bg-amber-500',  label: 'Anhang' },
 }
+
+const OTHER_EVENT_TYPES = [
+  { value: 'status',   label: 'Status' },
+  { value: 'gespräch', label: 'Gespräch' },
+  { value: 'mail',     label: 'Mail' },
+  { value: 'anruf',    label: 'Anruf' },
+  { value: 'angebot',  label: 'Angebot' },
+  { value: 'absage',   label: 'Absage' },
+]
 
 function getEventIcon(event: Event): { icon: React.ReactNode; bg: string; fg: string } {
   const sz = 'h-[9px] w-[9px]'
@@ -1956,7 +2091,7 @@ function SourceBadge({ source, external_id }: { source?: string; external_id?: s
   return <span className={cls}>{label}</span>
 }
 
-const EVENT_TYPES = ['bewerbung', 'status', 'notiz', 'gespräch'] as const
+const EVENT_TYPES = ['bewerbung', 'status', 'notiz', 'gespräch', 'mail', 'anruf', 'angebot', 'absage'] as const
 
 function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onDeleted: () => void }) {
   const [opening, setOpening] = useState(false)

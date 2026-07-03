@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.30.0',
+    date: '2026-07-03',
+    changes: [
+      'Manuell konnten Bewerbungen bisher nur zwei Eintrags-Arten (Notiz, Bewerbung) direkt anlegen — Mail, Anruf, Angebot, Absage, Status/Gespräch sowie Datei-Anhänge existierten nur, wenn sie über eine Sync-Quelle oder die KI-Review-Queue entstanden. Neu: "Weiteres" (alle übrigen Eintrags-Arten frei wählbar) und "Anhang" (Datei-Upload direkt an eine Bewerbung, der Backend-Endpunkt dafür existierte bereits, war aber an keiner Stelle im Frontend verdrahtet) in der Timeline. Der Typ eines bestehenden Eintrags lässt sich jetzt ebenfalls auf alle Arten (außer Anhänge) ändern, nicht nur die ursprünglichen vier.',
+    ],
+  },
+  {
     version: '3.29.1',
     date: '2026-07-03',
     changes: [
