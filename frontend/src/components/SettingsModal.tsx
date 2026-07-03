@@ -977,11 +977,7 @@ function CallsPanel() {
           Anrufliste (iPhone + WhatsApp)
         </div>
         <p>Liest Anrufe aus der Mac-Anrufliste und WhatsApp und verknüpft sie mit Bewerbungen über Kontakte.</p>
-        <p>Die Bridge muss lokal laufen:</p>
-        <code className="block bg-white border border-gray-200 rounded px-2 py-1 text-[11px] font-mono">
-          python3 calls_bridge.py
-        </code>
-        <p className="text-gray-400">Sie startet automatisch beim Login via LaunchAgent.</p>
+        <p className="text-gray-400">Erfordert den JobTracker Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
       </div>
 
       {/* Bridge status + toggle */}
@@ -1036,7 +1032,7 @@ function CallsPanel() {
         {!status.bridge_reachable && (
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
             <WifiOff className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            Bridge nicht erreichbar. Im Terminal starten: <code className="font-mono ml-1">python3 calls_bridge.py</code>
+            Agent nicht erreichbar. Prüfe den „Agent“-Tab (läuft er? Token korrekt hinterlegt?).
           </div>
         )}
       </div>
@@ -1123,14 +1119,10 @@ function FilesPanel() {
           Lokale Bewerbungsunterlagen
         </div>
         <p>Scannt einen Ordner nach PDF, DOCX, TXT und Markdown-Dateien und verknüpft sie anhand des Datei- und Ordnernamens mit Bewerbungen.</p>
-        <p>Die Bridge muss lokal laufen:</p>
-        <code className="block bg-white border border-gray-200 rounded px-2 py-1 text-[11px] font-mono">
-          python3 files_bridge.py
-        </code>
-        <p className="text-gray-400">Für PDF/DOCX-Text: <code>pip install pdfplumber python-docx</code></p>
+        <p className="text-gray-400">Erfordert den JobTracker Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
       </div>
 
-      {/* Bridge status */}
+      {/* Agent status */}
       <div className="flex items-center gap-2">
         {bridgeOk === null
           ? <Loader className="h-4 w-4 animate-spin text-gray-400" />
@@ -1138,7 +1130,7 @@ function FilesPanel() {
             ? <Wifi className="h-4 w-4 text-green-500" />
             : <WifiOff className="h-4 w-4 text-gray-400" />}
         <span className="text-sm text-gray-700">
-          Bridge {bridgeOk ? 'erreichbar (Port 9998)' : 'nicht erreichbar'}
+          Agent {bridgeOk ? 'erreichbar' : 'nicht erreichbar'}
         </span>
       </div>
 
@@ -1211,7 +1203,7 @@ function FilesPanel() {
           {!bridgeOk && (
             <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
               <WifiOff className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              Bridge nicht erreichbar. Im Terminal starten: <code className="font-mono ml-1">python3 files_bridge.py</code>
+              Agent nicht erreichbar. Prüfe den „Agent“-Tab (läuft er? Token korrekt hinterlegt?).
             </div>
           )}
         </div>

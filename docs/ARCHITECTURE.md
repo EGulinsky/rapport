@@ -32,9 +32,8 @@ flowchart TB
         BE -.->|"CLEF logs"| SEQ
     end
 
-    subgraph Bridges["macOS-Bridges (außerhalb Docker)"]
-        FilesBridge["files_bridge.py<br/>Port 9998"]
-        CallsBridge["Calls-Bridge<br/>Port 9997"]
+    subgraph Agent["JobTracker Agent (außerhalb Docker, .app/launchd)"]
+        AgentSvc["agent/main.py<br/>Port 9996 · Bearer-Token-Auth<br/>Dateien / Notizen / Anrufe / Backup"]
     end
 
     subgraph External["Externe Dienste (optional, je Sync-Konfiguration)"]
@@ -54,8 +53,7 @@ flowchart TB
     BE --> LinkedIn
     BE --> AIProvider
     BE --> Enrichment
-    BE -.->|"HTTP"| FilesBridge
-    BE -.->|"HTTP"| CallsBridge
+    BE -.->|"HTTP + Bearer-Token"| AgentSvc
 ```
 
 ### Technologie-Stack
@@ -128,7 +126,7 @@ backend/app/
     ├── sync_google.py          Google OAuth + Gmail + GCal
     ├── sync_icloud.py          iCloud Mail/Kalender/Notizen/Erinnerungen/Kontakte/Anrufe
     ├── sync_targeted.py        Pro-App-Sync über alle Quellen + manuelle Kandidatenzuordnung
-    ├── sync_files.py            Lokale Dokumente via files_bridge (Port 9998)
+    ├── sync_files.py            Lokale Dokumente via JobTracker Agent (Port 9996)
     ├── sync_linkedin.py         LinkedIn-Playwright-Scraper (eigene Bewerbungen) mit 2FA-Inline
     ├── sync_company.py          Firmendaten-Anreicherung (DuckDuckGo → Wikipedia → Clearbit-Logo)
     ├── review.py                Manuelle Review-Queue (PendingMatches)
@@ -249,7 +247,7 @@ Swagger UI: `http://localhost:8000/docs`
 | `GET` | `/api/sync/targeted/{app_id}/candidates` | Kandidaten für manuelle Zuordnung (Volltextsuche über alle Quellen) |
 | `POST` | `/api/sync/targeted/{app_id}/assign` | Kandidat manuell zuordnen |
 | `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn-Login, Session, Scraper-Start, 2FA |
-| `GET`/`POST` | `/api/sync/files/*` | Lokale Dokumente (files_bridge) |
+| `GET`/`POST` | `/api/sync/files/*` | Lokale Dokumente (JobTracker Agent) |
 
 ### Kalender, Review, Analytics, Audit, Backup, Einstellungen
 
@@ -296,10 +294,13 @@ Zwei getrennte Anwendungsfälle, beide über Headless Chromium:
 
 Beide nutzen dieselben Login-/2FA-/Consent-Helper. Session-Cookies werden in `linkedin_sync.session_cookies` gecacht.
 
-### 3.5 Lokale Dokumente & Anrufe (macOS-Bridges)
+### 3.5 Lokale Dokumente, Notizen & Anrufe (JobTracker Agent)
 
-- **`files_bridge.py`** (Port 9998, läuft auf dem Mac, nicht in Docker) — liefert Dateiinhalte aus konfiguriertem Ordner
-- **Calls-Bridge** (Port 9997) — liest Anruflisten via AppleScript
+- **`agent/`** (Port 9996, läuft auf dem Mac als `.app`/`launchd`-Dienst, nicht in Docker) — ein einzelner Prozess ersetzt die früheren drei separaten Bridge-Skripte (`files_bridge.py`, `notes_bridge.py`, `calls_bridge.py`), mit Bearer-Token-Auth statt offener Ports
+- **Dateien-Modul** — liefert Dateiinhalte aus konfiguriertem Ordner, native Ordner-/Datei-Picker, Backup-Lesen/Schreiben
+- **Notizen-Modul** — iCloud-Notizen via AppleScript (JXA)
+- **Anrufe-Modul** — iPhone-Anrufliste (CallHistoryDB) + WhatsApp via AppleScript/SQLite
+- **Architektur:** OS-neutrale Provider-Interfaces (`agent/providers/base.py`) mit heute nur einer macOS-Implementierung — bewusst so angelegt, um später einen Windows-Adapter hinter derselben Schnittstelle nachzuziehen, ohne Backend/Frontend anzufassen
 
 ### 3.6 AI-Klassifikation & -Bewertung (litellm)
 

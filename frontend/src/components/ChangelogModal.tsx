@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.27.0',
+    date: '2026-07-03',
+    changes: [
+      'Die drei alten separaten Hintergrund-Bridges (files_bridge.py, notes_bridge.py, calls_bridge.py) sind entfernt — der neue JobTracker Agent läuft seit einigen Tagen produktiv als vollwertiger Ersatz und wurde live gegen die echte Instanz verifiziert (Health-Check, Startup-Check, echter Backup-Roundtrip), bevor die alten Skripte abgeschaltet und gelöscht wurden. Dokumentation (README, Architektur, Projektstand) entsprechend aktualisiert.',
+    ],
+  },
+  {
     version: '3.26.1',
     date: '2026-07-03',
     changes: [
