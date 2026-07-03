@@ -632,20 +632,19 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
 # ── iCloud Notes ──────────────────────────────────────────────────────────────
 
 async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
-    NOTES_BRIDGE_URL = "http://host.docker.internal:9999/notes"
+    from app.agent_client import agent_get
+
     pfx = f"[SYNC #{app.id} icloud_notes]"
     created = skipped = 0
     errors: list[str] = []
 
     try:
-        import httpx
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(NOTES_BRIDGE_URL)
+        resp = await agent_get(db, "/notes", timeout=30)
         if resp.status_code != 200:
-            return 0, 0, [f"Notes Bridge: {resp.text[:200]}"]
+            return 0, 0, [f"Agent (Notizen): {resp.text[:200]}"]
         notes = resp.json()
     except Exception as e:
-        return 0, 0, [f"Notes Bridge nicht erreichbar: {e}"]
+        return 0, 0, [f"JobTracker Agent nicht erreichbar: {e}"]
 
     # Smart filter: always include text-matching notes (company/role in title/body) +
     # the 30 most recent notes (relevant notes often don't mention the company by name).
@@ -902,7 +901,8 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
 # ── Calls ─────────────────────────────────────────────────────────────────────
 
 async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Session) -> tuple[int, int, list[str]]:
-    CALLS_BRIDGE_URL = "http://host.docker.internal:9997/calls"
+    from app.agent_client import agent_get
+
     created = skipped = 0
     errors: list[str] = []
 
@@ -924,14 +924,12 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         return 0, 0, []
 
     try:
-        import httpx
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(CALLS_BRIDGE_URL)
+        resp = await agent_get(db, "/calls", timeout=15)
         if resp.status_code != 200:
-            return 0, 0, [f"Calls Bridge: {resp.text[:200]}"]
+            return 0, 0, [f"Agent (Anrufe): {resp.text[:200]}"]
         calls = resp.json()
     except Exception as e:
-        return 0, 0, [f"Calls Bridge nicht erreichbar: {e}"]
+        return 0, 0, [f"JobTracker Agent nicht erreichbar: {e}"]
 
     for call in calls:
         phone_raw = str(call.get("phone") or "")

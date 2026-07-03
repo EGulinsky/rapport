@@ -1,10 +1,9 @@
 """
 Local-files sync: indexes documents from a configured folder on the host Mac.
 
-Requires files_bridge.py running on the host:
-  python3 files_bridge.py          # port 9998
+Requires the JobTracker Agent running on the host (see agent/README.md).
 
-GET  /api/sync/files/status       — bridge reachability + last sync info
+GET  /api/sync/files/status       — agent reachability + last sync info
 POST /api/sync/files              — trigger background sync
 POST /api/sync/files/reset        — clear synced-items for local_files source
 GET  /api/sync/files/browse       — browse folders/files under root (manual sync)
@@ -22,6 +21,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.agent_client import agent_get, agent_post
 from app.database import get_db, SessionLocal
 from app import models
 from app.routers.sync_common import (
@@ -37,8 +37,6 @@ router = APIRouter(prefix="/api/sync/files", tags=["sync"])
 def _rolle_in_name(rolle: str, name_lower: str) -> bool:
     cleaned = re.sub(r'\s*\(m[/|]w[/|]d\)\s*$', '', rolle, flags=re.IGNORECASE).strip().lower()
     return bool(cleaned) and cleaned in name_lower
-
-FILES_BRIDGE_URL = os.getenv("FILES_BRIDGE_URL", "http://host.docker.internal:9998")
 
 
 def _get_cfg(db: Session) -> Optional[models.FilesConfig]:
@@ -57,13 +55,11 @@ def _get_or_create_cfg(db: Session) -> models.FilesConfig:
 
 @router.get("/status")
 async def files_status(db: Session = Depends(get_db)):
-    import httpx
     cfg = _get_or_create_cfg(db)
     reachable = False
     try:
-        async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/health")
-            reachable = resp.status_code == 200
+        resp = await agent_get(db, "/health", timeout=3)
+        reachable = resp.status_code == 200
     except Exception:
         pass
     return {
@@ -84,7 +80,6 @@ def reset_files_sync(db: Session = Depends(get_db)):
 
 
 async def _do_local_files() -> dict:
-    import httpx
     db = SessionLocal()
     processed = created = skipped = 0
     errors: list[str] = []
@@ -108,17 +103,16 @@ async def _do_local_files() -> dict:
             params["since"] = str(cfg.last_sync.timestamp())
 
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.get(f"{FILES_BRIDGE_URL}/files", params=params)
-                if resp.status_code != 200:
-                    err = resp.json().get("error", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
-                    finish_progress("local_files")
-                    return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Bridge-Fehler: {err}"]}
-                files = resp.json()
+            resp = await agent_get(db, "/files", params=params, timeout=60)
+            if resp.status_code != 200:
+                err = resp.json().get("error", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+                finish_progress("local_files")
+                return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Agent-Fehler: {err}"]}
+            files = resp.json()
         except Exception as e:
             finish_progress("local_files")
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [
-                f"Files Bridge nicht erreichbar ({e}). Starte files_bridge.py auf deinem Mac."
+                f"JobTracker Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
             ]}
 
         # Group files by first-level subfolder under root
@@ -215,22 +209,20 @@ async def sync_files(background_tasks: BackgroundTasks, db: Session = Depends(ge
 @router.get("/browse")
 async def browse_files(path: str = "", db: Session = Depends(get_db)):
     """List items at a given absolute host path. Defaults to configured root."""
-    import httpx
     cfg = _get_cfg(db)
     target = path or (cfg.folder_path if cfg else "")
     if not target:
         raise HTTPException(status_code=400, detail="Kein Pfad angegeben und kein Dokumentenordner konfiguriert.")
     default_root = cfg.folder_path if cfg else ""
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/browse", params={"folder": target})
-            if resp.status_code != 200:
-                raise HTTPException(status_code=502, detail=resp.json().get("error", "Bridge-Fehler"))
-            return {"path": target, "default_root": default_root, "items": resp.json()}
+        resp = await agent_get(db, "/files/browse", params={"folder": target}, timeout=10)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=resp.json().get("error", "Agent-Fehler"))
+        return {"path": target, "default_root": default_root, "items": resp.json()}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Files Bridge nicht erreichbar: {e}")
+        raise HTTPException(status_code=502, detail=f"JobTracker Agent nicht erreichbar: {e}")
 
 
 class AttachRequest(BaseModel):
@@ -243,7 +235,6 @@ class AttachRequest(BaseModel):
 @router.post("/attach")
 async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
     """Manually attach a file or folder from the host to an application."""
-    import httpx
     app_obj = db.query(models.Application).filter_by(id=req.app_id).first()
     if not app_obj:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
@@ -251,11 +242,10 @@ async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
     name = req.name or os.path.basename(req.path)
 
     if req.is_folder:
-        # Attach all files in the folder (recursive via bridge)
+        # Attach all files in the folder (recursive via agent)
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(f"{FILES_BRIDGE_URL}/files", params={"folder": req.path})
-                files = resp.json() if resp.status_code == 200 else []
+            resp = await agent_get(db, "/files", params={"folder": req.path}, timeout=30)
+            files = resp.json() if resp.status_code == 200 else []
         except Exception:
             files = []
 
@@ -300,17 +290,15 @@ async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/open")
-async def open_file(body: dict):
-    """Ask the host bridge to open a file with the default Mac application."""
-    import httpx
+async def open_file(body: dict, db: Session = Depends(get_db)):
+    """Ask the host agent to open a file with the default OS application."""
     path = body.get("path", "")
     if not path:
         raise HTTPException(status_code=400, detail="path erforderlich")
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/open", params={"path": path})
-            if resp.status_code != 200:
-                raise HTTPException(status_code=502, detail=resp.text)
+        resp = await agent_post(db, "/files/open", json={"path": path}, timeout=5)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=resp.text)
     except HTTPException:
         raise
     except Exception as e:

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw } from 'lucide-react'
 import { api } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
-import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus } from '../types'
+import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void }
@@ -1956,7 +1956,7 @@ function BackupPanel() {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'maps'
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'maps' | 'agent'
 
 const TABS: [Tab, string][] = [
   ['sync',       'Sync'],
@@ -1969,6 +1969,7 @@ const TABS: [Tab, string][] = [
   ['backup',     'Backup'],
   ['logos',      'Logos'],
   ['maps',       'Karten'],
+  ['agent',      'Agent'],
 ]
 
 function LogoPanel() {
@@ -2132,6 +2133,162 @@ function MapsPanel() {
   )
 }
 
+const AGENT_MODULE_LABELS: Record<string, string> = {
+  files: 'Dateien',
+  notes: 'Notizen',
+  calls: 'Anrufe',
+}
+
+function AgentPanel() {
+  const [url, setUrl] = useState('')
+  const [hasToken, setHasToken] = useState(false)
+  const [token, setToken] = useState('')
+  const [health, setHealth] = useState<AgentHealth | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [checking, setChecking] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function refreshHealth() {
+    setChecking(true)
+    try {
+      setHealth(await api.settings.getAgentHealth())
+    } catch {
+      setHealth({ reachable: false, modules: {}, error: 'Anfrage fehlgeschlagen' })
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  useEffect(() => {
+    api.settings.getAgent().then(r => {
+      setUrl(r.url ?? '')
+      setHasToken(r.has_token)
+    }).finally(() => setLoading(false))
+    refreshHealth()
+  }, [])
+
+  async function save() {
+    setSaving(true); setSaved(false); setError(null)
+    try {
+      const r = await api.settings.saveAgent({ url: url.trim() || null, token: token.trim() || undefined })
+      setHasToken(r.has_token)
+      setToken('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      await refreshHealth()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function clearToken() {
+    await api.settings.clearAgentToken()
+    setHasToken(false)
+    await refreshHealth()
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">JobTracker Agent</h3>
+        <p className="text-xs text-gray-400">
+          Der Agent läuft auf deinem Mac und ersetzt die früheren separaten Bridges (Dateien, Notizen,
+          Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um
+          die Verbindung herzustellen. Verschlüsselt gespeichert, verlässt den Server nie im Klartext.
+        </p>
+      </div>
+
+      {/* Status */}
+      <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium">
+            {health?.reachable ? (
+              <span className="flex items-center gap-1.5 text-emerald-600"><Wifi className="h-3.5 w-3.5" /> Agent erreichbar</span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-red-500"><WifiOff className="h-3.5 w-3.5" /> Agent nicht erreichbar</span>
+            )}
+          </div>
+          <button onClick={refreshHealth} disabled={checking} title="Status aktualisieren"
+            className="p-1 rounded hover:bg-gray-200 text-gray-400 disabled:opacity-50">
+            <RefreshCw className={clsx('h-3.5 w-3.5', checking && 'animate-spin')} />
+          </button>
+        </div>
+        {health?.reachable && (
+          <>
+            <p className="text-[11px] text-gray-500">
+              Version {health.version ?? '?'} · {health.platform ?? '?'}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(health.modules).map(([key, mod]) => (
+                <span key={key}
+                  className={clsx(
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border',
+                    mod.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100',
+                  )}>
+                  {mod.ok ? <CheckCircle className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
+                  {AGENT_MODULE_LABELS[key] ?? key}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+        {!health?.reachable && health?.error && (
+          <p className="text-[11px] text-red-500">{health.error}</p>
+        )}
+      </div>
+
+      {/* URL override */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-gray-700">Agent-URL (optional)</label>
+        <input
+          type="text"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="http://host.docker.internal:9996 (Standard)"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        />
+      </div>
+
+      {/* Token */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-gray-700">Token</label>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={token}
+            onChange={e => setToken(e.target.value)}
+            placeholder={hasToken ? '••••••••••• (gespeichert)' : 'Beim ersten Start des Agenten angezeigt'}
+            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+          <button
+            onClick={save}
+            disabled={saving || loading}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {saved ? <Check className="h-4 w-4" /> : saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saved ? 'Gespeichert' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {!loading && hasToken && (
+        <button onClick={clearToken} className="text-xs text-red-500 hover:text-red-600">Token löschen</button>
+      )}
+    </div>
+  )
+}
+
 export function SettingsModal({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>('sync')
 
@@ -2177,6 +2334,7 @@ export function SettingsModal({ onClose }: Props) {
             {tab === 'backup'     && <BackupPanel />}
             {tab === 'logos'      && <LogoPanel />}
             {tab === 'maps'       && <MapsPanel />}
+            {tab === 'agent'      && <AgentPanel />}
           </div>
         </div>
       </div>

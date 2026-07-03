@@ -4,27 +4,29 @@ Ersetzt `files_bridge.py`, `notes_bridge.py` und `calls_bridge.py`: ein
 einzelner Hintergrund-Prozess statt drei, mit Bearer-Token-Auth statt offener
 Ports, und einer OS-Adapter-Grenze für den geplanten Windows-Port.
 
-Architektur-Details: siehe die Session-Notizen / Chat-Verlauf zum
-Architektur-Vorschlag. Kurzfassung:
-
 ```
 agent/
   main.py            # FastAPI-App, create_app()-Factory, /health
-  auth.py            # Bearer-Token-Dependency
-  config.py          # Token-Generierung/-Persistenz, per-OS App-Data-Dir
-  text_extract.py     # PDF/DOCX/TXT-Textextraktion (OS-neutral)
+  menubar.py          # macOS-Menüleisten-Einstiegspunkt (rumps) + launchd-Selbstregistrierung
+  launchd.py           # LaunchAgent-Plist erzeugen/registrieren/entfernen
+  auth.py             # Bearer-Token-Dependency
+  config.py           # Token-Generierung/-Persistenz, per-OS App-Data-Dir
+  text_extract.py      # PDF/DOCX/TXT-Textextraktion (OS-neutral)
   providers/
-    base.py          # abstrakte Interfaces: FilesProvider, NotesProvider, CallsProvider
-    factory.py        # wählt Provider-Set nach platform.system()
-    mac/              # heutige Implementierung (1:1 aus den alten Bridges portiert)
+    base.py           # abstrakte Interfaces: FilesProvider, NotesProvider, CallsProvider
+    factory.py         # wählt Provider-Set nach platform.system()
+    mac/               # heutige Implementierung (1:1 aus den alten Bridges portiert)
   routers/
-    files.py          # /files, /files/browse, /files/file, /files/open, /files/pick-*
-    backup.py         # /backup/backups, /backup/backup-write, /backup/backup-read
-    notes.py          # /notes
-    calls.py          # /calls
+    files.py           # /files, /files/browse, /files/file, /files/open, /files/pick-*
+    backup.py          # /backup/backups, /backup/backup-write, /backup/backup-read
+    notes.py           # /notes
+    calls.py           # /calls
+  packaging/
+    agent.spec          # PyInstaller-Spec → "JobTracker Agent.app"
+    build_dmg.sh         # baut App + verpackt in ein .dmg (hdiutil)
 ```
 
-## Lokal starten (Entwicklung)
+## Lokal starten (Entwicklung, ohne Packaging)
 
 ```bash
 cd agent
@@ -46,14 +48,34 @@ python3 -m venv .venv_test
 .venv_test/bin/python3 -m pytest -v
 ```
 
-## Noch offen (nächste Schritte, nicht Teil dieses Grundgerüsts)
+## Installer bauen (.app + .dmg)
 
-- Packaging: PyInstaller → `.app` → `.dmg`, Menüleisten-Icon (`rumps`),
-  Selbstregistrierung als `launchd`-LaunchAgent beim ersten Start.
-- Backend-Integration: `FILES_BRIDGE_URL`/`CALLS_BRIDGE_URL`/hartkodierte
-  Notes-URL durch `AGENT_URL`+`AGENT_TOKEN` ersetzen, `startup_check.py` auf
-  einen einzelnen `/health`-Call umstellen.
-- Settings-UI: neuer "Agent"-Tab zum Einfügen des Tokens (verschlüsselt
-  gespeichert, gleiches Muster wie AI-/Maps-Key).
-- Die drei alten `*_bridge.py`-Skripte am Repo-Root erst entfernen, wenn der
-  Agent produktiv im Einsatz ist und die Backend-Integration steht.
+```bash
+cd agent
+python3 -m venv .venv_build
+.venv_build/bin/pip install -r packaging/requirements-packaging.txt
+PATH="$PWD/.venv_build/bin:$PATH" packaging/build_dmg.sh 0.1.0
+```
+
+Ergebnis: `agent/packaging/dist/JobTracker-Agent-0.1.0.dmg` (App +
+Applications-Symlink zum Draufziehen). Live verifiziert: Doppelklick auf die
+`.app` registriert sie beim ersten Start selbst als `launchd`-LaunchAgent
+(`~/Library/LaunchAgents/com.jobtracker.agent.plist`, `RunAtLoad`+
+`KeepAlive`), die eigentliche Instanz läuft danach dauerhaft im Hintergrund
+mit Menüleisten-Icon — kein zweiter Doppelklick, kein offenes Terminal nötig.
+
+## Backend-Integration
+
+Das Docker-Backend spricht den Agenten über `AGENT_URL`
+(Default `http://host.docker.internal:9996`) + einen in den Einstellungen
+(„Agent“-Tab) hinterlegten Bearer-Token an (`backend/app/agent_client.py`).
+Der Token wird beim ersten Start des Agenten einmalig angezeigt (Menüleiste →
+„Token kopieren“) und muss einmalig in die Einstellungen eingefügt werden.
+
+## Status
+
+Grundgerüst, Packaging und Backend-Integration sind fertig und getestet.
+Offen: die drei alten `*_bridge.py`-Skripte am Repo-Root laufen aktuell noch
+parallel (als eigene `launchd`-Jobs `com.jobtracker.files-bridge`,
+`com.jobtracker.notesbridge`, `com.jobtracker.calls-bridge`) und werden erst
+entfernt, nachdem der neue Agent im Alltag produktiv verifiziert wurde.

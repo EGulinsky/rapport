@@ -1,5 +1,5 @@
 """
-Backup: creates timestamped snapshots on the host Mac via files_bridge.
+Backup: creates timestamped snapshots on the host Mac via the JobTracker Agent.
 
 Backups are a zip bundle of the SQLite DB *and* fernet.key — the key lives
 outside the DB (data/fernet.key) and is never itself stored in the DB, so a
@@ -26,12 +26,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.agent_client import agent_get, agent_post
 from app.database import get_db, SessionLocal
 from app import models
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
-FILES_BRIDGE_URL = os.getenv("FILES_BRIDGE_URL", "http://host.docker.internal:9998")
 DB_PATH = "/app/data/jobtracker.db"
 FERNET_KEY_PATH = "/app/data/fernet.key"
 DB_ENTRY_NAME = "jobtracker.db"
@@ -55,21 +55,18 @@ def _get_or_create(db: Session) -> models.BackupConfig:
     return cfg
 
 
-async def _list_backups(folder: str) -> list[dict]:
-    import httpx
+async def _list_backups(db: Session, folder: str) -> list[dict]:
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/backups", params={"folder": folder})
-            if resp.status_code == 200:
-                return resp.json()
+        resp = await agent_get(db, "/backup/backups", params={"folder": folder}, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
     except Exception:
         pass
     return []
 
 
 async def do_backup() -> dict:
-    """Read DB, send to bridge, return {success, filename, error}."""
-    import httpx
+    """Read DB, send to the agent, return {success, filename, error}."""
     db = SessionLocal()
     try:
         cfg = _get_or_create(db)
@@ -102,18 +99,14 @@ async def do_backup() -> dict:
         ts = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
         filename = f"jobtracker_backup_{ts}.zip"
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{FILES_BRIDGE_URL}/backup-write",
-                json={
-                    "folder": cfg.backup_folder,
-                    "filename": filename,
-                    "data_b64": data_b64,
-                    "keep_count": cfg.keep_count,
-                },
-            )
-            if resp.status_code != 200:
-                return {"success": False, "error": resp.text}
+        resp = await agent_post(db, "/backup/backup-write", json={
+            "folder": cfg.backup_folder,
+            "filename": filename,
+            "data_b64": data_b64,
+            "keep_count": cfg.keep_count,
+        })
+        if resp.status_code != 200:
+            return {"success": False, "error": resp.text}
 
         cfg.last_backup = datetime.now(timezone.utc)
         db.commit()
@@ -129,7 +122,7 @@ async def backup_status(db: Session = Depends(get_db)):
     cfg = _get_or_create(db)
     backups = []
     if cfg.backup_folder:
-        backups = await _list_backups(cfg.backup_folder)
+        backups = await _list_backups(db, cfg.backup_folder)
     return {
         "enabled": cfg.enabled,
         "backup_folder": cfg.backup_folder,
@@ -167,11 +160,9 @@ async def run_backup():
 
 
 @router.get("/pick-folder")
-async def pick_folder():
-    import httpx
+async def pick_folder(db: Session = Depends(get_db)):
     try:
-        async with httpx.AsyncClient(timeout=65) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/pick-folder")
+        resp = await agent_get(db, "/files/pick-folder", timeout=65)
         data = resp.json()
         if resp.status_code != 200:
             raise HTTPException(status_code=400, detail=data.get("error", "Kein Ordner ausgewählt"))
@@ -179,7 +170,7 @@ async def pick_folder():
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"files_bridge nicht erreichbar: {e}")
+        raise HTTPException(status_code=503, detail=f"Agent nicht erreichbar: {e}")
 
 
 def _apply_restore(data: bytes, filename: str) -> dict:
@@ -223,11 +214,8 @@ def _apply_restore(data: bytes, filename: str) -> dict:
     return {"success": True, "filename": filename}
 
 
-async def _read_bridge_file(path: str) -> bytes:
-    import httpx
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{FILES_BRIDGE_URL}/backup-read", params={"path": path})
+async def _read_agent_file(db: Session, path: str) -> bytes:
+    resp = await agent_get(db, "/backup/backup-read", params={"path": path})
     if resp.status_code != 200:
         raise HTTPException(status_code=500, detail="Backup-Datei konnte nicht gelesen werden")
     return base64.b64decode(resp.json()["data_b64"])
@@ -240,12 +228,12 @@ class RestoreRequest(BaseModel):
 
 @router.post("/restore")
 async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
-    backups = await _list_backups(body.folder)
+    backups = await _list_backups(db, body.folder)
     target = next((b for b in backups if b["name"] == body.filename), None)
     if not target:
         raise HTTPException(status_code=404, detail="Backup-Datei nicht gefunden")
 
-    data = await _read_bridge_file(target["path"])
+    data = await _read_agent_file(db, target["path"])
     return _apply_restore(data, body.filename)
 
 
@@ -254,13 +242,11 @@ class RestoreFileRequest(BaseModel):
 
 
 @router.get("/pick-file")
-async def pick_file():
+async def pick_file(db: Session = Depends(get_db)):
     """Native macOS file picker for a single backup file — manual restore path
     that works without any backup_folder/enabled configuration at all."""
-    import httpx
     try:
-        async with httpx.AsyncClient(timeout=65) as client:
-            resp = await client.get(f"{FILES_BRIDGE_URL}/pick-file")
+        resp = await agent_get(db, "/files/pick-file", params={"extensions": "zip,db"}, timeout=65)
         data = resp.json()
         if resp.status_code != 200:
             raise HTTPException(status_code=400, detail=data.get("error", "Keine Datei ausgewählt"))
@@ -268,15 +254,15 @@ async def pick_file():
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"files_bridge nicht erreichbar: {e}")
+        raise HTTPException(status_code=503, detail=f"Agent nicht erreichbar: {e}")
 
 
 @router.post("/restore-file")
-async def restore_from_file(body: RestoreFileRequest):
+async def restore_from_file(body: RestoreFileRequest, db: Session = Depends(get_db)):
     """Manual restore from an arbitrary, freely picked file path — independent
     of the automatic-backup settings (no backup_folder/enabled required)."""
     if not body.path:
         raise HTTPException(status_code=400, detail="Kein Pfad angegeben")
-    data = await _read_bridge_file(body.path)
+    data = await _read_agent_file(db, body.path)
     filename = body.path.rsplit("/", 1)[-1]
     return _apply_restore(data, filename)

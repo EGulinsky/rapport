@@ -280,6 +280,33 @@ class MapsSettingsWrite(BaseModel):
     api_key: Optional[str] = None   # plain text; None/empty = clear existing key
 
 
+class AgentSettingsRead(BaseModel):
+    url: Optional[str] = None
+    has_token: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AgentSettingsWrite(BaseModel):
+    url: Optional[str] = None
+    token: Optional[str] = None   # plain text; None/empty = clear existing token
+
+
+class AgentHealthModule(BaseModel):
+    ok: bool
+    error: Optional[str] = None
+    phone_accessible: Optional[bool] = None
+    whatsapp_accessible: Optional[bool] = None
+
+
+class AgentHealth(BaseModel):
+    reachable: bool
+    version: Optional[str] = None
+    platform: Optional[str] = None
+    modules: dict[str, AgentHealthModule] = {}
+    error: Optional[str] = None
+
+
 class ImportResult(BaseModel):
     imported: int
     skipped: int
