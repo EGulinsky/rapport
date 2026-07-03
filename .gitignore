@@ -34,6 +34,7 @@ backend/data/
 
 # Test artifacts
 .pytest_cache/
+.ruff_cache/
 htmlcov/
 .coverage
 test-results.xml
