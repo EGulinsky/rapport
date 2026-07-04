@@ -194,12 +194,23 @@ LOGIN_URL = "https://www.linkedin.com/login"
 _TRACKER  = "https://www.linkedin.com/jobs-tracker/?stage="
 
 # (card_type, label, default_status, max_pages, url)
+#
+# LinkedIn's "In Progress" tab is a combined view of two distinct sub-stages that
+# are NOT reachable via a single URL (?stage=in-progress renders an empty page —
+# the tab is a client-side-only aggregate). Each sub-stage has its own working
+# ?stage= slug and must be scraped separately:
+#   - "draft":         job saved but application not started → not yet applied
+#   - "clicked_apply":  applicant clicked "Apply" on LinkedIn but hasn't confirmed
+#                       finishing it (LinkedIn itself asks "Did you finish applying?")
+# Both represent a not-yet-confirmed application, so both map to "prospecting"
+# ("Anbahnung") rather than "applied".
 CATEGORIES: list[tuple[str, str, str, int, str]] = [
-    ("SAVED",       "Gespeichert",    "prospecting", 99, _TRACKER + "saved"),
-    ("IN_PROGRESS", "In Bearbeitung", "applied",     99, _TRACKER + "in-progress"),
-    ("APPLIED",     "Beworben",       "applied",     99, _TRACKER + "applied"),
-    ("INTERVIEWS",  "Interviews",     "hr",          99, _TRACKER + "interview"),
-    ("ARCHIVED",    "Archiviert",     "rejected",    99, _TRACKER + "archived"),
+    ("SAVED",         "Gespeichert",    "prospecting", 99, _TRACKER + "saved"),
+    ("DRAFT",         "Entwurf",        "prospecting", 99, _TRACKER + "draft"),
+    ("CLICKED_APPLY", "Beworben (unbestätigt)", "prospecting", 99, _TRACKER + "clicked_apply"),
+    ("APPLIED",       "Beworben",       "applied",     99, _TRACKER + "applied"),
+    ("INTERVIEWS",    "Interviews",     "hr",          99, _TRACKER + "interview"),
+    ("ARCHIVED",      "Archiviert",     "rejected",    99, _TRACKER + "archived"),
 ]
 
 # LinkedIn status footer text → override main_status

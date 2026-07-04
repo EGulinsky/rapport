@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.32.4',
+    date: '2026-07-04',
+    changes: [
+      'Fix: Jobs im LinkedIn-Status "In Progress" wurden beim Sync komplett übersprungen. Ursache: "In Progress" ist bei LinkedIn nur eine Sammel-Ansicht zweier echter Unterkategorien ("Draft" und "Clicked apply"), die eigene, funktionierende Adressen brauchen — die bisher verwendete Adresse lieferte immer eine leere Seite. Beide Unterkategorien werden jetzt korrekt erkannt und wie erwartet als "Anbahnung" übernommen (nicht als "Beworben"), da LinkedIn bei "Clicked apply" selbst erst nachfragt, ob die Bewerbung überhaupt abgeschlossen wurde.',
+    ],
+  },
+  {
     version: '3.32.3',
     date: '2026-07-03',
     changes: [
