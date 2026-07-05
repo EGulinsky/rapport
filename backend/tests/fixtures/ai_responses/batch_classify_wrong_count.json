@@ -1,0 +1,5 @@
+{
+  "items": [
+    {"relevant": true, "confidence": 0.8, "event_type": "note", "datum": null, "titel": "Nur ein Eintrag", "extract": "Modell hat die Batch-Größe ignoriert.", "suggested_main_status": null, "suggested_sub_status": null}
+  ]
+}

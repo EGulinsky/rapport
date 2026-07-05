@@ -1,0 +1,6 @@
+{
+  "items": [
+    {"relevant": true, "confidence": 0.85, "event_type": "interview_scheduled", "datum": "2026-07-08", "titel": "Interview vereinbart", "extract": "Termin am 08.07. vereinbart.", "suggested_main_status": "hr", "suggested_sub_status": "1_scheduled"},
+    {"relevant": false, "confidence": 0.1, "event_type": null, "datum": null, "titel": null, "extract": null, "suggested_main_status": null, "suggested_sub_status": null}
+  ]
+}
