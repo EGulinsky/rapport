@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 96">
+  <rect x="8" y="8" width="56" height="56" rx="16" fill="#1D9E75"/>
+  <rect x="32" y="32" width="56" height="56" rx="16" fill="#D85A30" fill-opacity="0.92"/>
+  <text x="108" y="63" font-family="Helvetica, Arial, sans-serif" font-size="44" font-weight="500" fill="#1A1A1A">rapport</text>
+</svg>
