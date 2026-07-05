@@ -1,6 +1,10 @@
-# JobTracker
+<p align="center">
+  <img src="frontend/public/brand/logo.svg" alt="rapport" width="220" />
+</p>
 
-Self-hosted Bewerbungs-Tracking-App als Ersatz für die Excel-Bewerbungsliste.  
+# rapport
+
+Self-hosted CRM für deine Bewerbungssuche — Ersatz für die Excel-Bewerbungsliste.  
 Läuft lokal in OrbStack / Docker Compose. Aktueller Stand: siehe In-App-Changelog (Version in `frontend/src/components/ChangelogModal.tsx`).
 
 Technische Architektur mit Diagrammen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

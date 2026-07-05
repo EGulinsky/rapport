@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.0',
+    date: '2026-07-05',
+    changes: [
+      'Die App heißt jetzt "rapport" (statt "JobTracker") und hat ein eigenes Logo bekommen — sichtbar im Browser-Tab-Titel, Favicon und im README. Grund: der bisherige Name war rein beschreibend und stand einer öffentlichen Repo-Freigabe mit klarer Wiedererkennung im Weg.',
+    ],
+  },
+  {
     version: '3.32.4',
     date: '2026-07-04',
     changes: [
