@@ -1,0 +1,10 @@
+{
+  "application_id": 1,
+  "confidence": 0.9,
+  "event_type": "interview_scheduled",
+  "datum": "2026-07-10",
+  "titel": "Interviewtermin bestätigt",
+  "extract": "Der Recruiter bestätigt den Interviewtermin am 10.07. um 14 Uhr.",
+  "suggested_main_status": "hr",
+  "suggested_sub_status": "1_scheduled"
+}

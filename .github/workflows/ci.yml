@@ -45,6 +45,14 @@ jobs:
         if: always()
         run: python3 ../.github/scripts/junit_summary.py test-results.xml "Backend" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Tests (integration) — nur bei Push auf main
+        if: github.ref == 'refs/heads/main'
+        run: pytest -m integration --junitxml=test-results-integration.xml
+
+      - name: Test-Zusammenfassung (integration)
+        if: always() && github.ref == 'refs/heads/main'
+        run: python3 ../.github/scripts/junit_summary.py test-results-integration.xml "Backend Integration" >> "$GITHUB_STEP_SUMMARY"
+
   frontend:
     name: Frontend (Node/TypeScript)
     runs-on: ubuntu-latest

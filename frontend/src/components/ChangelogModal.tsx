@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.3',
+    date: '2026-07-05',
+    changes: [
+      'Testkonzept Phase 4 gestartet: erste L3-Integrationstests für den KI-Provider-Flow (assess_application, match_and_classify, Batch-Klassifikation inkl. Fallback-Regression bei falscher Antwortgröße) — mocken an der Netzwerkgrenze (litellm.acompletion), nicht an der eigenen Businesslogik. Laufen bei jedem Push auf main zusätzlich zum bestehenden PR-Gate.',
+    ],
+  },
+  {
     version: '3.33.2',
     date: '2026-07-05',
     changes: [
