@@ -258,4 +258,4 @@ services:
 
 ---
 
-*Dieses Dokument ist ein lebendes Konzept und wird mit dem Projektfortschritt aktualisiert.*
+*Dieses Dokument ist das ursprüngliche Planungskonzept vom 10. Juni 2026 und wird bewusst nicht mehr aktualisiert — es dient als Ausgangspunkt-Referenz. Der aktuelle Stand wird in [ARCHITECTURE.md](ARCHITECTURE.md) gepflegt.*

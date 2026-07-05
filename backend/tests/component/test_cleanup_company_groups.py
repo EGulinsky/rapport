@@ -11,17 +11,17 @@ pytestmark = pytest.mark.component
 
 class TestFindCompanyGroups:
     def test_positiv_gleiche_domain_wird_als_dublette_erkannt(self, db_session):
-        company_profile_factory(db_session, name_display="Siemens", website="https://www.siemens.com/")
-        company_profile_factory(db_session, name_display="Siemens Advanta", website="https://www.siemens.com/")
+        company_profile_factory(db_session, name_display="Contoso AG", website="https://www.contoso.com/")
+        company_profile_factory(db_session, name_display="Contoso Advanta", website="https://www.contoso.com/")
 
         groups = _find_company_groups(db_session)
 
         assert len(groups) == 1
         names = {groups[0]["keep"]["name"]} | {r["name"] for r in groups[0]["remove"]}
-        assert names == {"Siemens", "Siemens Advanta"}
+        assert names == {"Contoso AG", "Contoso Advanta"}
 
     def test_negativ_unterschiedliche_domains_keine_dublette(self, db_session):
-        company_profile_factory(db_session, name_display="Siemens", website="https://www.siemens.com/")
+        company_profile_factory(db_session, name_display="Contoso AG", website="https://www.contoso.com/")
         company_profile_factory(db_session, name_display="Bosch", website="https://www.bosch.com/")
 
         groups = _find_company_groups(db_session)
@@ -65,13 +65,13 @@ class TestFindCompanyGroups:
 
     def test_negativ_bereits_verknuepfte_tochterfirma_wird_ignoriert(self, db_session):
         # Regressionsfall: Töchter teilen oft die Website-Domain der Mutter
-        # (z.B. "Siemens Digital Industries Software" unter siemens.com) und
+        # (z.B. "Contoso Digital Industries Software" unter contoso.com) und
         # wurden fälschlich als Dublette der Mutter erkannt, obwohl die
         # Beziehung über parent_company_id bereits gepflegt war. Live an
-        # Produktivdaten verifiziert: 3 bereits verknüpfte Siemens-Töchter
+        # Produktivdaten verifiziert: 3 bereits verknüpfte Contoso-Töchter
         # wurden korrekt ausgeschlossen.
-        parent = company_profile_factory(db_session, name_display="Siemens", website="https://www.siemens.com/")
-        company_profile_factory(db_session, name_display="Siemens Digital Industries Software", website="https://www.siemens.com/", parent_company_id=parent.id)
+        parent = company_profile_factory(db_session, name_display="Contoso AG", website="https://www.contoso.com/")
+        company_profile_factory(db_session, name_display="Contoso Digital Industries Software", website="https://www.contoso.com/", parent_company_id=parent.id)
 
         groups = _find_company_groups(db_session)
 
@@ -81,15 +81,15 @@ class TestFindCompanyGroups:
         # Mutter + eine bereits zugeordnete Tochter + eine noch unverknüpfte
         # dritte Firma auf derselben Domain: die verknüpfte Tochter wird
         # ausgeblendet, die unverknüpfte bleibt als echte Dublette übrig.
-        parent = company_profile_factory(db_session, name_display="Siemens", website="https://www.siemens.com/")
-        company_profile_factory(db_session, name_display="Siemens Advanta", website="https://www.siemens.com/", parent_company_id=parent.id)
-        unresolved = company_profile_factory(db_session, name_display="Siemens PV", website="https://www.siemens.com/")
+        parent = company_profile_factory(db_session, name_display="Contoso AG", website="https://www.contoso.com/")
+        company_profile_factory(db_session, name_display="Contoso Advanta", website="https://www.contoso.com/", parent_company_id=parent.id)
+        unresolved = company_profile_factory(db_session, name_display="Contoso PV", website="https://www.contoso.com/")
 
         groups = _find_company_groups(db_session)
 
         assert len(groups) == 1
         names = {groups[0]["keep"]["name"]} | {r["name"] for r in groups[0]["remove"]}
-        assert names == {"Siemens", "Siemens PV"}
+        assert names == {"Contoso AG", "Contoso PV"}
         assert unresolved.name_display in names
 
     def test_corner_case_verknuepfung_ausserhalb_des_buckets_zaehlt_nicht(self, db_session):
@@ -97,8 +97,8 @@ class TestFindCompanyGroups:
         # Gruppe (z.B. ein anderer Datenfehler) — darf die beiden Profile in
         # diesem Bucket nicht fälschlich als "bereits verknüpft" ausschließen.
         other_domain_parent = company_profile_factory(db_session, name_display="Andere Firma", website="https://www.andere-firma.de/")
-        a = company_profile_factory(db_session, name_display="Siemens", website="https://www.siemens.com/", parent_company_id=other_domain_parent.id)
-        b = company_profile_factory(db_session, name_display="Siemens Advanta", website="https://www.siemens.com/")
+        a = company_profile_factory(db_session, name_display="Contoso AG", website="https://www.contoso.com/", parent_company_id=other_domain_parent.id)
+        b = company_profile_factory(db_session, name_display="Contoso Advanta", website="https://www.contoso.com/")
 
         groups = _find_company_groups(db_session)
 

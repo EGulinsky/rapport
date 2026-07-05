@@ -434,7 +434,7 @@ class TestLinkedinScrapeAbout:
         assert result["employee_count"] == 10001
 
     async def test_negativ_headquarters_wird_nie_extrahiert(self):
-        # Live-Regressionsfall (ZEISS Group, Mpowering People): LinkedIns
+        # Live-Regressionsfall (reale Firmenprofile mit ungewöhnlicher Feldbelegung): LinkedIns
         # 'About'-Seite rendert unter "Headquarters" teils eine unsichtbare
         # Screenreader-Zeile ("Hauptsitz-Stadt"), die inner_text() mitliefert
         # und ohne zuverlässiges Filtermuster fälschlich als hq_city landete.

@@ -1,6 +1,6 @@
 # rapport – Technische Architektur
 
-> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.16.0, 2026-07-01). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.33.1, 2026-07-05). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagramme sind als [Mermaid](https://mermaid.js.org/) eingebettet — GitHub rendert sie automatisch beim Anzeigen der Datei. Kein externes Tool zum Betrachten nötig; zum Bearbeiten reicht ein Texteditor.
 
@@ -43,7 +43,7 @@ flowchart TB
         ICloudCal["iCloud CalDAV/CardDAV"]
         LinkedIn["LinkedIn<br/>Playwright (headless Chromium)"]
         AIProvider["AI-Provider<br/>Groq / Anthropic / OpenAI / Ollama"]
-        Enrichment["DuckDuckGo / Wikipedia / Clearbit<br/>Firmendaten-Anreicherung"]
+        Enrichment["LinkedIn / Wikidata / Clearbit<br/>Firmendaten-Anreicherung"]
     end
 
     BE --> Gmail
@@ -73,7 +73,7 @@ flowchart TB
 | Kryptographie | cryptography (Fernet) | 42+ |
 | AI-Klassifikation | litellm (Provider-unabhängig) | latest |
 | Excel-Import/Export | openpyxl | 3.1+ |
-| PDF-Export | reportlab (o.ä.) | – |
+| PDF-Export | fpdf2 | 2.8+ |
 | LinkedIn-Scraper / Job-Import | Playwright | latest |
 | Logging | Loguru → Seq (CLEF) | – |
 | Containerisierung | Docker Compose | v2 |
@@ -118,6 +118,7 @@ backend/app/
     ├── export_pdf.py           GET /api/export/pdf
     ├── attachments.py          Datei-Anhänge an Timeline-Events
     ├── settings.py             AI-Settings, Logo-API-Key, Sync-Toggles, Ollama-Modelle
+    ├── geo.py                   Ortsautocomplete (Google Places, Fallback Nominatim)
     ├── calendar.py             GET /api/calendar/events
     ├── analytics.py            Pipeline-Funnel- und Absage-Statistiken
     ├── audit_log.py            Audit-Trail lesen/löschen
@@ -157,7 +158,7 @@ frontend/src/
     ├── MergeDialog.tsx                 AppMergeDialog / CompanyMergeDialog / ContactMergeDialog
     ├── CleanupModal.tsx                 Dubletten-Bereinigung, kontextsensitiv (scope-Prop)
     ├── ReviewModal.tsx                   Review-Inbox für KI-/Sync-Vorschläge
-    ├── SettingsModal.tsx                  Einstellungen (Tabs: Sync/KI/Google/iCloud/Anrufe/Dokumente/LinkedIn/Backup/Logos)
+    ├── SettingsModal.tsx                  Einstellungen (Tabs: Sync/KI/Google/iCloud/Anrufe/Dokumente/LinkedIn/Backup/Logos/Karten/Agent)
     ├── SyncButton.tsx                      Globaler Sync-Trigger + Fortschrittsanzeige
     ├── ImportButton.tsx / ExportButton.tsx / PdfExportButton.tsx / ImportExportMenu.tsx
     ├── AuditLogModal.tsx                   Audit-Trail-Ansicht
@@ -247,6 +248,8 @@ Swagger UI: `http://localhost:8000/docs`
 | `GET` | `/api/sync/targeted/{app_id}/candidates` | Kandidaten für manuelle Zuordnung (Volltextsuche über alle Quellen) |
 | `POST` | `/api/sync/targeted/{app_id}/assign` | Kandidat manuell zuordnen |
 | `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn-Login, Session, Scraper-Start, 2FA |
+| `GET`/`POST` | `/api/sync/linkedin/people/search` \| `/people/import` | Manueller Kontakt-Import: LinkedIn-Personensuche → Auswahl importieren |
+| `GET`/`POST` | `/api/sync/icloud/contacts/search` \| `/contacts/import` | Manueller Kontakt-Import: volltextsuche im iCloud-Adressbuch → Auswahl importieren |
 | `GET`/`POST` | `/api/sync/files/*` | Lokale Dokumente (Rapport Agent) |
 
 ### Kalender, Review, Analytics, Audit, Backup, Einstellungen
@@ -258,8 +261,9 @@ Swagger UI: `http://localhost:8000/docs`
 | `GET` | `/api/analytics/summary` | Pipeline-Funnel + Absage-Statistiken |
 | `GET`/`DELETE` | `/api/audit/` | Audit-Trail lesen / löschen |
 | `GET`/`POST` | `/api/backup/*` | Backup-Konfiguration, manueller Lauf, Restore |
-| `GET`/`POST`/`DELETE` | `/api/settings/*` | KI-Provider, Logo-Key, Sync-Toggles, Dokumente-Ordner |
+| `GET`/`POST`/`DELETE` | `/api/settings/*` | KI-Provider, Logo-Key, Sync-Toggles, Dokumente-Ordner, Agent-URL/Token, Karten-API-Key |
 | `GET` | `/api/startup-check` | Health-/Bridge-Konnektivitätscheck |
+| `GET` | `/api/geo/search` | Ortsautocomplete (Google Places, Fallback Nominatim) |
 | `GET` | `/health` | Health-Check |
 
 ---
@@ -284,15 +288,18 @@ Swagger UI: `http://localhost:8000/docs`
 - **Mail:** `imap.mail.me.com:993`, App-Specific Password (Fernet-verschlüsselt)
 - **Kalender:** `caldav.icloud.com`, `vobject` für VCALENDAR-Parsing, gleiche Änderungserkennung wie GCal
 - **Kontakte/Notizen/Erinnerungen/Anrufe:** ergänzend synchronisierbar, je über eigene Toggles in `sync_settings`
+- **Manueller Kontakt-Import:** Volltextsuche im gesamten CardDAV-Adressbuch aus der Kontakte-Übersicht heraus (unabhängig vom automatischen Sync), bereits importierte Treffer werden markiert statt ausgeblendet
 
 ### 3.4 LinkedIn (Playwright)
 
 Zwei getrennte Anwendungsfälle, beide über Headless Chromium:
 
-1. **Eigene Bewerbungsaktivität synchronisieren** (`sync_linkedin.py`) — scraped die "Meine Jobs"-Kategorien (SAVED → IN_PROGRESS → APPLIED → INTERVIEWS → ARCHIVED) des angemeldeten Accounts
+1. **Eigene Bewerbungsaktivität synchronisieren** (`sync_linkedin.py`) — scraped die "Meine Jobs"-Kategorien des angemeldeten Accounts: SAVED, DRAFT + CLICKED_APPLY (beide → `prospecting`; LinkedIns Sammel-Tab "In Progress" ist nur eine Client-Ansicht dieser beiden echten Unterkategorien, je mit eigener, sonst nicht URL-adressierbarer Ansicht), APPLIED, INTERVIEWS, ARCHIVED
 2. **Einzelne Stellenanzeige importieren** (`linkedin_job_description.py`) — lädt eine konkrete `/jobs/view/`-URL, extrahiert Beschreibungstext (Tree-Walker-Heuristik, robust gegen LinkedIns gehashte CSS-Klassennamen) sowie den anzeigenschaltenden Firmennamen (Link zur Firmenseite im Anzeigenkopf + `document.title`-Pattern als Fallback — ebenfalls klassenname-unabhängig)
 
 Beide nutzen dieselben Login-/2FA-/Consent-Helper. Session-Cookies werden in `linkedin_sync.session_cookies` gecacht.
+
+3. **Personen manuell importieren** (`people/search`, `people/import`) — Namenssuche über LinkedINs People-Search (text-basierte Card-Extraktion statt CSS-Selektoren, robust gegen gehashte Klassennamen), Auswahl als Kontakt anlegen
 
 ### 3.5 Lokale Dokumente, Notizen & Anrufe (Rapport Agent)
 
@@ -313,7 +320,8 @@ Beide nutzen dieselben Login-/2FA-/Consent-Helper. Session-Cookies werden in `li
 
 ### 3.7 Firmendaten-Anreicherung (`sync_company.py`)
 
-- **Quellen-Kaskade:** DuckDuckGo → Wikipedia-Fallback (Beschreibung/Branche/Standort/Mitarbeiterzahl) → Clearbit (Logo, mit Domain-Fallback)
+- **Quellen-Kaskade:** LinkedIn-Firmenseite (primär, Playwright — Branche/Standort/Mitarbeiterzahl/Logo) → Wikidata-Fallback (Search API + batch SPARQL, bei 0 LinkedIn-Treffern oder manuell als "keiner davon" aufgelöst) → Clearbit (Logo-Fallback über Domain, falls weder LinkedIn noch Wikidata ein Logo liefern)
+- **Disambiguierung:** Bei mehreren LinkedIn-Treffern landet die Firma als `pending` mit Kandidatenliste in der Review-Queue; manuelle Wahl inkl. "keiner davon" (→ Wikidata-Fallback für genau dieses eine Profil)
 - **Trigger:** Manuell über "Sync"/"Re-Sync" in der Firmenansicht (optional auf Markierung beschränkt), automatisch einmalig bei Neuanlage über LinkedIn-Import
 
 ---
@@ -539,7 +547,7 @@ erDiagram
     }
 ```
 
-**Singleton-Konfigurationstabellen** (genau eine Zeile pro Installation, keine ER-Relationen): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `backup_config`, `logo_settings`.
+**Singleton-Konfigurationstabellen** (genau eine Zeile pro Installation, keine ER-Relationen): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
 
 **Weitere Tabellen ohne direkte FK-Relation:** `synced_items` (Dedup-Ledger über alle Sync-Quellen), `merge_aliases` (behält alte Kennungen zusammengeführter Bewerbungen/Kontakte, damit künftige Syncs weiterhin auf den kanonischen Datensatz auflösen).
 
@@ -643,6 +651,8 @@ Verbosity über `sync_settings.audit_log_level` steuerbar (`off`/`normal`/`verbo
 | `ai_settings` | KI-Provider/Modell/Key | `api_key_enc` |
 | `sync_settings` | Enable-Toggles pro Quelle + Audit-Log-Level | – |
 | `calls_config` / `files_config` | Bridge-Konfiguration | – |
+| `agent_settings` | Rapport-Agent-URL (Override) + Token | `token_enc` |
+| `maps_settings` | Google Places API-Key (Ortsautocomplete, Fallback Nominatim) | `api_key_enc` |
 | `backup_config` | Backup-Ordner, Frequenz, Aufbewahrung | – |
 | `logo_settings` | Logo.dev API-Key | – |
 

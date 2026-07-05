@@ -157,7 +157,7 @@ def _find_company_groups(db: Session) -> list[dict]:
     how the name was spelled when the profile was created).
 
     Subsidiaries oft teilen sich die Website-Domain der Mutterfirma (z.B.
-    "Siemens Digital Industries Software" unter siemens.com) und würden sonst
+    "Contoso Digital Industries Software" unter contoso.com) und würden sonst
     fälschlich als Dublette der Mutter erkannt. Ist die Mutter-Tochter-
     Beziehung bereits über parent_company_id gepflegt, wird dieses Paar aus
     der Gruppe entfernt — für die verbleibenden (noch unverknüpften)

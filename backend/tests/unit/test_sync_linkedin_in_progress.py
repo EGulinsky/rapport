@@ -42,7 +42,7 @@ class TestExtractClickedApplyJob:
         # "Posted X ago" + "Did you finish applying? / Yes / No".
         text = "\n".join([
             "Vice President Professional Services (m/f/d)",
-            "DocuWare · Germering",
+            "Contoso GmbH · Musterstadt",
             "Posted 1d ago",
             "Add note",
             "Did you finish applying?",
@@ -54,7 +54,7 @@ class TestExtractClickedApplyJob:
 
         assert len(jobs) == 1
         job = jobs[0]
-        assert job["company"] == "DocuWare"
+        assert job["company"] == "Contoso GmbH"
         assert job["title"] == "Vice President Professional Services (m/f/d)"
         assert job["default_status"] == "prospecting"
         assert job["status_hint"] is None
