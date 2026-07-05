@@ -11,7 +11,7 @@ Zum Zeitpunkt dieses Konzepts existierte **keine** automatisierte Testabdeckung.
 
 Es gab einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping). Dieses Skript existiert weiterhin unverändert als eigenständiges Debug-Tool (nicht Teil der formalen Suite unten).
 
-**Aktueller Stand:** `backend/tests/` (271 Tests, Marker `unit`/`component`/`api`) und `agent/tests/` (51 Tests) laufen bei jedem Push als Pflicht-Gate (`pytest -m "unit or component or api"`, siehe `ci.yml`). Zusätzlich laufen bei Push auf `main` 10 erste L3-Integrationstests (`pytest -m integration`, KI-Provider-Flow über `fake_ai_provider`). Gmail/iCloud/LinkedIn-Mocking, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden.
+**Aktueller Stand (343 Tests insgesamt, Stand 2026-07-05):** `backend/tests/` (271 Tests, Marker `unit`/`component`/`api`), `agent/tests/` (51 Tests) und `frontend/src/**/*.test.tsx` (11 Tests) laufen bei jedem Push als Pflicht-Gate (siehe `ci.yml`). Zusätzlich laufen bei Push auf `main` 10 erste L3-Integrationstests (`pytest -m integration`, KI-Provider-Flow über `fake_ai_provider`). Gmail/iCloud/LinkedIn-Mocking, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden. Gemessene Zeilenabdeckung und wo die größten Lücken liegen: siehe [Abschnitt 10](#10-abdeckungsziele-vorschlag-kein-dogma).
 
 ---
 
@@ -264,6 +264,24 @@ frontend/
 - **L3 (Integration):** Kein Coverage-Ziel — Fokus auf die 5–8 kritischsten End-to-End-Datenflüsse (Sync, LinkedIn-Import, KI-Bewertung, Cleanup/Merge)
 - **L4 (E2E):** Bewusst klein gehalten (5–10 Journeys) — teuer in Wartung, nur für Dinge, die sich nicht anders sinnvoll testen lassen (Drag & Drop, Modal-Interaktionen)
 - **Kein globales Coverage-Gate** (z. B. "80 % Gesamt") — führt erfahrungsgemäß zu sinnlosen Tests für Coverage-Zahlen statt echter Fehlerabdeckung
+
+### Ist-Stand (gemessen 2026-07-05, `pytest --cov=app`)
+
+**Gesamt: 36 % Line-Coverage über `app/` (8966 Statements, 5704 ungetestet).** Der Durchschnitt verschleiert eine sehr ungleiche Verteilung, die dem Rollout-Plan (Abschnitt 11) entspricht — hoch dort, wo Phase 1–3 bewusst zuerst angesetzt haben, niedrig dort, wo Phase 4 noch aussteht:
+
+| Bereich | Abdeckung | Einordnung |
+|---|---|---|
+| `dedup.py`, `models.py`, `schemas.py`, `startup_check.py`, `agent_client.py` | 98–100 % | 80 %-Ziel von oben erreicht — die "scharfen" L0-Bereiche aus Phase 2 |
+| `merge.py`, `cleanup.py`, `geo.py`, `ai/provider.py` | 84–96 % | Phase 3 + der neue AI-Provider-Test (Abschnitt 11, Phase 4) |
+| `applications.py`, `companies.py`, `settings.py`, `contacts.py`, `ai/tasks.py` | 40–64 % | API-Grundfälle abgedeckt, viele Edge Cases (noch) nicht |
+| `sync_linkedin.py`, `sync_common.py`, `review.py`, `main.py`, `analytics.py` | 19–35 % | Größtenteils ungetestet |
+| `sync_icloud.py` (1275 Zeilen, größte Backend-Datei) | 23 % | Trotz mehrerer gezielter Regressionstests insgesamt dünn |
+| `sync_google.py`, `sync_files.py`, `import_excel.py`, `export_pdf.py` | 12–17 % | So gut wie ungetestet |
+| `sync_targeted.py` (1262 Zeilen, zweitgrößte Datei) | **5 %** | Praktisch ungetestet |
+| `linkedin_job_description.py` | **0 %** | Komplett ungetestet |
+| `database.py` | 8 % | Größtenteils historische Inline-Migrationen — geringere Priorität, da pro Migration nur einmalig beim Schema-Update relevant |
+
+**Wichtig für die Priorisierung von Phase 4:** Die am dünnsten getesteten Dateien (`sync_targeted.py`, `sync_icloud.py`, `sync_google.py`, `sync_linkedin.py`) sind exakt die Sync-Router, in denen die Session-Historie die meisten echten Produktivbugs gefunden hat (siehe Abschnitt 3, "Besonders scharf zu testen"). Die Coverage-Lücke ist also nicht zufällig, sondern markiert genau das aktuell größte Risiko.
 
 ---
 

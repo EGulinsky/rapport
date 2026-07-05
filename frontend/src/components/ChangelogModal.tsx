@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.4',
+    date: '2026-07-05',
+    changes: [
+      'Testkonzept um gemessene Testabdeckung ergänzt (343 Tests insgesamt, 36% Backend-Zeilenabdeckung) — mit Aufschlüsselung, welche Bereiche das 80%-Ziel schon erreichen (Dedup/Status/Krypto) und wo die größten Lücken liegen (Sync-Router: targeted 5%, google 12%, icloud 23%, linkedin 30%). Reine Doku-Ergänzung, kein Code geändert.',
+    ],
+  },
+  {
     version: '3.33.3',
     date: '2026-07-05',
     changes: [
