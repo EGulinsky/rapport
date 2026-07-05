@@ -84,7 +84,7 @@ def export_excel(
     buf.seek(0)
 
     today = date.today().strftime("%Y-%m-%d")
-    filename = f"jobtracker_export_{today}.xlsx"
+    filename = f"rapport_export_{today}.xlsx"
 
     return StreamingResponse(
         buf,

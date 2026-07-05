@@ -3,9 +3,9 @@
 set -euo pipefail
 
 BRIDGES=(
-  "com.jobtracker.files-bridge:9998"
-  "com.jobtracker.calls-bridge:9997"
-  "com.jobtracker.notesbridge:9999"
+  "com.rapport.files-bridge:9998"
+  "com.rapport.calls-bridge:9997"
+  "com.rapport.notesbridge:9999"
 )
 
 _bridge_running() {

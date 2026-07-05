@@ -1,5 +1,5 @@
 """
-Backup: creates timestamped snapshots on the host Mac via the JobTracker Agent.
+Backup: creates timestamped snapshots on the host Mac via the Rapport Agent.
 
 Backups are a zip bundle of the SQLite DB *and* fernet.key — the key lives
 outside the DB (data/fernet.key) and is never itself stored in the DB, so a
@@ -97,7 +97,7 @@ async def do_backup() -> dict:
                 zf.write(FERNET_KEY_PATH, KEY_ENTRY_NAME)
         data_b64 = base64.b64encode(zip_buf.getvalue()).decode()
         ts = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-        filename = f"jobtracker_backup_{ts}.zip"
+        filename = f"rapport_backup_{ts}.zip"
 
         resp = await agent_post(db, "/backup/backup-write", json={
             "folder": cfg.backup_folder,

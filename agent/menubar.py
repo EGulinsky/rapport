@@ -65,7 +65,7 @@ def run_menubar_app(config: AgentConfig) -> None:
 
     class AgentMenuBarApp(rumps.App):
         def __init__(self):
-            super().__init__("JobTracker Agent", title="🟢", quit_button=None)
+            super().__init__("Rapport Agent", title="🟢", quit_button=None)
             self.menu = [
                 rumps.MenuItem(f"Läuft auf Port {config.port}"),
                 None,
@@ -78,7 +78,7 @@ def run_menubar_app(config: AgentConfig) -> None:
 
         def copy_token(self, _):
             _copy_to_clipboard(config.token)
-            rumps.notification("JobTracker Agent", "", "Token in Zwischenablage kopiert")
+            rumps.notification("Rapport Agent", "", "Token in Zwischenablage kopiert")
 
         def open_logs(self, _):
             subprocess.Popen(["open", str(log_path)])

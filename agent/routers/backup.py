@@ -1,5 +1,5 @@
 """Backup file storage on the host — opaque bytes in, opaque bytes out. The
-JobTracker backend decides content/format (DB+fernet.key zip bundle); this
+rapport backend decides content/format (DB+fernet.key zip bundle); this
 module only knows about files on disk."""
 from __future__ import annotations
 

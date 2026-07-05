@@ -426,7 +426,7 @@ class MapsSettings(Base):
 
 
 class AgentSettings(Base):
-    """Connection to the host-side JobTracker Agent (replaces the three old
+    """Connection to the host-side Rapport Agent (replaces the three old
     unauthenticated bridges: files/notes/calls). Token is Fernet-encrypted,
     same pattern as AiSettings/MapsSettings — the agent generates it on
     first run, the user pastes it in once."""

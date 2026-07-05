@@ -1,4 +1,4 @@
-"""Shared HTTP client for talking to the host-side JobTracker Agent —
+"""Shared HTTP client for talking to the host-side Rapport Agent —
 replaces the four duplicated httpx-boilerplate call sites that used to talk
 to files_bridge/notes_bridge/calls_bridge directly (backup.py, sync_files.py,
 sync_icloud.py, sync_targeted.py).

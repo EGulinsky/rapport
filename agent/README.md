@@ -1,4 +1,4 @@
-# JobTracker Agent
+# Rapport Agent
 
 Ersetzt `files_bridge.py`, `notes_bridge.py` und `calls_bridge.py`: ein
 einzelner Hintergrund-Prozess statt drei, mit Bearer-Token-Auth statt offener
@@ -22,7 +22,7 @@ agent/
     notes.py           # /notes
     calls.py           # /calls
   packaging/
-    agent.spec          # PyInstaller-Spec → "JobTracker Agent.app"
+    agent.spec          # PyInstaller-Spec → "Rapport Agent.app"
     build_dmg.sh         # baut App + verpackt in ein .dmg (hdiutil)
 ```
 
@@ -32,11 +32,11 @@ agent/
 cd agent
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python3 -m agent.main   # von jobtracker/ (Repo-Root) aus, nicht von agent/
+.venv/bin/python3 -m agent.main   # von rapport/ (Repo-Root) aus, nicht von agent/
 ```
 
 Läuft auf Port 9996. Der Bearer-Token wird beim ersten Start generiert und
-liegt unter `~/Library/Application Support/JobTrackerAgent/config.json`
+liegt unter `~/Library/Application Support/RapportAgent/config.json`
 (macOS).
 
 ## Tests
@@ -57,10 +57,10 @@ python3 -m venv .venv_build
 PATH="$PWD/.venv_build/bin:$PATH" packaging/build_dmg.sh 0.1.0
 ```
 
-Ergebnis: `agent/packaging/dist/JobTracker-Agent-0.1.0.dmg` (App +
+Ergebnis: `agent/packaging/dist/Rapport-Agent-0.1.0.dmg` (App +
 Applications-Symlink zum Draufziehen). Live verifiziert: Doppelklick auf die
 `.app` registriert sie beim ersten Start selbst als `launchd`-LaunchAgent
-(`~/Library/LaunchAgents/com.jobtracker.agent.plist`, `RunAtLoad`+
+(`~/Library/LaunchAgents/com.rapport.agent.plist`, `RunAtLoad`+
 `KeepAlive`), die eigentliche Instanz läuft danach dauerhaft im Hintergrund
 mit Menüleisten-Icon — kein zweiter Doppelklick, kein offenes Terminal nötig.
 
@@ -76,6 +76,6 @@ Der Token wird beim ersten Start des Agenten einmalig angezeigt (Menüleiste →
 
 Grundgerüst, Packaging und Backend-Integration sind fertig und getestet.
 Offen: die drei alten `*_bridge.py`-Skripte am Repo-Root laufen aktuell noch
-parallel (als eigene `launchd`-Jobs `com.jobtracker.files-bridge`,
-`com.jobtracker.notesbridge`, `com.jobtracker.calls-bridge`) und werden erst
+parallel (als eigene `launchd`-Jobs `com.rapport.files-bridge`,
+`com.rapport.notesbridge`, `com.rapport.calls-bridge`) und werden erst
 entfernt, nachdem der neue Agent im Alltag produktiv verifiziert wurde.

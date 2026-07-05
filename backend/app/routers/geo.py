@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/geo", tags=["geo"])
 
 GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://maps.googleapis.com/maps/api/place/autocomplete/json"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "JobTracker/1.0 (personal single-user job application tracker)"
+USER_AGENT = "rapport/1.0 (personal single-user job application tracker)"
 
 
 def _get_maps_api_key(db: Session) -> str | None:

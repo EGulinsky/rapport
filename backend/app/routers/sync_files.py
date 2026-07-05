@@ -1,7 +1,7 @@
 """
 Local-files sync: indexes documents from a configured folder on the host Mac.
 
-Requires the JobTracker Agent running on the host (see agent/README.md).
+Requires the Rapport Agent running on the host (see agent/README.md).
 
 GET  /api/sync/files/status       — agent reachability + last sync info
 POST /api/sync/files              — trigger background sync
@@ -112,7 +112,7 @@ async def _do_local_files() -> dict:
         except Exception as e:
             finish_progress("local_files")
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [
-                f"JobTracker Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
+                f"Rapport Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
             ]}
 
         # Group files by first-level subfolder under root
@@ -222,7 +222,7 @@ async def browse_files(path: str = "", db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"JobTracker Agent nicht erreichbar: {e}")
+        raise HTTPException(status_code=502, detail=f"Rapport Agent nicht erreichbar: {e}")
 
 
 class AttachRequest(BaseModel):

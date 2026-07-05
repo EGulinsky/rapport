@@ -1,4 +1,4 @@
-# JobTracker – Claude Code Kontext
+# rapport – Claude Code Kontext
 
 Self-hosted Bewerbungs-Tracking-App (Ersatz für `Bewerbungen_Eugen_Gulinsky.xlsx`).  
 Läuft lokal in OrbStack (Docker Compose). Aktueller Stand: siehe `CURRENT_VERSION` in `frontend/src/components/ChangelogModal.tsx`.
@@ -9,7 +9,7 @@ Vollständige, laufend gepflegte technische Doku inkl. Mermaid-Diagrammen: [docs
 
 ```bash
 # App starten (OrbStack / Docker muss laufen)
-cd /Users/eugengulinsky/code/jobtracker
+cd /Users/eugengulinsky/code/rapport
 docker compose up -d
 
 # Nach Code-Änderungen neu bauen
@@ -30,7 +30,7 @@ docker compose logs -f frontend
 Detaillierte, gepflegte Übersicht (Router, Komponenten, Datenmodell): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#1-system--und-sw-architektur). Kurzfassung:
 
 ```
-jobtracker/
+rapport/
 ├── CLAUDE.md · README.md · docker-compose.yml (Services: backend, frontend, seq)
 ├── .github/workflows/ci.yml     # ruff + tsc + docker buildx, self-hosted runner + deploy
 ├── docs/ARCHITECTURE.md         # Technische Architektur inkl. Mermaid-Diagrammen

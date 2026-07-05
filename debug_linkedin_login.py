@@ -3,7 +3,7 @@
 LinkedIn login debugger — läuft im Docker-Container.
 
 Ausführen:
-    docker exec -it jobtracker-backend python3 /app/debug_linkedin_login.py
+    docker exec -it rapport-backend python3 /app/debug_linkedin_login.py
 """
 import asyncio
 import json

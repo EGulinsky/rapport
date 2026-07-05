@@ -139,7 +139,7 @@ export const api = {
       a.href = url
       const disposition = res.headers.get('Content-Disposition') ?? ''
       const match = disposition.match(/filename="([^"]+)"/)
-      a.download = match?.[1] ?? 'jobtracker_export.xlsx'
+      a.download = match?.[1] ?? 'rapport_export.xlsx'
       a.click()
       URL.revokeObjectURL(url)
     },

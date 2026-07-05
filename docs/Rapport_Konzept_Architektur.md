@@ -1,4 +1,4 @@
-# JobTracker – Konzept & Software-Architektur
+# rapport – Konzept & Software-Architektur
 
 **Version:** 1.0 · **Datum:** 10. Juni 2026  
 **Ziel:** Selbst-gehostete Web-App als Ersatz für die Excel-Bewerbungsliste
@@ -9,7 +9,7 @@
 
 ## 1. Produktvision
 
-JobTracker ist eine schlanke, selbst-gehostete Webanwendung, die den gesamten Bewerbungsprozess von der ersten Kontaktaufnahme bis zur Zu- oder Absage abbildet. Sie zieht Daten automatisch aus LinkedIn, Gmail und Google Calendar, reichert Firmenprofile mit öffentlichen Quellen an und liefert KPI-Dashboards sowie KI-basierte Handlungsempfehlungen.
+rapport ist eine schlanke, selbst-gehostete Webanwendung, die den gesamten Bewerbungsprozess von der ersten Kontaktaufnahme bis zur Zu- oder Absage abbildet. Sie zieht Daten automatisch aus LinkedIn, Gmail und Google Calendar, reichert Firmenprofile mit öffentlichen Quellen an und liefert KPI-Dashboards sowie KI-basierte Handlungsempfehlungen.
 
 **Kernprinzipien:**
 - Self-hosted: Daten bleiben lokal / auf eigenem Server

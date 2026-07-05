@@ -5,7 +5,7 @@ Setup for users:
   1. Google Cloud Console → APIs & Services → Credentials
   2. Create OAuth 2.0 Client ID (type: Web application)
   3. Authorized redirect URI: http://localhost:8000/api/sync/google/callback
-  4. Enter Client ID + Secret in JobTracker settings
+  4. Enter Client ID + Secret in rapport settings
 """
 from __future__ import annotations
 

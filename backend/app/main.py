@@ -146,7 +146,7 @@ def _auto_link_contacts():
 
 
 app = FastAPI(
-    title="JobTracker API",
+    title="rapport API",
     description="Bewerbungs-Tracking API",
     version="0.1.0",
     lifespan=lifespan,

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent.config import app_data_dir
 
-PLIST_LABEL = "com.jobtracker.agent"
+PLIST_LABEL = "com.rapport.agent"
 
 
 def plist_path() -> Path:

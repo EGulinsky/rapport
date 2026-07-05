@@ -644,7 +644,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
             return 0, 0, [f"Agent (Notizen): {resp.text[:200]}"]
         notes = resp.json()
     except Exception as e:
-        return 0, 0, [f"JobTracker Agent nicht erreichbar: {e}"]
+        return 0, 0, [f"Rapport Agent nicht erreichbar: {e}"]
 
     # Smart filter: always include text-matching notes (company/role in title/body) +
     # the 30 most recent notes (relevant notes often don't mention the company by name).
@@ -929,7 +929,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
             return 0, 0, [f"Agent (Anrufe): {resp.text[:200]}"]
         calls = resp.json()
     except Exception as e:
-        return 0, 0, [f"JobTracker Agent nicht erreichbar: {e}"]
+        return 0, 0, [f"Rapport Agent nicht erreichbar: {e}"]
 
     for call in calls:
         phone_raw = str(call.get("phone") or "")

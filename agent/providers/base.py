@@ -1,5 +1,5 @@
 """OS-neutral interfaces. Each module (files/notes/calls) is implemented once
-per platform behind these — the HTTP layer, auth and the JobTracker backend
+per platform behind these — the HTTP layer, auth and the rapport backend
 never see which OS they're talking to. Only agent/providers/mac/* exists
 today; a future agent/providers/windows/* implements the same interfaces
 without touching anything else.
