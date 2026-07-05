@@ -1,6 +1,6 @@
-# JobTracker – Technische Architektur
+# rapport – Technische Architektur
 
-> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.16.0, 2026-07-01). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [JobTracker_Konzept_Architektur.md](JobTracker_Konzept_Architektur.md)
+> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.16.0, 2026-07-01). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagramme sind als [Mermaid](https://mermaid.js.org/) eingebettet — GitHub rendert sie automatisch beim Anzeigen der Datei. Kein externes Tool zum Betrachten nötig; zum Bearbeiten reicht ein Texteditor.
 
@@ -32,7 +32,7 @@ flowchart TB
         BE -.->|"CLEF logs"| SEQ
     end
 
-    subgraph Agent["JobTracker Agent (außerhalb Docker, .app/launchd)"]
+    subgraph Agent["Rapport Agent (außerhalb Docker, .app/launchd)"]
         AgentSvc["agent/main.py<br/>Port 9996 · Bearer-Token-Auth<br/>Dateien / Notizen / Anrufe / Backup"]
     end
 
@@ -126,7 +126,7 @@ backend/app/
     ├── sync_google.py          Google OAuth + Gmail + GCal
     ├── sync_icloud.py          iCloud Mail/Kalender/Notizen/Erinnerungen/Kontakte/Anrufe
     ├── sync_targeted.py        Pro-App-Sync über alle Quellen + manuelle Kandidatenzuordnung
-    ├── sync_files.py            Lokale Dokumente via JobTracker Agent (Port 9996)
+    ├── sync_files.py            Lokale Dokumente via Rapport Agent (Port 9996)
     ├── sync_linkedin.py         LinkedIn-Playwright-Scraper (eigene Bewerbungen) mit 2FA-Inline
     ├── sync_company.py          Firmendaten-Anreicherung (DuckDuckGo → Wikipedia → Clearbit-Logo)
     ├── review.py                Manuelle Review-Queue (PendingMatches)
@@ -247,7 +247,7 @@ Swagger UI: `http://localhost:8000/docs`
 | `GET` | `/api/sync/targeted/{app_id}/candidates` | Kandidaten für manuelle Zuordnung (Volltextsuche über alle Quellen) |
 | `POST` | `/api/sync/targeted/{app_id}/assign` | Kandidat manuell zuordnen |
 | `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn-Login, Session, Scraper-Start, 2FA |
-| `GET`/`POST` | `/api/sync/files/*` | Lokale Dokumente (JobTracker Agent) |
+| `GET`/`POST` | `/api/sync/files/*` | Lokale Dokumente (Rapport Agent) |
 
 ### Kalender, Review, Analytics, Audit, Backup, Einstellungen
 
@@ -294,7 +294,7 @@ Zwei getrennte Anwendungsfälle, beide über Headless Chromium:
 
 Beide nutzen dieselben Login-/2FA-/Consent-Helper. Session-Cookies werden in `linkedin_sync.session_cookies` gecacht.
 
-### 3.5 Lokale Dokumente, Notizen & Anrufe (JobTracker Agent)
+### 3.5 Lokale Dokumente, Notizen & Anrufe (Rapport Agent)
 
 - **`agent/`** (Port 9996, läuft auf dem Mac als `.app`/`launchd`-Dienst, nicht in Docker) — ein einzelner Prozess ersetzt die früheren drei separaten Bridge-Skripte (`files_bridge.py`, `notes_bridge.py`, `calls_bridge.py`), mit Bearer-Token-Auth statt offener Ports
 - **Dateien-Modul** — liefert Dateiinhalte aus konfiguriertem Ordner, native Ordner-/Datei-Picker, Backup-Lesen/Schreiben
@@ -677,4 +677,4 @@ flowchart LR
 | `deploy` | Push auf `main` (self-hosted, nach docker) | `git pull` → Playwright-Base bei Bedarf neu bauen (Hash-Check) → `docker compose up -d --build` → Health-Poll `/health` (60s) → macOS-Notification + Browser öffnen |
 | `notify-failure` | `always()` bei Fehler in einem der obigen Jobs | macOS-Fehlerbenachrichtigung + Log-Eintrag |
 
-Repository: [github.com/EGulinsky/jobtracker](https://github.com/EGulinsky/jobtracker) (privat)
+Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (privat)

@@ -1,4 +1,4 @@
-# PyInstaller spec — builds "JobTracker Agent.app".
+# PyInstaller spec — builds "Rapport Agent.app".
 #
 # Run from the repo root:
 #   pyinstaller agent/packaging/agent.spec --distpath agent/packaging/dist --workpath agent/packaging/build
@@ -39,7 +39,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="JobTracker Agent",
+    name="Rapport Agent",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -55,14 +55,14 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="JobTracker Agent",
+    name="Rapport Agent",
 )
 
 app = BUNDLE(
     coll,
-    name="JobTracker Agent.app",
+    name="Rapport Agent.app",
     icon=None,
-    bundle_identifier="com.jobtracker.agent",
+    bundle_identifier="com.rapport.agent",
     info_plist={
         "LSUIElement": True,
         "CFBundleShortVersionString": "0.1.0",

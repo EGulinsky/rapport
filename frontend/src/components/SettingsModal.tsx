@@ -977,7 +977,7 @@ function CallsPanel() {
           Anrufliste (iPhone + WhatsApp)
         </div>
         <p>Liest Anrufe aus der Mac-Anrufliste und WhatsApp und verknüpft sie mit Bewerbungen über Kontakte.</p>
-        <p className="text-gray-400">Erfordert den JobTracker Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
+        <p className="text-gray-400">Erfordert den Rapport Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
       </div>
 
       {/* Bridge status + toggle */}
@@ -1119,7 +1119,7 @@ function FilesPanel() {
           Lokale Bewerbungsunterlagen
         </div>
         <p>Scannt einen Ordner nach PDF, DOCX, TXT und Markdown-Dateien und verknüpft sie anhand des Datei- und Ordnernamens mit Bewerbungen.</p>
-        <p className="text-gray-400">Erfordert den JobTracker Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
+        <p className="text-gray-400">Erfordert den Rapport Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
       </div>
 
       {/* Agent status */}
@@ -1771,7 +1771,7 @@ function BackupPanel() {
             type="text"
             value={folder}
             onChange={e => setFolder(e.target.value)}
-            placeholder="/Users/…/Backups/JobTracker"
+            placeholder="/Users/…/Backups/Rapport"
             className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
           <button
@@ -2186,7 +2186,7 @@ function AgentPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">JobTracker Agent</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">Rapport Agent</h3>
         <p className="text-xs text-gray-400">
           Der Agent läuft auf deinem Mac und ersetzt die früheren separaten Bridges (Dateien, Notizen,
           Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um

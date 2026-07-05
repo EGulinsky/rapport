@@ -26,7 +26,7 @@ _SYNC_RUNNING = False
 _SYNC_CANCEL = False
 _CURRENT_COMPANY: str | None = None
 
-_UA = "JobTracker/1.0 (personal job-application tracker; contact: private)"
+_UA = "rapport/1.0 (personal job-application tracker; contact: private)"
 _SPARQL_BATCH = 40   # Q-IDs per SPARQL query (well under Wikidata's complexity limit)
 _LOGO_CONCURRENCY = 3
 

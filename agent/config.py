@@ -1,7 +1,7 @@
 """Agent configuration: per-OS app-data dir, port, bearer token.
 
 Token is generated once on first run and persisted — the agent and the
-JobTracker backend must share it (pasted into Settings → Agent). Storing it
+rapport backend must share it (pasted into Settings → Agent). Storing it
 in the app-data dir (not the repo, not stdout logs) keeps it out of backups
 of the codebase.
 """
@@ -28,7 +28,7 @@ def app_data_dir() -> Path:
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    path = base / "JobTrackerAgent"
+    path = base / "RapportAgent"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

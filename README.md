@@ -17,7 +17,7 @@ Technische Architektur mit Diagrammen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 
 ```bash
 # 1. In den Projektordner wechseln
-cd /Users/eugengulinsky/code/jobtracker
+cd /Users/eugengulinsky/code/rapport
 
 # 2. App starten (erstmaliger Build dauert ~2–3 Minuten)
 docker compose up -d --build
@@ -46,7 +46,7 @@ open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
 | **iCloud Mail** | IMAP-Sync (App-Specific Password) |
 | **iCloud Kalender** | CalDAV-Sync |
 | **iCloud Kontakte** | CardDAV-Import |
-| **Lokale Dokumente** | PDF/DOCX/TXT/MD über den JobTracker Agent |
+| **Lokale Dokumente** | PDF/DOCX/TXT/MD über den Rapport Agent |
 | **Review-Queue** | KI-Vorschläge für Events und Statuswechsel freigeben |
 | **Sync-Steuerung** | Quellen einzeln aktivieren / deaktivieren |
 | **AI-Klassifikation** | Provider-agnostisch via LiteLLM (Groq, Ollama, OpenAI, Anthropic) |
@@ -77,7 +77,7 @@ open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
 2. Einstellungen → iCloud: Apple-ID + App-Passwort eintragen
 
 ### Lokale Dokumente (+ Notizen, Anrufe, Backup)
-Erfordert den JobTracker Agent auf dem Mac (siehe [agent/README.md](agent/README.md) — als `.app`/`.dmg` installierbar, läuft dauerhaft im Hintergrund mit Menüleisten-Icon, keine manuellen Terminal-Fenster mehr). Nach der Installation: Einstellungen → Agent → Token einfügen (wird beim ersten Start des Agenten in der Menüleiste angezeigt). Dann Einstellungen → Dokumente → Ordnerpfad setzen.
+Erfordert den Rapport Agent auf dem Mac (siehe [agent/README.md](agent/README.md) — als `.app`/`.dmg` installierbar, läuft dauerhaft im Hintergrund mit Menüleisten-Icon, keine manuellen Terminal-Fenster mehr). Nach der Installation: Einstellungen → Agent → Token einfügen (wird beim ersten Start des Agenten in der Menüleiste angezeigt). Dann Einstellungen → Dokumente → Ordnerpfad setzen.
 
 ### AI-Provider
 - **Groq** (empfohlen, kostenlos): API-Key von [console.groq.com](https://console.groq.com), Modell `groq/llama-3.3-70b-versatile`
@@ -92,7 +92,7 @@ Swagger UI: `http://localhost:8000/docs`
 Für gefahrloses Testen (z.B. Restore aus einem Produktiv-Backup) gibt es eine separate 1:1-Umgebung mit eigener, leerer Datenbank — komplett getrennt von den echten Daten und im Frontend deutlich mit einem roten "TESTUMGEBUNG"-Banner markiert.
 
 ```bash
-docker compose -p jobtracker-test -f docker-compose.test.yml up -d --build
+docker compose -p rapport-test -f docker-compose.test.yml up -d --build
 ```
 
 - GUI: `http://localhost:3001`
@@ -101,7 +101,7 @@ docker compose -p jobtracker-test -f docker-compose.test.yml up -d --build
 Zurücksetzen (löscht auch die Test-Datenbank):
 
 ```bash
-docker compose -p jobtracker-test -f docker-compose.test.yml down -v
+docker compose -p rapport-test -f docker-compose.test.yml down -v
 ```
 
 ## App stoppen

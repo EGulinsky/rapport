@@ -259,9 +259,9 @@ export default function App() {
           <div className="flex h-14 items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2.5">
-                <Briefcase className="h-5 w-5 text-indigo-600" />
+                <img src="/brand/icon.svg" alt="" className="h-5 w-5" />
                 <div className="flex flex-col leading-tight">
-                  <span className="font-semibold text-gray-900 leading-none">JobTracker</span>
+                  <span className="font-semibold text-gray-900 leading-none">rapport</span>
                   <button
                     onClick={() => setShowChangelog(true)}
                     className="text-[10px] text-indigo-400 hover:text-indigo-600 font-mono leading-none mt-0.5 text-left transition-colors"

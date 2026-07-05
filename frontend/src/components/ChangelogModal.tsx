@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.1',
+    date: '2026-07-05',
+    changes: [
+      'Umbenennung vollständig durchgezogen: Docker-Container, Repo-Ordner (jetzt `~/code/rapport`), GitHub-Repo (github.com/EGulinsky/rapport) und der lokale Mac-Hintergrunddienst ("Rapport Agent", vormals "JobTracker Agent") heißen jetzt konsistent rapport. App-URLs sind entsprechend umgezogen (z.B. backend.rapport.orb.local statt backend.jobtracker.orb.local). Bewerbungen, Kontakte und Einstellungen sind unverändert erhalten geblieben.',
+    ],
+  },
+  {
     version: '3.33.0',
     date: '2026-07-05',
     changes: [
@@ -1798,7 +1805,7 @@ export function ChangelogModal({ open, onClose }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
             <span className="font-semibold text-gray-900">Changelog</span>
-            <span className="ml-2 text-xs text-gray-400">JobTracker</span>
+            <span className="ml-2 text-xs text-gray-400">rapport</span>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
             <X className="h-4 w-4" />

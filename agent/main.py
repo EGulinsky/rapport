@@ -1,4 +1,4 @@
-"""JobTracker Agent — single background service replacing files_bridge.py,
+"""Rapport Agent — single background service replacing files_bridge.py,
 notes_bridge.py and calls_bridge.py. See agent/README.md for architecture.
 
 Run directly:  python3 -m agent.main
@@ -24,7 +24,7 @@ def create_app(
     """Builds the FastAPI app from already-constructed dependencies — kept
     free of module-level side effects (no config file I/O, no subprocess
     calls at import time) so tests can inject fakes cheaply."""
-    app = FastAPI(title="JobTracker Agent", version=__version__)
+    app = FastAPI(title="Rapport Agent", version=__version__)
 
     auth = require_token(config)
     app.include_router(files.router, dependencies=[Depends(auth)])
@@ -39,7 +39,7 @@ def create_app(
     @app.get("/health")
     def health():
         """Unauthenticated on purpose (mirrors the old bridges' /health) — the
-        JobTracker backend's startup check needs to detect the agent before it
+        rapport backend's startup check needs to detect the agent before it
         has a token configured. Reports per-module status so the frontend can
         show the same granular Files/Notes/Calls breakdown as today."""
         modules = {}

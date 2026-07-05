@@ -512,7 +512,7 @@ async def _do_icloud_notes() -> dict:
         except Exception as e:
             finish_progress("icloud_notes")
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [
-                f"JobTracker Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
+                f"Rapport Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
             ]}
 
         total = len(notes)
@@ -1597,7 +1597,7 @@ def import_contacts(body: ContactImportPayload, db: Session = Depends(get_db)):
     return {"imported": imported, "skipped": skipped}
 
 
-# ── Anrufliste (via JobTracker Agent) ─────────────────────────────────────────
+# ── Anrufliste (via Rapport Agent) ─────────────────────────────────────────
 
 def _get_calls_cfg(db: Session) -> models.CallsConfig:
     cfg = db.query(models.CallsConfig).first()
@@ -1721,7 +1721,7 @@ async def _do_icloud_calls() -> dict:
             calls: list[dict] = resp.json()
         except Exception as e:
             finish_progress("icloud_calls")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"JobTracker Agent nicht erreichbar: {e}"]}
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Rapport Agent nicht erreichbar: {e}"]}
 
         total = len(calls)
         update_progress("icloud_calls", 0, total, f"{total} Anrufe gefunden")

@@ -30,9 +30,9 @@ class TestExecutablePath:
     def test_positiv_frozen_liefert_sys_executable(self, monkeypatch):
         import sys
         monkeypatch.setattr(sys, "frozen", True, raising=False)
-        monkeypatch.setattr(sys, "executable", "/Applications/JobTracker Agent.app/Contents/MacOS/JobTracker Agent")
+        monkeypatch.setattr(sys, "executable", "/Applications/Rapport Agent.app/Contents/MacOS/Rapport Agent")
 
-        assert menubar.executable_path() == "/Applications/JobTracker Agent.app/Contents/MacOS/JobTracker Agent"
+        assert menubar.executable_path() == "/Applications/Rapport Agent.app/Contents/MacOS/Rapport Agent"
 
     def test_negativ_nicht_frozen_liefert_python_modul_aufruf(self, monkeypatch):
         import sys

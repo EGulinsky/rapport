@@ -1,5 +1,5 @@
 """
-GET /api/startup-check  — checks the JobTracker Agent and external connections.
+GET /api/startup-check  — checks the Rapport Agent and external connections.
 Returns a list of check results, each with {name, ok, message}.
 """
 from __future__ import annotations

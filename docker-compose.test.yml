@@ -3,9 +3,9 @@
 # (docker-compose.yml). Über das Frontend ganz normal bedienbar, deutlich
 # als Testumgebung markiert (roter Banner oben, via VITE_ENV_LABEL).
 #
-# Start:   docker compose -p jobtracker-test -f docker-compose.test.yml up -d --build
-# Stop:    docker compose -p jobtracker-test -f docker-compose.test.yml down
-# Reset:   docker compose -p jobtracker-test -f docker-compose.test.yml down -v   (löscht auch die Test-DB)
+# Start:   docker compose -p rapport-test -f docker-compose.test.yml up -d --build
+# Stop:    docker compose -p rapport-test -f docker-compose.test.yml down
+# Reset:   docker compose -p rapport-test -f docker-compose.test.yml down -v   (löscht auch die Test-DB)
 #
 # GUI:     http://localhost:3001
 # API:     http://localhost:8001/docs
@@ -13,7 +13,7 @@
 services:
   backend-test:
     build: ./backend
-    container_name: jobtracker-backend-test
+    container_name: rapport-backend-test
     environment:
       - DATABASE_URL=sqlite:////app/data/jobtracker.db
       - TZ=Europe/Berlin
@@ -21,7 +21,7 @@ services:
       - SEQ_URL=http://seq-not-used:5341
       - FILES_BRIDGE_URL=http://host.docker.internal:9998
     volumes:
-      - jobtracker-test-data:/app/data
+      - rapport-test-data:/app/data
     ports:
       - "8001:8000"
     networks:
@@ -34,7 +34,7 @@ services:
       args:
         ENV_LABEL: "⚠ TESTUMGEBUNG — nicht die echten Daten"
         NGINX_CONF: nginx.test.conf
-    container_name: jobtracker-frontend-test
+    container_name: rapport-frontend-test
     ports:
       - "3001:80"
     networks:
@@ -44,7 +44,7 @@ services:
       - backend-test
 
 volumes:
-  jobtracker-test-data:
+  rapport-test-data:
 
 networks:
   default:

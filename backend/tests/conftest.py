@@ -9,7 +9,7 @@ echte /app/data/jobtracker.db.
 import os
 import tempfile
 
-_TEST_DB_DIR = tempfile.mkdtemp(prefix="jobtracker_test_")
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="rapport_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_DIR}/test.db"
 os.environ.setdefault("LOG_LEVEL", "ERROR")
 os.environ.setdefault("SEQ_URL", "http://seq-not-reachable-in-tests:5341")

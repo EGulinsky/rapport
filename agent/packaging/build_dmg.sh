@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds "JobTracker Agent.app" via PyInstaller, then packages it into a
+# Builds "Rapport Agent.app" via PyInstaller, then packages it into a
 # drag-to-Applications .dmg using hdiutil (no extra Homebrew tool needed —
 # hdiutil ships with macOS).
 #
@@ -12,8 +12,8 @@ VERSION="${1:-0.1.0}"
 
 DIST_DIR="$SCRIPT_DIR/dist"
 BUILD_DIR="$SCRIPT_DIR/build"
-APP_NAME="JobTracker Agent.app"
-DMG_NAME="JobTracker-Agent-${VERSION}.dmg"
+APP_NAME="Rapport Agent.app"
+DMG_NAME="Rapport-Agent-${VERSION}.dmg"
 STAGING_DIR="$SCRIPT_DIR/dmg_staging"
 
 echo "==> Baue ${APP_NAME} mit PyInstaller…"
@@ -32,7 +32,7 @@ ln -s /Applications "$STAGING_DIR/Applications"
 
 echo "==> Erzeuge ${DMG_NAME}…"
 rm -f "$DIST_DIR/$DMG_NAME"
-hdiutil create -volname "JobTracker Agent" \
+hdiutil create -volname "Rapport Agent" \
   -srcfolder "$STAGING_DIR" \
   -ov -format UDZO \
   "$DIST_DIR/$DMG_NAME"

@@ -91,7 +91,7 @@ jobs:
         env:
           DOCKER_BUILDKIT: "1"
         run: |
-          docker build -f ./backend/Dockerfile.playwright-base -t jobtracker-playwright-base:latest ./backend/
+          docker build -f ./backend/Dockerfile.playwright-base -t rapport-playwright-base:latest ./backend/
           docker build ./backend/
           docker build ./frontend/
 
@@ -109,27 +109,27 @@ jobs:
     steps:
       - name: Pull latest code
         run: |
-          git -C /Users/eugengulinsky/code/jobtracker fetch origin main
-          git -C /Users/eugengulinsky/code/jobtracker reset --hard origin/main
+          git -C /Users/eugengulinsky/code/rapport fetch origin main
+          git -C /Users/eugengulinsky/code/rapport reset --hard origin/main
 
       - name: App-Version ermitteln
         id: version
         run: |
-          VERSION=$(grep -m1 "version: '" /Users/eugengulinsky/code/jobtracker/frontend/src/components/ChangelogModal.tsx | sed "s/.*version: '\([^']*\)'.*/\1/")
+          VERSION=$(grep -m1 "version: '" /Users/eugengulinsky/code/rapport/frontend/src/components/ChangelogModal.tsx | sed "s/.*version: '\([^']*\)'.*/\1/")
           echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Rebuild playwright base image if needed
         env:
           DOCKER_BUILDKIT: "1"
         run: |
-          REPO=/Users/eugengulinsky/code/jobtracker
+          REPO=/Users/eugengulinsky/code/rapport
           # Hash of files that affect the base image
           CURRENT_HASH=$(cat "$REPO/backend/Dockerfile.playwright-base" "$REPO/backend/requirements.txt" | sha256sum | cut -d' ' -f1)
           HASH_FILE="$REPO/.playwright-base-hash"
           STORED_HASH=$(cat "$HASH_FILE" 2>/dev/null || echo "")
-          if [ "$CURRENT_HASH" != "$STORED_HASH" ] || ! docker image inspect jobtracker-playwright-base:latest >/dev/null 2>&1; then
+          if [ "$CURRENT_HASH" != "$STORED_HASH" ] || ! docker image inspect rapport-playwright-base:latest >/dev/null 2>&1; then
             echo "Rebuilding playwright base image..."
-            docker build -f "$REPO/backend/Dockerfile.playwright-base" -t jobtracker-playwright-base:latest "$REPO/backend/"
+            docker build -f "$REPO/backend/Dockerfile.playwright-base" -t rapport-playwright-base:latest "$REPO/backend/"
             echo "$CURRENT_HASH" > "$HASH_FILE"
           else
             echo "Playwright base image up to date, skipping rebuild."
@@ -139,13 +139,13 @@ jobs:
         env:
           DOCKER_BUILDKIT: "1"
           BUILD_NUMBER: ${{ github.run_number }}
-        run: docker compose -f /Users/eugengulinsky/code/jobtracker/docker-compose.yml up -d --build
+        run: docker compose -f /Users/eugengulinsky/code/rapport/docker-compose.yml up -d --build
 
       - name: Warte auf Backend
         run: |
           echo "Warte auf Backend..."
           for i in $(seq 1 30); do
-            if curl -sf https://backend.jobtracker.orb.local/health > /dev/null 2>&1; then
+            if curl -sf https://backend.rapport.orb.local/health > /dev/null 2>&1; then
               echo "Backend bereit."
               exit 0
             fi
@@ -157,8 +157,8 @@ jobs:
       - name: Browser öffnen und Sound
         run: |
           TIME=$(date '+%H:%M')
-          osascript -e "display notification \"${{ steps.version.outputs.version }} (Build ${{ github.run_number }}) erfolgreich deployt (${TIME})\" with title \"Jobtracker CI ✓\" sound name \"Glass\""
-          osascript -e 'open location "https://frontend.jobtracker.orb.local/"'
+          osascript -e "display notification \"${{ steps.version.outputs.version }} (Build ${{ github.run_number }}) erfolgreich deployt (${TIME})\" with title \"rapport CI ✓\" sound name \"Glass\""
+          osascript -e 'open location "https://frontend.rapport.orb.local/"'
 
   notify-failure:
     name: Fehler-Benachrichtigung
@@ -174,5 +174,5 @@ jobs:
           [ "${{ needs.docker.result }}"   = "failure" ] && FAILED="${FAILED} Docker"
           [ "${{ needs.deploy.result }}"   = "failure" ] && FAILED="${FAILED} Deploy"
           TIME=$(date '+%H:%M')
-          osascript -e "display notification \"Fehlgeschlagen:${FAILED} — Build ${{ github.run_number }} (${TIME})\" with title \"Jobtracker CI ✗\" sound name \"Basso\""
+          osascript -e "display notification \"Fehlgeschlagen:${FAILED} — Build ${{ github.run_number }} (${TIME})\" with title \"rapport CI ✗\" sound name \"Basso\""
           echo "$(date '+%Y-%m-%d %H:%M:%S') FAILED build=${{ github.run_number }} jobs=${FAILED}" >> /tmp/ci_failures.log
