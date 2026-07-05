@@ -1,17 +1,17 @@
 # rapport – Testkonzept
 
-> Status: **Abgestimmt, noch nicht umgesetzt.** Die in Abschnitt 12 aufgeführten Entscheidungen wurden getroffen und sind ab jetzt verbindliche Leitplanken für die Umsetzung.
+> Status: **Phase 1–3 umgesetzt** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI. Phase 4–6 (Mocking-Infrastruktur für Sync, E2E-Suite, Nightly-Job) stehen noch aus. Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
 
-## 0. Ausgangslage
+## 0. Ausgangslage (Stand bei Konzepterstellung, 2026-07-01)
 
-Aktuell existiert **keine** automatisierte Testabdeckung. Die CI-Pipeline (`ci.yml`) prüft nur:
+Zum Zeitpunkt dieses Konzepts existierte **keine** automatisierte Testabdeckung. Die CI-Pipeline (`ci.yml`) prüfte nur:
 - Backend: `ruff` (Lint) + `pyright` (informativ, `continue-on-error`)
 - Frontend: `tsc --noEmit` + `vite build`
 - Docker-Buildbarkeit
 
-Es gibt einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping), das wir formalisieren sollten.
+Es gab einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping). Dieses Skript existiert weiterhin unverändert als eigenständiges Debug-Tool (nicht Teil der formalen Suite unten).
 
-Das bedeutet: Jede Regression wird aktuell nur durch manuelles Testen nach dem Deploy gefunden (siehe Session-Historie — mehrere Bugs wie der Firmen-Sync-Scoping-Fehler wurden erst durch Live-Nutzung entdeckt). Das Testkonzept soll das systematisch abfangen.
+**Aktueller Stand:** `backend/tests/` (271 Tests, Marker `unit`/`component`/`api`) und `agent/tests/` (51 Tests) laufen bei jedem Push als Pflicht-Gate (`pytest -m "unit or component or api"`, siehe `ci.yml`). L3 Integration, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden.
 
 ---
 
@@ -88,7 +88,7 @@ Dies wird nicht als separate Teststufe geführt, sondern als **Pflicht-Checklist
 - **Backend:** `factory_boy` oder `polyfactory` (Pydantic-nativ) für Model-Factories — `ApplicationFactory`, `ContactFactory`, `CompanyProfileFactory`, `EventFactory` mit sinnvollen Defaults und gezielt überschreibbaren Feldern für Edge Cases
 - **Deterministischer Zufall:** fester Seed pro Testlauf (`Faker.seed(1234)`), damit Fehlschläge reproduzierbar sind
 - **Zeitabhängige Logik einfrieren:** `freezegun`/`time-machine` für alles, was von `date.today()` abhängt (`naechster_schritt`, Ghosting-Erkennung, KI-Prompt-Datum) — sonst werden Tests an bestimmten Wochentagen/Monatsenden flaky
-- **Realistische Volumina für Integrationstests:** z. B. 50 Bewerbungen mit überlappenden Firmennamen, um Dedup-Grenzfälle zu provozieren (ähnlich der echten "Siemens"-Duplikate, die die Cleanup-Funktion heute live gefunden hat)
+- **Realistische Volumina für Integrationstests:** z. B. 50 Bewerbungen mit überlappenden Firmennamen, um Dedup-Grenzfälle zu provozieren (ähnlich der echten Tochterfirmen-Duplikate, die die Cleanup-Funktion live gefunden hat)
 - **Kein produktives Datenbank-Backup als Testfixture** — auch nicht anonymisiert, um zu vermeiden, dass reale Bewerbungsdaten (Firmen, Kontakte) versehentlich in Test-Snapshots landen
 
 ---

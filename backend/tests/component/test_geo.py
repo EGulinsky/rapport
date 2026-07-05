@@ -24,7 +24,7 @@ _NOMINATIM_RESPONSE = [
 _GOOGLE_RESPONSE = {
     "status": "OK",
     "predictions": [
-        {"description": "Siemens AG, Werner-von-Siemens-Straße, München, Deutschland", "place_id": "abc"},
+        {"description": "Contoso AG, Musterstraße 1, München, Deutschland", "place_id": "abc"},
         {"description": "München, Deutschland", "place_id": "def"},
     ],
 }
@@ -56,10 +56,10 @@ class TestSearchLocationRouting:
         _with_maps_key(db_session)
 
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_mock_response(_GOOGLE_RESPONSE))):
-            results = await search_location(q="Siemens München", db=db_session)
+            results = await search_location(q="Contoso München", db=db_session)
 
         assert results == [
-            {"label": "Siemens AG, Werner-von-Siemens-Straße, München, Deutschland"},
+            {"label": "Contoso AG, Musterstraße 1, München, Deutschland"},
             {"label": "München, Deutschland"},
         ]
 

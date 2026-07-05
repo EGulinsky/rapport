@@ -1427,7 +1427,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             # explicitly mentioned in events or application text (not just by firma match).
             # Volltext-Erwähnungssuche braucht den vollen Anzeigenamen (fn), nicht
             # nur den seit dem Vorname/Nachname-Split isolierten Nachnamen — sonst
-            # würden z.B. Erwähnungen von "Volker Häussler" im Bewerbungstext nicht
+            # würden z.B. Erwähnungen von "Max Mustermann" im Bewerbungstext nicht
             # mehr gefunden.
             mention_app_ids = _find_apps_where_contact_mentioned(fn, email_val, db)
             firma_app_ids = _find_apps_for_contact(org_val or "", db) if org_val else []
@@ -1437,7 +1437,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             # can contain hundreds of colleagues from a former employer that happens to
             # share a name with a CompanyProfile (e.g. from an unrelated application),
             # which previously caused entire company address books to be imported wholesale
-            # (592 contacts, 272 from a single "EDAG Group" match — live-verified bug).
+            # (592 contacts, 272 from a single "Contoso GmbH" match — live-verified bug).
             # Only accept the company match as a standalone reason if the contact's email
             # domain also matches the company's website — an org-name match by itself
             # still populates company_profile_id for display, but doesn't gate import.
@@ -1445,7 +1445,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             # a CompanyProfile can exist standalone (e.g. leftover from an old/removed
             # application, LinkedIn import, etc.) without ever having been applied to. An
             # email-domain match against such a profile still isn't a real connection: it
-            # imported 32 EDAG-domain contacts even though EDAG has zero applications
+            # imported 32 Contoso-domain contacts even though Contoso has zero applications
             # (live-verified follow-up to the bug above).
             company_profile_id = None
             company_domain_match = False

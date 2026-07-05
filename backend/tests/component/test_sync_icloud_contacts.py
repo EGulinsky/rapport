@@ -1,7 +1,7 @@
 """L1 Component — _sync_contacts_http() in sync_icloud.py.
 
 Regressionstest für einen live an Produktivdaten gefundenen Bug: 592 importierte
-Kontakte, davon 272 allein mit Firma "EDAG Group". Ursache war, dass ein reiner
+Kontakte, davon 272 allein mit Firma "Contoso GmbH". Ursache war, dass ein reiner
 Textmatch des ORG-Feldes einer vCard gegen den Namen einer bekannten CompanyProfile
 (z.B. aus einer früheren Bewerbung) ausreichte, um JEDEN Kontakt mit diesem
 Firmennamen zu importieren — unabhängig davon, ob eine tatsächliche Verbindung zur
@@ -44,11 +44,11 @@ def _cfg():
 
 class TestSyncContactsHttp:
     async def test_negativ_reiner_namens_match_auf_companyprofile_importiert_nicht(self, db_session):
-        # Regressionsfall: CompanyProfile "EDAG Group" existiert (z.B. aus einer alten
+        # Regressionsfall: CompanyProfile "Contoso GmbH" existiert (z.B. aus einer alten
         # Bewerbung), aber der Adressbuch-Kontakt hat weder eine passende E-Mail-Domain
         # noch sonst eine Verbindung zu einer Bewerbung — darf NICHT importiert werden.
-        company_profile_factory(db_session, name_display="EDAG Group", name_norm="edag", website="https://www.edag.de/")
-        vcards = [_vcard("Ehemaliger Kollege", email="kollege@web.de", org="EDAG Group")]
+        company_profile_factory(db_session, name_display="Contoso GmbH", name_norm="contoso", website="https://www.contoso-gmbh.de/")
+        vcards = [_vcard("Ehemaliger Kollege", email="kollege@web.de", org="Contoso GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
             created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
@@ -57,13 +57,13 @@ class TestSyncContactsHttp:
         assert db_session.query(sync_icloud.models.Contact).count() == 0
 
     async def test_negativ_domain_match_ohne_bewerbung_zur_firma_importiert_nicht(self, db_session):
-        # Regressionsfall (Follow-up): EDAG-Domain-Kontakte wurden weiter importiert,
-        # obwohl es zu EDAG gar keine Bewerbung gibt — die CompanyProfile existierte nur
+        # Regressionsfall (Follow-up): Contoso-Domain-Kontakte wurden weiter importiert,
+        # obwohl es zu Contoso gar keine Bewerbung gibt — die CompanyProfile existierte nur
         # noch als Datenleiche. Ein Domain-Match reicht nicht, wenn die Firma nicht
-        # tatsächlich mit einer Bewerbung verknüpft ist (live: 32 EDAG-Kontakte trotz 0
-        # Bewerbungen zu EDAG).
-        company_profile_factory(db_session, name_display="EDAG Group", name_norm="edag", website="https://www.edag.de/")
-        vcards = [_vcard("Ehemaliger Kollege", email="kollege@edag.de", org="EDAG Group")]
+        # tatsächlich mit einer Bewerbung verknüpft ist (live: 32 Contoso-Kontakte trotz 0
+        # Bewerbungen zu Contoso).
+        company_profile_factory(db_session, name_display="Contoso GmbH", name_norm="contoso", website="https://www.contoso-gmbh.de/")
+        vcards = [_vcard("Ehemaliger Kollege", email="kollege@contoso-gmbh.de", org="Contoso GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
             created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
@@ -72,9 +72,9 @@ class TestSyncContactsHttp:
         assert db_session.query(sync_icloud.models.Contact).count() == 0
 
     async def test_positiv_email_domain_matcht_firmen_website_mit_echter_bewerbung_wird_importiert(self, db_session):
-        cp = company_profile_factory(db_session, name_display="EDAG Group", name_norm="edag", website="https://www.edag.de/")
-        application_factory(db_session, firma="EDAG Group", company_profile_id=cp.id)
-        vcards = [_vcard("Recruiterin Muster", email="muster@edag.de", org="EDAG Group")]
+        cp = company_profile_factory(db_session, name_display="Contoso GmbH", name_norm="contoso", website="https://www.contoso-gmbh.de/")
+        application_factory(db_session, firma="Contoso GmbH", company_profile_id=cp.id)
+        vcards = [_vcard("Recruiterin Muster", email="muster@contoso-gmbh.de", org="Contoso GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
             created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
@@ -118,9 +118,9 @@ class TestSyncContactsHttp:
         # Ohne Fallback-Match über den alten Vollnamen (fn) würde ein erneuter
         # Sync sie per E-Mail-loser Suche nicht wiederfinden und stattdessen
         # fälschlich ein Duplikat mit dem neu gesplitteten Namen anlegen.
-        legacy = contact_factory(db_session, name="Volker Häussler", vorname=None, email=None, firma="Qorix")
+        legacy = contact_factory(db_session, name="Max Mustermann", vorname=None, email=None, firma="Fabrikam GmbH")
         db_session.commit()
-        vcards = [_vcard("Volker Häussler", n=("Häussler", "Volker"), org="Qorix")]
+        vcards = [_vcard("Max Mustermann", n=("Mustermann", "Max"), org="Fabrikam GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
             created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
@@ -129,19 +129,19 @@ class TestSyncContactsHttp:
         assert db_session.query(sync_icloud.models.Contact).count() == 1
         db_session.commit()
         db_session.refresh(legacy)
-        assert legacy.name == "Häussler"
-        assert legacy.vorname == "Volker"
+        assert legacy.name == "Mustermann"
+        assert legacy.vorname == "Max"
 
     async def test_negativ_legacy_kontakt_mit_bereits_gesetztem_vorname_wird_nicht_ueberschrieben(self, db_session):
         # Ein bereits (manuell oder korrekt) gesetzter vorname darf nicht von
         # einem erneuten Sync überschrieben werden.
-        legacy = contact_factory(db_session, name="Anders", vorname="Schon Gesetzt", email=None, firma="Qorix")
+        legacy = contact_factory(db_session, name="Anders", vorname="Schon Gesetzt", email=None, firma="Fabrikam GmbH")
         db_session.commit()
-        vcards = [_vcard("Volker Häussler", n=("Häussler", "Volker"), org="Qorix")]
+        vcards = [_vcard("Max Mustermann", n=("Mustermann", "Max"), org="Fabrikam GmbH")]
 
         # Kein Treffer über name/fn, da der Alt-Kontakt einen anderen Namen hat —
         # simuliert stattdessen direkt über einen Treffer mit gleichem Namen.
-        legacy.name = "Häussler"
+        legacy.name = "Mustermann"
         db_session.commit()
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):

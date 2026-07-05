@@ -1145,7 +1145,7 @@ function FilesPanel() {
           onKeyDown={e => e.key === 'Enter' && save()}
         />
         <p className="mt-1 text-xs text-gray-400">
-          Unterordner-Namen (z.B. „Moog", „Siemens") werden als Firmenname erkannt.
+          Unterordner-Namen (z.B. „Contoso", „Fabrikam") werden als Firmenname erkannt.
         </p>
       </div>
 

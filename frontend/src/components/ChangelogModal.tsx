@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.2',
+    date: '2026-07-05',
+    changes: [
+      'Doku auf aktuellen Stand gebracht (Architektur beschrieb noch den alten DuckDuckGo/Wikipedia-Firmensync und die alte LinkedIn-Kategorienliste statt Wikidata bzw. Draft/Clicked-apply; fehlende Router/Tabellen ergänzt) und reale Firmennamen/Personendaten aus früheren Bug-Regressionstests sowie aus Changelog-Einträgen durch generische Platzhalter ersetzt — Vorbereitung für die öffentliche Repo-Freigabe.',
+    ],
+  },
+  {
     version: '3.33.1',
     date: '2026-07-05',
     changes: [
@@ -119,7 +126,7 @@ const CHANGELOG: Release[] = [
     version: '3.28.0',
     date: '2026-07-03',
     changes: [
-      'Firmensync grundlegend überarbeitet: Wikidata (Suche + strukturierte Firmendaten) ist jetzt die primäre Quelle statt DuckDuckGo/Wikipedia — behebt einen Datenqualitätsbug, bei dem 127 von 183 Firmen identisch "Softwareentwicklung" als Branche zeigten (ein zu allgemeines Suchwort hatte die Rechtsform mit der Branche verwechselt). Neu: LinkedIn-Firmenseiten-Fallback für Firmen ohne Wikidata-Eintrag (nutzt die bestehende LinkedIn-Session, kein zusätzlicher Login). Neu: automatische grobe Startup/KMU/Konzern-Einstufung aus Mitarbeiterzahl + Gründungsjahr, sobald frische Daten vorliegen. Live an Produktivdaten verifiziert (Siemens, ZEISS Group, Mpowering People) und dabei zwei echte Bugs gefunden und behoben: ein Abbruch-Bug, der nie versuchte Firmen fälschlich als "fertig, kein Treffer" markiert hätte, und eine LinkedIn-Sonderzeichen-Falle bei der Hauptsitz-Extraktion (deshalb bewusst nicht mehr aus LinkedIn übernommen, Hauptsitz kommt zuverlässig aus Wikidata).',
+      'Firmensync grundlegend überarbeitet: Wikidata (Suche + strukturierte Firmendaten) ist jetzt die primäre Quelle statt DuckDuckGo/Wikipedia — behebt einen Datenqualitätsbug, bei dem 127 von 183 Firmen identisch "Softwareentwicklung" als Branche zeigten (ein zu allgemeines Suchwort hatte die Rechtsform mit der Branche verwechselt). Neu: LinkedIn-Firmenseiten-Fallback für Firmen ohne Wikidata-Eintrag (nutzt die bestehende LinkedIn-Session, kein zusätzlicher Login). Neu: automatische grobe Startup/KMU/Konzern-Einstufung aus Mitarbeiterzahl + Gründungsjahr, sobald frische Daten vorliegen. Live an Produktivdaten verifiziert (mehrere reale Firmenprofile, u.a. mit Tochterfirmen-Struktur) und dabei zwei echte Bugs gefunden und behoben: ein Abbruch-Bug, der nie versuchte Firmen fälschlich als "fertig, kein Treffer" markiert hätte, und eine LinkedIn-Sonderzeichen-Falle bei der Hauptsitz-Extraktion (deshalb bewusst nicht mehr aus LinkedIn übernommen, Hauptsitz kommt zuverlässig aus Wikidata).',
     ],
   },
   {
@@ -239,14 +246,14 @@ const CHANGELOG: Release[] = [
     version: '3.19.2',
     date: '2026-07-01',
     changes: [
-      'iCloud-Kontakte-Sync (Follow-up zu v3.19.1): Ein Domain-Match der E-Mail-Adresse gegen die Firmen-Website reichte allein aus, um Kontakte zu importieren — auch wenn zu dieser Firma gar keine Bewerbung existiert (live: 32 EDAG-Kontakte importiert, obwohl 0 Bewerbungen zu EDAG bestehen; die CompanyProfile war nur noch eine Datenleiche). Der Domain-Match zählt jetzt nur noch, wenn die Firma auch tatsächlich mit mindestens einer Bewerbung verknüpft ist.',
+      'iCloud-Kontakte-Sync (Follow-up zu v3.19.1): Ein Domain-Match der E-Mail-Adresse gegen die Firmen-Website reichte allein aus, um Kontakte zu importieren — auch wenn zu dieser Firma gar keine Bewerbung existiert (live: 32 Contoso-Kontakte importiert, obwohl 0 Bewerbungen zu Contoso bestehen; die CompanyProfile war nur noch eine Datenleiche). Der Domain-Match zählt jetzt nur noch, wenn die Firma auch tatsächlich mit mindestens einer Bewerbung verknüpft ist.',
     ],
   },
   {
     version: '3.19.1',
     date: '2026-07-01',
     changes: [
-      'iCloud-Kontakte-Sync importierte teils hunderte irrelevante Kontakte (live 592, davon 272 allein mit Firma "EDAG Group") — ein reiner Textmatch des ORG-Felds einer vCard gegen den Namen einer bekannten Firma reichte aus, um praktisch das komplette Adressbuch eines früheren Arbeitgebers zu importieren, unabhängig von jeder echten Verbindung zu einer Bewerbung. Ein Firmen-Namens-Match allein zählt jetzt nicht mehr — zusätzlich muss entweder die E-Mail-Domain des Kontakts zur Firmen-Website passen, oder der Kontakt ist tatsächlich in einer Bewerbung erwähnt bzw. per Firmentext verknüpft.',
+      'iCloud-Kontakte-Sync importierte teils hunderte irrelevante Kontakte (live 592, davon 272 allein mit Firma "Contoso GmbH") — ein reiner Textmatch des ORG-Felds einer vCard gegen den Namen einer bekannten Firma reichte aus, um praktisch das komplette Adressbuch eines früheren Arbeitgebers zu importieren, unabhängig von jeder echten Verbindung zu einer Bewerbung. Ein Firmen-Namens-Match allein zählt jetzt nicht mehr — zusätzlich muss entweder die E-Mail-Domain des Kontakts zur Firmen-Website passen, oder der Kontakt ist tatsächlich in einer Bewerbung erwähnt bzw. per Firmentext verknüpft.',
     ],
   },
   {
@@ -260,7 +267,7 @@ const CHANGELOG: Release[] = [
     version: '3.18.2',
     date: '2026-07-01',
     changes: [
-      'Bereinigen bei Firmen erkannte Tochterfirmen fälschlich als Duplikate, wenn sie sich die Website-Domain der Mutter teilen (z.B. "Siemens Digital Industries Software" unter siemens.com) — selbst wenn die Mutter-Tochter-Beziehung bereits gepflegt war. Bereits verknüpfte Paare werden jetzt ignoriert. Für noch unverknüpfte Duplikate gibt es zusätzlich zum Zusammenführen die neue Option "Als Tochterfirma zuordnen".',
+      'Bereinigen bei Firmen erkannte Tochterfirmen fälschlich als Duplikate, wenn sie sich die Website-Domain der Mutter teilen (z.B. "Contoso Digital Industries Software" unter contoso.com) — selbst wenn die Mutter-Tochter-Beziehung bereits gepflegt war. Bereits verknüpfte Paare werden jetzt ignoriert. Für noch unverknüpfte Duplikate gibt es zusätzlich zum Zusammenführen die neue Option "Als Tochterfirma zuordnen".',
     ],
   },
   {
@@ -1157,14 +1164,14 @@ const CHANGELOG: Release[] = [
     version: '2.5.7',
     date: '2026-06-24',
     changes: [
-      'Fix: DB-Migration setzte main_status bei jedem Container-Neustart auf den alten Wert zurück, wenn die legacy-Spalte "status" noch befüllt war — betroffen war z.B. Rohde & Schwarz #119 (manuell auf "beworben" gesetzt, nach Deploy wieder "abgesagt"). Alte Spalte wird jetzt beim ersten Start gedroppt; Migration überschreibt nur noch Zeilen mit NULL-Status.',
+      'Fix: DB-Migration setzte main_status bei jedem Container-Neustart auf den alten Wert zurück, wenn die legacy-Spalte "status" noch befüllt war — betroffen war z.B. Contoso AG #119 (manuell auf "beworben" gesetzt, nach Deploy wieder "abgesagt"). Alte Spalte wird jetzt beim ersten Start gedroppt; Migration überschreibt nur noch Zeilen mit NULL-Status.',
     ],
   },
   {
     version: '2.5.6',
     date: '2026-06-24',
     changes: [
-      'Auto-Sync Dokumente: Ordner werden jetzt auch nach Stelle disambiguiert — bei mehreren Bewerbungen für die gleiche Firma wird der Ordnername gegen den Rollentitel geprüft (Bsp: "Siemens Senior Software Engineer"). Rekursiv: alle Dateien in beliebig tiefen Unterordnern werden erfasst.',
+      'Auto-Sync Dokumente: Ordner werden jetzt auch nach Stelle disambiguiert — bei mehreren Bewerbungen für die gleiche Firma wird der Ordnername gegen den Rollentitel geprüft (Bsp: "Contoso AG Senior Software Engineer"). Rekursiv: alle Dateien in beliebig tiefen Unterordnern werden erfasst.',
     ],
   },
   {
@@ -1256,7 +1263,7 @@ const CHANGELOG: Release[] = [
     version: '2.4.2',
     date: '2026-06-24',
     changes: [
-      'Fix: Bewerbung wurde nach jedem LI-Sync erneut als "Abgesagt" vorgeschlagen, obwohl der Vorschlag bereits abgelehnt/genehmigt war — jetzt werden bereits reviewte Vorschläge (approved/rejected) pro App+Zielstatus nicht mehr neu angelegt (behebt Rohde+Schwarz #119)',
+      'Fix: Bewerbung wurde nach jedem LI-Sync erneut als "Abgesagt" vorgeschlagen, obwohl der Vorschlag bereits abgelehnt/genehmigt war — jetzt werden bereits reviewte Vorschläge (approved/rejected) pro App+Zielstatus nicht mehr neu angelegt (behebt Contoso AG #119)',
     ],
   },
   {
@@ -1273,7 +1280,7 @@ const CHANGELOG: Release[] = [
       'Stellenanzeige-URL: neues Feld in Bewerbungsmaske — Link zur Ausschreibung, manuell editierbar; LinkedIn-Sync befüllt es automatisch',
       'Ghosting: wird jetzt automatisch berechnet (letztes_update > 14 Tage, kein Terminalstatus) — kein manuelles Setzen mehr nötig; neuer "Nur Ghosting"-Filter statusübergreifend',
       'Abgesagt-Flag: jetzt computed property (main_status == rejected) — keine redundante Checkbox mehr, kein Sync-Aufwand',
-      'Sync-Fix: abgesagte Bewerbungen aus Firmenindex ausgeschlossen — verhindert Cross-Match bei mehreren Bewerbungen derselben Firma (z.B. Rohde+Schwarz)',
+      'Sync-Fix: abgesagte Bewerbungen aus Firmenindex ausgeschlossen — verhindert Cross-Match bei mehreren Bewerbungen derselben Firma (z.B. Contoso AG)',
       'LinkedIn-Sync: Parsing auf Firma·Ort-Anker umgestellt — findet alle Einträge unabhängig davon ob eine Notiz vorhanden ist (behebt fehlende Interview-Einträge)',
     ],
   },
@@ -1677,7 +1684,7 @@ const CHANGELOG: Release[] = [
     version: '1.0.1',
     date: '2026-06-13',
     changes: [
-      'Fix: Sync-Fortschritt zeigte Daten anderer Bewerbungen (z.B. Hahn-Schickard statt Moog)',
+      'Fix: Sync-Fortschritt zeigte Daten anderer Bewerbungen (z.B. Contoso GmbH statt Fabrikam GmbH)',
     ],
   },
   {

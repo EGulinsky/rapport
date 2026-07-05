@@ -89,12 +89,14 @@ Separates Base-Image `Dockerfile.playwright-base` — wird nur bei Playwright-Ve
 ```python
 CATEGORIES = [
     ("SAVED", "Gespeichert", "prospecting"),
-    ("IN_PROGRESS", "In Bearbeitung", "applied"),
+    ("DRAFT", "Entwurf", "prospecting"),
+    ("CLICKED_APPLY", "Beworben (unbestätigt)", "prospecting"),
     ("APPLIED", "Beworben", "applied"),
     ("INTERVIEWS", "Interviews", "hr"),
     ("ARCHIVED", "Archiviert", "rejected"),
 ]
 ```
+LinkedIns Sammel-Tab "In Progress" ist nur eine Client-Ansicht von DRAFT + CLICKED_APPLY — `?stage=in-progress` liefert immer eine leere Seite, die echten Slugs sind `draft` und `clicked_apply`.
 
 Jede Kategorie bekommt ein eigenes `seen_ids = set()` — bewusst **nicht** geteilt, damit ARCHIVED denselben Job überschreiben kann.
 
@@ -121,14 +123,23 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner auf dem Mac.  
-Jobs: `backend` (ruff + pyright) → `frontend` (tsc + vite build) → `docker` (buildx).  
-Deploy: Docker Buildx baut neue Images auf dem Runner, `docker compose up -d` rollt sie aus.
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 271 Tests) → `frontend` (tsc + vite build) → `docker` (buildx) → `deploy` (self-hosted).  
+Deploy: `git pull` → Docker Buildx baut neue Images auf dem Runner → `docker compose up -d --build` → Health-Poll → macOS-Notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (Testkonzept, Phase 1–3 umgesetzt).
 
 ## Wichtige Konstanten
 
 - `CURRENT_VERSION` in `frontend/src/components/ChangelogModal.tsx` — bei jeder inhaltlichen Änderung erhöhen
 - OrbStack IPs: Backend `192.168.117.10`, Frontend `192.168.117.11`
 - Fernet-Key-Datei: `backend/data/fernet.key` (wird beim ersten Start auto-generiert)
+
+## Rapport Agent (`agent/`)
+
+Läuft als natives macOS-launchd-Programm **außerhalb** von Docker (Menüleisten-App, Port 9996) — `docker compose up -d --build` fasst ihn nicht an. Code-Änderungen in `agent/` brauchen einen echten Rebuild + Neuinstallation:
+```bash
+cd agent && python3 -m venv .venv_build && .venv_build/bin/pip install -r packaging/requirements-packaging.txt
+PATH="$PWD/.venv_build/bin:$PATH" packaging/build_dmg.sh <version>
+```
+Danach alten launchd-Job entladen (`launchctl unload -w ~/Library/LaunchAgents/com.rapport.agent.plist`), neue App nach `/Applications` kopieren, einmal öffnen (self-registriert). Config/Token liegt in `~/Library/Application Support/RapportAgent/config.json` — bleibt bei App-Updates erhalten, solange der Ordner nicht gelöscht wird.
 
 ## Excel-Datei
 

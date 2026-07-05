@@ -40,12 +40,14 @@ open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
 | **Excel Import** | `.xlsx` im Originalformat (Sheet „Tracking", 17 Spalten) |
 | **Excel Export** | Rückexport ins gleiche Format |
 | **KPI-Kacheln** | Gesamt / Aktiv / Abgesagt / Interview-Rate |
-| **LinkedIn Sync** | Playwright-Scraper: Archived → abgesagt, Status-Updates |
+| **LinkedIn Sync** | Playwright-Scraper: eigene Bewerbungsaktivität abgleichen, Status-Updates inkl. Absagen |
 | **Gmail Sync** | Google OAuth 2.0, bewerbungsrelevante Mails verknüpfen |
 | **Google Calendar** | Interview-Termine als Events, Kontakte aus Teilnehmerliste |
 | **iCloud Mail** | IMAP-Sync (App-Specific Password) |
 | **iCloud Kalender** | CalDAV-Sync |
-| **iCloud Kontakte** | CardDAV-Import |
+| **iCloud Kontakte** | CardDAV-Import + manuelle Volltextsuche im Adressbuch |
+| **LinkedIn-Kontaktimport** | Personensuche direkt in der Kontakte-Übersicht, Auswahl importieren |
+| **Ortsautocomplete** | Google Places (mit API-Key) oder Nominatim-Fallback |
 | **Lokale Dokumente** | PDF/DOCX/TXT/MD über den Rapport Agent |
 | **Review-Queue** | KI-Vorschläge für Events und Statuswechsel freigeben |
 | **Sync-Steuerung** | Quellen einzeln aktivieren / deaktivieren |
@@ -83,6 +85,9 @@ Erfordert den Rapport Agent auf dem Mac (siehe [agent/README.md](agent/README.md
 - **Groq** (empfohlen, kostenlos): API-Key von [console.groq.com](https://console.groq.com), Modell `groq/llama-3.3-70b-versatile`
 - **Ollama** (lokal, kein API-Key): Base URL `http://host.docker.internal:11434`
 
+### Ortsautocomplete (optional)
+Ohne Konfiguration nutzt die "Ort"-Suche automatisch Nominatim (kostenlos, keine POIs). Für Firmenstandorte/POIs: Einstellungen → Karten → Google Places API-Key eintragen.
+
 ## API-Dokumentation
 
 Swagger UI: `http://localhost:8000/docs`
@@ -111,6 +116,16 @@ docker compose down
 ```
 
 Daten bleiben erhalten (Docker Volume `jobtracker-data`).
+
+## Tests
+
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -m "unit or component or api"    # 271 Tests, gleiches Gate wie in CI
+```
+
+Details zum Testkonzept: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md)
 
 ## Entwicklungsmodus (ohne Docker)
 

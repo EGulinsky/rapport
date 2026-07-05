@@ -1,10 +1,10 @@
 """L0 Unit — _parse_vcard() Vorname/Nachname-Split in sync_icloud.py.
 
 Live-Regressionsfall: 183 von 184 Kontakten hatten vorname=None und im
-name-Feld den vollen Anzeigenamen ("Volker Häussler" statt nur "Häussler"),
+name-Feld den vollen Anzeigenamen (z.B. "Max Mustermann" statt nur "Mustermann"),
 weil _parse_vcard nur das FN-Feld (Anzeigename) las und das strukturierte
 N:-Feld (Family;Given;;;) der vCard nie auswertete. FN-Reihenfolge ist
-uneinheitlich (z.B. "Bayer Sarah" statt "Sarah Bayer"), aber N: ist von
+uneinheitlich (z.B. "Nachname Vorname" statt "Vorname Nachname"), aber N: ist von
 Apple Contacts immer korrekt strukturiert — unabhängig davon, wie FN
 formatiert ist.
 """
@@ -27,20 +27,20 @@ def _vcard(fn: str, n: tuple[str, str] | None = None, org: str | None = None) ->
 
 class TestParseVcardNameSplit:
     def test_positiv_strukturiertes_n_feld_wird_verwendet(self):
-        card = _vcard("Volker Häussler", n=("Häussler", "Volker"))
+        card = _vcard("Max Mustermann", n=("Mustermann", "Max"))
         parsed = _parse_vcard(card)
-        assert parsed["name"] == "Häussler"
-        assert parsed["vorname"] == "Volker"
-        assert parsed["fn"] == "Volker Häussler"
+        assert parsed["name"] == "Mustermann"
+        assert parsed["vorname"] == "Max"
+        assert parsed["fn"] == "Max Mustermann"
 
     def test_positiv_n_feld_zuverlaessig_auch_bei_ungewoehnlicher_fn_reihenfolge(self):
-        # Live beobachtet: FN "Bayer Sarah" (Nachname zuerst, kein Komma) —
+        # Live beobachtet: FN "Nachname Vorname" (Nachname zuerst, kein Komma) —
         # aus dem FN-Text allein nicht zuverlässig zu splitten, aber N: ist
         # trotzdem korrekt strukturiert.
-        card = _vcard("Bayer Sarah", n=("Bayer", "Sarah"))
+        card = _vcard("Schmidt Julia", n=("Schmidt", "Julia"))
         parsed = _parse_vcard(card)
-        assert parsed["name"] == "Bayer"
-        assert parsed["vorname"] == "Sarah"
+        assert parsed["name"] == "Schmidt"
+        assert parsed["vorname"] == "Julia"
 
     def test_negativ_firma_ohne_n_feld_wird_nicht_gesplittet(self):
         # Firmen-vCards haben ein leeres N:-Feld (";;;;") — kein Rate-Split
