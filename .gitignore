@@ -37,7 +37,9 @@ backend/data/
 .ruff_cache/
 htmlcov/
 .coverage
+.coverage.*
 test-results.xml
+test-results-integration.xml
 
 # Playwright base image build tracking (runner-local, not for versioning)
 .playwright-base-hash
