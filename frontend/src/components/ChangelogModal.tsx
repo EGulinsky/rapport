@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.5',
+    date: '2026-07-05',
+    changes: [
+      'Testkonzept Phase 4 fortgesetzt: 5 neue L3-Integrationstests für den Google-Calendar-Sync (Kontakt-Match, Änderungserkennung, Löschen verwaister Termine, Calendar-API-Fehler) über einen Fake für googleapiclient. Dabei eine Testfalle entdeckt und dokumentiert: Sync-Funktionen öffnen intern eine eigene DB-Session — ungecommittete Test-Fixtures blockieren sonst bis zum SQLite-busy_timeout (60s) statt sofort zu failen.',
+    ],
+  },
+  {
     version: '3.33.4',
     date: '2026-07-05',
     changes: [

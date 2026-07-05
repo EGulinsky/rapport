@@ -5,7 +5,13 @@ Mocking-Grenze ist bewusst `litellm.acompletion` selbst (nicht die eigenen
 `app/ai/provider.py::complete()` (JSON-Parsing, leere-Antwort-Erkennung,
 Fehler-Mapping auf AINotConfigured/AIRateLimited/AIBadRequest) end-to-end,
 ohne echte Netzwerkaufrufe an Groq/Anthropic/OpenAI/Ollama.
-"""
+
+WICHTIG (live gefundene Falle): `_do_gcal()`/`_do_gmail()` etc. öffnen intern
+eine EIGENE `SessionLocal()` statt die Test-`db_session` zu nutzen. Setup-Daten
+über `db_session` MÜSSEN vor dem Aufruf committet werden (`db_session.commit()`),
+sonst hält die eigene Session der Sync-Funktion an SQLite's `busy_timeout`
+(60s, siehe `app/database.py`) fest — der Test läuft dann durch, aber erst nach
+einer Minute. Kein `db.flush()`-Ersatz möglich, da Flush keine Locks freigibt."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -68,3 +74,65 @@ def ai_settings(db_session):
     db_session.add(cfg)
     db_session.flush()
     return cfg
+
+
+@pytest.fixture()
+def google_sync(db_session):
+    """GoogleSync-Konfig mit gültigem, nicht abgelaufenem Access-Token — damit
+    `_refresh_if_needed()` keinen echten OAuth-Refresh-Call auslöst (der sonst
+    zusätzlich gemockt werden müsste). `_do_gcal()`/`_do_gmail()` öffnen intern
+    eine eigene SessionLocal() — Setup-Daten müssen daher committet sein."""
+    from datetime import datetime, timedelta, timezone
+
+    from app import models
+    from app.ai.provider import encrypt_api_key
+
+    cfg = models.GoogleSync(
+        client_id="test-client-id",
+        client_secret_enc=encrypt_api_key("test-secret"),
+        access_token_enc=encrypt_api_key("test-access-token"),
+        refresh_token_enc=encrypt_api_key("test-refresh-token"),
+        token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    db_session.add(cfg)
+    db_session.commit()
+    return cfg
+
+
+class FakeCalendarService:
+    """Test-Double für den von `googleapiclient.discovery.build('calendar', ...)`
+    zurückgegebenen Service — deckt nur die hier tatsächlich genutzte Methodenkette
+    `events().list(**kwargs).execute()` ab."""
+
+    def __init__(self, events: list[dict]) -> None:
+        self._events = events
+        self.list_calls: list[dict] = []
+
+    def events(self) -> "FakeCalendarService":
+        return self
+
+    def list(self, **kwargs) -> "FakeCalendarService":
+        self.list_calls.append(kwargs)
+        return self
+
+    def execute(self) -> dict:
+        return {"items": self._events}
+
+
+@pytest.fixture()
+def fake_google_calendar(monkeypatch):
+    """Liefert eine Factory `set_events(events) -> FakeCalendarService`. Muss vor
+    dem Aufruf von `_do_gcal()` mit den gewünschten Kalender-Events befüllt werden."""
+    holder: dict[str, FakeCalendarService] = {}
+
+    def _fake_build(serviceName, version, credentials=None, cache_discovery=True):
+        assert serviceName == "calendar", f"Nur Calendar gemockt, nicht {serviceName!r}"
+        return holder["service"]
+
+    def set_events(events: list[dict]) -> FakeCalendarService:
+        service = FakeCalendarService(events)
+        holder["service"] = service
+        return service
+
+    monkeypatch.setattr("googleapiclient.discovery.build", _fake_build)
+    return set_events

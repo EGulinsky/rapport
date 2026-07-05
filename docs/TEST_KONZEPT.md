@@ -1,6 +1,6 @@
 # rapport – Testkonzept
 
-> Status: **Phase 1–3 umgesetzt, Phase 4 gestartet** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI, erste L3-Integrationstests (KI-Provider) laufen bei Push auf `main`. Gmail/iCloud/LinkedIn-Mocking sowie Phase 5–6 (E2E-Suite, Nightly-Job) stehen noch aus. Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
+> Status: **Phase 1–3 umgesetzt, Phase 4 in Arbeit** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI, L3-Integrationstests (KI-Provider, Google Calendar) laufen bei Push auf `main`. Gmail/iCloud/LinkedIn-Mocking sowie Phase 5–6 (E2E-Suite, Nightly-Job) stehen noch aus. Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
 
 ## 0. Ausgangslage (Stand bei Konzepterstellung, 2026-07-01)
 
@@ -11,7 +11,7 @@ Zum Zeitpunkt dieses Konzepts existierte **keine** automatisierte Testabdeckung.
 
 Es gab einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping). Dieses Skript existiert weiterhin unverändert als eigenständiges Debug-Tool (nicht Teil der formalen Suite unten).
 
-**Aktueller Stand (343 Tests insgesamt, Stand 2026-07-05):** `backend/tests/` (271 Tests, Marker `unit`/`component`/`api`), `agent/tests/` (51 Tests) und `frontend/src/**/*.test.tsx` (11 Tests) laufen bei jedem Push als Pflicht-Gate (siehe `ci.yml`). Zusätzlich laufen bei Push auf `main` 10 erste L3-Integrationstests (`pytest -m integration`, KI-Provider-Flow über `fake_ai_provider`). Gmail/iCloud/LinkedIn-Mocking, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden. Gemessene Zeilenabdeckung und wo die größten Lücken liegen: siehe [Abschnitt 10](#10-abdeckungsziele-vorschlag-kein-dogma).
+**Aktueller Stand (348 Tests insgesamt, Stand 2026-07-05):** `backend/tests/` (271 Tests, Marker `unit`/`component`/`api`), `agent/tests/` (51 Tests) und `frontend/src/**/*.test.tsx` (11 Tests) laufen bei jedem Push als Pflicht-Gate (siehe `ci.yml`). Zusätzlich laufen bei Push auf `main` 15 L3-Integrationstests (`pytest -m integration`: KI-Provider-Flow über `fake_ai_provider`, Google-Calendar-Sync über `fake_google_calendar`). Gmail (Batch-Requests), iCloud (IMAP/CalDAV/CardDAV), LinkedIn-Mocking, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden diese Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden. Gemessene Zeilenabdeckung und wo die größten Lücken liegen: siehe [Abschnitt 10](#10-abdeckungsziele-vorschlag-kein-dogma).
 
 ---
 
@@ -292,7 +292,7 @@ frontend/
 | **1** ✅ | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
 | **2** ✅ | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert — `test_dedup.py`, `test_naechster_schritt.py`, `test_crypto.py` |
 | **3** ✅ | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features — `test_merge_api.py`, `test_cleanup_app_groups.py`, `test_cleanup_contact_groups.py`, `test_cleanup_api.py`, plus organisch entstandene Bugfix-Tests (Companies-Dedup, Event-Groups, iCloud-Kontakte-Sync, Applications-API). Dabei zwei kritische, live reproduzierte Datenverlust-Bugs in `merge.py`/`cleanup.py` gefunden und behoben (Events wurden bei Bewerbungs-Merge/-Bereinigung durch die `delete-orphan`-Kaskade mitgelöscht statt umgehängt) |
-| **4** 🔶 | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | KI-Provider erledigt (`tests/integration/conftest.py::fake_ai_provider` patcht `litellm.acompletion`, `test_ai_provider_flow.py` — 10 Tests inkl. Batch-Fallback-Regression). Läuft in CI bei Push auf `main`. Gmail/iCloud/LinkedIn-Mocking noch offen |
+| **4** 🔶 | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | KI-Provider erledigt (`fake_ai_provider` patcht `litellm.acompletion`, 10 Tests). Google Calendar erledigt (`fake_google_calendar` patcht `googleapiclient.discovery.build`, `test_google_calendar_sync.py` — 5 Tests: Kontakt-Match, Änderungserkennung, verwaiste Termine, API-Fehler). Beide laufen in CI bei Push auf `main`. Gmail (Batch-Requests), iCloud (IMAP/CalDAV/CardDAV) und LinkedIn-Mocking noch offen |
 | **5** | E2E-Suite (5–10 Journeys) + Smoke-Job nach Deploy | Vollständige Pyramide steht |
 | **6** | Nightly-Job, Fixture-Pflege-Routine (LinkedIn-HTML altert) | Dauerbetrieb |
 
