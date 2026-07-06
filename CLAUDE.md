@@ -123,8 +123,8 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner auf dem Mac.  
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 271 Tests) → `frontend` (tsc + vite build) → `docker` (buildx) → `deploy` (self-hosted).  
-Deploy: `git pull` → Docker Buildx baut neue Images auf dem Runner → `docker compose up -d --build` → Health-Poll → macOS-Notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (Testkonzept, Phase 1–3 umgesetzt).
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 357 Tests) → `frontend` (tsc + vite build) → `docker` (buildx) → `deploy` (self-hosted). Zusätzlich laufen bei Push auf `main` 93 L3-Integrationstests (`pytest -m integration`).  
+Deploy: `git pull` → Docker Buildx baut neue Images auf dem Runner → `docker compose up -d --build` → Health-Poll → macOS-Notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (Testkonzept, Phase 1–4 umgesetzt, nur LinkedIn-Playwright-Fixture-Replay aus Phase 6 offen).
 
 ## Wichtige Konstanten
 

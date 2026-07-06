@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.13',
+    date: '2026-07-06',
+    changes: [
+      'Doku-Feinschliff: veraltete Testzahlen in CLAUDE.md/README.md (noch "271 Tests"/"Phase 1–3") auf den aktuellen Stand (357 PR-Gate-Tests, Phase 1–4) gebracht. Reine Doku-Korrektur, kein Code geändert.',
+    ],
+  },
+  {
     version: '3.33.12',
     date: '2026-07-06',
     changes: [
