@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.6',
+    date: '2026-07-06',
+    changes: [
+      'Fix: Jede neue, über LinkedIn-Sync angelegte Bewerbung erzeugte einen sinnlosen Review-Eintrag ("Neu (LI Archiv): applied → X"), auch wenn X exakt der Status war, mit dem die Bewerbung ohnehin schon angelegt wurde — betraf alle Status außer Absagen. Beim Schreiben der zugehörigen Tests entdeckt: 8 solche No-op-Einträge steckten bereits in der echten Review-Queue. Jetzt wird nur noch bei tatsächlichen Archiv-/Absage-Fällen ein Review-Eintrag erzeugt.',
+      'Testkonzept Phase 4 fortgesetzt: Status-Übergangs- und Duplikat-Vermeidungslogik des LinkedIn-Syncs (bisher nur über einen echten Sync-Lauf erreichbar) in eine eigenständige, testbare Funktion ausgelagert und mit 9 Tests abgesichert — u.a. Regressionsschutz für die alten Issues #9/#14 (wiederholte Statusvorschläge).',
+    ],
+  },
+  {
     version: '3.33.5',
     date: '2026-07-05',
     changes: [
