@@ -36,7 +36,7 @@ from app.routers.sync_common import (
     build_firm_index, build_contact_domain_index, find_hint_apps,
     process_item, strip_html, earliest_bewerbung_date,
     init_progress, update_progress, finish_progress,
-    set_batch_result,
+    set_batch_result, vobj_str,
 )
 
 # In-memory session cache: apple_id -> {'api': ICloudPyService, 'sms_device': dict|None}
@@ -723,9 +723,9 @@ def debug_calendar_events(db: Session = Depends(get_db)):
         for ev in events:
             try:
                 vevent = ev.vobject_instance.vevent
-                summary = str(getattr(vevent, "summary", None) or "")
-                desc = str(getattr(vevent, "description", None) or "")
-                uid = str(getattr(vevent, "uid", None) or ev.url)
+                summary = vobj_str(vevent, "summary")
+                desc = vobj_str(vevent, "description")
+                uid = vobj_str(vevent, "uid") or str(ev.url)
                 dtstart = str(getattr(vevent, "dtstart", None) and vevent.dtstart.value or "")
             except Exception:
                 continue
@@ -804,9 +804,9 @@ async def _do_icloud_cal() -> dict:
                 update_progress("icloud_cal", i, total, f"Termin {i + 1}/{total}")
             try:
                 vevent = ev.vobject_instance.vevent
-                summary = str(getattr(vevent, "summary", None) or "")
-                desc = str(getattr(vevent, "description", None) or "")
-                uid = str(getattr(vevent, "uid", None) or ev.url)
+                summary = vobj_str(vevent, "summary")
+                desc = vobj_str(vevent, "description")
+                uid = vobj_str(vevent, "uid") or str(ev.url)
             except Exception:
                 continue
 
@@ -840,7 +840,7 @@ async def _do_icloud_cal() -> dict:
                 skipped += 1
                 continue
 
-            location = str(getattr(vevent, "location", None) or "")
+            location = vobj_str(vevent, "location")
             raw = f"Titel: {summary}\nOrt: {location}\nBeschreibung: {desc[:800]}"
             hint_apps = find_hint_apps(raw, term_to_apps)
 
@@ -973,9 +973,9 @@ async def _do_icloud_reminders() -> dict:
                 update_progress("icloud_reminders", i, total, f"Erinnerung {i + 1}/{total}")
             try:
                 vtodo = todo.vobject_instance.vtodo
-                summary = str(getattr(vtodo, "summary", None) or "")
-                desc = str(getattr(vtodo, "description", None) or "")
-                uid = str(getattr(vtodo, "uid", None) or todo.url)
+                summary = vobj_str(vtodo, "summary")
+                desc = vobj_str(vtodo, "description")
+                uid = vobj_str(vtodo, "uid") or str(todo.url)
             except Exception:
                 continue
 

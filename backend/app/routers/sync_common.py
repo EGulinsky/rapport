@@ -420,6 +420,17 @@ def decode_b64(data: str) -> str:
     return base64.urlsafe_b64decode(padded).decode("utf-8", errors="ignore")
 
 
+def vobj_str(vobj, attr: str) -> str:
+    """Extract plain string value from a vObject attribute (e.g. a VEVENT/VTODO's
+    summary/description/uid). Calling str() directly on the ContentLine object
+    itself yields its debug repr (e.g. '<SUMMARY{}Interview bei Contoso>')
+    instead of the actual text — always go through .value."""
+    obj = getattr(vobj, attr, None)
+    if obj is None:
+        return ""
+    return str(getattr(obj, "value", None) or obj or "")
+
+
 # ── Firm / contact indexes ────────────────────────────────────────────────────
 
 _CORP_SUFFIXES = {
