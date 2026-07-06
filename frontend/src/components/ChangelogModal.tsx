@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.8',
+    date: '2026-07-06',
+    changes: [
+      'Testkonzept Phase 4: gezielte Lücken-Analyse der bisherigen Fehlerfall-Abdeckung durchgeführt und 5 Blindflecken mit 18 neuen Tests geschlossen — fehlende KI-Konfiguration/deaktivierter Provider, ungültiger API-Key, nicht unterstützter JSON-Modus und unbekanntes Modell bei der KI-Bewertung; "nicht mit Google verbunden" bei Calendar- und Gmail-Sync; abgelaufener/widerrufener Google-Token beim Refresh; sowie der LinkedIn-MergeAlias-Fallback nach einem manuellen Zusammenführen von Bewerbungen. Gesamtabdeckung damit auf 42% gestiegen, `ai/provider.py` auf 96%.',
+    ],
+  },
+  {
     version: '3.33.7',
     date: '2026-07-06',
     changes: [

@@ -8,12 +8,70 @@ Batch-Fallback-Logik als vollständigen Fluss.
 import litellm
 import pytest
 
-from app.ai.provider import AIBadRequest, AIRateLimited
+from app import models
+from app.ai.provider import AIBadRequest, AINotConfigured, AIRateLimited
 from app.ai.tasks import assess_application, classify_batch_for_app, match_and_classify
 from tests.factories import application_factory, event_factory
 from tests.integration.conftest import load_fixture
 
 pytestmark = pytest.mark.integration
+
+
+class TestCompleteErrorMapping:
+    """Deckt die Fehlerzweige von app/ai/provider.py::complete() ab, die die
+    bisherigen assess_application()-Tests nicht erreichen — insbesondere die
+    drei unterschiedlichen BadRequestError-Nachrichten und die beiden
+    AINotConfigured-Auslöser (keine/deaktivierte Konfiguration)."""
+
+    async def test_negativ_keine_ai_konfiguration_wirft_ainotconfigured(self, db_session):
+        app = application_factory(db_session)
+        # bewusst KEIN ai_settings-Fixture — es existiert keine Zeile in der Tabelle
+        with pytest.raises(AINotConfigured):
+            await assess_application(db_session, app)
+
+    async def test_negativ_deaktivierter_ai_provider_wirft_ainotconfigured(self, db_session):
+        app = application_factory(db_session)
+        db_session.add(models.AiSettings(provider="groq", model="groq/llama-3.3-70b-versatile", enabled=False))
+        db_session.commit()
+
+        with pytest.raises(AINotConfigured):
+            await assess_application(db_session, app)
+
+    async def test_negativ_authentication_error_wirft_aibadrequest(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session)
+        fake_ai_provider.queue_error(
+            litellm.AuthenticationError(message="invalid api key", llm_provider="groq", model=ai_settings.model)
+        )
+
+        with pytest.raises(AIBadRequest, match="API-Key ungültig"):
+            await assess_application(db_session, app)
+
+    async def test_negativ_json_modus_nicht_unterstuetzt_wirft_hilfreiche_meldung(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session)
+        fake_ai_provider.queue_error(
+            litellm.BadRequestError(message="json_validate_failed: model refused", model=ai_settings.model, llm_provider="groq")
+        )
+
+        with pytest.raises(AIBadRequest, match="unterstützt keinen JSON-Modus"):
+            await assess_application(db_session, app)
+
+    async def test_negativ_modell_nicht_gefunden_wirft_hilfreiche_meldung(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session)
+        fake_ai_provider.queue_error(
+            litellm.BadRequestError(message="The model does not exist", model=ai_settings.model, llm_provider="groq")
+        )
+
+        with pytest.raises(AIBadRequest, match="nicht gefunden beim Anbieter"):
+            await assess_application(db_session, app)
+
+    async def test_negativ_sonstiger_bad_request_wird_gekuerzt_durchgereicht(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session)
+        fake_ai_provider.queue_error(
+            litellm.BadRequestError(message="context_length_exceeded: too many tokens", model=ai_settings.model, llm_provider="groq")
+        )
+
+        with pytest.raises(AIBadRequest, match="Ungültige Anfrage"):
+            await assess_application(db_session, app)
 
 
 class TestAssessApplication:
