@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.15',
+    date: '2026-07-06',
+    changes: [
+      'Testkonzept: 49 neue Tests für den LinkedIn-Import mit Fokus auf Stellenausschreibungen, Firmenname und Bewerbungsdatum — Datums-Parsing ("3d/2w/3mo ago", absolute Formate), Text-Extraktion mehrerer Job-Einträge (Firma, Dedup, Status-Hinweise), LinkedIn-Job-ID-Zuordnung und die Übernahme von Firmenname/Bewerbungsdatum beim Anlegen neuer Bewerbungen. sync_linkedin.py von 37% auf 42% Coverage.',
+    ],
+  },
+  {
     version: '3.33.14',
     date: '2026-07-06',
     changes: [
