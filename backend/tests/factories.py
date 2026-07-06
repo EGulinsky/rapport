@@ -66,6 +66,36 @@ def company_profile_factory(db: Session, **overrides) -> models.CompanyProfile:
     return profile
 
 
+def icloud_vcard(
+    fn: str, family: str | None = None, given: str | None = None,
+    email: str | None = None, org: str | None = None, title: str | None = None,
+    tel: str | None = None, tel_type: str | None = None, linkedin_url: str | None = None,
+) -> str:
+    """Baut einen echten, über vobject serialisierten vCard-3.0-String für Tests
+    des iCloud-CardDAV-Kontakte-Syncs (_parse_vcard/_sync_contacts_http)."""
+    import vobject
+
+    card = vobject.vCard()
+    card.add("fn").value = fn
+    if family:
+        n = card.add("n")
+        n.value = vobject.vcard.Name(family=family, given=given or "")
+    if email:
+        card.add("email").value = email
+    if org:
+        card.add("org").value = [org]
+    if title:
+        card.add("title").value = title
+    if tel:
+        tel_prop = card.add("tel")
+        tel_prop.value = tel
+        if tel_type:
+            tel_prop.type_param = tel_type
+    if linkedin_url:
+        card.add("url").value = linkedin_url
+    return card.serialize()
+
+
 def event_factory(db: Session, application: models.Application, **overrides) -> models.Event:
     defaults = dict(
         application_id=application.id,

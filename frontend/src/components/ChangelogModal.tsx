@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.11',
+    date: '2026-07-06',
+    changes: [
+      'Testkonzept Phase 4 (iCloud-Mocking) fortgesetzt: 14 neue Tests für iCloud Kontakte (CardDAV) — global und im gezielten Einzelbewerbungs-Sync, inkl. Regressionstests für zwei früher live aufgetretene Massenimport-Bugs (Kontakte aus verwaisten Firmenprofilen ohne echte Bewerbungsanbindung bzw. ohne passende E-Mail-Domain). sync_icloud.py auf 45%, sync_targeted.py auf 57%, Gesamtabdeckung auf 53% gestiegen.',
+    ],
+  },
+  {
     version: '3.33.10',
     date: '2026-07-06',
     changes: [
