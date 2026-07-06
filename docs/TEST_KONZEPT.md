@@ -1,6 +1,6 @@
 # rapport – Testkonzept
 
-> Status: **Phase 1–3 umgesetzt, Phase 4 in Arbeit** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI (jetzt inkl. LinkedIn-Statuslogik), L3-Integrationstests (KI-Provider, Google Calendar) laufen bei Push auf `main`. Gmail/iCloud-Mocking und LinkedIn-Playwright-Fixture-Replay sowie Phase 5–6 (E2E-Suite, Nightly-Job) stehen noch aus. Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
+> Status: **Phase 1–3 umgesetzt, Phase 4 in Arbeit** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI (jetzt inkl. LinkedIn-Statuslogik), L3-Integrationstests (KI-Provider, Google Calendar, Gmail) laufen bei Push auf `main`. iCloud-Mocking und LinkedIn-Playwright-Fixture-Replay sowie Phase 5–6 (E2E-Suite, Nightly-Job) stehen noch aus. Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
 
 ## 0. Ausgangslage (Stand bei Konzepterstellung, 2026-07-01)
 
@@ -11,7 +11,7 @@ Zum Zeitpunkt dieses Konzepts existierte **keine** automatisierte Testabdeckung.
 
 Es gab einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping). Dieses Skript existiert weiterhin unverändert als eigenständiges Debug-Tool (nicht Teil der formalen Suite unten).
 
-**Aktueller Stand (357 Tests insgesamt, Stand 2026-07-06):** `backend/tests/` (280 Tests, Marker `unit`/`component`/`api`), `agent/tests/` (51 Tests) und `frontend/src/**/*.test.tsx` (11 Tests) laufen bei jedem Push als Pflicht-Gate (siehe `ci.yml`). Zusätzlich laufen bei Push auf `main` 15 L3-Integrationstests (`pytest -m integration`: KI-Provider-Flow über `fake_ai_provider`, Google-Calendar-Sync über `fake_google_calendar`). Gmail (Batch-Requests), iCloud (IMAP/CalDAV/CardDAV), LinkedIn-Playwright-Fixture-Replay, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden diese Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden. Gemessene Zeilenabdeckung und wo die größten Lücken liegen: siehe [Abschnitt 10](#10-abdeckungsziele-vorschlag-kein-dogma).
+**Aktueller Stand (364 Tests insgesamt, Stand 2026-07-06):** `backend/tests/` (280 Tests, Marker `unit`/`component`/`api`), `agent/tests/` (51 Tests) und `frontend/src/**/*.test.tsx` (11 Tests) laufen bei jedem Push als Pflicht-Gate (siehe `ci.yml`). Zusätzlich laufen bei Push auf `main` 22 L3-Integrationstests (`pytest -m integration`: KI-Provider-Flow über `fake_ai_provider`, Google-Calendar-Sync über `fake_google_calendar`, Gmail-Sync inkl. zweiphasiger Batch-Abholung über `fake_gmail`). iCloud (IMAP/CalDAV/CardDAV), LinkedIn-Playwright-Fixture-Replay, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt — bis dahin werden diese Sync-/Scraping-Regressionen weiterhin nur durch manuelles Testen nach dem Deploy gefunden. Gemessene Zeilenabdeckung und wo die größten Lücken liegen: siehe [Abschnitt 10](#10-abdeckungsziele-vorschlag-kein-dogma).
 
 ---
 
@@ -267,7 +267,7 @@ frontend/
 
 ### Ist-Stand (gemessen 2026-07-05, `pytest --cov=app`)
 
-**Gesamt: 39 % Line-Coverage über `app/` (8977 Statements, 5497 ungetestet, Stand 2026-07-06).** Der Durchschnitt verschleiert eine sehr ungleiche Verteilung, die dem Rollout-Plan (Abschnitt 11) entspricht — hoch dort, wo Phase 1–3 bewusst zuerst angesetzt haben, niedrig dort, wo Phase 4 noch aussteht:
+**Gesamt: 41 % Line-Coverage über `app/` (8977 Statements, 5282 ungetestet, Stand 2026-07-06).** Der Durchschnitt verschleiert eine sehr ungleiche Verteilung, die dem Rollout-Plan (Abschnitt 11) entspricht — hoch dort, wo Phase 1–3 bewusst zuerst angesetzt haben, niedrig dort, wo Phase 4 noch aussteht:
 
 | Bereich | Abdeckung | Einordnung |
 |---|---|---|
@@ -276,12 +276,13 @@ frontend/
 | `applications.py`, `companies.py`, `settings.py`, `contacts.py`, `ai/tasks.py` | 40–64 % | API-Grundfälle abgedeckt, viele Edge Cases (noch) nicht |
 | `sync_linkedin.py` (35 %, ↑ von 30 % durch Statuslogik-Tests), `sync_common.py`, `review.py`, `main.py`, `analytics.py` | 19–35 % | Größtenteils ungetestet |
 | `sync_icloud.py` (1275 Zeilen, größte Backend-Datei) | 23 % | Trotz mehrerer gezielter Regressionstests insgesamt dünn |
-| `sync_google.py`, `sync_files.py`, `import_excel.py`, `export_pdf.py` | 12–17 % | So gut wie ungetestet |
+| `sync_files.py`, `import_excel.py`, `export_pdf.py` | 16–17 % | So gut wie ungetestet |
 | `sync_targeted.py` (1262 Zeilen, zweitgrößte Datei) | **5 %** | Praktisch ungetestet |
 | `linkedin_job_description.py` | **0 %** | Komplett ungetestet |
 | `database.py` | 8 % | Größtenteils historische Inline-Migrationen — geringere Priorität, da pro Migration nur einmalig beim Schema-Update relevant |
+| `sync_google.py` | 62 % (↑ von 12 %) | Gmail + Calendar jetzt gut abgedeckt, Rest (OAuth-Flow, Reset-Endpunkte) offen |
 
-**Wichtig für die Priorisierung von Phase 4:** Die am dünnsten getesteten Dateien (`sync_targeted.py`, `sync_icloud.py`, `sync_google.py`, `sync_linkedin.py`) sind exakt die Sync-Router, in denen die Session-Historie die meisten echten Produktivbugs gefunden hat (siehe Abschnitt 3, "Besonders scharf zu testen"). Die Coverage-Lücke ist also nicht zufällig, sondern markiert genau das aktuell größte Risiko.
+**Wichtig für die Priorisierung von Phase 4:** Die am dünnsten getesteten Dateien (`sync_targeted.py`, `sync_icloud.py`, `sync_linkedin.py`) sind exakt die Sync-Router, in denen die Session-Historie die meisten echten Produktivbugs gefunden hat (siehe Abschnitt 3, "Besonders scharf zu testen"). Die Coverage-Lücke ist also nicht zufällig, sondern markiert genau das aktuell größte Risiko.
 
 ---
 
@@ -292,7 +293,7 @@ frontend/
 | **1** ✅ | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
 | **2** ✅ | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert — `test_dedup.py`, `test_naechster_schritt.py`, `test_crypto.py` |
 | **3** ✅ | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features — `test_merge_api.py`, `test_cleanup_app_groups.py`, `test_cleanup_contact_groups.py`, `test_cleanup_api.py`, plus organisch entstandene Bugfix-Tests (Companies-Dedup, Event-Groups, iCloud-Kontakte-Sync, Applications-API). Dabei zwei kritische, live reproduzierte Datenverlust-Bugs in `merge.py`/`cleanup.py` gefunden und behoben (Events wurden bei Bewerbungs-Merge/-Bereinigung durch die `delete-orphan`-Kaskade mitgelöscht statt umgehängt) |
-| **4** 🔶 | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | KI-Provider erledigt (`fake_ai_provider`, 10 Tests). Google Calendar erledigt (`fake_google_calendar`, 5 Tests). LinkedIn-Statuslogik erledigt: `_process_linkedin_job()` aus der `_async_sync()`-Closure extrahiert (kein Playwright-Mock nötig, reine DB-Logik) und mit 9 Tests abgesichert — dabei einen echten Live-Bug gefunden und gefixt (neue Bewerbungen erzeugten für jeden Status einen No-op-Review-Eintrag "X → X" statt nur bei "rejected"; 8 solche Altlast-Einträge in der Produktiv-Review-Queue bestätigt). Gmail (Batch-Requests), iCloud (IMAP/CalDAV/CardDAV) und LinkedIn-Playwright-Fixture-Replay (Nightly-Tier, Phase 6) noch offen |
+| **4** 🔶 | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | KI-Provider erledigt (`fake_ai_provider`, 10 Tests). Google Calendar erledigt (`fake_google_calendar`, 5 Tests). Gmail erledigt (`fake_gmail`, 7 Tests — inkl. zweiphasiger Batch-Abholung Metadata/Volltext, Pagination, teilweisem Batch-Fehler). LinkedIn-Statuslogik erledigt: `_process_linkedin_job()` aus der `_async_sync()`-Closure extrahiert (kein Playwright-Mock nötig, reine DB-Logik) und mit 9 Tests abgesichert — dabei einen echten Live-Bug gefunden und gefixt (neue Bewerbungen erzeugten für jeden Status einen No-op-Review-Eintrag "X → X" statt nur bei "rejected"; 8 solche Altlast-Einträge in der Produktiv-Review-Queue bestätigt). iCloud (IMAP/CalDAV/CardDAV) und LinkedIn-Playwright-Fixture-Replay (Nightly-Tier, Phase 6) noch offen |
 | **5** | E2E-Suite (5–10 Journeys) + Smoke-Job nach Deploy | Vollständige Pyramide steht |
 | **6** | Nightly-Job, Fixture-Pflege-Routine (LinkedIn-HTML altert) | Dauerbetrieb |
 

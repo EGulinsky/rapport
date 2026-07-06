@@ -1,0 +1,168 @@
+"""L3 Integration — _do_gmail() in sync_google.py end-to-end.
+
+Mockt an der Netzwerkgrenze (googleapiclient.discovery.build, siehe
+tests/integration/conftest.py::fake_gmail), nicht die eigene Sync-Logik.
+Anders als bei Calendar läuft hier eine zweiphasige Batch-Abholung
+(Metadata dann Volltext) über new_batch_http_request() — die komplexere
+Mocking-Fläche gegenüber Google Calendar. Klassifikation ist rein
+keyword-basiert (_classify_type_from_text), keine AI im Spiel.
+"""
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
+
+from app import models
+from app.routers.sync_google import _do_gmail
+from tests.factories import application_factory, contact_factory
+from tests.integration.conftest import gmail_message
+
+pytestmark = pytest.mark.integration
+
+
+def _now_rfc2822() -> str:
+    return datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+
+
+class TestDoGmailNeueNachrichten:
+    async def test_positiv_einladung_mit_bekanntem_kontakt_wird_als_gespraech_angelegt(
+        self, db_session, google_sync, fake_gmail
+    ):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        meta, full = gmail_message(
+            "msg-1", "Recruiterin <recruiterin@contoso.com>", "Einladung zum Interview",
+            "Wir würden Sie gerne zu einem Interview einladen.", _now_rfc2822(),
+        )
+        fake_gmail([{"messages": [{"id": "msg-1"}]}], metadata={"msg-1": meta}, full={"msg-1": full})
+
+        result = await _do_gmail()
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="gmail", external_id="msg-1").one()
+        assert event.typ == "gespräch"
+        assert event.application_id == app.id
+
+    async def test_positiv_absage_erzeugt_statusvorschlag_statt_direkter_aenderung(
+        self, db_session, google_sync, fake_gmail
+    ):
+        app = application_factory(db_session, firma="Contoso AG", main_status="applied", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="hr@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        meta, full = gmail_message(
+            "msg-2", "HR <hr@contoso.com>", "Ihre Bewerbung",
+            "Leider müssen wir Ihnen mitteilen, dass wir uns für einen anderen Kandidaten entschieden haben.",
+            _now_rfc2822(),
+        )
+        fake_gmail([{"messages": [{"id": "msg-2"}]}], metadata={"msg-2": meta}, full={"msg-2": full})
+
+        result = await _do_gmail()
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="gmail", external_id="msg-2").one()
+        assert event.typ == "status"
+        pm = db_session.query(models.PendingMatch).filter_by(suggested_app_id=app.id).one()
+        assert pm.suggested_main_status == "rejected"
+        db_session.refresh(app)
+        assert app.main_status == "applied"  # Änderung geht über Review, nicht direkt
+
+    async def test_negativ_mail_ohne_kontakt_match_wird_uebersprungen(self, db_session, google_sync, fake_gmail):
+        application_factory(db_session)
+        db_session.commit()
+
+        meta, full = gmail_message(
+            "msg-3", "Newsletter <news@irgendwas.de>", "Wochenrückblick",
+            "Diese Woche bei uns: ...", _now_rfc2822(),
+        )
+        fake_gmail([{"messages": [{"id": "msg-3"}]}], metadata={"msg-3": meta}, full={"msg-3": full})
+
+        result = await _do_gmail()
+
+        assert result["created"] == 0
+        assert result["skipped"] == 1
+        assert db_session.query(models.Event).filter_by(source="gmail", external_id="msg-3").first() is None
+
+    async def test_negativ_mail_vor_globalem_cutoff_wird_uebersprungen(self, db_session, google_sync, fake_gmail):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today())
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        old_date = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%a, %d %b %Y %H:%M:%S +0000")
+        meta, full = gmail_message(
+            "msg-4", "Recruiterin <recruiterin@contoso.com>", "Altes Interview",
+            "Einladung zum Interview letztes Jahr.", old_date,
+        )
+        fake_gmail([{"messages": [{"id": "msg-4"}]}], metadata={"msg-4": meta}, full={"msg-4": full})
+
+        result = await _do_gmail()
+
+        assert result["created"] == 0
+        assert result["skipped"] == 1
+
+
+class TestDoGmailPaginationUndFehler:
+    async def test_positiv_pagination_ueber_mehrere_seiten_wird_vollstaendig_abgeholt(
+        self, db_session, google_sync, fake_gmail
+    ):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        meta1, full1 = gmail_message("msg-p1", "Recruiterin <recruiterin@contoso.com>", "Interview 1", "Einladung zum Interview.", _now_rfc2822())
+        meta2, full2 = gmail_message("msg-p2", "Recruiterin <recruiterin@contoso.com>", "Interview 2", "Einladung zum Interview.", _now_rfc2822())
+        service = fake_gmail(
+            [
+                {"messages": [{"id": "msg-p1"}], "nextPageToken": "page2"},
+                {"messages": [{"id": "msg-p2"}]},
+            ],
+            metadata={"msg-p1": meta1, "msg-p2": meta2},
+            full={"msg-p1": full1, "msg-p2": full2},
+        )
+
+        result = await _do_gmail()
+
+        assert result["created"] == 2
+        assert len(service.list_calls) == 2
+        assert "pageToken" not in service.list_calls[0]
+        assert service.list_calls[1]["pageToken"] == "page2"
+
+    async def test_negativ_gmail_api_fehler_bei_list_liefert_sauberen_fehler(self, db_session, google_sync, fake_gmail):
+        service = fake_gmail([])
+
+        def _raise(**kwargs):
+            raise RuntimeError("500 Internal Server Error")
+
+        service.execute = _raise
+
+        result = await _do_gmail()
+
+        assert result["created"] == 0
+        assert any("Gmail API Fehler" in e for e in result["errors"])
+
+    async def test_negativ_einzelner_batch_fehler_stoppt_nicht_den_gesamten_sync(
+        self, db_session, google_sync, fake_gmail
+    ):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        meta_ok, full_ok = gmail_message("msg-ok", "Recruiterin <recruiterin@contoso.com>", "Interview", "Einladung zum Interview.", _now_rfc2822())
+        fake_gmail(
+            [{"messages": [{"id": "msg-fail"}, {"id": "msg-ok"}]}],
+            metadata={"msg-ok": meta_ok},
+            full={"msg-ok": full_ok},
+            batch_errors={"msg-fail": RuntimeError("boom")},
+        )
+
+        result = await _do_gmail()
+
+        assert result["created"] == 1
+        assert any("msg-fail" in e for e in result["errors"])
