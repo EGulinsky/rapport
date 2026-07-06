@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.12',
+    date: '2026-07-06',
+    changes: [
+      'Testkonzept Phase 4 (iCloud-Mocking) abgeschlossen: 7 neue Tests für den Notizen-Sync. Dabei festgestellt, dass der aktive Notizen-Sync schon länger über den lokalen Rapport-Agenten statt über einen direkten Apple-ID-Login läuft — nur der alte, ungenutzte Login-Pfad blieb ungetestet. sync_icloud.py auf 50%, Gesamtabdeckung auf 54% gestiegen. Damit ist Phase 4 des Testkonzepts bis auf LinkedIn-Playwright-Fixture-Replay abgeschlossen.',
+    ],
+  },
+  {
     version: '3.33.11',
     date: '2026-07-06',
     changes: [
