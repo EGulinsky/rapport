@@ -351,6 +351,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
                 titel=summary or "Kalendertermin",
                 notiz=notiz,
                 source="gcal",
+                external_id=ev_id,
             ))
             mark_synced(db, "gcal", ev_id)
             created += 1
@@ -608,6 +609,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
                 titel=summary or "Kalendertermin",
                 notiz=notiz,
                 source="icloud_cal",
+                external_id=uid,
             ))
             mark_synced(db, "icloud_cal", uid)
             created += 1
