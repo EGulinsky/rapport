@@ -3,9 +3,11 @@ L3 Integration-Tests (Fremdsysteme an der Netzwerkgrenze gemockt), siehe `docs/T
 **Umgesetzt:**
 - KI-Provider (`conftest.py::fake_ai_provider` patcht `litellm.acompletion`, `test_ai_provider_flow.py`)
 - Google Calendar (`conftest.py::fake_google_calendar` patcht `googleapiclient.discovery.build`, `test_google_calendar_sync.py`)
+- Gmail (`conftest.py::fake_gmail` + `gmail_message()`-Helper, `test_gmail_sync.py`) — deckt die zweiphasige Batch-Abholung (`new_batch_http_request`, erst Metadata dann Volltext) ab, nicht nur einfache `.execute()`-Calls
+- LinkedIn-Statuslogik (`_process_linkedin_job()`, `test_process_linkedin_job.py` — reine DB-Logik, kein Playwright-Mock nötig)
 
-**Achtung beim Erweitern:** Sync-Funktionen (`_do_gcal`, `_do_gmail`, …) öffnen intern eine eigene `SessionLocal()`. Test-Setup über die `db_session`-Fixture muss vor dem Aufruf **committet** sein (`db_session.commit()`, nicht nur `flush()`) — sonst blockiert SQLite bis zum `busy_timeout` (60s), der Test läuft dann nur sehr langsam statt sofort zu failen. Live in dieser Session gefunden (siehe `conftest.py`-Docstring).
+**Achtung beim Erweitern:** Sync-Funktionen (`_do_gcal`, `_do_gmail`, …) öffnen intern eine eigene `SessionLocal()`. Test-Setup über die `db_session`-Fixture muss vor dem Aufruf **committet** sein (`db_session.commit()`, nicht nur `flush()`) — sonst blockiert SQLite bis zum `busy_timeout` (60s), der Test läuft dann nur sehr langsam statt sofort zu failen. Ist bereits **zweimal** live passiert (Calendar- und Gmail-Tests) — beim Hinzufügen jedes neuen Testfalls explizit gegenprüfen, nicht nur beim ersten.
 
-**Noch offen:** Gmail (Batch-Requests, komplexer als Calendar), iCloud IMAP/CalDAV/CardDAV, LinkedIn (Playwright-Interception).
+**Noch offen:** iCloud (IMAP/CalDAV/CardDAV), LinkedIn (Playwright-Interception, gehört laut Abschnitt 8 eigentlich in den Nightly-Tier).
 
 Laufen nur explizit über `pytest -m integration` bzw. bei Push auf `main` in CI — nicht Teil des PR-Gates (siehe `ci.yml`).

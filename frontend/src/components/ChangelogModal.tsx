@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.7',
+    date: '2026-07-06',
+    changes: [
+      'Testkonzept Phase 4 fortgesetzt: 7 neue L3-Integrationstests für den Gmail-Sync — deckt als Erstes die zweiphasige Batch-Abholung ab (erst Nachrichten-Metadaten, dann Volltext für relevante Treffer), inkl. Pagination über mehrere Seiten und teilweisem Batch-Fehler ohne Gesamtabbruch. Google-Sync-Bereich (Gmail + Calendar) damit von 12% auf 62% Testabdeckung.',
+    ],
+  },
+  {
     version: '3.33.6',
     date: '2026-07-06',
     changes: [
