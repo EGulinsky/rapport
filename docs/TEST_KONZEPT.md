@@ -267,7 +267,7 @@ frontend/
 
 ### Ist-Stand (gemessen 2026-07-06, `pytest --cov=app`)
 
-**Gesamt: 54 % Line-Coverage über `app/` (8978 Statements, 4134 ungetestet, Stand 2026-07-06).** Der Durchschnitt verschleiert eine sehr ungleiche Verteilung, die dem Rollout-Plan (Abschnitt 11) entspricht — hoch dort, wo Phase 1–3 bewusst zuerst angesetzt haben, niedrig dort, wo Phase 4 noch aussteht:
+**Gesamt: 54 % Line-Coverage über `app/` (8978 Statements, 4134 ungetestet, Stand 2026-07-06).** Der Durchschnitt verschleiert eine sehr ungleiche Verteilung, die dem Rollout-Plan (Abschnitt 11) entspricht — hoch dort, wo Phase 1–4 bewusst zuerst angesetzt haben, niedrig dort, wo erst Phase 5–6 (E2E, LinkedIn-Fixture-Replay) sowie die dauerhaft niedrig priorisierten Dateien (`sync_linkedin.py`, `sync_files.py`, `export_pdf.py` u.a.) ansetzen:
 
 | Bereich | Abdeckung | Einordnung |
 |---|---|---|
