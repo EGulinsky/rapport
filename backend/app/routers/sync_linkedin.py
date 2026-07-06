@@ -848,7 +848,7 @@ def _quick_match(job: dict, target_app: "models.Application") -> bool:
     return False
 
 
-def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None]:
+def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None, str]:
     """Match job to existing application or create new. Returns (app, created, pending_status).
 
     pending_status is set when a new app was created but the LI source implies a status
@@ -988,7 +988,123 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         titel=event_titel,
         source="linkedin",
     ))
-    return new_app, True, intended_status, f"neu→#{new_app.id}"
+    # pending_status (review-queue trigger) nur bei "rejected" — für jeden anderen
+    # intended_status wurde initial_status bereits identisch gesetzt, ein Review-
+    # Vorschlag wäre dort ein sinnloser No-op ("X → X", live in PendingMatch gefunden).
+    pending_status = intended_status if intended_status == "rejected" else None
+    return new_app, True, pending_status, f"neu→#{new_app.id}"
+
+
+_STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
+
+
+def _process_linkedin_job(db: Session, job: dict) -> dict:
+    """Match/create an application from one scraped LI job and apply the
+    status-progression + PendingMatch-dedup rules.
+
+    Extracted out of the sync loop's closure so this — historically the most
+    bug-prone part (repeated duplicate status proposals, see issues #9/#14) —
+    is directly testable without a real Playwright session.
+
+    Returns {"result": "created"|"updated"|"skipped", "app_id": int,
+    "match_grund": str, ...}."""
+    app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
+    pfx = f"[LI #{app.id}]"
+    log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
+              pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
+              job.get("_label", ""), job.get("status_hint", ""), job.get("_raw_context", ""), match_grund)
+
+    if was_created:
+        pending_match_created = False
+        if pending_status:
+            li_job_id_val = job.get("id", "")
+            pm_ext_id = f"linkedin_{li_job_id_val}__status__{pending_status}"
+            db.add(models.PendingMatch(
+                source="linkedin",
+                external_id=pm_ext_id,
+                confidence=90,
+                event_type="status_change",
+                datum=date.today(),
+                titel=f"Neu (LI Archiv): applied → {pending_status}",
+                suggested_app_id=app.id,
+                suggested_main_status=pending_status,
+                status_only=True,
+            ))
+            pending_match_created = True
+            log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
+        else:
+            log.info("{} neu angelegt: {} | match={}", pfx, app.main_status, match_grund)
+        return {
+            "result": "created", "app_id": app.id, "match_grund": match_grund,
+            "pending_status": pending_status, "pending_match_created": pending_match_created,
+        }
+
+    job_url = job.get("stellenanzeige_url") or None
+    if job_url and not app.stellenanzeige_url:
+        app.stellenanzeige_url = job_url
+    if not app.datum_bewerbung and job.get("applied_date"):
+        try:
+            app.datum_bewerbung = date.fromisoformat(str(job["applied_date"]))
+        except Exception:
+            pass
+    db.flush()
+
+    target_status = job.get("default_status", "applied")
+    if job.get("status_hint"):
+        target_status = job["status_hint"][0]
+
+    old_status = app.main_status
+    cur_idx = _STATUS_ORDER.index(old_status) if old_status in _STATUS_ORDER else 0
+    new_idx = _STATUS_ORDER.index(target_status) if target_status in _STATUS_ORDER else 0
+
+    status_changed = (
+        (target_status == "rejected" and old_status != "rejected")
+        or (target_status != "rejected" and new_idx > cur_idx)
+    )
+
+    if not status_changed:
+        log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
+        return {"result": "skipped", "app_id": app.id, "match_grund": match_grund, "old_status": old_status}
+
+    li_job_id_val = job.get("id", "")
+    pm_ext_id = f"linkedin_{li_job_id_val}__status__{target_status}"
+    already_pending = db.query(models.PendingMatch).filter(
+        models.PendingMatch.source == "linkedin",
+        models.PendingMatch.external_id == pm_ext_id,
+        models.PendingMatch.review_status == "pending",
+    ).first()
+    already_reviewed = db.query(models.PendingMatch).filter(
+        models.PendingMatch.suggested_app_id == app.id,
+        models.PendingMatch.suggested_main_status == target_status,
+        models.PendingMatch.review_status.in_(["approved", "rejected"]),
+    ).first()
+    pending_match_created = False
+    if not already_pending and not already_reviewed:
+        sub_hint = job["status_hint"][1] if job.get("status_hint") else None
+        db.add(models.PendingMatch(
+            source="linkedin",
+            external_id=pm_ext_id,
+            confidence=90,
+            event_type="status_change",
+            datum=date.today(),
+            titel=f"Status: {old_status} → {target_status}",
+            suggested_app_id=app.id,
+            suggested_main_status=target_status,
+            suggested_sub_status=sub_hint,
+            status_only=True,
+        ))
+        pending_match_created = True
+        log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
+    elif already_pending:
+        log.info("{} Status-Vorschlag übersprungen (bereits ausstehend): {} → {} | match={}", pfx, old_status, target_status, match_grund)
+    else:
+        log.info("{} Status-Vorschlag übersprungen (bereits überprüft: {}): {} → {} | match={}", pfx, already_reviewed.review_status, old_status, target_status, match_grund)
+
+    return {
+        "result": "updated", "app_id": app.id, "match_grund": match_grund,
+        "old_status": old_status, "target_status": target_status,
+        "pending_match_created": pending_match_created,
+    }
 
 
 def _run_sync_task(cfg_id: int, target_app_id: int | None = None):
@@ -1082,98 +1198,19 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             cfg.session_cookies = json.dumps(cookies)
             _commit_with_retry(db)
 
-            STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
             created = updated = skipped = 0
             errors: list[str] = []
 
             def _process(job: dict) -> None:
                 nonlocal created, updated, skipped
                 try:
-                    app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
-                    pfx = f"[LI #{app.id}]"
-                    log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
-                              pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
-                              job.get("_label", ""), job.get("status_hint", ""), job.get("_raw_context", ""), match_grund)
-                    if was_created:
+                    outcome = _process_linkedin_job(db, job)
+                    if outcome["result"] == "created":
                         created += 1
-                        if pending_status:
-                            li_job_id_val = job.get("id", "")
-                            pm_ext_id = f"linkedin_{li_job_id_val}__status__{pending_status}"
-                            db.add(models.PendingMatch(
-                                source="linkedin",
-                                external_id=pm_ext_id,
-                                confidence=90,
-                                event_type="status_change",
-                                datum=date.today(),
-                                titel=f"Neu (LI Archiv): applied → {pending_status}",
-                                suggested_app_id=app.id,
-                                suggested_main_status=pending_status,
-                                status_only=True,
-                            ))
-                            log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
-                        else:
-                            log.info("{} neu angelegt: {} | match={}", pfx, app.main_status, match_grund)
+                    elif outcome["result"] == "updated":
+                        updated += 1
                     else:
-                        job_url = job.get("stellenanzeige_url") or None
-                        if job_url and not app.stellenanzeige_url:
-                            app.stellenanzeige_url = job_url
-                        if not app.datum_bewerbung and job.get("applied_date"):
-                            from datetime import date as _date
-                            try:
-                                app.datum_bewerbung = _date.fromisoformat(str(job["applied_date"]))
-                            except Exception:
-                                pass
-                        db.flush()
-
-                        target_status = job.get("default_status", "applied")
-                        if job.get("status_hint"):
-                            target_status = job["status_hint"][0]
-
-                        old_status = app.main_status
-                        cur_idx = STATUS_ORDER.index(old_status) if old_status in STATUS_ORDER else 0
-                        new_idx = STATUS_ORDER.index(target_status) if target_status in STATUS_ORDER else 0
-
-                        status_changed = (
-                            (target_status == "rejected" and old_status != "rejected")
-                            or (target_status != "rejected" and new_idx > cur_idx)
-                        )
-
-                        if status_changed:
-                            li_job_id_val = job.get("id", "")
-                            pm_ext_id = f"linkedin_{li_job_id_val}__status__{target_status}"
-                            already_pending = db.query(models.PendingMatch).filter(
-                                models.PendingMatch.source == "linkedin",
-                                models.PendingMatch.external_id == pm_ext_id,
-                                models.PendingMatch.review_status == "pending",
-                            ).first()
-                            already_reviewed = db.query(models.PendingMatch).filter(
-                                models.PendingMatch.suggested_app_id == app.id,
-                                models.PendingMatch.suggested_main_status == target_status,
-                                models.PendingMatch.review_status.in_(["approved", "rejected"]),
-                            ).first()
-                            if not already_pending and not already_reviewed:
-                                sub_hint = job["status_hint"][1] if job.get("status_hint") else None
-                                db.add(models.PendingMatch(
-                                    source="linkedin",
-                                    external_id=pm_ext_id,
-                                    confidence=90,
-                                    event_type="status_change",
-                                    datum=date.today(),
-                                    titel=f"Status: {old_status} → {target_status}",
-                                    suggested_app_id=app.id,
-                                    suggested_main_status=target_status,
-                                    suggested_sub_status=sub_hint,
-                                    status_only=True,
-                                ))
-                                log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
-                            elif already_pending:
-                                log.info("{} Status-Vorschlag übersprungen (bereits ausstehend): {} → {} | match={}", pfx, old_status, target_status, match_grund)
-                            else:
-                                log.info("{} Status-Vorschlag übersprungen (bereits überprüft: {}): {} → {} | match={}", pfx, already_reviewed.review_status, old_status, target_status, match_grund)
-                            updated += 1
-                        else:
-                            skipped += 1
-                            log.debug("{} unverändert: {} | match={}", pfx, old_status, match_grund)
+                        skipped += 1
                 except Exception as e:
                     errors.append(f"{job.get('company', '?')}: {e}")
                     log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)
