@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.10',
+    date: '2026-07-06',
+    changes: [
+      'Fix: Über iCloud synchronisierte Kalendertermine und Erinnerungen wurden mit fehlerhaftem Titel gespeichert (Rohtext wie "<SUMMARY{}Interview bei Contoso>" statt "Interview bei Contoso") — betraf jeden über iCloud synchronisierten Kalender-/Erinnerungs-Eintrag. Beim Aufbau der zugehörigen Tests entdeckt und behoben.',
+      'Testkonzept Phase 4 (iCloud-Mocking) begonnen: 31 neue Tests für iCloud Mail (IMAP), Calendar und Reminders (CalDAV) — jeweils global und im gezielten Einzelbewerbungs-Sync. sync_icloud.py von 23% auf 43%, sync_targeted.py von 38% auf 53%, Gesamtabdeckung auf 52% gestiegen.',
+    ],
+  },
+  {
     version: '3.33.9',
     date: '2026-07-06',
     changes: [

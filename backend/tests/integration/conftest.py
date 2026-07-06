@@ -242,3 +242,183 @@ def fake_gmail(monkeypatch):
 
     monkeypatch.setattr("googleapiclient.discovery.build", _fake_build)
     return set_service
+
+
+@pytest.fixture()
+def icloud_sync(db_session):
+    """ICloudSync-Konfig mit verschlüsseltem App-Passwort — `_imap_connect()`
+    ruft `decrypt_api_key()` darauf auf, das Ergebnis wird an die (gemockte)
+    IMAP-Verbindung als Passwort übergeben, aber vom Fake nie geprüft."""
+    from app import models
+    from app.ai.provider import encrypt_api_key
+
+    cfg = models.ICloudSync(
+        apple_id="test@example.com",
+        icloud_email="test@icloud.com",
+        app_password_enc=encrypt_api_key("test-app-password"),
+    )
+    db_session.add(cfg)
+    db_session.commit()
+    return cfg
+
+
+class FakeImapConnection:
+    """Test-Double für `imaplib.IMAP4_SSL`. Deckt genau die hier genutzte
+    Methodenkette ab: `login()`, `select()`, `search(None, criteria)`,
+    `fetch(msg_id_bytes, spec)` (zweiphasig: erst RFC822.HEADER, dann bei
+    Bedarf volles RFC822) und `logout()`."""
+
+    def __init__(self, search_response: bytes, messages: dict[bytes, dict[str, bytes]]) -> None:
+        self._search_response = search_response
+        self._messages = messages
+        self.search_calls: list[str] = []
+        self.fetch_calls: list[tuple[bytes, str]] = []
+
+    def login(self, user, password):
+        return ("OK", [b"Logged in"])
+
+    def select(self, mailbox):
+        return ("OK", [b"1"])
+
+    def search(self, charset, criteria):
+        self.search_calls.append(criteria)
+        return ("OK", [self._search_response])
+
+    def fetch(self, msg_id_bytes, spec):
+        self.fetch_calls.append((msg_id_bytes, spec))
+        data = self._messages[msg_id_bytes]
+        key = "header" if "HEADER" in spec else "full"
+        return ("OK", [(b"", data[key])])
+
+    def logout(self):
+        return ("BYE", [b"Logging out"])
+
+
+def icloud_email(msg_id: str, sender: str, subject: str, body_text: str, date_str: str) -> tuple[bytes, dict[str, bytes]]:
+    """Baut (msg_id_bytes, {"header":..., "full":...}) für eine IMAP-Testnachricht."""
+    from email.message import EmailMessage
+
+    full_msg = EmailMessage()
+    full_msg["From"] = sender
+    full_msg["Subject"] = subject
+    full_msg["Date"] = date_str
+    full_msg.set_content(body_text)
+
+    header_msg = EmailMessage()
+    header_msg["From"] = sender
+    header_msg["Subject"] = subject
+    header_msg["Date"] = date_str
+
+    return msg_id.encode(), {"header": bytes(header_msg), "full": bytes(full_msg)}
+
+
+@pytest.fixture()
+def fake_icloud_imap(monkeypatch):
+    """Liefert eine Factory `set_messages(msg_ids: list[str], messages: dict) ->
+    FakeImapConnection`. `messages` bildet die msg_id_bytes aus `icloud_email()`
+    auf ihr (header, full)-Paar ab."""
+    holder: dict[str, FakeImapConnection] = {}
+
+    def _fake_imap_ssl(host, port):
+        return holder["conn"]
+
+    def set_messages(msg_ids: list[str], messages: dict[bytes, dict[str, bytes]] | None = None) -> FakeImapConnection:
+        search_response = " ".join(msg_ids).encode()
+        conn = FakeImapConnection(search_response, messages or {})
+        holder["conn"] = conn
+        return conn
+
+    monkeypatch.setattr("imaplib.IMAP4_SSL", _fake_imap_ssl)
+    return set_messages
+
+
+class FakeCaldavEvent:
+    """Test-Double für ein caldav-`Event`/`Todo`-Objekt. `.vobject_instance` ist
+    ECHT über `vobject.readOne()` geparst (kein Hand-Stub) — nur so wird eine
+    reale Falle wie das versehentliche `str()` auf ein vobject-ContentLine-Objekt
+    (liefert '<SUMMARY{}Text>' statt 'Text') im Test überhaupt sichtbar."""
+
+    def __init__(self, ics_text: str, url: str) -> None:
+        import vobject
+        self.vobject_instance = vobject.readOne(ics_text)
+        self.url = url
+
+
+def icloud_calendar_event(uid: str, summary: str, start_dt, organizer_email: str = "",
+                          description: str = "", location: str = "", attendee_emails: list[str] | None = None) -> FakeCaldavEvent:
+    organizer_line = f"ORGANIZER;CN=Organizer:mailto:{organizer_email}\n" if organizer_email else ""
+    attendee_lines = "".join(f"ATTENDEE;CN=Guest:mailto:{e}\n" for e in (attendee_emails or []))
+    ics = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nBEGIN:VEVENT\n"
+        f"UID:{uid}\nDTSTART:{start_dt.strftime('%Y%m%dT%H%M%SZ')}\nSUMMARY:{summary}\n"
+        f"DESCRIPTION:{description}\nLOCATION:{location}\n{organizer_line}{attendee_lines}"
+        "END:VEVENT\nEND:VCALENDAR\n"
+    )
+    return FakeCaldavEvent(ics, f"https://caldav.icloud.com/{uid}.ics")
+
+
+def icloud_reminder(uid: str, summary: str, description: str = "", due_dt=None) -> FakeCaldavEvent:
+    due_line = f"DUE:{due_dt.strftime('%Y%m%dT%H%M%SZ')}\n" if due_dt else ""
+    ics = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nBEGIN:VTODO\n"
+        f"UID:{uid}\nSUMMARY:{summary}\nDESCRIPTION:{description}\n{due_line}"
+        "END:VTODO\nEND:VCALENDAR\n"
+    )
+    return FakeCaldavEvent(ics, f"https://caldav.icloud.com/{uid}.ics")
+
+
+class FakeCaldavCalendar:
+    def __init__(self, name: str, events: list[FakeCaldavEvent] | None = None,
+                 todos: list[FakeCaldavEvent] | None = None,
+                 date_search_error: Exception | None = None) -> None:
+        self.name = name
+        self._events = events or []
+        self._todos = todos or []
+        self._date_search_error = date_search_error
+
+    def date_search(self, start=None, end=None, expand=True):
+        if self._date_search_error:
+            raise self._date_search_error
+        return self._events
+
+    def todos(self):
+        return self._todos
+
+
+class FakeCaldavPrincipal:
+    def __init__(self, calendars: list[FakeCaldavCalendar]) -> None:
+        self._calendars = calendars
+
+    def calendars(self):
+        return self._calendars
+
+
+class FakeCaldavClient:
+    def __init__(self, calendars: list[FakeCaldavCalendar] | None = None, error: Exception | None = None) -> None:
+        self._calendars = calendars or []
+        self._error = error
+
+    def principal(self):
+        if self._error:
+            raise self._error
+        return FakeCaldavPrincipal(self._calendars)
+
+
+@pytest.fixture()
+def fake_caldav(monkeypatch):
+    """Liefert eine Factory `set_calendars(calendars, error=None) -> FakeCaldavClient`.
+    Patcht `caldav.DAVClient` direkt (Netzwerkgrenze) — dieselbe Grenze wird
+    sowohl vom globalen iCloud-Kalender-/Erinnerungen-Sync (sync_icloud.py)
+    als auch vom gezielten Einzelbewerbungs-Sync (sync_targeted.py) genutzt."""
+    holder: dict[str, FakeCaldavClient] = {}
+
+    def _fake_dav_client(url, username=None, password=None):
+        return holder["client"]
+
+    def set_calendars(calendars: list[FakeCaldavCalendar] | None = None, error: Exception | None = None) -> FakeCaldavClient:
+        client = FakeCaldavClient(calendars, error)
+        holder["client"] = client
+        return client
+
+    monkeypatch.setattr("caldav.DAVClient", _fake_dav_client)
+    return set_calendars

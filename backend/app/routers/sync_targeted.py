@@ -28,8 +28,7 @@ from app.routers.sync_common import (
     is_synced, mark_synced, strip_html,
     term_variants, process_item, process_item_for_app,
     init_progress, update_progress, finish_progress,
-    upsert_contact_from_sender,
-
+    upsert_contact_from_sender, vobj_str,
 )
 from app.logger import get_logger
 
@@ -462,12 +461,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     return created, total, errors
 
 
-def _vobj_str(vevent, attr: str) -> str:
-    """Extract plain string value from a vObject attribute (avoids '<ATTR{}>...' repr)."""
-    obj = getattr(vevent, attr, None)
-    if obj is None:
-        return ""
-    return str(getattr(obj, "value", None) or obj or "")
+_vobj_str = vobj_str  # lokaler Alias, historisch unter diesem Namen hier verwendet
 
 
 # ── iCloud Calendar ───────────────────────────────────────────────────────────
@@ -845,8 +839,8 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
             for todo in cal.todos():
                 try:
                     vtodo = todo.vobject_instance.vtodo
-                    summary = str(getattr(vtodo, "summary", None) or "")
-                    desc = str(getattr(vtodo, "description", None) or "")
+                    summary = vobj_str(vtodo, "summary")
+                    desc = vobj_str(vtodo, "description")
                     all_todos.append(todo)
                     if _text_matches(summary + " " + desc, terms):
                         matched_todos.append(todo)
@@ -861,9 +855,9 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
     for todo in matched_todos:
         try:
             vtodo = todo.vobject_instance.vtodo
-            summary = str(getattr(vtodo, "summary", None) or "")
-            desc = str(getattr(vtodo, "description", None) or "")
-            uid = str(getattr(vtodo, "uid", None) or todo.url)
+            summary = vobj_str(vtodo, "summary")
+            desc = vobj_str(vtodo, "description")
+            uid = vobj_str(vtodo, "uid") or str(todo.url)
         except Exception:
             continue
 
