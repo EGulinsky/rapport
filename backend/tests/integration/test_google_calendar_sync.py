@@ -31,6 +31,23 @@ def _cal_event(event_id: str, summary: str, organizer_email: str, days_from_now:
     }
 
 
+class TestDoGcalNichtVerbunden:
+    async def test_negativ_keine_google_konfiguration_liefert_klaren_fehler(self, db_session):
+        # Bewusst kein google_sync-Fixture — es existiert keine GoogleSync-Zeile.
+        result = await _do_gcal()
+
+        assert result["errors"] == ["Nicht mit Google verbunden."]
+        assert result["created"] == 0
+
+    async def test_corner_case_konfiguration_ohne_refresh_token_gilt_als_nicht_verbunden(self, db_session):
+        db_session.add(models.GoogleSync(client_id="x", client_secret_enc="y", refresh_token_enc=None))
+        db_session.commit()
+
+        result = await _do_gcal()
+
+        assert result["errors"] == ["Nicht mit Google verbunden."]
+
+
 class TestDoGcalNeueTermine:
     async def test_positiv_termin_mit_bekanntem_kontakt_wird_als_gespraech_angelegt(
         self, db_session, google_sync, fake_google_calendar

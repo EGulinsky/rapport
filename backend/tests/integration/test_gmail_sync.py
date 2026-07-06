@@ -23,6 +23,23 @@ def _now_rfc2822() -> str:
     return datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
 
 
+class TestDoGmailNichtVerbunden:
+    async def test_negativ_keine_google_konfiguration_liefert_klaren_fehler(self, db_session):
+        # Bewusst kein google_sync-Fixture — es existiert keine GoogleSync-Zeile.
+        result = await _do_gmail()
+
+        assert result["errors"] == ["Nicht mit Google verbunden."]
+        assert result["created"] == 0
+
+    async def test_corner_case_konfiguration_ohne_refresh_token_gilt_als_nicht_verbunden(self, db_session):
+        db_session.add(models.GoogleSync(client_id="x", client_secret_enc="y", refresh_token_enc=None))
+        db_session.commit()
+
+        result = await _do_gmail()
+
+        assert result["errors"] == ["Nicht mit Google verbunden."]
+
+
 class TestDoGmailNeueNachrichten:
     async def test_positiv_einladung_mit_bekanntem_kontakt_wird_als_gespraech_angelegt(
         self, db_session, google_sync, fake_gmail
