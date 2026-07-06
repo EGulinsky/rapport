@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.14',
+    date: '2026-07-06',
+    changes: [
+      'CI: manueller workflow_dispatch-Trigger für ci.yml hinzugefügt — erlaubt gezielt "nur testen" (Standard) oder "testen + deployen" (per deploy-Input), analog zu klassischen make test/make deploy-Targets. Push auf main verhält sich unverändert (immer Test+Deploy).',
+    ],
+  },
+  {
     version: '3.33.13',
     date: '2026-07-06',
     changes: [
