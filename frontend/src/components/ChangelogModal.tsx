@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.33.9',
+    date: '2026-07-06',
+    changes: [
+      'Testkonzept: Testabdeckung des gezielten Einzelbewerbungs-Syncs (sync_targeted.py, zweitgrößte Backend-Datei) von 5% auf 38% angehoben — 72 neue Tests für Suchbegriffs-/Domain-Logik, die API-Endpunkte (Reset, Kandidatenliste, manuelle Zuweisung), die domain-basierte Filterung von Gmail/Calendar sowie die agentenbasierten Quellen (iCloud-Notizen, Anrufe).',
+      'Fix: Über den gezielten Sync angelegte Kalendertermine (Google + iCloud) setzten die externe ID nicht, wodurch sie in der Kandidatenliste/bei manueller Zuweisung nicht zuverlässig wiedergefunden werden konnten — beim Schreiben der zugehörigen Tests entdeckt. Gesamtabdeckung damit auf 47% gestiegen.',
+    ],
+  },
+  {
     version: '3.33.8',
     date: '2026-07-06',
     changes: [
