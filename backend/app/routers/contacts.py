@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app import models, schemas
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 def list_all_contacts(
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     q = db.query(models.Contact).options(joinedload(models.Contact.applications))
     if search:
@@ -62,8 +64,12 @@ class ContactCreate(BaseModel):
 
 
 @router.post("/", status_code=201)
-def create_contact(body: ContactCreate, db: Session = Depends(get_db)):
-    contact = models.Contact(**body.model_dump())
+def create_contact(
+    body: ContactCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    contact = models.Contact(**body.model_dump(), user_id=current_user.id)
     db.add(contact)
     db.commit()
     db.refresh(contact)
@@ -86,8 +92,13 @@ class ContactPatch(BaseModel):
 
 
 @router.patch("/{contact_id}")
-def patch_contact(contact_id: int, body: ContactPatch, db: Session = Depends(get_db)):
-    contact = db.get(models.Contact, contact_id)
+def patch_contact(
+    contact_id: int,
+    body: ContactPatch,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    contact = db.query(models.Contact).filter_by(id=contact_id).first()
     if not contact:
         raise HTTPException(404)
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -102,10 +113,16 @@ class BulkDeleteBody(BaseModel):
 
 
 @router.delete("/bulk", status_code=200)
-def bulk_delete_contacts(body: BulkDeleteBody, db: Session = Depends(get_db)):
-    if body.all:
-        deleted = db.query(models.Contact).delete()
-    else:
-        deleted = db.query(models.Contact).filter(models.Contact.id.in_(body.ids)).delete(synchronize_session=False)
+def bulk_delete_contacts(
+    body: BulkDeleteBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # Bulk-delete() umgeht (wie jedes Query.delete()/.update()) den ORM-Loader
+    # und damit den automatischen Mandanten-Filter — daher hier explizit gefiltert.
+    q = db.query(models.Contact).filter(models.Contact.user_id == current_user.id)
+    if not body.all:
+        q = q.filter(models.Contact.id.in_(body.ids))
+    deleted = q.delete(synchronize_session=False)
     db.commit()
     return {"deleted": deleted}
