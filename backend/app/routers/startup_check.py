@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.agent_client import agent_health
-from app.database import get_db
+from app.database import get_db, get_first_user_id, set_session_user
 from app import models
 
 router = APIRouter(prefix="/api", tags=["startup"])
@@ -73,6 +73,13 @@ def _check_files_config(db: Session) -> dict:
 
 @router.get("/startup-check")
 async def startup_check(db: Session = Depends(get_db)):
+    # Bewusst OHNE Login-Pflicht — wird u.a. als reiner Health-Check per
+    # unauthentifiziertem curl genutzt. Verbindungs-Checks (Google/iCloud/AI/
+    # Dateien) sind Konto-Daten und werden daher — wie der Hintergrund-Sync-
+    # Loop — pragmatisch auf das erste/einzige registrierte Konto gescoped.
+    user_id = get_first_user_id(db)
+    if user_id is not None:
+        set_session_user(db, user_id)
     bridge_results = await _check_agent_modules(db)
 
     connection_results = [

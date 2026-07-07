@@ -27,8 +27,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.agent_client import agent_get, agent_post
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, set_session_user
 from app import models
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
@@ -45,10 +46,10 @@ class BackupSettings(BaseModel):
     keep_count: int = 7
 
 
-def _get_or_create(db: Session) -> models.BackupConfig:
+def _get_or_create(db: Session, user_id: int) -> models.BackupConfig:
     cfg = db.query(models.BackupConfig).first()
     if not cfg:
-        cfg = models.BackupConfig()
+        cfg = models.BackupConfig(user_id=user_id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)
@@ -65,11 +66,12 @@ async def _list_backups(db: Session, folder: str) -> list[dict]:
     return []
 
 
-async def do_backup() -> dict:
+async def do_backup(user_id: int) -> dict:
     """Read DB, send to the agent, return {success, filename, error}."""
     db = SessionLocal()
     try:
-        cfg = _get_or_create(db)
+        set_session_user(db, user_id)
+        cfg = _get_or_create(db, user_id)
         if not cfg.enabled or not cfg.backup_folder:
             return {"success": False, "error": "Backup nicht konfiguriert oder deaktiviert"}
 
@@ -118,8 +120,8 @@ async def do_backup() -> dict:
 
 
 @router.get("/status")
-async def backup_status(db: Session = Depends(get_db)):
-    cfg = _get_or_create(db)
+async def backup_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    cfg = _get_or_create(db, current_user.id)
     backups = []
     if cfg.backup_folder:
         backups = await _list_backups(db, cfg.backup_folder)
@@ -134,8 +136,12 @@ async def backup_status(db: Session = Depends(get_db)):
 
 
 @router.post("/settings")
-def save_settings(body: BackupSettings, db: Session = Depends(get_db)):
-    cfg = _get_or_create(db)
+def save_settings(
+    body: BackupSettings,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    cfg = _get_or_create(db, current_user.id)
     cfg.enabled = body.enabled
     cfg.backup_folder = body.backup_folder
     cfg.frequency_hours = max(1, body.frequency_hours)
@@ -152,15 +158,15 @@ def save_settings(body: BackupSettings, db: Session = Depends(get_db)):
 
 
 @router.post("/run")
-async def run_backup():
-    result = await do_backup()
+async def run_backup(current_user: models.User = Depends(get_current_user)):
+    result = await do_backup(current_user.id)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Backup fehlgeschlagen"))
     return result
 
 
 @router.get("/pick-folder")
-async def pick_folder(db: Session = Depends(get_db)):
+async def pick_folder(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         resp = await agent_get(db, "/files/pick-folder", timeout=65)
         data = resp.json()
@@ -227,7 +233,11 @@ class RestoreRequest(BaseModel):
 
 
 @router.post("/restore")
-async def restore_backup(body: RestoreRequest, db: Session = Depends(get_db)):
+async def restore_backup(
+    body: RestoreRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     backups = await _list_backups(db, body.folder)
     target = next((b for b in backups if b["name"] == body.filename), None)
     if not target:
@@ -242,7 +252,7 @@ class RestoreFileRequest(BaseModel):
 
 
 @router.get("/pick-file")
-async def pick_file(db: Session = Depends(get_db)):
+async def pick_file(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Native macOS file picker for a single backup file — manual restore path
     that works without any backup_folder/enabled configuration at all."""
     try:
@@ -258,7 +268,11 @@ async def pick_file(db: Session = Depends(get_db)):
 
 
 @router.post("/restore-file")
-async def restore_from_file(body: RestoreFileRequest, db: Session = Depends(get_db)):
+async def restore_from_file(
+    body: RestoreFileRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Manual restore from an arbitrary, freely picked file path — independent
     of the automatic-backup settings (no backup_folder/enabled required)."""
     if not body.path:
