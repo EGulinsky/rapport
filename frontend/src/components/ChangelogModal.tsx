@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.34.1',
+    date: '2026-07-07',
+    changes: [
+      'Benutzerkonten Phase 2/5: Mandantentrennung in der Datenbank. Alle 20 bisher globalen Tabellen (Bewerbungen, Kontakte, Firmenprofile, Termine, alle Sync-Einstellungen) haben jetzt eine Konto-Zuordnung. Der bisherige (konto-lose) Datenbestand wird automatisch dem ersten bestätigten Konto zugewiesen, sobald sich jemand zum ersten Mal registriert und verifiziert. Noch nicht aktiv: die Endpunkte filtern noch nicht nach Konto (folgt in Phase 3) — bis dahin bleibt der Zugriff wie bisher offen.',
+    ],
+  },
+  {
     version: '3.34.0',
     date: '2026-07-07',
     changes: [

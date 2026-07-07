@@ -211,3 +211,37 @@ class TestForgotUndResetPassword:
         )
 
         assert resp.status_code == 400
+
+
+class TestClaimOnFirstVerify:
+    def test_positiv_erstes_bestaetigtes_konto_erbt_bisherigen_datenbestand(self, client, captured_email, db_session):
+        from app import models
+        from tests.factories import application_factory
+
+        app = application_factory(db_session, user_id=None)
+        db_session.commit()
+
+        _register(client, captured_email, email="first@example.com")
+        resp = client.post("/api/auth/verify-email", json={"email": "first@example.com", "code": captured_email["code"]})
+        assert resp.status_code == 200
+
+        user = db_session.query(models.User).filter_by(email="first@example.com").one()
+        db_session.refresh(app)
+        assert app.user_id == user.id
+
+    def test_negativ_zweites_konto_erbt_nichts(self, client, captured_email, db_session):
+        from app import models
+        from tests.factories import application_factory
+
+        app = application_factory(db_session, user_id=None)
+        db_session.commit()
+
+        _register(client, captured_email, email="first@example.com")
+        client.post("/api/auth/verify-email", json={"email": "first@example.com", "code": captured_email["code"]})
+        first_user = db_session.query(models.User).filter_by(email="first@example.com").one()
+
+        _register(client, captured_email, email="second@example.com")
+        client.post("/api/auth/verify-email", json={"email": "second@example.com", "code": captured_email["code"]})
+
+        db_session.refresh(app)
+        assert app.user_id == first_user.id  # unverändert, gehört weiterhin dem ersten Konto
