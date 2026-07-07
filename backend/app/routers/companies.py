@@ -5,8 +5,9 @@ from pydantic import BaseModel
 from datetime import datetime, date
 import base64
 
-from app.database import get_db, SessionLocal
-from app.models import CompanyProfile
+from app.database import get_db, SessionLocal, set_session_user
+from app.models import CompanyProfile, User
+from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
 log = get_logger("sync", source="company")
@@ -140,7 +141,11 @@ class CompanyCreateRequest(BaseModel):
 
 
 @router.post("", response_model=CompanyProfileListItem, status_code=201)
-def create_company(body: CompanyCreateRequest, db: Session = Depends(get_db)):
+def create_company(
+    body: CompanyCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.dedup import norm_firma
     name = body.name.strip()
     if not name:
@@ -149,7 +154,7 @@ def create_company(body: CompanyCreateRequest, db: Session = Depends(get_db)):
     existing = db.query(CompanyProfile).filter(CompanyProfile.name_norm == key).first()
     if existing:
         return existing
-    profile = CompanyProfile(name_norm=key, name_display=name, sync_status="pending")
+    profile = CompanyProfile(name_norm=key, name_display=name, sync_status="pending", user_id=current_user.id)
     db.add(profile)
     db.commit()
     db.refresh(profile)
@@ -163,6 +168,7 @@ def list_companies(
     sort: str = Query("name"),
     order: str = Query("asc"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     profiles = db.query(CompanyProfile).all()
     id_to_name = {p.id: p.name_display or p.name_norm for p in profiles}
@@ -213,7 +219,11 @@ def list_companies(
 
 
 @router.get("/{company_id}", response_model=CompanyProfileDetail)
-def get_company(company_id: int, db: Session = Depends(get_db)):
+def get_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -281,7 +291,12 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{company_id}", response_model=CompanyProfileDetail)
-def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = Depends(get_db)):
+def update_company(
+    company_id: int,
+    body: CompanyUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -290,7 +305,7 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
         if field == "parent_company_id":
             # cycle guard: don't allow a company to be its own ancestor
             if value is not None:
-                ancestor = db.get(CompanyProfile, value)
+                ancestor = db.query(CompanyProfile).filter_by(id=value, user_id=current_user.id).first()
                 visited: set[int] = set()
                 while ancestor:
                     if ancestor.id == profile.id:
@@ -298,7 +313,10 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
                     if ancestor.id in visited:
                         break
                     visited.add(ancestor.id)
-                    ancestor = db.get(CompanyProfile, ancestor.parent_company_id) if ancestor.parent_company_id else None
+                    ancestor = (
+                        db.query(CompanyProfile).filter_by(id=ancestor.parent_company_id, user_id=current_user.id).first()
+                        if ancestor.parent_company_id else None
+                    )
             setattr(profile, field, value)
         else:
             setattr(profile, field, value or None)
@@ -307,7 +325,7 @@ def update_company(company_id: int, body: CompanyUpdateRequest, db: Session = De
     db.refresh(profile)
 
     # Re-use get_company logic
-    return get_company(company_id, db)
+    return get_company(company_id, db, current_user)
 
 
 @router.get("/link-contacts/status")
@@ -326,6 +344,7 @@ def link_contacts_cancel():
 def link_contacts_to_companies(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     company_ids: list[int] | None = Query(default=None),
 ):
     global _LINK_RUNNING
@@ -338,18 +357,21 @@ def link_contacts_to_companies(
     allowed_norms: set[str] | None = None
     if company_ids:
         allowed_norms = {
-            n for (n,) in db.query(CompanyProfile.name_norm).filter(CompanyProfile.id.in_(company_ids)).all()
+            n for (n,) in db.query(CompanyProfile.name_norm)
+            .filter(CompanyProfile.id.in_(company_ids), CompanyProfile.user_id == current_user.id)
+            .all()
         }
 
     total = db.query(models.Contact).filter(
         models.Contact.company_profile_id.is_(None),
         models.Contact.firma.isnot(None),
+        models.Contact.user_id == current_user.id,
     ).count()
-    background_tasks.add_task(_run_link_contacts, allowed_norms)
+    background_tasks.add_task(_run_link_contacts, current_user.id, allowed_norms)
     return {"started": True, "total": total}
 
 
-def _run_link_contacts(allowed_norms: set[str] | None = None):
+def _run_link_contacts(user_id: int, allowed_norms: set[str] | None = None):
     global _LINK_RUNNING, _LINK_CANCEL, _LINK_PROGRESS
     from app.dedup import norm_firma
     from app import models
@@ -358,9 +380,11 @@ def _run_link_contacts(allowed_norms: set[str] | None = None):
     _LINK_PROGRESS = {"linked": 0, "created": 0, "total": 0, "done": False, "cancelled": False}
     try:
         db = SessionLocal()
+        set_session_user(db, user_id)
         contacts = db.query(models.Contact).filter(
             models.Contact.company_profile_id.is_(None),
             models.Contact.firma.isnot(None),
+            models.Contact.user_id == user_id,
         ).all()
         if allowed_norms is not None:
             contacts = [c for c in contacts if norm_firma(c.firma) in allowed_norms]
@@ -373,12 +397,14 @@ def _run_link_contacts(allowed_norms: set[str] | None = None):
                 log.info("Kontaktverknüpfung abgebrochen nach {}/{}", linked + created, len(contacts))
                 break
             nname = norm_firma(c.firma)
-            profile = db.query(CompanyProfile).filter(CompanyProfile.name_norm == nname).first()
+            profile = db.query(CompanyProfile).filter(
+                CompanyProfile.name_norm == nname, CompanyProfile.user_id == user_id
+            ).first()
             if not profile:
                 # Scoped runs must not silently create new profiles outside the selection.
                 if allowed_norms is not None:
                     continue
-                profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending")
+                profile = CompanyProfile(name_norm=nname, name_display=c.firma, sync_status="pending", user_id=user_id)
                 db.add(profile)
                 db.flush()
                 created += 1
@@ -399,8 +425,13 @@ def _run_link_contacts(allowed_norms: set[str] | None = None):
 
 
 @router.post("/{company_id}/logo")
-async def upload_company_logo(company_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    profile = db.get(CompanyProfile, company_id)
+async def upload_company_logo(
+    company_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    profile = db.query(CompanyProfile).filter_by(id=company_id, user_id=current_user.id).first()
     if not profile:
         raise HTTPException(404)
     data = await file.read()
@@ -412,8 +443,12 @@ async def upload_company_logo(company_id: int, file: UploadFile = File(...), db:
 
 
 @router.delete("/{company_id}/logo")
-def delete_company_logo(company_id: int, db: Session = Depends(get_db)):
-    profile = db.get(CompanyProfile, company_id)
+def delete_company_logo(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    profile = db.query(CompanyProfile).filter_by(id=company_id, user_id=current_user.id).first()
     if not profile:
         raise HTTPException(404)
     profile.logo_data = None
@@ -422,12 +457,17 @@ def delete_company_logo(company_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{company_id}/contacts/{contact_id}", status_code=200)
-def assign_contact_to_company(company_id: int, contact_id: int, db: Session = Depends(get_db)):
+def assign_contact_to_company(
+    company_id: int,
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app import models as m
-    profile = db.get(CompanyProfile, company_id)
+    profile = db.query(CompanyProfile).filter_by(id=company_id, user_id=current_user.id).first()
     if not profile:
         raise HTTPException(404)
-    contact = db.get(m.Contact, contact_id)
+    contact = db.query(m.Contact).filter_by(id=contact_id, user_id=current_user.id).first()
     if not contact:
         raise HTTPException(404)
     contact.company_profile_id = company_id
@@ -436,9 +476,14 @@ def assign_contact_to_company(company_id: int, contact_id: int, db: Session = De
 
 
 @router.delete("/{company_id}/contacts/{contact_id}", status_code=200)
-def unassign_contact_from_company(company_id: int, contact_id: int, db: Session = Depends(get_db)):
+def unassign_contact_from_company(
+    company_id: int,
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app import models as m
-    contact = db.get(m.Contact, contact_id)
+    contact = db.query(m.Contact).filter_by(id=contact_id, user_id=current_user.id).first()
     if not contact:
         raise HTTPException(404)
     if contact.company_profile_id == company_id:
@@ -452,7 +497,15 @@ class BulkDeleteCompaniesBody(BaseModel):
 
 
 @router.delete("/bulk", status_code=200)
-def bulk_delete_companies(body: BulkDeleteCompaniesBody, db: Session = Depends(get_db)):
-    deleted = db.query(CompanyProfile).filter(CompanyProfile.id.in_(body.ids)).delete(synchronize_session=False)
+def bulk_delete_companies(
+    body: BulkDeleteCompaniesBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    deleted = (
+        db.query(CompanyProfile)
+        .filter(CompanyProfile.id.in_(body.ids), CompanyProfile.user_id == current_user.id)
+        .delete(synchronize_session=False)
+    )
     db.commit()
     return {"deleted": deleted}
