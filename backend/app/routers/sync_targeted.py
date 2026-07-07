@@ -21,9 +21,10 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import decrypt_api_key
+from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
     is_synced, mark_synced, strip_html,
     term_variants, process_item, process_item_for_app,
@@ -151,7 +152,7 @@ def _role_query_words(rolle: str) -> list[str]:
 
 # ── Gmail ─────────────────────────────────────────────────────────────────────
 
-async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.routers.sync_google import _get_cfg as _get_google_cfg, _refresh_if_needed, _gmail_body
     cfg = _get_google_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
@@ -227,7 +228,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     for i, item in enumerate(pending):
         update_progress("targeted_gmail", i, len(pending), f"Gmail {i+1}/{len(pending)}")
         try:
-            ok = await process_item(db, "gmail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict])
+            ok = await process_item(db, "gmail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict], user_id=user_id)
             if ok:
                 created += 1
             else:
@@ -241,7 +242,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
 
 # ── Google Calendar ───────────────────────────────────────────────────────────
 
-async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.routers.sync_google import _get_cfg as _get_google_cfg, _refresh_if_needed
     cfg = _get_google_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
@@ -351,8 +352,9 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
                 notiz=notiz,
                 source="gcal",
                 external_id=ev_id,
+                user_id=user_id,
             ))
-            mark_synced(db, "gcal", ev_id)
+            mark_synced(db, "gcal", ev_id, user_id)
             created += 1
             # Auto-create contacts from organizer + attendees
             event_date = date_hint.date() if date_hint else None
@@ -363,6 +365,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
                     firma=app_dict.get("firma", ""),
                     is_headhunter=app_dict.get("is_headhunter", False),
                     event_date=event_date,
+                    user_id=user_id,
                 )
         except Exception as e:
             errors.append(f"gcal/{summary}: {e}")
@@ -372,7 +375,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
 
 # ── iCloud Mail ───────────────────────────────────────────────────────────────
 
-async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _imap_connect, _imap_body
     cfg = _get_icloud_cfg(db)
     if not cfg:
@@ -449,7 +452,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     for i, item in enumerate(pending):
         update_progress("targeted_icloud_mail", i, len(pending), f"iCloud Mail {i+1}/{len(pending)}")
         try:
-            ok = await process_item(db, "icloud_mail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict])
+            ok = await process_item(db, "icloud_mail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict], user_id=user_id)
             if ok:
                 created += 1
             else:
@@ -466,7 +469,7 @@ _vobj_str = vobj_str  # lokaler Alias, historisch unter diesem Namen hier verwen
 
 # ── iCloud Calendar ───────────────────────────────────────────────────────────
 
-async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, CALDAV_URL
     cfg = _get_icloud_cfg(db)
     if not cfg:
@@ -604,8 +607,9 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
                 notiz=notiz,
                 source="icloud_cal",
                 external_id=uid,
+                user_id=user_id,
             ))
-            mark_synced(db, "icloud_cal", uid)
+            mark_synced(db, "icloud_cal", uid, user_id)
             created += 1
             # Auto-create contacts from calendar participants
             event_date = date_hint.date() if date_hint else None
@@ -616,6 +620,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
                     firma=app_dict.get("firma", ""),
                     is_headhunter=app_dict.get("is_headhunter", False),
                     event_date=event_date,
+                    user_id=user_id,
                 )
             continue
         except Exception as e:
@@ -627,7 +632,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
 
 # ── iCloud Notes ──────────────────────────────────────────────────────────────
 
-async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.agent_client import agent_get
 
     pfx = f"[SYNC #{app.id} icloud_notes]"
@@ -673,7 +678,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
         log.debug("{} {} TITLE:{!r} → pending", pfx, note_key, title)
         raw = f"Titel: {title}\n\n{body[:2000]}"
         try:
-            ok = await process_item_for_app(db, "icloud_notes", note_key, raw, date_hint, app_dict)
+            ok = await process_item_for_app(db, "icloud_notes", note_key, raw, date_hint, app_dict, user_id=user_id)
         except Exception as e:
             errors.append(f"note/{title}: {e}")
             continue
@@ -688,7 +693,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
 
 # ── iCloud Contacts ───────────────────────────────────────────────────────────
 
-async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, fetch_all_vcards
     cfg = _get_icloud_cfg(db)
     if not cfg:
@@ -773,6 +778,7 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 contact = models.Contact(
                     name=name, email=email_val, telefon=tel_val,
                     firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
+                    user_id=user_id,
                 )
                 db.add(contact)
                 db.flush()
@@ -811,7 +817,7 @@ def _contact_mentioned_in_app(name: str, email: Optional[str], app: models.Appli
 
 # ── iCloud Reminders ─────────────────────────────────────────────────────────
 
-async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session) -> tuple[int, int, list[str]]:
+async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, CALDAV_URL
     pfx = f"[SYNC #{app.id} icloud_todo]"
     cfg = _get_icloud_cfg(db)
@@ -881,7 +887,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
         log.debug("{} {} SUMMARY:{!r} → pending", pfx, uid[:16], summary)
         raw = f"Erinnerung: {summary}\n{desc[:800]}"
         try:
-            ok = await process_item_for_app(db, "icloud_todo", uid, raw, date_hint, app_dict)
+            ok = await process_item_for_app(db, "icloud_todo", uid, raw, date_hint, app_dict, user_id=user_id)
         except Exception as e:
             errors.append(f"reminder/{summary}: {e}")
             continue
@@ -896,7 +902,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
 
 # ── Calls ─────────────────────────────────────────────────────────────────────
 
-async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Session) -> tuple[int, int, list[str]]:
+async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
     from app.agent_client import agent_get
 
     created = skipped = 0
@@ -983,8 +989,9 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
             titel=titel,
             notiz=notiz or None,
             source="icloud_calls",
+            user_id=user_id,
         ))
-        mark_synced(db, "icloud_calls", call_key)
+        mark_synced(db, "icloud_calls", call_key, user_id)
         created += 1
 
     return created, len(calls), errors
@@ -998,21 +1005,28 @@ _task_results: dict[str, dict] = {}  # str(app_id) -> result dict
 # ── Reset endpoint ────────────────────────────────────────────────────────────
 
 @router.post("/{app_id}/reset", status_code=200)
-def reset_targeted_sync(app_id: int, db: Session = Depends(get_db)):
-    app = db.query(models.Application).get(app_id)
+def reset_targeted_sync(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    app = db.query(models.Application).filter_by(id=app_id, user_id=current_user.id).first()
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
 
+    # Bulk .delete() umgeht den zentralen Mandanten-Filter — daher explizit gefiltert.
     deleted_events = db.query(models.Event).filter(
         models.Event.application_id == app_id,
         models.Event.source.isnot(None),
+        models.Event.user_id == current_user.id,
     ).delete()
 
-    # Clear ALL source synced_items so everything gets re-evaluated from scratch
+    # Clear ALL source synced_items (für dieses Konto) so everything gets re-evaluated from scratch
     deleted_items = db.query(models.SyncedItem).filter(
         models.SyncedItem.source.in_(
             ["gmail", "gcal", "icloud_mail", "icloud_cal", "icloud_notes", "icloud_todo", "icloud_calls"]
-        )
+        ),
+        models.SyncedItem.user_id == current_user.id,
     ).delete()
 
     db.commit()
@@ -1028,6 +1042,9 @@ async def _do_sync(app_id: int) -> dict:
         app = db.query(models.Application).get(app_id)
         if not app:
             return {"created": 0, "processed": 0, "errors": [f"App {app_id} nicht gefunden"]}
+        user_id = app.user_id
+        if user_id is not None:
+            set_session_user(db, user_id)
 
         terms = _search_terms(app, db)
         app_dict = _app_dict(app)
@@ -1054,7 +1071,7 @@ async def _do_sync(app_id: int) -> dict:
 
         async def _run_source(label: str, prog_key: str, fn) -> tuple[int, int, list[str]]:
             try:
-                c, p, errs = await fn(app, app_dict, terms, db)
+                c, p, errs = await fn(app, app_dict, terms, db, user_id)
                 finish_progress(prog_key)
                 return c, p, errs
             except Exception as e:
@@ -1080,7 +1097,7 @@ async def _do_sync(app_id: int) -> dict:
         try:
             # Refresh app so SQLAlchemy sees the newly committed events
             db.refresh(app)
-            c, p, errs = await _sync_contacts_for_app(app, terms, db)
+            c, p, errs = await _sync_contacts_for_app(app, terms, db, user_id)
             total_created += c
             total_processed += p
             all_errors.extend(errs)
@@ -1092,7 +1109,7 @@ async def _do_sync(app_id: int) -> dict:
         # 3. Calls (no AI)
         init_progress("targeted_calls", "Anrufliste", "Starte…")
         try:
-            c, p, errs = await _sync_calls_for_app(app, app_dict, db)
+            c, p, errs = await _sync_calls_for_app(app, app_dict, db, user_id)
             total_created += c
             total_processed += p
             all_errors.extend(errs)
@@ -1134,8 +1151,13 @@ async def _do_sync(app_id: int) -> dict:
 
 
 @router.post("/{app_id}", response_model=schemas.SyncResult)
-async def sync_for_app(app_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    app = db.query(models.Application).get(app_id)
+async def sync_for_app(
+    app_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    app = db.query(models.Application).filter_by(id=app_id, user_id=current_user.id).first()
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
     if not _search_terms(app, db):
@@ -1158,7 +1180,18 @@ async def sync_for_app(app_id: int, background_tasks: BackgroundTasks, db: Sessi
 
 
 @router.get("/{app_id}/result")
-def get_result(app_id: int):
+def get_result(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # _task_results ist ein prozessweiter In-Memory-Store ohne eigene
+    # Mandanten-Trennung — Ownership hier explizit über die Application prüfen,
+    # bevor Sync-Ergebnisse (können Fehlermeldungen mit Inhalten enthalten)
+    # herausgegeben werden.
+    app = db.query(models.Application).filter_by(id=app_id, user_id=current_user.id).first()
+    if not app:
+        raise HTTPException(404, "Bewerbung nicht gefunden.")
     return _task_results.get(str(app_id)) or {"done": False}
 
 
@@ -1166,7 +1199,12 @@ _SYNC_SOURCES = {"gmail", "gcal", "icloud_mail", "icloud_cal", "icloud_notes", "
 
 
 @router.get("/{app_id}/candidates")
-def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
+def list_candidates(
+    app_id: int,
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Return items that could be manually assigned to this application.
 
     Two pools:
@@ -1175,7 +1213,7 @@ def list_candidates(app_id: int, q: str = "", db: Session = Depends(get_db)):
        (can be re-assigned here)
     Both pools are filtered by the query string (or app search terms if no query).
     """
-    app = db.query(models.Application).get(app_id)
+    app = db.query(models.Application).filter_by(id=app_id, user_id=current_user.id).first()
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
 
@@ -1556,14 +1594,19 @@ class ManualAssignPayload(BaseModel):
 
 
 @router.post("/{app_id}/assign")
-def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(get_db)):
+def manual_assign(
+    app_id: int,
+    body: ManualAssignPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Manually assign a PendingMatch or existing Event to an application.
 
     Positive match_id → PendingMatch row.
     Negative match_id → abs(match_id) is an Event.id from another application
     (returned by list_candidates when the item is already in Pool 2).
     """
-    app = db.query(models.Application).get(app_id)
+    app = db.query(models.Application).filter_by(id=app_id, user_id=current_user.id).first()
     if not app:
         raise HTTPException(404, "Bewerbung nicht gefunden.")
 
@@ -1719,9 +1762,10 @@ def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(
             notiz=body_text,
             source=src,
             external_id=ext_id,
+            user_id=current_user.id,
         )
         db.add(ev)
-        mark_synced(db, src, ext_id)
+        mark_synced(db, src, ext_id, current_user.id)
         db.commit()
         db.refresh(ev)
         return {"conflict": False, "event_id": ev.id}
@@ -1803,6 +1847,7 @@ def manual_assign(app_id: int, body: ManualAssignPayload, db: Session = Depends(
         notiz=pm.extract,
         source=pm.source,
         external_id=ext_id,
+        user_id=current_user.id,
     )
     db.add(ev)
     pm.review_status = "approved"

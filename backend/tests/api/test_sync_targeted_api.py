@@ -19,7 +19,7 @@ class TestResetTargetedSync:
         app = application_factory(db_session)
         event_factory(db_session, app, source="gmail")
         event_factory(db_session, app, source=None, typ="notiz")  # manuell, hat keine source
-        db_session.add(models.SyncedItem(source="gmail", external_id="msg-1"))
+        db_session.add(models.SyncedItem(source="gmail", external_id="msg-1", user_id=1))
         db_session.commit()
 
         resp = client.post(f"/api/sync/targeted/{app.id}/reset")
@@ -46,10 +46,15 @@ class TestSyncForAppValidation:
 
 
 class TestGetResult:
-    def test_negativ_ohne_vorherigen_sync_liefert_done_false(self, client):
-        resp = client.get("/api/sync/targeted/999999/result")
+    def test_negativ_ohne_vorherigen_sync_liefert_done_false(self, client, db_session):
+        app = application_factory(db_session)
+        resp = client.get(f"/api/sync/targeted/{app.id}/result")
         assert resp.status_code == 200
         assert resp.json() == {"done": False}
+
+    def test_negativ_unbekannte_bewerbung_liefert_404(self, client):
+        resp = client.get("/api/sync/targeted/999999/result")
+        assert resp.status_code == 404
 
 
 class TestListCandidates:
@@ -61,11 +66,11 @@ class TestListCandidates:
         app = application_factory(db_session, firma="Contoso AG")
         db_session.add(models.PendingMatch(
             source="gmail", external_id="msg-1", confidence=70, titel="Interview bei Contoso",
-            extract="Wir laden Sie ein", datum=date.today(), review_status="pending",
+            extract="Wir laden Sie ein", datum=date.today(), review_status="pending", user_id=1,
         ))
         db_session.add(models.PendingMatch(
             source="gmail", external_id="msg-2", confidence=70, titel="Newsletter",
-            extract="Irrelevant", datum=date.today(), review_status="pending",
+            extract="Irrelevant", datum=date.today(), review_status="pending", user_id=1,
         ))
         db_session.commit()
 
