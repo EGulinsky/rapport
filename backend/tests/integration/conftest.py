@@ -93,6 +93,7 @@ def google_sync(db_session):
         access_token_enc=encrypt_api_key("test-access-token"),
         refresh_token_enc=encrypt_api_key("test-refresh-token"),
         token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        user_id=1,
     )
     db_session.add(cfg)
     db_session.commit()

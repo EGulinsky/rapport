@@ -224,6 +224,7 @@ def _upsert_contact(
     is_headhunter: bool,
     event_date=None,
     extra: dict | None = None,
+    user_id: Optional[int] = None,
 ) -> None:
     """Create contact if not existing, always ensure link to application.
 
@@ -293,6 +294,7 @@ def _upsert_contact(
         letzter_kontakt=event_date,
         telefon=extra.get('telefon') or None,
         rolle=extra.get('rolle') or None,
+        user_id=user_id,
     )
     db.add(contact)
     db.flush()  # get contact.id
@@ -307,11 +309,12 @@ def upsert_contact_from_sender(
     is_headhunter: bool,
     event_date=None,
     body: str = "",
+    user_id: Optional[int] = None,
 ) -> None:
     """Parse 'Display Name <email@host>', extract footer info, and upsert contact."""
     name, addr = parseaddr(raw_sender or "")
     extra = _extract_footer_info(body, name) if body else {}
-    _upsert_contact(db, name, addr, app_id, firma, is_headhunter, event_date, extra)
+    _upsert_contact(db, name, addr, app_id, firma, is_headhunter, event_date, extra, user_id=user_id)
 
 
 # ── In-memory progress tracking ───────────────────────────────────────────────
@@ -781,18 +784,19 @@ def _save_deterministic_event(
     det: dict,
     raw_text: str,
     date_hint: Optional[datetime],
+    user_id: Optional[int] = None,
 ) -> bool:
     """Persist a deterministically classified event. Returns True if event was created."""
     app = db.query(models.Application).get(det['app_id'])
     if not app:
-        mark_synced(db, source, external_id)
+        mark_synced(db, source, external_id, user_id)
         return False
 
     datum = date_hint.date() if date_hint else None
     pfx = f"[SYNC #{det['app_id']} {source}]"
     if _predates_bewerbung(datum, app):
         log.debug("{} {} → SKIP zu alt ({}  <  Bewerbungsdatum {})", pfx, external_id[:20], datum, app.datum_bewerbung)
-        mark_synced(db, source, external_id)
+        mark_synced(db, source, external_id, user_id)
         return False
 
     # Time prefix only for mail/note events, not calendar or files
@@ -815,8 +819,9 @@ def _save_deterministic_event(
         notiz=notiz or None,
         source=source,
         external_id=external_id,
+        user_id=user_id,
     ))
-    mark_synced(db, source, external_id)
+    mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender (mail events only)
     if source in ('gmail', 'icloud_mail'):
@@ -831,6 +836,7 @@ def _save_deterministic_event(
                         is_headhunter=app.is_headhunter,
                         event_date=datum,
                         body=raw_text,
+                        user_id=user_id,
                     )
                 break
 
@@ -856,6 +862,7 @@ def _save_deterministic_event(
                 suggested_app_id=det['app_id'],
                 suggested_main_status=status,
                 status_only=True,
+                user_id=user_id,
             ))
 
     return True
@@ -882,20 +889,21 @@ async def process_item(
     raw_text: str,
     date_hint: Optional[datetime] = None,
     hint_apps: Optional[list[dict]] = None,
+    user_id: Optional[int] = None,
 ) -> bool:
     """Classify and persist event using deterministic rules. No AI."""
     if is_synced(db, source, external_id):
         return False
 
     if not hint_apps:
-        mark_synced(db, source, external_id)
+        mark_synced(db, source, external_id, user_id)
         return False
 
     det = _classify_deterministic(source, raw_text, date_hint, hint_apps)
     if det is not None:
-        return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint)
+        return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint, user_id)
 
-    mark_synced(db, source, external_id)
+    mark_synced(db, source, external_id, user_id)
     return False
 
 
@@ -908,11 +916,12 @@ def save_classified_event(
     date_hint: Optional[datetime],
     target_app: dict,
     extra_notiz: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> bool:
     """Persist a pre-classified result as an event. Returns True if event was created."""
     confidence = float(result.get("confidence") or 0)
     if not result.get("relevant", True) or confidence < 0.55:
-        mark_synced(db, source, external_id)
+        mark_synced(db, source, external_id, user_id)
         return False
 
     autor = None
@@ -948,7 +957,7 @@ def save_classified_event(
 
     app_obj = db.query(models.Application).get(target_app["id"])
     if app_obj and _predates_bewerbung(datum, app_obj):
-        mark_synced(db, source, external_id)
+        mark_synced(db, source, external_id, user_id)
         return False
     db.add(models.Event(
         application_id=target_app["id"],
@@ -959,8 +968,9 @@ def save_classified_event(
         autor=autor,
         source=source,
         external_id=external_id,
+        user_id=user_id,
     ))
-    mark_synced(db, source, external_id)
+    mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender, extract phone/role from mail footer
     if autor:
@@ -971,6 +981,7 @@ def save_classified_event(
             is_headhunter=target_app.get("is_headhunter", False),
             event_date=datum,
             body=raw_text,
+            user_id=user_id,
         )
 
     # Queue status change for user review (never apply automatically)
@@ -998,6 +1009,7 @@ def save_classified_event(
                 suggested_main_status=new_main,
                 suggested_sub_status=result.get("suggested_sub_status"),
                 status_only=True,
+                user_id=user_id,
             ))
 
     return True
@@ -1010,6 +1022,7 @@ async def process_item_for_app(
     raw_text: str,
     date_hint: Optional[datetime],
     target_app: dict,
+    user_id: Optional[int] = None,
 ) -> bool:
     """Like process_item but scoped to a single known application. No AI."""
-    return await process_item(db, source, external_id, raw_text, date_hint, hint_apps=[target_app])
+    return await process_item(db, source, external_id, raw_text, date_hint, hint_apps=[target_app], user_id=user_id)

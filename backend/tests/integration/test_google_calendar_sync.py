@@ -34,7 +34,7 @@ def _cal_event(event_id: str, summary: str, organizer_email: str, days_from_now:
 class TestDoGcalNichtVerbunden:
     async def test_negativ_keine_google_konfiguration_liefert_klaren_fehler(self, db_session):
         # Bewusst kein google_sync-Fixture — es existiert keine GoogleSync-Zeile.
-        result = await _do_gcal()
+        result = await _do_gcal(1)
 
         assert result["errors"] == ["Nicht mit Google verbunden."]
         assert result["created"] == 0
@@ -43,7 +43,7 @@ class TestDoGcalNichtVerbunden:
         db_session.add(models.GoogleSync(client_id="x", client_secret_enc="y", refresh_token_enc=None))
         db_session.commit()
 
-        result = await _do_gcal()
+        result = await _do_gcal(1)
 
         assert result["errors"] == ["Nicht mit Google verbunden."]
 
@@ -59,7 +59,7 @@ class TestDoGcalNeueTermine:
 
         fake_google_calendar([_cal_event("evt-1", "Interview Runde 1", "recruiterin@contoso.com")])
 
-        result = await _do_gcal()
+        result = await _do_gcal(1)
 
         assert result["errors"] == []
         assert result["created"] == 1
@@ -73,7 +73,7 @@ class TestDoGcalNeueTermine:
         db_session.commit()  # _do_gcal() öffnet eine eigene Session — ohne Commit blockiert SQLite bis busy_timeout
         fake_google_calendar([_cal_event("evt-2", "Zahnarzttermin", "praxis@unbekannt.de")])
 
-        result = await _do_gcal()
+        result = await _do_gcal(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -89,7 +89,7 @@ class TestDoGcalNeueTermine:
 
         service.execute = _raise
 
-        result = await _do_gcal()
+        result = await _do_gcal(1)
 
         assert result["created"] == 0
         assert any("Calendar API Fehler" in e for e in result["errors"])
@@ -102,15 +102,15 @@ class TestDoGcalAenderungserkennungUndVerwaisteTermine:
         app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
         existing = models.Event(
             application_id=app.id, typ="gespräch", titel="Altes Thema",
-            datum=date.today(), source="gcal", external_id="evt-3",
+            datum=date.today(), source="gcal", external_id="evt-3", user_id=1,
         )
         db_session.add(existing)
-        db_session.add(models.SyncedItem(source="gcal", external_id="evt-3"))
+        db_session.add(models.SyncedItem(source="gcal", external_id="evt-3", user_id=1))
         db_session.commit()
 
         fake_google_calendar([_cal_event("evt-3", "Neues Thema (verschoben)", "irrelevant@x.de")])
 
-        result = await _do_gcal()
+        result = await _do_gcal(1)
 
         assert result["skipped"] == 1  # bereits synced, aber Titel wird trotzdem aktualisiert
         db_session.refresh(existing)
@@ -124,17 +124,17 @@ class TestDoGcalAenderungserkennungUndVerwaisteTermine:
         app.contacts.append(contact)
         orphan = models.Event(
             application_id=app.id, typ="gespräch", titel="Abgesagter Termin",
-            datum=date.today(), source="gcal", external_id="evt-orphan",
+            datum=date.today(), source="gcal", external_id="evt-orphan", user_id=1,
         )
         db_session.add(orphan)
-        db_session.add(models.SyncedItem(source="gcal", external_id="evt-orphan"))
+        db_session.add(models.SyncedItem(source="gcal", external_id="evt-orphan", user_id=1))
         db_session.commit()
 
         # Aktueller Kalenderabruf enthält "evt-orphan" nicht mehr (z.B. gelöscht/verschoben) —
         # uid_set ist trotzdem nicht leer, da ein anderer Termin zurückkommt.
         fake_google_calendar([_cal_event("evt-1", "Interview Runde 1", "recruiterin@contoso.com")])
 
-        await _do_gcal()
+        await _do_gcal(1)
 
         assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is None
         assert db_session.query(models.SyncedItem).filter_by(source="gcal", external_id="evt-orphan").first() is None

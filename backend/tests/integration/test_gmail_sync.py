@@ -26,7 +26,7 @@ def _now_rfc2822() -> str:
 class TestDoGmailNichtVerbunden:
     async def test_negativ_keine_google_konfiguration_liefert_klaren_fehler(self, db_session):
         # Bewusst kein google_sync-Fixture — es existiert keine GoogleSync-Zeile.
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["errors"] == ["Nicht mit Google verbunden."]
         assert result["created"] == 0
@@ -35,7 +35,7 @@ class TestDoGmailNichtVerbunden:
         db_session.add(models.GoogleSync(client_id="x", client_secret_enc="y", refresh_token_enc=None))
         db_session.commit()
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["errors"] == ["Nicht mit Google verbunden."]
 
@@ -55,7 +55,7 @@ class TestDoGmailNeueNachrichten:
         )
         fake_gmail([{"messages": [{"id": "msg-1"}]}], metadata={"msg-1": meta}, full={"msg-1": full})
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["errors"] == []
         assert result["created"] == 1
@@ -78,7 +78,7 @@ class TestDoGmailNeueNachrichten:
         )
         fake_gmail([{"messages": [{"id": "msg-2"}]}], metadata={"msg-2": meta}, full={"msg-2": full})
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["created"] == 1
         event = db_session.query(models.Event).filter_by(source="gmail", external_id="msg-2").one()
@@ -98,7 +98,7 @@ class TestDoGmailNeueNachrichten:
         )
         fake_gmail([{"messages": [{"id": "msg-3"}]}], metadata={"msg-3": meta}, full={"msg-3": full})
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -117,7 +117,7 @@ class TestDoGmailNeueNachrichten:
         )
         fake_gmail([{"messages": [{"id": "msg-4"}]}], metadata={"msg-4": meta}, full={"msg-4": full})
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -143,7 +143,7 @@ class TestDoGmailPaginationUndFehler:
             full={"msg-p1": full1, "msg-p2": full2},
         )
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["created"] == 2
         assert len(service.list_calls) == 2
@@ -158,7 +158,7 @@ class TestDoGmailPaginationUndFehler:
 
         service.execute = _raise
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["created"] == 0
         assert any("Gmail API Fehler" in e for e in result["errors"])
@@ -179,7 +179,7 @@ class TestDoGmailPaginationUndFehler:
             batch_errors={"msg-fail": RuntimeError("boom")},
         )
 
-        result = await _do_gmail()
+        result = await _do_gmail(1)
 
         assert result["created"] == 1
         assert any("msg-fail" in e for e in result["errors"])
