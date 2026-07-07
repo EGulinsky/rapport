@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, DATABASE_URL
 from app import models
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 
@@ -34,6 +35,7 @@ def store_attachment(
     event_id: int,
     filename: str,
     data: bytes,
+    user_id: int,
     source: str = "manual",
     external_id: Optional[str] = None,
     content_type: Optional[str] = None,
@@ -44,7 +46,7 @@ def store_attachment(
     if size > MAX_INLINE_BYTES:
         # Create PendingMatch instead
         from datetime import date as _date
-        ev = db.query(models.Event).get(event_id)
+        ev = db.query(models.Event).filter_by(id=event_id, user_id=user_id).first()
         app_id = ev.application_id if ev else None
         db.add(models.PendingMatch(
             source="attachment",
@@ -55,6 +57,7 @@ def store_attachment(
             titel=f"Großer Anhang: {filename}",
             extract=f"Datei {filename} ({size / 1024 / 1024:.1f} MB) ist zu groß für automatische Speicherung.",
             suggested_app_id=app_id,
+            user_id=user_id,
         ))
         raise ValueError(f"Datei {filename} ist größer als 100 MB und wurde zur manuellen Prüfung weitergeleitet.")
 
@@ -87,14 +90,19 @@ def store_attachment(
         storage_path=rel_path,
         source=source,
         external_id=external_id,
+        user_id=user_id,
     )
     db.add(attachment)
     return attachment
 
 
 @router.get("/{attachment_id}/download")
-def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    att = db.query(models.Attachment).get(attachment_id)
+def download_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    att = db.query(models.Attachment).filter_by(id=attachment_id, user_id=current_user.id).first()
     if not att:
         raise HTTPException(404, "Anhang nicht gefunden.")
     full_path = os.path.join(ATTACHMENTS_ROOT, att.storage_path)
@@ -108,15 +116,23 @@ def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{event_id}/upload", status_code=201)
-async def upload_attachment(event_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    ev = db.query(models.Event).get(event_id)
+async def upload_attachment(
+    event_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    ev = db.query(models.Event).filter_by(id=event_id, user_id=current_user.id).first()
     if not ev:
         raise HTTPException(404, "Timeline-Eintrag nicht gefunden.")
 
     data = await file.read()
     filename = file.filename or "attachment"
     try:
-        att = store_attachment(db, event_id, filename, data, source="manual", content_type=file.content_type)
+        att = store_attachment(
+            db, event_id, filename, data, user_id=current_user.id,
+            source="manual", content_type=file.content_type,
+        )
         db.commit()
         db.refresh(att)
     except ValueError as e:
@@ -132,8 +148,12 @@ async def upload_attachment(event_id: int, file: UploadFile = File(...), db: Ses
 
 
 @router.delete("/{attachment_id}", status_code=204)
-def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    att = db.query(models.Attachment).get(attachment_id)
+def delete_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    att = db.query(models.Attachment).filter_by(id=attachment_id, user_id=current_user.id).first()
     if not att:
         raise HTTPException(404, "Anhang nicht gefunden.")
     full_path = os.path.join(ATTACHMENTS_ROOT, att.storage_path)

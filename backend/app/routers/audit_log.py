@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
@@ -14,6 +15,7 @@ def list_audit(
     app_id: Optional[int] = Query(None),
     limit: int = Query(200, le=1000),
     offset: int = Query(0),
+    current_user: models.User = Depends(get_current_user),
 ):
     q = db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc())
     if app_id is not None:
@@ -42,7 +44,7 @@ def list_audit(
 
 
 @router.delete("/")
-def clear_audit(db: Session = Depends(get_db)):
-    deleted = db.query(models.AuditLog).delete()
+def clear_audit(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    deleted = db.query(models.AuditLog).filter(models.AuditLog.user_id == current_user.id).delete()
     db.commit()
     return {"deleted": deleted}

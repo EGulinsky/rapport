@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.database import get_db
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -30,6 +31,7 @@ def get_calendar_events(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     q = (
         db.query(models.Event, models.Application)
