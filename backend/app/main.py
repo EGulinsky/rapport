@@ -99,7 +99,7 @@ async def _background_sync_loop():
                 if not sync_cfg or sync_cfg.icloud_calls_enabled:
                     tasks.append(_run_source("icloud_calls", _do_icloud_calls))
             if not sync_cfg or sync_cfg.files_enabled:
-                tasks.append(_run_source("local_files", _do_local_files))
+                tasks.append(_run_source("local_files", lambda: _do_local_files(user_id)))
 
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)

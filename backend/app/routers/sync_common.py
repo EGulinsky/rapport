@@ -396,15 +396,23 @@ def is_synced(db: Session, source: str, external_id: str) -> bool:
     ).first() is not None
 
 
-def mark_synced(db: Session, source: str, external_id: str) -> None:
-    db.add(models.SyncedItem(source=source, external_id=external_id))
+def mark_synced(db: Session, source: str, external_id: str, user_id: Optional[int] = None) -> None:
+    db.add(models.SyncedItem(source=source, external_id=external_id, user_id=user_id))
 
 
-def purge_source(db: Session, source: str) -> None:
+def purge_source(db: Session, source: str, user_id: Optional[int] = None) -> None:
     """Clear SyncedItem records so items get reprocessed on next sync.
     Events are intentionally kept — deleting them causes permanent data loss
-    when the re-sync window doesn't cover all previously-synced items."""
-    db.query(models.SyncedItem).filter_by(source=source).delete()
+    when the re-sync window doesn't cover all previously-synced items.
+
+    user_id: bulk .delete() umgeht (wie jedes Query.delete()) den zentralen
+    Mandanten-Filter — daher hier optional explizit gefiltert. None (noch
+    nicht auf Mandantentrennung umgestellte Aufrufer) erhält das bisherige,
+    ungescopte Verhalten."""
+    q = db.query(models.SyncedItem).filter_by(source=source)
+    if user_id is not None:
+        q = q.filter_by(user_id=user_id)
+    q.delete()
 
 
 # ── Text helpers ──────────────────────────────────────────────────────────────
