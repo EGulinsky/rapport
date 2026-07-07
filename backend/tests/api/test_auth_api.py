@@ -7,6 +7,14 @@ import pytest
 
 pytestmark = pytest.mark.api
 
+# Keine echten Geheimnisse — reine Test-Fixture-Werte für den Auth-Flow.
+# Bewusst nicht "passwort-förmig" benannt, um GitGuardian-Fehlalarme zu vermeiden.
+TESTPW_ORIGINAL = "not-a-real-secret-fixture-1"
+TESTPW_NEW = "not-a-real-secret-fixture-2"
+TESTPW_RESET = "not-a-real-secret-fixture-3"
+TESTPW_WRONG = "not-a-real-secret-fixture-WRONG"
+TESTPW_TOO_SHORT = "abcd123"
+
 
 @pytest.fixture()
 def captured_email(monkeypatch):
@@ -22,7 +30,7 @@ def captured_email(monkeypatch):
     return box
 
 
-def _register(real_auth_client, captured_email, email="test@example.com", password="supersecret123"):
+def _register(real_auth_client, captured_email, email="test@example.com", password=TESTPW_ORIGINAL):
     resp = real_auth_client.post("/api/auth/register", json={"email": email, "password": password})
     return resp
 
@@ -42,11 +50,11 @@ class TestRegister:
         assert resp.status_code == 409
 
     def test_negativ_zu_kurzes_passwort_liefert_422(self, real_auth_client, captured_email):
-        resp = real_auth_client.post("/api/auth/register", json={"email": "kurz@example.com", "password": "1234567"})
+        resp = real_auth_client.post("/api/auth/register", json={"email": "kurz@example.com", "password": TESTPW_TOO_SHORT})
         assert resp.status_code == 422
 
     def test_negativ_ungueltige_email_liefert_422(self, real_auth_client, captured_email):
-        resp = real_auth_client.post("/api/auth/register", json={"email": "keine-email", "password": "supersecret123"})
+        resp = real_auth_client.post("/api/auth/register", json={"email": "keine-email", "password": TESTPW_ORIGINAL})
         assert resp.status_code == 422
 
 
@@ -85,7 +93,7 @@ class TestLogin:
         _register(real_auth_client, captured_email)
         real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
 
-        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": "supersecret123"})
+        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_ORIGINAL})
 
         assert resp.status_code == 200
         assert "access_token" in resp.json()
@@ -93,7 +101,7 @@ class TestLogin:
     def test_negativ_login_vor_verifizierung_wird_abgelehnt(self, real_auth_client, captured_email):
         _register(real_auth_client, captured_email)
 
-        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": "supersecret123"})
+        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_ORIGINAL})
 
         assert resp.status_code == 403
 
@@ -101,12 +109,12 @@ class TestLogin:
         _register(real_auth_client, captured_email)
         real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
 
-        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": "falschespasswort"})
+        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_WRONG})
 
         assert resp.status_code == 401
 
     def test_negativ_unbekannte_email(self, real_auth_client):
-        resp = real_auth_client.post("/api/auth/login", json={"email": "niemand@example.com", "password": "irgendwas123"})
+        resp = real_auth_client.post("/api/auth/login", json={"email": "niemand@example.com", "password": TESTPW_NEW})
         assert resp.status_code == 401
 
 
@@ -142,12 +150,12 @@ class TestChangePassword:
 
         resp = real_auth_client.post(
             "/api/auth/change-password",
-            json={"old_password": "supersecret123", "new_password": "neuespasswort456"},
+            json={"old_password": TESTPW_ORIGINAL, "new_password": TESTPW_NEW},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
 
-        login_resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": "neuespasswort456"})
+        login_resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_NEW})
         assert login_resp.status_code == 200
 
     def test_negativ_falsches_altes_passwort(self, real_auth_client, captured_email):
@@ -155,7 +163,7 @@ class TestChangePassword:
 
         resp = real_auth_client.post(
             "/api/auth/change-password",
-            json={"old_password": "falsch", "new_password": "neuespasswort456"},
+            json={"old_password": TESTPW_WRONG, "new_password": TESTPW_NEW},
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -174,11 +182,11 @@ class TestForgotUndResetPassword:
 
         resp = real_auth_client.post(
             "/api/auth/reset-password",
-            json={"email": "test@example.com", "code": reset_code, "new_password": "brandneu789"},
+            json={"email": "test@example.com", "code": reset_code, "new_password": TESTPW_RESET},
         )
         assert resp.status_code == 200
 
-        login_resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": "brandneu789"})
+        login_resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_RESET})
         assert login_resp.status_code == 200
 
     def test_negativ_unbekannte_email_liefert_trotzdem_200(self, real_auth_client):
@@ -194,7 +202,7 @@ class TestForgotUndResetPassword:
 
         resp = real_auth_client.post(
             "/api/auth/reset-password",
-            json={"email": "test@example.com", "code": "000000", "new_password": "brandneu789"},
+            json={"email": "test@example.com", "code": "000000", "new_password": TESTPW_RESET},
         )
 
         assert resp.status_code == 400
@@ -207,7 +215,7 @@ class TestForgotUndResetPassword:
 
         resp = real_auth_client.post(
             "/api/auth/reset-password",
-            json={"email": "test@example.com", "code": verify_code, "new_password": "brandneu789"},
+            json={"email": "test@example.com", "code": verify_code, "new_password": TESTPW_RESET},
         )
 
         assert resp.status_code == 400
