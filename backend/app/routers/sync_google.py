@@ -17,9 +17,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
+from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
     is_synced, mark_synced, load_synced_ids, purge_source,
     strip_html, decode_b64,
@@ -116,7 +117,7 @@ def _gmail_body(payload: dict) -> str:
 # ── OAuth endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/status", response_model=schemas.GoogleSyncStatus)
-def google_status(db: Session = Depends(get_db)):
+def google_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg:
         return schemas.GoogleSyncStatus(connected=False)
@@ -129,12 +130,17 @@ def google_status(db: Session = Depends(get_db)):
 
 
 @router.post("/credentials", response_model=schemas.GoogleSyncStatus)
-def save_credentials(payload: schemas.GoogleCredentials, db: Session = Depends(get_db)):
+def save_credentials(
+    payload: schemas.GoogleCredentials,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg:
         cfg = models.GoogleSync(
             client_id=payload.client_id,
             client_secret_enc=encrypt_api_key(payload.client_secret),
+            user_id=current_user.id,
         )
         db.add(cfg)
     else:
@@ -149,7 +155,7 @@ def save_credentials(payload: schemas.GoogleCredentials, db: Session = Depends(g
 
 
 @router.get("/auth")
-def google_auth_url(db: Session = Depends(get_db)):
+def google_auth_url(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Erst Google-Credentials speichern.")
@@ -180,6 +186,14 @@ def google_auth_url(db: Session = Depends(get_db)):
 
 @router.get("/callback", response_class=HTMLResponse)
 def google_callback(code: str, state: str = "", db: Session = Depends(get_db)):
+    # Bewusst OHNE current_user-Dependency: dies ist ein Redirect direkt von
+    # Googles OAuth-Server im Browser, kann also keinen Authorization-Header
+    # mitschicken. Wie beim Hintergrund-Sync-Loop pragmatisch auf das
+    # erste/einzige registrierte Konto gescoped.
+    from app.database import get_first_user_id
+    user_id = get_first_user_id(db)
+    if user_id is not None:
+        set_session_user(db, user_id)
     cfg = _get_cfg(db)
     if not cfg:
         return HTMLResponse("<p>Keine Konfiguration gefunden.</p>", status_code=400)
@@ -238,7 +252,7 @@ def google_callback(code: str, state: str = "", db: Session = Depends(get_db)):
 
 
 @router.delete("", status_code=204)
-def google_disconnect(db: Session = Depends(get_db)):
+def google_disconnect(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.access_token_enc  = None
@@ -250,20 +264,21 @@ def google_disconnect(db: Session = Depends(get_db)):
 # ── Gmail Sync ────────────────────────────────────────────────────────────────
 
 @router.get("/progress")
-def sync_progress_all():
+def sync_progress_all(current_user: models.User = Depends(get_current_user)):
     return get_all_progress()
 
 
 @router.get("/batch/results")
-def batch_results():
+def batch_results(current_user: models.User = Depends(get_current_user)):
     return get_batch_results()
 
 
 # ── Gmail background task ─────────────────────────────────────────────────────
 
-async def _do_gmail() -> dict:
+async def _do_gmail(user_id: int) -> dict:
     import time as _time
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
 
@@ -379,13 +394,13 @@ async def _do_gmail() -> dict:
                 pass
 
             if global_cutoff and date_hint and date_hint.date() < global_cutoff:
-                mark_synced(db, "gmail", msg_id)
+                mark_synced(db, "gmail", msg_id, user_id)
                 skipped += 1
                 continue
 
             hint_apps = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
             if not hint_apps:
-                mark_synced(db, "gmail", msg_id)
+                mark_synced(db, "gmail", msg_id, user_id)
                 skipped += 1
                 continue
 
@@ -430,7 +445,7 @@ async def _do_gmail() -> dict:
 
             _t0 = _time.perf_counter()
             try:
-                ok = await process_item(db, "gmail", msg_id, raw, date_hint, hint_apps=hint_apps)
+                ok = await process_item(db, "gmail", msg_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
                 finish_progress("gmail")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -479,16 +494,20 @@ async def _do_gmail() -> dict:
 
 
 @router.post("/gmail/reset", status_code=204)
-def reset_gmail_sync(db: Session = Depends(get_db)):
+def reset_gmail_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.gmail_last_sync = None
-        purge_source(db, "gmail")
+        purge_source(db, "gmail", current_user.id)
         db.commit()
 
 
 @router.post("/gmail", response_model=schemas.SyncResult)
-async def sync_gmail(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_gmail(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
         raise HTTPException(400, "Nicht mit Google verbunden.")
@@ -497,7 +516,7 @@ async def sync_gmail(background_tasks: BackgroundTasks, db: Session = Depends(ge
     init_progress("gmail", "Gmail", "Starte…")
 
     async def _bg():
-        result = await _do_gmail()
+        result = await _do_gmail(current_user.id)
         set_batch_result("gmail", {**result, "done": True})
         if p := result.get("perf"):
             print(
@@ -517,8 +536,9 @@ async def sync_gmail(background_tasks: BackgroundTasks, db: Session = Depends(ge
 
 # ── Google Calendar background task ──────────────────────────────────────────
 
-async def _do_gcal() -> dict:
+async def _do_gcal(user_id: int) -> dict:
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
@@ -617,7 +637,7 @@ async def _do_gcal() -> dict:
             )
 
             try:
-                ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps)
+                ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
                 finish_progress("gcal")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -651,7 +671,9 @@ async def _do_gcal() -> dict:
             deleted_count = 0
             for orphan in orphaned:
                 if orphan.external_id not in uid_set:
-                    db.query(models.SyncedItem).filter_by(source="gcal", external_id=orphan.external_id).delete()
+                    db.query(models.SyncedItem).filter_by(
+                        source="gcal", external_id=orphan.external_id, user_id=user_id
+                    ).delete()
                     db.delete(orphan)
                     deleted_count += 1
             if deleted_count:
@@ -669,16 +691,16 @@ async def _do_gcal() -> dict:
 
 
 @router.post("/calendar/reset", status_code=204)
-def reset_calendar_sync(db: Session = Depends(get_db)):
+def reset_calendar_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.gcal_last_sync = None
-        purge_source(db, "gcal")
+        purge_source(db, "gcal", current_user.id)
         db.commit()
 
 
 @router.get("/calendar/debug")
-def debug_gcal_events(db: Session = Depends(get_db)):
+def debug_gcal_events(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
         raise HTTPException(400, "Nicht mit Google verbunden.")
@@ -707,7 +729,11 @@ def debug_gcal_events(db: Session = Depends(get_db)):
 
 
 @router.post("/calendar", response_model=schemas.SyncResult)
-async def sync_calendar(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_calendar(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
         raise HTTPException(400, "Nicht mit Google verbunden.")
@@ -716,7 +742,7 @@ async def sync_calendar(background_tasks: BackgroundTasks, db: Session = Depends
     init_progress("gcal", "Google Calendar", "Starte…")
 
     async def _bg():
-        result = await _do_gcal()
+        result = await _do_gcal(current_user.id)
         set_batch_result("gcal", {**result, "done": True})
 
     background_tasks.add_task(_bg)

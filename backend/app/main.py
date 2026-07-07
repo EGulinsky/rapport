@@ -84,9 +84,9 @@ async def _background_sync_loop():
             tasks = []
             if google_on:
                 if not sync_cfg or sync_cfg.gmail_enabled:
-                    tasks.append(_run_source("gmail", _do_gmail))
+                    tasks.append(_run_source("gmail", lambda: _do_gmail(user_id)))
                 if not sync_cfg or sync_cfg.gcal_enabled:
-                    tasks.append(_run_source("gcal", _do_gcal))
+                    tasks.append(_run_source("gcal", lambda: _do_gcal(user_id)))
             if icloud_on:
                 if not sync_cfg or sync_cfg.icloud_mail_enabled:
                     tasks.append(_run_source("icloud_mail", _do_icloud_mail))
