@@ -494,6 +494,10 @@ export const api = {
       request<AuthTokenResponse>('/auth/verify-email', {
         method: 'POST', body: JSON.stringify({ email, code }),
       }),
+    resendCode: (email: string) =>
+      request<{ message: string }>('/auth/resend-code', {
+        method: 'POST', body: JSON.stringify({ email }),
+      }),
     login: (email: string, password: string) =>
       request<AuthTokenResponse>('/auth/login', {
         method: 'POST', body: JSON.stringify({ email, password }),
