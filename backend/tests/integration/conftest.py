@@ -257,6 +257,7 @@ def icloud_sync(db_session):
         apple_id="test@example.com",
         icloud_email="test@icloud.com",
         app_password_enc=encrypt_api_key("test-app-password"),
+        user_id=1,
     )
     db_session.add(cfg)
     db_session.commit()

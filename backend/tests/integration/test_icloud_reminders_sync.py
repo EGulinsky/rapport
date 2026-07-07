@@ -19,7 +19,7 @@ pytestmark = pytest.mark.integration
 
 class TestDoIcloudRemindersNichtVerbunden:
     async def test_negativ_keine_icloud_konfiguration_liefert_klaren_fehler(self, db_session):
-        result = await _do_icloud_reminders()
+        result = await _do_icloud_reminders(1)
         assert result["errors"] == ["Keine iCloud-Credentials gespeichert."]
         assert result["created"] == 0
 
@@ -31,7 +31,7 @@ class TestDoIcloudRemindersNeueErinnerungen:
         todo = icloud_reminder("todo-1", "Unterlagen für Contoso AG vorbereiten", due_dt=datetime.now(timezone.utc) + timedelta(days=1))
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
 
-        result = await _do_icloud_reminders()
+        result = await _do_icloud_reminders(1)
 
         assert result["errors"] == []
         assert result["created"] == 1
@@ -47,7 +47,7 @@ class TestDoIcloudRemindersNeueErinnerungen:
         todo = icloud_reminder("todo-2", "Milch kaufen")
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
 
-        result = await _do_icloud_reminders()
+        result = await _do_icloud_reminders(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -55,12 +55,12 @@ class TestDoIcloudRemindersNeueErinnerungen:
 
     async def test_negativ_bereits_synctes_liefert_skip_ohne_erneute_verarbeitung(self, db_session, icloud_sync, fake_caldav):
         application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
-        db_session.add(models.SyncedItem(source="icloud_todo", external_id="todo-3"))
+        db_session.add(models.SyncedItem(source="icloud_todo", external_id="todo-3", user_id=1))
         db_session.commit()
         todo = icloud_reminder("todo-3", "Unterlagen für Contoso AG vorbereiten")
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
 
-        result = await _do_icloud_reminders()
+        result = await _do_icloud_reminders(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -68,7 +68,7 @@ class TestDoIcloudRemindersNeueErinnerungen:
     async def test_negativ_caldav_verbindungsfehler_liefert_sauberen_fehler(self, db_session, icloud_sync, fake_caldav):
         fake_caldav(error=RuntimeError("401 Unauthorized"))
 
-        result = await _do_icloud_reminders()
+        result = await _do_icloud_reminders(1)
 
         assert result["created"] == 0
         assert any("CalDAV-Fehler" in e for e in result["errors"])

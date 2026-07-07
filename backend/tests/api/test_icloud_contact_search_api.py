@@ -29,7 +29,7 @@ def _vcard(fn: str, email: str | None = None, org: str | None = None, n: tuple[s
 
 
 def _icloud_cfg(db_session):
-    cfg = models.ICloudSync(apple_id="test@example.com", app_password_enc="x")
+    cfg = models.ICloudSync(apple_id="test@example.com", app_password_enc="x", user_id=1)
     db_session.add(cfg)
     db_session.commit()
     return cfg

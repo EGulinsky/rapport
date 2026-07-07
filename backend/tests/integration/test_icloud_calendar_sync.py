@@ -25,7 +25,7 @@ pytestmark = pytest.mark.integration
 
 class TestDoIcloudCalNichtVerbunden:
     async def test_negativ_keine_icloud_konfiguration_liefert_klaren_fehler(self, db_session):
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
         assert result["errors"] == ["Keine iCloud-Credentials gespeichert."]
         assert result["created"] == 0
 
@@ -40,7 +40,7 @@ class TestDoIcloudCalNeueTermine:
         ev = icloud_calendar_event("evt-1", "Interview Runde 1 bei Contoso AG", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
 
         assert result["errors"] == []
         assert result["created"] == 1
@@ -57,7 +57,7 @@ class TestDoIcloudCalNeueTermine:
         ev = icloud_calendar_event("evt-2", "Zahnarzttermin", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -69,7 +69,7 @@ class TestDoIcloudCalNeueTermine:
         ev = icloud_calendar_event("evt-3", "Meeting bei Contoso AG", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
 
         assert result["created"] == 1
 
@@ -81,7 +81,7 @@ class TestDoIcloudCalNeueTermine:
         good_cal = FakeCaldavCalendar("Gut", events=[good_ev])
         fake_caldav([broken_cal, good_cal])
 
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
 
         assert result["created"] == 1
         assert any("Kaputt" in e for e in result["errors"])
@@ -89,7 +89,7 @@ class TestDoIcloudCalNeueTermine:
     async def test_negativ_caldav_verbindungsfehler_liefert_sauberen_fehler(self, db_session, icloud_sync, fake_caldav):
         fake_caldav(error=RuntimeError("401 Unauthorized"))
 
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
 
         assert result["created"] == 0
         assert any("CalDAV-Fehler" in e for e in result["errors"])
@@ -102,16 +102,16 @@ class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
         app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
         existing = models.Event(
             application_id=app.id, typ="gespräch", titel="Altes Thema",
-            datum=date.today(), source="icloud_cal", external_id="evt-4",
+            datum=date.today(), source="icloud_cal", external_id="evt-4", user_id=1,
         )
         db_session.add(existing)
-        db_session.add(models.SyncedItem(source="icloud_cal", external_id="evt-4"))
+        db_session.add(models.SyncedItem(source="icloud_cal", external_id="evt-4", user_id=1))
         db_session.commit()
 
         ev = icloud_calendar_event("evt-4", "Neues Thema (Interview verschoben)", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(1)
 
         assert result["skipped"] == 1
         db_session.refresh(existing)
@@ -123,10 +123,10 @@ class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
         app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
         orphan = models.Event(
             application_id=app.id, typ="gespräch", titel="Abgesagtes Interview",
-            datum=date.today(), source="icloud_cal", external_id="evt-orphan",
+            datum=date.today(), source="icloud_cal", external_id="evt-orphan", user_id=1,
         )
         db_session.add(orphan)
-        db_session.add(models.SyncedItem(source="icloud_cal", external_id="evt-orphan"))
+        db_session.add(models.SyncedItem(source="icloud_cal", external_id="evt-orphan", user_id=1))
         db_session.commit()
 
         # Aktueller Kalenderabruf enthält "evt-orphan" nicht mehr — uid_set ist
@@ -134,7 +134,7 @@ class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
         ev = icloud_calendar_event("evt-1", "Interview Runde 1", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        await _do_icloud_cal()
+        await _do_icloud_cal(1)
 
         assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is None
         assert db_session.query(models.SyncedItem).filter_by(source="icloud_cal", external_id="evt-orphan").first() is None
