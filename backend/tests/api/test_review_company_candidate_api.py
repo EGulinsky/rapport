@@ -25,6 +25,7 @@ def _make_pending_match(db_session, profile_id: int, candidates: list[dict]) -> 
         titel="Contoso GmbH",
         raw_content=json.dumps({"company_profile_id": profile_id, "candidates": candidates}),
         status_only=False,
+        user_id=1,  # muss mit conftest.py::DEFAULT_TEST_USER_ID übereinstimmen
     )
     db_session.add(match)
     db_session.commit()

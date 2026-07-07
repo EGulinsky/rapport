@@ -6,22 +6,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import PendingMatch, Event, Application, Contact
+from app.models import PendingMatch, Event, Application, Contact, User
 from app.routers.applications import _status_label
 from app.schemas import PendingMatchRead, ApproveMatch
 from app.audit import add_audit
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
 
 @router.get("/count")
-def get_pending_count(db: Session = Depends(get_db)):
+def get_pending_count(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     count = db.query(PendingMatch).filter(PendingMatch.review_status == "pending").count()
     return {"count": count}
 
 
 @router.get("/", response_model=list[PendingMatchRead])
-def list_pending(db: Session = Depends(get_db)):
+def list_pending(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     rows = (
         db.query(PendingMatch)
         .filter(PendingMatch.review_status == "pending")
@@ -53,7 +54,12 @@ def list_pending(db: Session = Depends(get_db)):
 
 
 @router.post("/{match_id}/approve")
-async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends(get_db)):
+async def approve_match(
+    match_id: int,
+    body: ApproveMatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     match = db.query(PendingMatch).filter(PendingMatch.id == match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -81,8 +87,8 @@ async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends
         except Exception:
             keeper_id = dup_id = None
         if keeper_id and dup_id:
-            keeper = db.query(Contact).get(keeper_id)
-            dup = db.query(Contact).get(dup_id)
+            keeper = db.query(Contact).filter_by(id=keeper_id, user_id=current_user.id).first()
+            dup = db.query(Contact).filter_by(id=dup_id, user_id=current_user.id).first()
             if keeper and dup:
                 keeper_app_ids = {a.id for a in keeper.applications}
                 for app in list(dup.applications):
@@ -106,7 +112,7 @@ async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends
         except Exception:
             dup_event_id = None
         if dup_event_id:
-            ev = db.query(Event).get(dup_event_id)
+            ev = db.query(Event).filter_by(id=dup_event_id, user_id=current_user.id).first()
             if ev:
                 db.delete(ev)
         match.review_status = "approved"
@@ -133,12 +139,13 @@ async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends
                 datum=date.today(),
                 titel=_status_label(new_main, new_sub),
                 source=match.source,
+                user_id=current_user.id,
             )
             db.add(status_event)
             add_audit(db, "status_change", match.source or "user",
                       app_id=app.id, field="main_status",
                       old_value=old_main, new_value=new_main,
-                      reason="PendingMatch genehmigt")
+                      reason="PendingMatch genehmigt", user_id=current_user.id)
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": status_event.id if new_main else None}
@@ -153,6 +160,7 @@ async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends
         titel=body.titel or match.titel,
         notiz=match.extract,
         source=match.source,
+        user_id=current_user.id,
     )
     db.add(event)
     match.review_status = "approved"
@@ -161,7 +169,11 @@ async def approve_match(match_id: int, body: ApproveMatch, db: Session = Depends
 
 
 @router.delete("/{match_id}")
-async def reject_match(match_id: int, db: Session = Depends(get_db)):
+async def reject_match(
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     match = db.query(PendingMatch).filter(PendingMatch.id == match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -186,7 +198,7 @@ async def reject_match(match_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/cleanup-calendar-status")
-def cleanup_calendar_status(db: Session = Depends(get_db)):
+def cleanup_calendar_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Reject all pending status-change suggestions from calendar sources."""
     result = (
         db.query(PendingMatch)
@@ -194,6 +206,7 @@ def cleanup_calendar_status(db: Session = Depends(get_db)):
             PendingMatch.review_status == "pending",
             PendingMatch.status_only.is_(True),
             PendingMatch.source.in_(["gcal", "icloud_cal"]),
+            PendingMatch.user_id == current_user.id,
         )
         .update({"review_status": "rejected"}, synchronize_session=False)
     )
