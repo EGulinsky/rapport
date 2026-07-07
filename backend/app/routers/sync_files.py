@@ -22,8 +22,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.agent_client import agent_get, agent_post
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, set_session_user
 from app import models
+from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
     is_synced, mark_synced, purge_source,
     build_firm_index, find_hint_apps,
@@ -43,10 +44,10 @@ def _get_cfg(db: Session) -> Optional[models.FilesConfig]:
     return db.query(models.FilesConfig).first()
 
 
-def _get_or_create_cfg(db: Session) -> models.FilesConfig:
+def _get_or_create_cfg(db: Session, user_id: int) -> models.FilesConfig:
     cfg = _get_cfg(db)
     if not cfg:
-        cfg = models.FilesConfig(enabled=True)
+        cfg = models.FilesConfig(enabled=True, user_id=user_id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)
@@ -54,8 +55,8 @@ def _get_or_create_cfg(db: Session) -> models.FilesConfig:
 
 
 @router.get("/status")
-async def files_status(db: Session = Depends(get_db)):
-    cfg = _get_or_create_cfg(db)
+async def files_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    cfg = _get_or_create_cfg(db, current_user.id)
     reachable = False
     try:
         resp = await agent_get(db, "/health", timeout=3)
@@ -71,16 +72,17 @@ async def files_status(db: Session = Depends(get_db)):
 
 
 @router.post("/reset", status_code=204)
-def reset_files_sync(db: Session = Depends(get_db)):
+def reset_files_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.last_sync = None
-    purge_source(db, "local_files")
+    purge_source(db, "local_files", current_user.id)
     db.commit()
 
 
-async def _do_local_files() -> dict:
+async def _do_local_files(user_id: int) -> dict:
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
@@ -170,8 +172,9 @@ async def _do_local_files() -> dict:
                     datum=date_hint.date() if date_hint else None,
                     titel=name,
                     notiz=path,
+                    user_id=user_id,
                 ))
-                mark_synced(db, "local_files", file_id)
+                mark_synced(db, "local_files", file_id, user_id)
                 created += 1
 
         db.commit()
@@ -190,8 +193,12 @@ async def _do_local_files() -> dict:
 
 
 @router.post("", response_model=dict)
-async def sync_files(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    cfg = _get_or_create_cfg(db)
+async def sync_files(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    cfg = _get_or_create_cfg(db, current_user.id)
     if not cfg.enabled or not cfg.folder_path:
         return {"processed": 0, "created": 0, "skipped": 0, "errors": []}
 
@@ -199,7 +206,7 @@ async def sync_files(background_tasks: BackgroundTasks, db: Session = Depends(ge
     init_progress("local_files", "Dokumente", "Starte…")
 
     async def _bg():
-        result = await _do_local_files()
+        result = await _do_local_files(current_user.id)
         set_batch_result("local_files", {**result, "done": True})
 
     background_tasks.add_task(_bg)
@@ -207,7 +214,11 @@ async def sync_files(background_tasks: BackgroundTasks, db: Session = Depends(ge
 
 
 @router.get("/browse")
-async def browse_files(path: str = "", db: Session = Depends(get_db)):
+async def browse_files(
+    path: str = "",
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """List items at a given absolute host path. Defaults to configured root."""
     cfg = _get_cfg(db)
     target = path or (cfg.folder_path if cfg else "")
@@ -233,7 +244,11 @@ class AttachRequest(BaseModel):
 
 
 @router.post("/attach")
-async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
+async def attach_file(
+    req: AttachRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Manually attach a file or folder from the host to an application."""
     app_obj = db.query(models.Application).filter_by(id=req.app_id).first()
     if not app_obj:
@@ -266,8 +281,9 @@ async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
                 datum=_date.today(),
                 titel=fname,
                 notiz=fpath,
+                user_id=current_user.id,
             ))
-            mark_synced(db, "local_files", file_id)
+            mark_synced(db, "local_files", file_id, current_user.id)
             created += 1
         db.commit()
         return {"created": created, "titel": name}
@@ -281,16 +297,21 @@ async def attach_file(req: AttachRequest, db: Session = Depends(get_db)):
         datum=_date.today(),
         titel=name,
         notiz=req.path,
+        user_id=current_user.id,
     )
     db.add(ev)
-    mark_synced(db, "local_files", file_id)
+    mark_synced(db, "local_files", file_id, current_user.id)
     db.commit()
     db.refresh(ev)
     return {"event_id": ev.id, "created": 1, "titel": name}
 
 
 @router.post("/open")
-async def open_file(body: dict, db: Session = Depends(get_db)):
+async def open_file(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Ask the host agent to open a file with the default OS application."""
     path = body.get("path", "")
     if not path:
