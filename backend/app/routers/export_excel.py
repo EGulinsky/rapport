@@ -9,6 +9,7 @@ import io
 from app.database import get_db
 from app import models
 from app.models import EXCEL_EXPORT_MAP
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -31,6 +32,7 @@ def flag(b: bool) -> str:
 def export_excel(
     show_rejected: bool = Query(True),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     q = db.query(models.Application)
     if not show_rejected:

@@ -13,6 +13,8 @@ from app import models
 
 pytestmark = pytest.mark.component
 
+_FAKE_USER = models.User(id=1, email="test-geo@example.com", password_hash="x", email_verified=True)
+
 _NOMINATIM_RESPONSE = [
     {
         "name": "München",
@@ -39,14 +41,14 @@ def _mock_response(json_data):
 
 
 def _with_maps_key(db, key="AIzaTestKey"):
-    db.add(models.MapsSettings(api_key_enc=encrypt_api_key(key)))
+    db.add(models.MapsSettings(api_key_enc=encrypt_api_key(key), user_id=_FAKE_USER.id))
     db.commit()
 
 
 class TestSearchLocationRouting:
     async def test_positiv_ohne_key_faellt_auf_nominatim_zurueck(self, db_session):
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_mock_response(_NOMINATIM_RESPONSE))):
-            results = await search_location(q="München", db=db_session)
+            results = await search_location(q="München", db=db_session, current_user=_FAKE_USER)
 
         assert results == [{"label": "München, Deutschland"}]
 
@@ -56,7 +58,7 @@ class TestSearchLocationRouting:
         _with_maps_key(db_session)
 
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_mock_response(_GOOGLE_RESPONSE))):
-            results = await search_location(q="Contoso München", db=db_session)
+            results = await search_location(q="Contoso München", db=db_session, current_user=_FAKE_USER)
 
         assert results == [
             {"label": "Contoso AG, Musterstraße 1, München, Deutschland"},
@@ -65,7 +67,7 @@ class TestSearchLocationRouting:
 
     async def test_negativ_leere_suche_ruft_keine_api_auf(self, db_session):
         with patch("httpx.AsyncClient.get", new=AsyncMock()) as mock_get:
-            results = await search_location(q="  ", db=db_session)
+            results = await search_location(q="  ", db=db_session, current_user=_FAKE_USER)
 
         assert results == []
         mock_get.assert_not_called()
@@ -74,7 +76,7 @@ class TestSearchLocationRouting:
         _with_maps_key(db_session)
 
         with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=httpx.ConnectError("down"))):
-            results = await search_location(q="Berlin", db=db_session)
+            results = await search_location(q="Berlin", db=db_session, current_user=_FAKE_USER)
 
         assert results == []
 
@@ -83,17 +85,17 @@ class TestSearchLocationRouting:
         data = {"status": "ZERO_RESULTS", "predictions": []}
 
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_mock_response(data))):
-            results = await search_location(q="Xyzxyzxyz", db=db_session)
+            results = await search_location(q="Xyzxyzxyz", db=db_session, current_user=_FAKE_USER)
 
         assert results == []
 
     async def test_corner_case_kaputter_gespeicherter_key_faellt_auf_nominatim_zurueck(self, db_session):
         # Ein nicht entschlüsselbarer Key (z.B. nach Fernet-Secret-Rotation) darf die
         # Ortssuche nicht komplett brechen — Fallback auf Nominatim statt 500er.
-        db_session.add(models.MapsSettings(api_key_enc="not-a-valid-fernet-token"))
+        db_session.add(models.MapsSettings(api_key_enc="not-a-valid-fernet-token", user_id=_FAKE_USER.id))
         db_session.commit()
 
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_mock_response(_NOMINATIM_RESPONSE))):
-            results = await search_location(q="München", db=db_session)
+            results = await search_location(q="München", db=db_session, current_user=_FAKE_USER)
 
         assert results == [{"label": "München, Deutschland"}]

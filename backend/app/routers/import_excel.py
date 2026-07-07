@@ -9,6 +9,7 @@ from app import models, schemas
 from app.models import EXCEL_IMPORT_MAP, MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.dedup import dedup_key as _dedup_key
 from app.audit import add_audit
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -53,6 +54,7 @@ async def import_excel(
     file: UploadFile = File(...),
     skip_duplicates: bool = True,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Nur .xlsx Dateien erlaubt")
@@ -126,6 +128,7 @@ async def import_excel(
                 gespraech_3=g3,
                 gespraech_4=g4,
                 gespraech_5=g5,
+                user_id=current_user.id,
             )
             db.add(app)
             db.flush()
@@ -138,6 +141,7 @@ async def import_excel(
                 typ="bewerbung",
                 datum=ref_date,
                 titel="Bewerbung eingereicht",
+                user_id=current_user.id,
             ))
 
             if main_status not in ("applied", "prospecting"):
@@ -149,6 +153,7 @@ async def import_excel(
                     typ="status",
                     datum=late_date,
                     titel=label,
+                    user_id=current_user.id,
                 ))
 
             if kommentar:
@@ -157,10 +162,11 @@ async def import_excel(
                     typ="notiz",
                     datum=late_date,
                     notiz=kommentar,
+                    user_id=current_user.id,
                 ))
 
             add_audit(db, "import", "import", app_id=app.id,
-                      new_value=f"{firma} – {rolle}")
+                      new_value=f"{firma} – {rolle}", user_id=current_user.id)
             existing_keys.add(dedup_key)
             imported += 1
 
