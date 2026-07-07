@@ -89,15 +89,15 @@ async def _background_sync_loop():
                     tasks.append(_run_source("gcal", lambda: _do_gcal(user_id)))
             if icloud_on:
                 if not sync_cfg or sync_cfg.icloud_mail_enabled:
-                    tasks.append(_run_source("icloud_mail", _do_icloud_mail))
+                    tasks.append(_run_source("icloud_mail", lambda: _do_icloud_mail(user_id)))
                 if not sync_cfg or sync_cfg.icloud_cal_enabled:
-                    tasks.append(_run_source("icloud_cal", _do_icloud_cal))
+                    tasks.append(_run_source("icloud_cal", lambda: _do_icloud_cal(user_id)))
                 if not sync_cfg or sync_cfg.icloud_notes_enabled:
-                    tasks.append(_run_source("icloud_notes", _do_icloud_notes))
+                    tasks.append(_run_source("icloud_notes", lambda: _do_icloud_notes(user_id)))
                 if not sync_cfg or sync_cfg.icloud_reminders_enabled:
-                    tasks.append(_run_source("icloud_reminders", _do_icloud_reminders))
+                    tasks.append(_run_source("icloud_reminders", lambda: _do_icloud_reminders(user_id)))
                 if not sync_cfg or sync_cfg.icloud_calls_enabled:
-                    tasks.append(_run_source("icloud_calls", _do_icloud_calls))
+                    tasks.append(_run_source("icloud_calls", lambda: _do_icloud_calls(user_id)))
             if not sync_cfg or sync_cfg.files_enabled:
                 tasks.append(_run_source("local_files", lambda: _do_local_files(user_id)))
 

@@ -31,7 +31,7 @@ def _mock_response(json_data, status=200, text=""):
 
 class TestDoIcloudNotesNichtVerbunden:
     async def test_negativ_keine_icloud_konfiguration_liefert_klaren_fehler(self, db_session):
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
         assert result["errors"] == ["Keine iCloud-Credentials gespeichert."]
         assert result["created"] == 0
 
@@ -47,7 +47,7 @@ class TestDoIcloudNotesNeueNotizen:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
 
         assert result["errors"] == []
         assert result["created"] == 1
@@ -63,7 +63,7 @@ class TestDoIcloudNotesNeueNotizen:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -78,7 +78,7 @@ class TestDoIcloudNotesNeueNotizen:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -98,7 +98,7 @@ class TestDoIcloudNotesNeueNotizen:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
 
         assert result["errors"] == []
         assert result["created"] == 7
@@ -111,7 +111,7 @@ class TestDoIcloudNotesFehler:
 
         monkeypatch.setattr("httpx.AsyncClient.get", raise_conn_error)
 
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
 
         assert result["created"] == 0
         assert any("nicht erreichbar" in e for e in result["errors"])
@@ -122,7 +122,7 @@ class TestDoIcloudNotesFehler:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(1)
 
         assert result["created"] == 0
         assert any("Agent-Fehler (Notizen)" in e for e in result["errors"])

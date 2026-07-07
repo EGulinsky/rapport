@@ -28,9 +28,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
+from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
     is_synced, load_synced_ids, purge_source,
     build_firm_index, build_contact_domain_index, find_hint_apps,
@@ -98,7 +99,7 @@ def _since_date(dt: Optional[datetime]) -> str:
 # ── status / credentials ──────────────────────────────────────────────────────
 
 @router.get("/status", response_model=schemas.ICloudSyncStatus)
-def icloud_status(db: Session = Depends(get_db)):
+def icloud_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg:
         return schemas.ICloudSyncStatus(connected=False)
@@ -115,7 +116,11 @@ def icloud_status(db: Session = Depends(get_db)):
 
 
 @router.post("/credentials", response_model=schemas.ICloudSyncStatus)
-def save_credentials(payload: schemas.ICloudCredentials, db: Session = Depends(get_db)):
+def save_credentials(
+    payload: schemas.ICloudCredentials,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     enc = encrypt_api_key(payload.app_password)
     web_enc = encrypt_api_key(payload.web_password) if payload.web_password else None
@@ -125,6 +130,7 @@ def save_credentials(payload: schemas.ICloudCredentials, db: Session = Depends(g
             icloud_email=payload.icloud_email or None,
             app_password_enc=enc,
             web_password_enc=web_enc,
+            user_id=current_user.id,
         )
         db.add(cfg)
     else:
@@ -141,7 +147,11 @@ def save_credentials(payload: schemas.ICloudCredentials, db: Session = Depends(g
 
 
 @router.post("/web-password", status_code=204)
-def save_web_password(payload: schemas.ICloud2FAVerify, db: Session = Depends(get_db)):
+def save_web_password(
+    payload: schemas.ICloud2FAVerify,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Update only the Apple ID web password (used for pyicloud/Notes sync)."""
     cfg = _get_cfg(db)
     if not cfg:
@@ -152,7 +162,7 @@ def save_web_password(payload: schemas.ICloud2FAVerify, db: Session = Depends(ge
 
 
 @router.post("/test")
-def test_connection(db: Session = Depends(get_db)):
+def test_connection(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -174,7 +184,7 @@ def test_connection(db: Session = Depends(get_db)):
 
 
 @router.delete("", status_code=204)
-def delete_credentials(db: Session = Depends(get_db)):
+def delete_credentials(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         db.delete(cfg)
@@ -184,16 +194,17 @@ def delete_credentials(db: Session = Depends(get_db)):
 # ── Mail ──────────────────────────────────────────────────────────────────────
 
 @router.post("/mail/reset", status_code=204)
-def reset_mail_sync(db: Session = Depends(get_db)):
+def reset_mail_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.mail_last_sync = None
-        purge_source(db, "icloud_mail")
+        purge_source(db, "icloud_mail", current_user.id)
         db.commit()
 
 
-async def _do_icloud_mail() -> dict:
+async def _do_icloud_mail(user_id: int) -> dict:
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     imap = None
@@ -279,7 +290,7 @@ async def _do_icloud_mail() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
 
             try:
-                ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps)
+                ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
                 finish_progress("icloud_mail")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -312,7 +323,11 @@ async def _do_icloud_mail() -> dict:
 
 
 @router.post("/mail", response_model=schemas.SyncResult)
-async def sync_mail(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_mail(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -321,7 +336,7 @@ async def sync_mail(background_tasks: BackgroundTasks, db: Session = Depends(get
     init_progress("icloud_mail", "iCloud Mail", "Starte…")
 
     async def _bg():
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(current_user.id)
         set_batch_result("icloud_mail", {**result, "done": True})
 
     background_tasks.add_task(_bg)
@@ -331,11 +346,11 @@ async def sync_mail(background_tasks: BackgroundTasks, db: Session = Depends(get
 # ── Notes (via pyicloud) ───────────────────────────────────────────────────────
 
 @router.post("/notes/reset", status_code=204)
-def reset_notes_sync(db: Session = Depends(get_db)):
+def reset_notes_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.notes_last_sync = None
-        purge_source(db, "icloud_notes")
+        purge_source(db, "icloud_notes", current_user.id)
         db.commit()
         _ICLOUD_SESSIONS.pop(cfg.apple_id, None)
 
@@ -374,7 +389,9 @@ def _get_pyicloud_api(cfg: models.ICloudSync, force_new: bool = False):
     return _ICLOUD_SESSIONS[apple_id]['api']
 
 
-async def _sync_notes_with_api(api: Any, cfg: models.ICloudSync, db: Session) -> schemas.SyncResult:
+async def _sync_notes_with_api(
+    api: Any, cfg: models.ICloudSync, db: Session, user_id: Optional[int] = None
+) -> schemas.SyncResult:
     _, term_to_apps = build_firm_index(db)
     processed = created = skipped = 0
     errors: list[str] = []
@@ -434,7 +451,7 @@ async def _sync_notes_with_api(api: Any, cfg: models.ICloudSync, db: Session) ->
         hint_apps = find_hint_apps(raw, term_to_apps)
 
         try:
-            ok = await process_item(db, "icloud_notes", note_key, raw, None, hint_apps=hint_apps)
+            ok = await process_item(db, "icloud_notes", note_key, raw, None, hint_apps=hint_apps, user_id=user_id)
         except AINotConfigured as e:
             finish_progress("icloud_notes")
             raise HTTPException(400, str(e))
@@ -457,7 +474,11 @@ async def _sync_notes_with_api(api: Any, cfg: models.ICloudSync, db: Session) ->
 
 
 @router.post("/notes/verify-2fa", response_model=schemas.SyncResult)
-async def verify_notes_2fa(payload: schemas.ICloud2FAVerify, db: Session = Depends(get_db)):
+async def verify_notes_2fa(
+    payload: schemas.ICloud2FAVerify,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -484,13 +505,14 @@ async def verify_notes_2fa(payload: schemas.ICloud2FAVerify, db: Session = Depen
     except Exception as e:
         raise HTTPException(400, f"2FA-Fehler: {e}")
 
-    return await _sync_notes_with_api(api, cfg, db)
+    return await _sync_notes_with_api(api, cfg, db, current_user.id)
 
 
-async def _do_icloud_notes() -> dict:
+async def _do_icloud_notes(user_id: int) -> dict:
     from app.agent_client import agent_get
 
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
@@ -562,7 +584,7 @@ async def _do_icloud_notes() -> dict:
 
         async def _process_one(idx: int, note_key: str, raw: str, date_hint, hint_apps):
             update_progress("icloud_notes", idx, n_pending, f"Notiz {idx + 1}/{n_pending}")
-            return await process_item(db, "icloud_notes", note_key, raw, date_hint, hint_apps=hint_apps)
+            return await process_item(db, "icloud_notes", note_key, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
 
         for batch_start in range(0, n_pending, BATCH):
             batch = pending[batch_start:batch_start + BATCH]
@@ -602,7 +624,11 @@ async def _do_icloud_notes() -> dict:
 
 
 @router.post("/notes", response_model=schemas.SyncResult)
-async def sync_notes(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_notes(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -611,7 +637,7 @@ async def sync_notes(background_tasks: BackgroundTasks, db: Session = Depends(ge
     init_progress("icloud_notes", "iCloud Notizen", "Starte…")
 
     async def _bg():
-        result = await _do_icloud_notes()
+        result = await _do_icloud_notes(current_user.id)
         set_batch_result("icloud_notes", {**result, "done": True})
 
     background_tasks.add_task(_bg)
@@ -619,7 +645,7 @@ async def sync_notes(background_tasks: BackgroundTasks, db: Session = Depends(ge
 
 
 @router.post("/notes/_legacy", response_model=schemas.SyncResult)
-async def sync_notes_legacy(db: Session = Depends(get_db)):
+async def sync_notes_legacy(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -690,13 +716,13 @@ async def sync_notes_legacy(db: Session = Depends(get_db)):
             errors=[f"Code per SMS/Anruf gesendet an: {sent_to}"]
         )
 
-    return await _sync_notes_with_api(api, cfg, db)
+    return await _sync_notes_with_api(api, cfg, db, current_user.id)
 
 
 # ── Calendar (CalDAV) ─────────────────────────────────────────────────────────
 
 @router.get("/calendar/debug")
-def debug_calendar_events(db: Session = Depends(get_db)):
+def debug_calendar_events(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """List raw CalDAV events (no AI processing) for debugging."""
     cfg = _get_cfg(db)
     if not cfg:
@@ -737,16 +763,17 @@ def debug_calendar_events(db: Session = Depends(get_db)):
 
 
 @router.post("/calendar/reset", status_code=204)
-def reset_calendar_sync(db: Session = Depends(get_db)):
+def reset_calendar_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.calendar_last_sync = None
-        purge_source(db, "icloud_cal")
+        purge_source(db, "icloud_cal", current_user.id)
         db.commit()
 
 
-async def _do_icloud_cal() -> dict:
+async def _do_icloud_cal(user_id: int) -> dict:
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
@@ -845,7 +872,7 @@ async def _do_icloud_cal() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps)
 
             try:
-                ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps)
+                ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
                 finish_progress("icloud_cal")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -879,7 +906,9 @@ async def _do_icloud_cal() -> dict:
             )
             for orphan in orphaned:
                 if orphan.external_id not in uid_set:
-                    db.query(models.SyncedItem).filter_by(source="icloud_cal", external_id=orphan.external_id).delete()
+                    db.query(models.SyncedItem).filter_by(
+                        source="icloud_cal", external_id=orphan.external_id, user_id=user_id
+                    ).delete()
                     db.delete(orphan)
                     deleted_count += 1
             if deleted_count:
@@ -897,7 +926,11 @@ async def _do_icloud_cal() -> dict:
 
 
 @router.post("/calendar", response_model=schemas.SyncResult)
-async def sync_calendar(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_calendar(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -906,7 +939,7 @@ async def sync_calendar(background_tasks: BackgroundTasks, db: Session = Depends
     init_progress("icloud_cal", "iCloud Kalender", "Starte…")
 
     async def _bg():
-        result = await _do_icloud_cal()
+        result = await _do_icloud_cal(current_user.id)
         set_batch_result("icloud_cal", {**result, "done": True})
 
     background_tasks.add_task(_bg)
@@ -916,16 +949,17 @@ async def sync_calendar(background_tasks: BackgroundTasks, db: Session = Depends
 # ── Reminders (CalDAV VTODO) ──────────────────────────────────────────────────
 
 @router.post("/reminders/reset", status_code=204)
-def reset_reminders_sync(db: Session = Depends(get_db)):
+def reset_reminders_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.reminders_last_sync = None
-        purge_source(db, "icloud_todo")
+        purge_source(db, "icloud_todo", current_user.id)
         db.commit()
 
 
-async def _do_icloud_reminders() -> dict:
+async def _do_icloud_reminders(user_id: int) -> dict:
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
@@ -1004,7 +1038,7 @@ async def _do_icloud_reminders() -> dict:
             hint_apps = find_hint_apps(raw, term_to_apps)
 
             try:
-                ok = await process_item(db, "icloud_todo", uid, raw, date_hint, hint_apps=hint_apps)
+                ok = await process_item(db, "icloud_todo", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
                 finish_progress("icloud_reminders")
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -1032,7 +1066,11 @@ async def _do_icloud_reminders() -> dict:
 
 
 @router.post("/reminders", response_model=schemas.SyncResult)
-async def sync_reminders(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_reminders(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
@@ -1041,7 +1079,7 @@ async def sync_reminders(background_tasks: BackgroundTasks, db: Session = Depend
     init_progress("icloud_reminders", "iCloud Erinnerungen", "Starte…")
 
     async def _bg():
-        result = await _do_icloud_reminders()
+        result = await _do_icloud_reminders(current_user.id)
         set_batch_result("icloud_reminders", {**result, "done": True})
 
     background_tasks.add_task(_bg)
@@ -1051,7 +1089,7 @@ async def sync_reminders(background_tasks: BackgroundTasks, db: Session = Depend
 # ── Contacts (CardDAV) ────────────────────────────────────────────────────────
 
 @router.post("/contacts/reset", status_code=204)
-def reset_contacts_sync(db: Session = Depends(get_db)):
+def reset_contacts_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if cfg:
         cfg.contacts_last_sync = None
@@ -1164,13 +1202,13 @@ def _find_apps_where_contact_mentioned(name: str, email: str | None, db) -> list
 
 
 @router.post("/contacts", response_model=schemas.SyncResult)
-async def sync_contacts(db: Session = Depends(get_db)):
+async def sync_contacts(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
     init_progress("icloud_contacts", "iCloud Kontakte", "Kontakte werden geladen…")
-    created, errors = await _sync_contacts_http(cfg, db)
+    created, errors = await _sync_contacts_http(cfg, db, current_user.id)
 
     # Backfill missing application links for already-imported contacts (mention-based)
     update_progress("icloud_contacts", 0, 1, "Verlinkungen werden aktualisiert…")
@@ -1362,7 +1400,9 @@ def _parse_vcard(raw_vcard: str) -> Optional[dict]:
     }
 
 
-async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int, list[str]]:
+async def _sync_contacts_http(
+    cfg: models.ICloudSync, db: Session, user_id: Optional[int] = None
+) -> tuple[int, list[str]]:
     """CardDAV sync via HTTP using fetch_all_vcards helper."""
     processed = created = 0
     errors: list[str] = []
@@ -1468,7 +1508,7 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
             contact = models.Contact(
                 name=name, vorname=vorname_val, email=email_val, telefon=tel_val,
                 firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
-                company_profile_id=company_profile_id,
+                company_profile_id=company_profile_id, user_id=user_id,
             )
             db.add(contact)
             db.flush()
@@ -1486,7 +1526,11 @@ async def _sync_contacts_http(cfg: models.ICloudSync, db: Session) -> tuple[int,
 
 
 @router.get("/contacts/search")
-async def search_contacts(q: str = Query(..., min_length=2), db: Session = Depends(get_db)):
+async def search_contacts(
+    q: str = Query(..., min_length=2),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Volltextsuche im kompletten iCloud-Adressbuch, unabhängig von der
     Relevanz-Prüfung des automatischen Syncs (_sync_contacts_http). Für den
     manuellen Import sucht der User gezielt nach einer Person und entscheidet
@@ -1556,7 +1600,11 @@ class ContactImportPayload(BaseModel):
 
 
 @router.post("/contacts/import")
-def import_contacts(body: ContactImportPayload, db: Session = Depends(get_db)):
+def import_contacts(
+    body: ContactImportPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Importiert vom User ausgewählte Kandidaten (aus /contacts/search) als
     echte Contact-Zeilen. Explizite User-Aktion, deshalb ohne die
     Relevanz-Prüfung des automatischen Syncs — der User hat die Auswahl
@@ -1586,6 +1634,7 @@ def import_contacts(body: ContactImportPayload, db: Session = Depends(get_db)):
         contact = models.Contact(
             name=cand.name, vorname=cand.vorname, email=cand.email, telefon=cand.telefon,
             firma=cand.firma, rolle=cand.rolle, linkedin_url=cand.linkedin_url,
+            user_id=current_user.id,
         )
         db.add(contact)
         db.flush()
@@ -1599,10 +1648,10 @@ def import_contacts(body: ContactImportPayload, db: Session = Depends(get_db)):
 
 # ── Anrufliste (via Rapport Agent) ─────────────────────────────────────────
 
-def _get_calls_cfg(db: Session) -> models.CallsConfig:
+def _get_calls_cfg(db: Session, user_id: Optional[int] = None) -> models.CallsConfig:
     cfg = db.query(models.CallsConfig).first()
     if not cfg:
-        cfg = models.CallsConfig(enabled=True)
+        cfg = models.CallsConfig(enabled=True, user_id=user_id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)
@@ -1619,8 +1668,8 @@ async def _agent_reachable(db: Session) -> bool:
 
 
 @router.get("/calls/status", response_model=schemas.CallsStatus)
-async def calls_status(db: Session = Depends(get_db)):
-    cfg = _get_calls_cfg(db)
+async def calls_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    cfg = _get_calls_cfg(db, current_user.id)
     return schemas.CallsStatus(
         enabled=cfg.enabled,
         last_sync=cfg.last_sync,
@@ -1629,8 +1678,12 @@ async def calls_status(db: Session = Depends(get_db)):
 
 
 @router.post("/calls/settings", response_model=schemas.CallsStatus)
-async def calls_settings(body: dict, db: Session = Depends(get_db)):
-    cfg = _get_calls_cfg(db)
+async def calls_settings(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    cfg = _get_calls_cfg(db, current_user.id)
     if "enabled" in body:
         cfg.enabled = bool(body["enabled"])
         db.commit()
@@ -1694,22 +1747,23 @@ def _match_contacts_by_name(call_name: str, db: Session) -> list[models.Contact]
 
 
 @router.post("/calls/reset", status_code=204)
-def reset_calls_sync(db: Session = Depends(get_db)):
-    calls_cfg = _get_calls_cfg(db)
+def reset_calls_sync(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    calls_cfg = _get_calls_cfg(db, current_user.id)
     calls_cfg.last_sync = None
-    purge_source(db, "icloud_calls")
-    db.query(models.Event).filter_by(source="icloud_calls").delete()
+    purge_source(db, "icloud_calls", current_user.id)
+    db.query(models.Event).filter_by(source="icloud_calls", user_id=current_user.id).delete()
     db.commit()
 
 
-async def _do_icloud_calls() -> dict:
+async def _do_icloud_calls(user_id: int) -> dict:
     from app.agent_client import agent_get
 
     db = SessionLocal()
+    set_session_user(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
-        calls_cfg = _get_calls_cfg(db)
+        calls_cfg = _get_calls_cfg(db, user_id)
         if not calls_cfg.enabled:
             finish_progress("icloud_calls")
             return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Anrufliste-Sync deaktiviert"]}
@@ -1796,10 +1850,11 @@ async def _do_icloud_calls() -> dict:
                     notiz=notiz,
                     source="icloud_calls",
                     external_id=source_key,
+                    user_id=user_id,
                 ))
                 created += 1
 
-            _mark_synced(db, "icloud_calls", source_key)
+            _mark_synced(db, "icloud_calls", source_key, user_id)
             processed += 1
 
         db.commit()
@@ -1815,8 +1870,12 @@ async def _do_icloud_calls() -> dict:
 
 
 @router.post("/calls", response_model=schemas.SyncResult)
-async def sync_calls(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    calls_cfg = _get_calls_cfg(db)
+async def sync_calls(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    calls_cfg = _get_calls_cfg(db, current_user.id)
     if not calls_cfg.enabled:
         return schemas.SyncResult(processed=0, created=0, skipped=0, errors=["Anrufliste-Sync deaktiviert"])
 
@@ -1824,16 +1883,16 @@ async def sync_calls(background_tasks: BackgroundTasks, db: Session = Depends(ge
     init_progress("icloud_calls", "Anrufliste", "Starte…")
 
     async def _bg():
-        result = await _do_icloud_calls()
+        result = await _do_icloud_calls(current_user.id)
         set_batch_result("icloud_calls", {**result, "done": True})
 
     background_tasks.add_task(_bg)
     return schemas.SyncResult(processed=0, created=0, skipped=0, errors=[])
 
 
-def _mark_synced(db: Session, source: str, external_id: str) -> None:
+def _mark_synced(db: Session, source: str, external_id: str, user_id: Optional[int] = None) -> None:
     """Insert a SyncedItem record (idempotent)."""
     existing = db.query(models.SyncedItem).filter_by(source=source, external_id=external_id).first()
     if not existing:
-        db.add(models.SyncedItem(source=source, external_id=external_id))
+        db.add(models.SyncedItem(source=source, external_id=external_id, user_id=user_id))
         db.flush()

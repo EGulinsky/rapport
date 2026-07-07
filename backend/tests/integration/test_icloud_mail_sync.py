@@ -24,7 +24,7 @@ def _now_rfc2822() -> str:
 
 class TestDoIcloudMailNichtVerbunden:
     async def test_negativ_keine_icloud_konfiguration_liefert_klaren_fehler(self, db_session):
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(1)
         assert result["errors"] == ["Keine iCloud-Credentials gespeichert."]
         assert result["created"] == 0
 
@@ -44,7 +44,7 @@ class TestDoIcloudMailNeueNachrichten:
         )
         fake_icloud_imap(["1"], {msg_id: msg})
 
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(1)
 
         assert result["errors"] == []
         assert result["created"] == 1
@@ -61,7 +61,7 @@ class TestDoIcloudMailNeueNachrichten:
         )
         fake_icloud_imap(["2"], {msg_id: msg})
 
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -79,7 +79,7 @@ class TestDoIcloudMailNeueNachrichten:
         )
         fake_icloud_imap(["3"], {msg_id: msg})
 
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(1)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
@@ -92,7 +92,7 @@ class TestDoIcloudMailFehler:
 
         monkeypatch.setattr("imaplib.IMAP4_SSL", _raise)
 
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(1)
 
         assert result["created"] == 0
         assert any("IMAP-Fehler" in e for e in result["errors"])
@@ -119,7 +119,7 @@ class TestDoIcloudMailFehler:
 
         conn.fetch = _flaky_fetch
 
-        result = await _do_icloud_mail()
+        result = await _do_icloud_mail(1)
 
         assert result["created"] == 1
         assert any("fail" in e for e in result["errors"])
