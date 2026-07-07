@@ -36,6 +36,7 @@ from app.routers.sync_common import (
     init_progress, update_progress, finish_progress, get_all_progress,
 )
 from app.routers.merge import merge_companies, SimpleMergeRequest
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/cleanup", tags=["cleanup"])
 
@@ -330,7 +331,11 @@ def _event_dict(e: models.Event) -> dict:
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/preview")
-def cleanup_preview(db: Session = Depends(get_db), scope: Scope | None = Query(default=None)):
+def cleanup_preview(
+    db: Session = Depends(get_db),
+    scope: Scope | None = Query(default=None),
+    current_user: models.User = Depends(get_current_user),
+):
     """Dry-run: return what would be merged/deleted, without changing anything.
 
     scope: "applications" | "contacts" | "companies" | "events" | None (= all)
@@ -353,12 +358,16 @@ def cleanup_preview(db: Session = Depends(get_db), scope: Scope | None = Query(d
 
 
 @router.get("/progress")
-def cleanup_progress_endpoint():
+def cleanup_progress_endpoint(current_user: models.User = Depends(get_current_user)):
     return get_all_progress()
 
 
 @router.post("/run")
-async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query(default=None)):
+async def cleanup_run(
+    db: Session = Depends(get_db),
+    scope: Scope | None = Query(default=None),
+    current_user: models.User = Depends(get_current_user),
+):
     """Execute deduplication. Returns counts of deleted rows per category.
 
     scope: "applications" | "contacts" | "companies" | "events" | None (= all)
@@ -389,10 +398,10 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
         for g in app_groups:
             keeper_id = g["keep"]["id"]
             for rem in g["remove"]:
-                dup = db.query(models.Application).get(rem["id"])
+                dup = db.query(models.Application).filter_by(id=rem["id"], user_id=current_user.id).first()
                 if not dup:
                     continue
-                keeper = db.query(models.Application).get(keeper_id)
+                keeper = db.query(models.Application).filter_by(id=keeper_id, user_id=current_user.id).first()
                 # Reassign via the relationship attribute, not the raw FK column:
                 # Application.events has cascade="all, delete-orphan", so setting
                 # only ev.application_id leaves dup's in-memory events collection
@@ -436,6 +445,7 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
                     extract=f"Behalten: ID {keeper['id']} ({keeper.get('firma') or '–'})\nDuplikat: ID {rem['id']} ({rem.get('firma') or '–'})",
                     raw_content=json.dumps({"keeper_contact_id": keeper["id"], "dup_contact_id": rem["id"]}),
                     suggested_app_id=None,
+                    user_id=current_user.id,
                 ))
                 queued_contacts += 1
         db.commit()
@@ -456,7 +466,7 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
             loser_ids = [i for i in loser_ids if i in still_exist]
             if winner_id not in still_exist or not loser_ids:
                 continue
-            merge_companies(SimpleMergeRequest(winner_id=winner_id, loser_ids=loser_ids), db)
+            merge_companies(SimpleMergeRequest(winner_id=winner_id, loser_ids=loser_ids), db, current_user)
             deleted_companies += len(loser_ids)
         await asyncio.sleep(0)
 
@@ -470,7 +480,7 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
         event_groups = _find_event_groups(db, calendar_only=calendar_only)
         for g in event_groups:
             for rem in g["remove"]:
-                ev = db.query(models.Event).get(rem["id"])
+                ev = db.query(models.Event).filter_by(id=rem["id"], user_id=current_user.id).first()
                 if ev:
                     db.delete(ev)
                     deleted_events += 1
@@ -498,6 +508,7 @@ async def cleanup_run(db: Session = Depends(get_db), scope: Scope | None = Query
                     extract=f"Bewerbung {keeper_ev['application_id']} (behalten) vs. {rem['application_id']} (Duplikat)",
                     raw_content=json.dumps({"keeper_event_id": keeper_ev["id"], "dup_event_id": rem["id"]}),
                     suggested_app_id=keeper_ev["application_id"],
+                    user_id=current_user.id,
                 ))
                 queued_events += 1
         db.commit()

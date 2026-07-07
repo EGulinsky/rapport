@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
 from app.audit import add_audit
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/merge", tags=["merge"])
 
@@ -28,7 +29,11 @@ class MergeRequest(BaseModel):
 
 
 @router.post("/applications")
-def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
+def merge_applications(
+    req: MergeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     if not req.loser_ids:
         raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
     all_ids = [req.winner_id] + req.loser_ids
@@ -47,7 +52,7 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
     if winner.main_status != old_main:
         add_audit(db, "status_change", "user", app_id=winner.id,
                   field="main_status", old_value=old_main, new_value=winner.main_status,
-                  reason="Zusammenführen: Status übernommen")
+                  reason="Zusammenführen: Status übernommen", user_id=current_user.id)
 
     for loser in losers:
         # Store alias so future syncs recognise the old identifiers
@@ -57,6 +62,7 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
             alias_firma=loser.firma,
             alias_rolle=loser.rolle,
             alias_li_job_id=loser.linkedin_job_id,
+            user_id=current_user.id,
         ))
 
         # Move events from loser to winner via the relationship attribute, not the
@@ -74,15 +80,18 @@ def merge_applications(req: MergeRequest, db: Session = Depends(get_db)):
             if contact not in winner.contacts:
                 winner.contacts.append(contact)
 
-        # Reassign pending matches
+        # Reassign pending matches. Bulk .update() bypasses den zentralen
+        # Mandanten-Filter, daher explizit auf user_id gefiltert (loser.id ist
+        # bereits als current_user gehörend verifiziert, siehe apps-Lookup oben).
         db.query(models.PendingMatch).filter(
-            models.PendingMatch.suggested_app_id == loser.id
+            models.PendingMatch.suggested_app_id == loser.id,
+            models.PendingMatch.user_id == current_user.id,
         ).update({"suggested_app_id": winner.id})
 
         add_audit(db, "merge", "user", app_id=winner.id,
                   old_value=f"{loser.firma} – {loser.rolle} (#{loser.id})",
                   new_value=f"{winner.firma} – {winner.rolle} (#{winner.id})",
-                  reason="Zusammengeführt")
+                  reason="Zusammengeführt", user_id=current_user.id)
         db.delete(loser)
 
     db.commit()
@@ -102,7 +111,11 @@ class SimpleMergeRequest(BaseModel):
 
 
 @router.post("/companies")
-def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
+def merge_companies(
+    req: SimpleMergeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     if not req.loser_ids:
         raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
     all_ids = [req.winner_id] + req.loser_ids
@@ -141,7 +154,7 @@ def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
         add_audit(db, "merge", "user", app_id=None,
                   old_value=f"{loser.name_display or loser.name_norm} (#{loser.id})",
                   new_value=f"{winner.name_display or winner.name_norm} (#{winner.id})",
-                  reason="Firmen zusammengeführt")
+                  reason="Firmen zusammengeführt", user_id=current_user.id)
         db.delete(loser)
 
     db.commit()
@@ -149,7 +162,11 @@ def merge_companies(req: SimpleMergeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/contacts")
-def merge_contacts(req: MergeRequest, db: Session = Depends(get_db)):
+def merge_contacts(
+    req: MergeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     if not req.loser_ids:
         raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
     all_ids = [req.winner_id] + req.loser_ids
@@ -171,6 +188,7 @@ def merge_contacts(req: MergeRequest, db: Session = Depends(get_db)):
             canonical_id=winner.id,
             alias_name=loser.name,
             alias_email=loser.email,
+            user_id=current_user.id,
         ))
 
         # Move application links (M2M, dedup)
