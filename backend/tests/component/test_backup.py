@@ -43,7 +43,7 @@ def isolated_paths(tmp_path, monkeypatch):
 
 
 def _enable_backup(db_session, folder="/backups"):
-    db_session.add(models.BackupConfig(enabled=True, backup_folder=folder, keep_count=7))
+    db_session.add(models.BackupConfig(enabled=True, backup_folder=folder, keep_count=7, user_id=1))
     db_session.commit()
 
 
@@ -60,7 +60,7 @@ class TestDoBackup:
             return _mock_response({"success": True, "filename": json["filename"]})
 
         with patch("httpx.AsyncClient.post", new=fake_post):
-            result = await backup_module.do_backup()
+            result = await backup_module.do_backup(1)
 
         assert result["success"] is True
         assert result["filename"].endswith(".zip")
@@ -85,7 +85,7 @@ class TestDoBackup:
             return _mock_response({"success": True, "filename": json["filename"]})
 
         with patch("httpx.AsyncClient.post", new=fake_post):
-            result = await backup_module.do_backup()
+            result = await backup_module.do_backup(1)
 
         assert result["success"] is True
         zip_bytes = __import__("base64").b64decode(captured["json"]["data_b64"])
@@ -93,10 +93,10 @@ class TestDoBackup:
             assert zf.namelist() == ["jobtracker.db"]
 
     async def test_negativ_backup_deaktiviert_wird_nicht_ausgefuehrt(self, db_session):
-        db_session.add(models.BackupConfig(enabled=False, backup_folder="/backups"))
+        db_session.add(models.BackupConfig(enabled=False, backup_folder="/backups", user_id=1))
         db_session.commit()
 
-        result = await backup_module.do_backup()
+        result = await backup_module.do_backup(1)
 
         assert result["success"] is False
 

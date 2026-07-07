@@ -38,13 +38,21 @@ async def _run_source(name: str, coro_fn):
 
 
 async def _background_sync_loop():
-    """Run all enabled sync sources every _BG_INTERVAL_MINUTES minutes."""
+    """Run all enabled sync sources every _BG_INTERVAL_MINUTES minutes.
+
+    Läuft (Projektentscheidung zur Mandantentrennung) vorerst nur für das
+    erste/einzige registrierte Konto — echte Mehrkonten-Hintergrundjobs
+    (mehrere parallele Sync-Läufe, einer pro Konto) wären ein deutlich
+    größerer Umbau und sind bewusst zurückgestellt. Die einzelnen _do_*-
+    Sync-Funktionen selbst laufen noch ungescoped (eigene SessionLocal()-
+    Instanzen) — das ist der nächste Schritt der Mandantentrennung.
+    """
     # Wait a bit after startup so the app is fully ready
     await asyncio.sleep(30)
 
     while True:
         try:
-            from app.database import SessionLocal
+            from app.database import SessionLocal, set_session_user, get_first_user_id
             from app import models
             from app.routers.sync_google import _do_gmail, _do_gcal
             from app.routers.sync_icloud import (
@@ -55,11 +63,23 @@ async def _background_sync_loop():
 
             db = SessionLocal()
             try:
-                sync_cfg = db.query(models.SyncSettings).first()
-                google_on  = not sync_cfg or sync_cfg.google_enabled
-                icloud_on  = not sync_cfg or sync_cfg.icloud_enabled
+                user_id = get_first_user_id(db)
+                if user_id is None:
+                    sync_cfg = None
+                    google_on = icloud_on = False
+                else:
+                    set_session_user(db, user_id)
+                    sync_cfg = db.query(models.SyncSettings).first()
+                    google_on  = not sync_cfg or sync_cfg.google_enabled
+                    icloud_on  = not sync_cfg or sync_cfg.icloud_enabled
             finally:
                 db.close()
+
+            if user_id is None:
+                # Noch niemand registriert — Hintergrund-Sync macht ohne Konto
+                # keinen Sinn (siehe Docstring). Trotzdem schlafen statt busy-loopen.
+                await asyncio.sleep(_BG_INTERVAL_MINUTES * 60)
+                continue
 
             tasks = []
             if google_on:
@@ -84,13 +104,16 @@ async def _background_sync_loop():
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Backup: run if enabled and due
+            # Backup: run if enabled and due. Läuft (wie der gesamte Hintergrund-
+            # Sync-Loop, siehe Docstring oben) vorerst nur für das erste/einzige
+            # registrierte Konto — echte Mehrkonten-Hintergrundjobs sind ein
+            # separater, größerer Umbau.
             try:
                 from app.routers.backup import do_backup
-                from app.database import SessionLocal
                 from app import models as _models
                 _db = SessionLocal()
                 try:
+                    set_session_user(_db, user_id)
                     _bcfg = _db.query(_models.BackupConfig).first()
                     if _bcfg and _bcfg.enabled and _bcfg.backup_folder:
                         from datetime import timedelta
@@ -105,7 +128,7 @@ async def _background_sync_loop():
                         if due and "backup" not in _RUNNING_SOURCES:
                             _RUNNING_SOURCES.add("backup")
                             try:
-                                await do_backup()
+                                await do_backup(user_id)
                             finally:
                                 _RUNNING_SOURCES.discard("backup")
                 finally:

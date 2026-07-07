@@ -838,6 +838,18 @@ def claim_unowned_data(db, user_id: int) -> None:
     db.commit()
 
 
+def get_first_user_id(db) -> int | None:
+    """Liefert die ID des am längsten bestehenden Kontos (niedrigste ID), oder
+    None wenn noch niemand registriert ist. Genutzt vom Hintergrund-Sync-Loop
+    (siehe main.py) und ähnlichen Background-Jobs ohne HTTP-Request-Kontext —
+    diese laufen bewusst nur für das erste/einzige Konto (siehe Projektentscheidung
+    zur pragmatischen Mehrkonten-Behandlung von Hintergrundjobs)."""
+    from app import models
+
+    row = db.query(models.User.id).order_by(models.User.id).first()
+    return row[0] if row else None
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
