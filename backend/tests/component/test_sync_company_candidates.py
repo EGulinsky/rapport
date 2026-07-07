@@ -34,7 +34,7 @@ class TestCollectSyncCandidates:
             db_session, sync_status="done", description="Vorhanden", logo_data=None
         )
 
-        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None)
+        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None, user_id=1)
 
         assert candidates == []
 
@@ -45,7 +45,7 @@ class TestCollectSyncCandidates:
             db_session, sync_status="done", description=None, logo_data="data:image/png;base64,xyz"
         )
 
-        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None)
+        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None, user_id=1)
 
         assert candidates == []
         assert p.sync_status == "done"  # bleibt unverändert, kein stiller Statuswechsel
@@ -55,7 +55,7 @@ class TestCollectSyncCandidates:
             db_session, sync_status="done", description=None, logo_data=None
         )
 
-        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None)
+        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None, user_id=1)
 
         assert candidates == []
 
@@ -64,7 +64,7 @@ class TestCollectSyncCandidates:
         # normaler "Sync"-Klick abholt.
         p = company_profile_factory(db_session, sync_status="pending")
 
-        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None)
+        candidates = _collect_sync_candidates(db_session, force=False, company_ids=None, user_id=1)
 
         assert [c.id for c in candidates] == [p.id]
 
@@ -73,7 +73,7 @@ class TestCollectSyncCandidates:
             db_session, sync_status="done", description="Da", logo_data="data:image/png;base64,xyz"
         )
 
-        candidates = _collect_sync_candidates(db_session, force=True, company_ids=None)
+        candidates = _collect_sync_candidates(db_session, force=True, company_ids=None, user_id=1)
 
         assert [c.id for c in candidates] == [p.id]
 
@@ -81,6 +81,6 @@ class TestCollectSyncCandidates:
         target = company_profile_factory(db_session, sync_status="pending")
         company_profile_factory(db_session, sync_status="pending")  # außerhalb Scope
 
-        candidates = _collect_sync_candidates(db_session, force=False, company_ids=[target.id])
+        candidates = _collect_sync_candidates(db_session, force=False, company_ids=[target.id], user_id=1)
 
         assert [c.id for c in candidates] == [target.id]
