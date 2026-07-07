@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw } from 'lucide-react'
-import { api } from '../api/client'
+import { api, authFetch } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
+import { useAuth } from '../context/AuthContext'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
@@ -392,7 +393,7 @@ function AiPanel() {
     setPulling({ model: modelName, status: 'Starte Download…', pct: null })
     const url = api.settings.pullOllamaModel(modelName, form.base_url || 'http://host.docker.internal:11434')
     try {
-      const resp = await fetch(url)
+      const resp = await authFetch(url)
       if (!resp.body) throw new Error('Kein Stream')
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
@@ -1948,9 +1949,104 @@ function BackupPanel() {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'maps' | 'agent'
+function AccountPanel() {
+  const { user, logout } = useAuth()
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function changePassword() {
+    setError(null)
+    if (newPassword.length < 8) {
+      setError('Das neue Passwort muss mindestens 8 Zeichen lang sein.')
+      return
+    }
+    if (newPassword !== confirm) {
+      setError('Die Passwörter stimmen nicht überein.')
+      return
+    }
+    setSaving(true)
+    try {
+      await api.auth.changePassword(oldPassword, newPassword)
+      setOldPassword('')
+      setNewPassword('')
+      setConfirm('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">Konto</h3>
+        <p className="text-xs text-gray-400">Angemeldet als</p>
+        <p className="text-sm text-gray-800 font-medium mt-0.5">{user?.email}</p>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-4">
+        <h4 className="text-xs font-semibold text-gray-700">Passwort ändern</h4>
+        {error && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {error}
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Aktuelles Passwort</label>
+          <input
+            type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Neues Passwort</label>
+          <input
+            type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+            placeholder="Mindestens 8 Zeichen"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Neues Passwort bestätigen</label>
+          <input
+            type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        <button
+          onClick={changePassword}
+          disabled={saving || !oldPassword || !newPassword}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+          {saved ? 'Gespeichert' : 'Passwort ändern'}
+        </button>
+      </div>
+
+      <div className="border-t border-gray-100 pt-4">
+        <button
+          onClick={logout}
+          className="text-xs text-red-500 hover:text-red-600 font-medium"
+        >
+          Abmelden
+        </button>
+      </div>
+    </div>
+  )
+}
+
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'maps' | 'agent' | 'account'
 
 const TABS: [Tab, string][] = [
+  ['account',    'Konto'],
   ['sync',       'Sync'],
   ['ai',         'KI / API'],
   ['google',     'Google'],
@@ -2316,6 +2412,7 @@ export function SettingsModal({ onClose, onReviewOpen }: Props) {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6 min-w-0">
+            {tab === 'account'  && <AccountPanel />}
             {tab === 'sync'     && <SyncControlPanel />}
             {tab === 'ai'       && <AiPanel />}
             {tab === 'google'   && <GoogleSyncPanel />}
