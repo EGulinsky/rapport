@@ -41,7 +41,7 @@ class TestApproveCompanyCandidate:
             {"name": "Contoso Inc.", "url": "https://www.linkedin.com/company/contoso-inc"},
         ])
 
-        async def fake_get_context():
+        async def fake_get_context(user_id=None):
             playwright = MagicMock()
             playwright.stop = AsyncMock()
             browser = MagicMock()

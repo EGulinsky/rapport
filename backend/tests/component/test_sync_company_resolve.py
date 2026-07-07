@@ -30,7 +30,7 @@ class TestResolveCompanyCandidateWithUrl:
         p = company_profile_factory(db_session, sync_status="needs_review")
         db_session.commit()
 
-        async def fake_get_context():
+        async def fake_get_context(user_id=None):
             from unittest.mock import MagicMock
             playwright = MagicMock()
             playwright.stop = AsyncMock()
@@ -59,7 +59,7 @@ class TestResolveCompanyCandidateWithUrl:
         p = company_profile_factory(db_session, sync_status="needs_review")
         db_session.commit()
 
-        async def fake_get_context():
+        async def fake_get_context(user_id=None):
             return None
 
         with patch("app.routers.sync_company._get_linkedin_context", new=fake_get_context), \

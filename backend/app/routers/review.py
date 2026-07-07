@@ -73,7 +73,7 @@ async def approve_match(
         except Exception:
             profile_id = None
         if profile_id and body.linkedin_url:
-            await resolve_company_candidate(db, profile_id, body.linkedin_url)
+            await resolve_company_candidate(db, profile_id, body.linkedin_url, current_user.id)
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": None}
@@ -187,7 +187,7 @@ async def reject_match(
         except Exception:
             profile_id = None
         if profile_id:
-            await resolve_company_candidate(db, profile_id, None)
+            await resolve_company_candidate(db, profile_id, None, current_user.id)
         match.review_status = "rejected"
         db.commit()
         return {"status": "rejected"}

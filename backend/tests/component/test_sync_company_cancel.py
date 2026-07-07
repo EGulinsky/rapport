@@ -50,7 +50,7 @@ class TestRunSyncBatchCancelWikidata:
 
         with patch.object(sync_company, "_wikidata_search_one", new=fake_search_one), \
              patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
-            await sync_company._run_sync_batch([p1.id, p2.id, p3.id])
+            await sync_company._run_sync_batch([p1.id, p2.id, p3.id], 1)
 
         db_session.expire_all()
         assert p1.sync_status == "done"
@@ -75,7 +75,7 @@ class TestRunSyncBatchCancelWikidata:
 
         with patch.object(sync_company, "_wikidata_search_one", new=fake_search_one), \
              patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
-            await sync_company._run_sync_batch([p1.id])
+            await sync_company._run_sync_batch([p1.id], 1)
 
         db_session.expire_all()
         assert p1.sync_status == "pending"
@@ -92,7 +92,7 @@ class TestRunSyncBatchCancelWikidata:
 
         with patch.object(sync_company, "_wikidata_search_one", new=fake_search_one), \
              patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
-            await sync_company._run_sync_batch([p1.id, p2.id])
+            await sync_company._run_sync_batch([p1.id, p2.id], 1)
 
         db_session.expire_all()
         assert p1.sync_status == "done"
@@ -116,7 +116,7 @@ class TestRunSyncBatchCancelLinkedin:
         p2 = company_profile_factory(db_session, sync_status="pending")
         db_session.commit()
 
-        async def fake_get_context():
+        async def fake_get_context(user_id=None):
             return _fake_linkedin_context()
 
         async def fake_search_candidates(context, name, limit=5):
@@ -126,7 +126,7 @@ class TestRunSyncBatchCancelLinkedin:
         with patch.object(sync_company, "_get_linkedin_context", new=fake_get_context), \
              patch.object(sync_company, "_linkedin_search_candidates", new=fake_search_candidates), \
              patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
-            await sync_company._run_sync_batch([p1.id, p2.id])
+            await sync_company._run_sync_batch([p1.id, p2.id], 1)
 
         db_session.expire_all()
         # p1: LinkedIn-Suche lief (0 Treffer) → für Wikidata vorgesehen, aber
@@ -141,7 +141,7 @@ class TestRunSyncBatchCancelLinkedin:
         p1 = company_profile_factory(db_session, sync_status="pending")
         db_session.commit()
 
-        async def fake_get_context():
+        async def fake_get_context(user_id=None):
             return _fake_linkedin_context()
 
         async def fake_search_candidates(context, name, limit=5):
@@ -155,7 +155,7 @@ class TestRunSyncBatchCancelLinkedin:
              patch.object(sync_company, "_linkedin_scrape_about", new=fake_scrape_about), \
              patch.object(sync_company, "_fetch_logo_with_clearbit_fallback", new=AsyncMock(return_value=None)), \
              patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
-            await sync_company._run_sync_batch([p1.id])
+            await sync_company._run_sync_batch([p1.id], 1)
 
         db_session.expire_all()
         assert p1.sync_status == "done"
@@ -170,7 +170,7 @@ class TestRunSyncBatchCancelLinkedin:
         p1 = company_profile_factory(db_session, sync_status="pending")
         db_session.commit()
 
-        async def fake_get_context():
+        async def fake_get_context(user_id=None):
             return _fake_linkedin_context()
 
         async def fake_search_candidates(context, name, limit=5):
@@ -182,7 +182,7 @@ class TestRunSyncBatchCancelLinkedin:
         with patch.object(sync_company, "_get_linkedin_context", new=fake_get_context), \
              patch.object(sync_company, "_linkedin_search_candidates", new=fake_search_candidates), \
              patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
-            await sync_company._run_sync_batch([p1.id])
+            await sync_company._run_sync_batch([p1.id], 1)
 
         db_session.expire_all()
         assert p1.sync_status == "needs_review"

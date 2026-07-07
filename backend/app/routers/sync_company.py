@@ -8,14 +8,16 @@ import base64
 import json
 import re
 from datetime import datetime, timezone
+from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, set_session_user
 from app import models
+from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
 log = get_logger("sync", source="company")
@@ -232,7 +234,7 @@ GROUP BY ?company ?hqLabel ?countryLabel ?founded ?industryLabel
 
 # ── Source 1: LinkedIn company page (primär) ─────────────────────────────────
 
-async def _get_linkedin_context():
+async def _get_linkedin_context(user_id: Optional[int] = None):
     """Startet einen Playwright-Browser mit der gespeicherten LinkedIn-Session.
 
     Nutzt nur eine bestehende, gültige Session (kein Login-Versuch) — Company-Sync
@@ -241,6 +243,8 @@ async def _get_linkedin_context():
     """
     db = SessionLocal()
     try:
+        if user_id is not None:
+            set_session_user(db, user_id)
         cfg = db.query(models.LinkedInSync).first()
         if not cfg or not cfg.session_cookies:
             return None
@@ -445,7 +449,9 @@ async def _fetch_logo_with_clearbit_fallback(logo_url: str | None, website: str 
 # "Manuelle Überprüfung"-Queue; der User wählt einen Kandidaten (annehmen) oder
 # "keiner davon" (ablehnen → Wikidata-Fallback für genau diese eine Firma).
 
-async def resolve_company_candidate(db: Session, profile_id: int, linkedin_url: str | None) -> None:
+async def resolve_company_candidate(
+    db: Session, profile_id: int, linkedin_url: str | None, user_id: Optional[int] = None
+) -> None:
     """linkedin_url gesetzt: genau diese LinkedIn-Seite scrapen und übernehmen.
     linkedin_url=None ('keiner davon'): Wikidata-Fallback für dieses eine Profil."""
     profile = db.query(models.CompanyProfile).filter(models.CompanyProfile.id == profile_id).first()
@@ -458,7 +464,7 @@ async def resolve_company_candidate(db: Session, profile_id: int, linkedin_url: 
         data: dict = {}
         li_ctx = None
         try:
-            li_ctx = await _get_linkedin_context()
+            li_ctx = await _get_linkedin_context(user_id)
         except Exception as e:
             log.warning("Resolve: LinkedIn-Browser-Start fehlgeschlagen: {}", e)
         if li_ctx:
@@ -520,7 +526,7 @@ async def resolve_company_candidate(db: Session, profile_id: int, linkedin_url: 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/status")
-def company_sync_status(db: Session = Depends(get_db)):
+def company_sync_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     profiles = db.query(models.CompanyProfile).all()
     pending      = [p for p in profiles if p.sync_status == "pending"]
     done         = [p for p in profiles if p.sync_status == "done"]
@@ -547,7 +553,7 @@ def company_sync_status(db: Session = Depends(get_db)):
 
 
 def _collect_sync_candidates(
-    db: Session, force: bool, company_ids: list[int] | None
+    db: Session, force: bool, company_ids: list[int] | None, user_id: int
 ) -> list[models.CompanyProfile]:
     """Bestimmt, welche CompanyProfiles bei einem /run-Aufruf verarbeitet werden.
 
@@ -560,9 +566,12 @@ def _collect_sync_candidates(
     nutzt bewusst "Re-Sync" (force=True).
     """
     def _scoped(q):
+        q = q.filter(models.CompanyProfile.user_id == user_id)
         return q.filter(models.CompanyProfile.id.in_(company_ids)) if company_ids else q
 
     if force:
+        # Bulk .update() umgeht den zentralen Mandanten-Filter — daher ist
+        # user_id oben in _scoped() explizit mitgefiltert.
         _scoped(db.query(models.CompanyProfile)).update(
             {"sync_status": "pending", "sync_error": None}, synchronize_session=False
         )
@@ -579,31 +588,32 @@ async def company_sync_run(
     db: Session = Depends(get_db),
     force: bool = False,
     company_ids: list[int] | None = Query(default=None),
+    current_user: models.User = Depends(get_current_user),
 ):
     global _SYNC_RUNNING
     if _SYNC_RUNNING:
         return {"started": False, "count": 0, "message": "Sync already running"}
 
-    pending = _collect_sync_candidates(db, force, company_ids)
+    pending = _collect_sync_candidates(db, force, company_ids, current_user.id)
 
     count = len(pending)
     if count == 0:
         return {"started": False, "count": 0, "message": "Kein Sync nötig."}
 
     ids = [p.id for p in pending]
-    background_tasks.add_task(_run_sync_batch, ids)
+    background_tasks.add_task(_run_sync_batch, ids, current_user.id)
     return {"started": True, "count": count}
 
 
 @router.post("/cancel")
-def cancel_sync():
+def cancel_sync(current_user: models.User = Depends(get_current_user)):
     global _SYNC_CANCEL
     _SYNC_CANCEL = True
     return {"ok": True}
 
 
 @router.post("/reset-lock")
-def reset_lock():
+def reset_lock(current_user: models.User = Depends(get_current_user)):
     global _SYNC_RUNNING, _SYNC_CANCEL, _CURRENT_COMPANY
     _SYNC_RUNNING = False
     _SYNC_CANCEL = False
@@ -612,7 +622,7 @@ def reset_lock():
 
 
 @router.post("/reset-failed")
-def reset_failed(db: Session = Depends(get_db)):
+def reset_failed(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     updated = db.query(models.CompanyProfile).filter(
         models.CompanyProfile.sync_status == "failed"
     ).all()
@@ -624,7 +634,11 @@ def reset_failed(db: Session = Depends(get_db)):
 
 
 @router.post("/profiles/{profile_id}/reset")
-def reset_profile(profile_id: int, db: Session = Depends(get_db)):
+def reset_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     from fastapi import HTTPException
     profile = db.query(models.CompanyProfile).filter(
         models.CompanyProfile.id == profile_id
@@ -639,7 +653,7 @@ def reset_profile(profile_id: int, db: Session = Depends(get_db)):
 
 # ── Batch runner ──────────────────────────────────────────────────────────────
 
-async def _run_sync_batch(profile_ids: list[int]):
+async def _run_sync_batch(profile_ids: list[int], user_id: int):
     global _SYNC_RUNNING, _SYNC_CANCEL, _CURRENT_COMPANY
     _SYNC_RUNNING = True
     _SYNC_CANCEL = False
@@ -648,6 +662,7 @@ async def _run_sync_batch(profile_ids: list[int]):
 
     try:
         db = SessionLocal()
+        set_session_user(db, user_id)
         profiles = {
             p.id: p
             for p in db.query(models.CompanyProfile)
@@ -667,7 +682,7 @@ async def _run_sync_batch(profile_ids: list[int]):
 
         li_ctx = None
         try:
-            li_ctx = await _get_linkedin_context()
+            li_ctx = await _get_linkedin_context(user_id)
         except Exception as e:
             log.warning("LinkedIn: Browser-Start fehlgeschlagen: {}", e)
 
@@ -764,6 +779,7 @@ async def _run_sync_batch(profile_ids: list[int]):
             except Exception as e:
                 log.error("SPARQL-Batch Fehler: {}", e)
                 db = SessionLocal()
+                set_session_user(db, user_id)
                 for pid in chunk_pids:
                     p = db.query(models.CompanyProfile).get(pid)
                     if p:
@@ -797,6 +813,7 @@ async def _run_sync_batch(profile_ids: list[int]):
         # Phase 5: Ergebnisse schreiben — nur für tatsächlich versuchte Profile.
         attempted_pids = list(dict.fromkeys(li_attempted_pids + wikidata_attempted_pids))
         db = SessionLocal()
+        set_session_user(db, user_id)
         for pid in attempted_pids:
             if pid in sparql_failed_pids:
                 continue  # bereits als "failed" committed (SPARQL-Batch-Fehler)
@@ -812,6 +829,7 @@ async def _run_sync_batch(profile_ids: list[int]):
                     models.PendingMatch.event_type == "company_candidate",
                     models.PendingMatch.external_id == f"company:{pid}",
                     models.PendingMatch.review_status == "pending",
+                    models.PendingMatch.user_id == user_id,
                 ).delete(synchronize_session=False)
                 db.add(models.PendingMatch(
                     source="linkedin",
@@ -821,6 +839,7 @@ async def _run_sync_batch(profile_ids: list[int]):
                     titel=p.name_display or p.name_norm,
                     raw_content=json.dumps({"company_profile_id": pid, "candidates": candidates}),
                     status_only=False,
+                    user_id=user_id,
                 ))
                 p.sync_status = "needs_review"
                 p.sync_error = None
