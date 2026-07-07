@@ -11,7 +11,7 @@ from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
     review, cleanup, calendar, attachments, merge, audit_log, backup,
-    analytics, sync_company, companies, startup_check, geo,
+    analytics, sync_company, companies, startup_check, geo, auth,
 )
 
 setup_logging()
@@ -160,6 +160,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(applications.router)
 app.include_router(import_excel.router)
 app.include_router(contacts.router)
