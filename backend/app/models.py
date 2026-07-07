@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, Text, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Date, Boolean, Text, DateTime, ForeignKey, Table, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -113,9 +113,13 @@ EXCEL_EXPORT_MAP: dict[tuple[str, str | None], str] = {
 class CompanyProfile(Base):
     """Background data about a company or headhunter, populated by async web sync."""
     __tablename__ = "company_profiles"
+    __table_args__ = (
+        Index("ix_company_profiles_user_id_name_norm", "user_id", "name_norm", unique=True),
+    )
 
     id                   = Column(Integer, primary_key=True, index=True)
-    name_norm            = Column(String, unique=True, nullable=False, index=True)  # normalised key for dedup
+    user_id              = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    name_norm            = Column(String, nullable=False)  # normalised key for dedup, unique per Nutzer (siehe __table_args__)
     name_display         = Column(String, nullable=True)
 
     # Location
@@ -161,6 +165,7 @@ class Application(Base):
     __tablename__ = "applications"
 
     id                   = Column(Integer, primary_key=True, index=True)
+    user_id              = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     firma                = Column(String, nullable=False)
     rolle                = Column(String, nullable=False)
 
@@ -237,6 +242,7 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     name            = Column(String, nullable=False)
     vorname         = Column(String, nullable=True)
@@ -265,6 +271,7 @@ class MergeAlias(Base):
     __tablename__ = "merge_aliases"
 
     id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     entity_type     = Column(String, nullable=False)   # "application" | "contact"
     canonical_id    = Column(Integer, nullable=False, index=True)
     # Application alias fields
@@ -281,6 +288,7 @@ class Event(Base):
     __tablename__ = "events"
 
     id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     application_id  = Column(Integer, ForeignKey("applications.id"), nullable=False)
 
     typ             = Column(String)
@@ -301,6 +309,7 @@ class Attachment(Base):
     __tablename__ = "attachments"
 
     id           = Column(Integer, primary_key=True, index=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     event_id     = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
     filename     = Column(String, nullable=False)
     content_type = Column(String, nullable=True)
@@ -317,6 +326,7 @@ class GoogleSync(Base):
     __tablename__ = "google_sync"
 
     id                  = Column(Integer, primary_key=True)
+    user_id             = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     client_id           = Column(String, nullable=False)
     client_secret_enc   = Column(Text, nullable=False)
     access_token_enc    = Column(Text, nullable=True)
@@ -334,6 +344,7 @@ class SyncedItem(Base):
     __tablename__ = "synced_items"
 
     id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     source      = Column(String, nullable=False)
     external_id = Column(String, nullable=False)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -343,6 +354,7 @@ class PendingMatch(Base):
     __tablename__ = "pending_matches"
 
     id                    = Column(Integer, primary_key=True)
+    user_id               = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     source                = Column(String, nullable=False)   # "gmail", "gcal"
     external_id           = Column(String, nullable=False)
     confidence            = Column(Integer, nullable=False)  # 0–100
@@ -365,6 +377,7 @@ class ICloudSync(Base):
     __tablename__ = "icloud_sync"
 
     id                    = Column(Integer, primary_key=True)
+    user_id               = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     apple_id              = Column(String, nullable=False)
     icloud_email          = Column(String, nullable=True)   # @icloud.com/@me.com for IMAP; falls back to apple_id
     app_password_enc      = Column(Text, nullable=False)
@@ -383,6 +396,7 @@ class CallsConfig(Base):
     __tablename__ = "calls_config"
 
     id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     enabled     = Column(Boolean, default=True, nullable=False)
     last_sync   = Column(DateTime(timezone=True), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
@@ -393,6 +407,7 @@ class LinkedInSync(Base):
     __tablename__ = "linkedin_sync"
 
     id               = Column(Integer, primary_key=True)
+    user_id          = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     email            = Column(String, nullable=False)
     password_enc     = Column(Text, nullable=False)    # Fernet-encrypted
     session_cookies  = Column(Text, nullable=True)     # JSON blob, reused across syncs
@@ -405,6 +420,7 @@ class AiSettings(Base):
     __tablename__ = "ai_settings"
 
     id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     provider    = Column(String, nullable=False, default="groq")
     model       = Column(String, nullable=False, default="groq/llama-3.3-70b-versatile")
     api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted, null for Ollama
@@ -419,6 +435,7 @@ class MapsSettings(Base):
     __tablename__ = "maps_settings"
 
     id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted Google Maps API key
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
@@ -433,6 +450,7 @@ class AgentSettings(Base):
     __tablename__ = "agent_settings"
 
     id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     url         = Column(String, nullable=True)   # override; None = default AGENT_URL env var
     token_enc   = Column(Text, nullable=True)
 
@@ -444,6 +462,7 @@ class SyncSettings(Base):
     __tablename__ = "sync_settings"
 
     id                       = Column(Integer, primary_key=True)
+    user_id                  = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     google_enabled           = Column(Boolean, default=True, nullable=False)
     gmail_enabled            = Column(Boolean, default=True, nullable=False)
     gcal_enabled             = Column(Boolean, default=True, nullable=False)
@@ -464,6 +483,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id          = Column(Integer, primary_key=True, index=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     app_id      = Column(Integer, ForeignKey("applications.id", ondelete="SET NULL"), nullable=True, index=True)
     timestamp   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     # create | update | delete | status_change | merge | import
@@ -482,6 +502,7 @@ class FilesConfig(Base):
     __tablename__ = "files_config"
 
     id           = Column(Integer, primary_key=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     folder_path  = Column(String, nullable=True)
     enabled      = Column(Boolean, default=True, nullable=False)
     last_sync    = Column(DateTime(timezone=True), nullable=True)
@@ -493,6 +514,7 @@ class BackupConfig(Base):
     __tablename__ = "backup_config"
 
     id              = Column(Integer, primary_key=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     enabled         = Column(Boolean, default=False, nullable=False)
     backup_folder   = Column(String, nullable=True)   # absolute path on host Mac
     frequency_hours = Column(Integer, default=24, nullable=False)
@@ -506,6 +528,7 @@ class LogoSettings(Base):
     __tablename__ = "logo_settings"
 
     id      = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     api_key = Column(String, nullable=True)   # Logo.dev public pk_ key
 
 

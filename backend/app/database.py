@@ -732,6 +732,61 @@ def _migrate_application_ort():
     conn.close()
 
 
+_USER_SCOPED_TABLES = [
+    "company_profiles", "applications", "contacts", "merge_aliases", "events",
+    "attachments", "google_sync", "synced_items", "pending_matches", "icloud_sync",
+    "calls_config", "linkedin_sync", "ai_settings", "maps_settings", "agent_settings",
+    "sync_settings", "audit_log", "files_config", "backup_config", "logo_settings",
+]
+
+
+def _migrate_add_user_id_columns():
+    """Benutzerkonten-Feature (Mandantentrennung): fügt jeder bisher globalen
+    Tabelle eine user_id-Spalte hinzu (zunächst NULL für bereits vorhandene
+    Zeilen — siehe Claim-on-first-verify in app/routers/auth.py) und ersetzt
+    den globalen Unique-Index auf CompanyProfile.name_norm durch einen
+    zusammengesetzten (user_id, name_norm)-Index. Muss nach create_all()
+    laufen, da die users-Tabelle als FK-Ziel existieren muss."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    for table in _USER_SCOPED_TABLES:
+        cur.execute(f"PRAGMA table_info({table})")
+        cols = {row[1] for row in cur.fetchall()}
+        if "user_id" not in cols:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER REFERENCES users(id)")
+
+    cur.execute("DROP INDEX IF EXISTS ix_company_profiles_name_norm")
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_company_profiles_user_id_name_norm "
+        "ON company_profiles (user_id, name_norm)"
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def claim_unowned_data(db, user_id: int) -> None:
+    """Weist einem Konto alle Zeilen zu, die noch keinem Nutzer gehören
+    (user_id IS NULL) — der einmalige Übergang von der bisherigen Ein-
+    Personen-Installation zu echten Benutzerkonten. Wird ausschließlich für
+    das allererste bestätigte Konto aufgerufen (siehe verify_email() in
+    app/routers/auth.py)."""
+    from sqlalchemy import text
+
+    for table in _USER_SCOPED_TABLES:
+        db.execute(
+            text(f"UPDATE {table} SET user_id = :uid WHERE user_id IS NULL"),
+            {"uid": user_id},
+        )
+    db.commit()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -753,6 +808,7 @@ def init_db():
     _migrate_ai_assessment()
     _migrate_application_ort()
     Base.metadata.create_all(bind=engine)
+    _migrate_add_user_id_columns()
     _migrate_company_profiles()
     _backfill_company_profiles()
     _backfill_events()

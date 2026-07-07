@@ -28,7 +28,7 @@ from app.auth.security import (
     verify_password,
     verification_code_expiry,
 )
-from app.database import get_db
+from app.database import claim_unowned_data, get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -125,9 +125,17 @@ def verify_email(payload: VerifyEmailPayload, db: Session = Depends(get_db)):
     if user.email_verified:
         raise HTTPException(400, "E-Mail-Adresse ist bereits bestätigt.")
 
+    # Vor dem Markieren prüfen: ist dies das allererste je bestätigte Konto?
+    # Falls ja, gehört diesem Konto der komplette bisherige (kontolose)
+    # Datenbestand aus der Zeit vor den Benutzerkonten (siehe claim_unowned_data()).
+    is_first_verified_ever = db.query(models.User).filter_by(email_verified=True).count() == 0
+
     _consume_code(db, user, payload.code, "verify_email")
     user.email_verified = True
     db.commit()
+
+    if is_first_verified_ever:
+        claim_unowned_data(db, user.id)
 
     return AuthTokenResponse(access_token=create_access_token(user.id))
 
