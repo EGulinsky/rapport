@@ -20,6 +20,14 @@ from app import models
 
 fake = Faker("de_DE")
 
+# Muss mit conftest.py::DEFAULT_TEST_USER_ID übereinstimmen — der `client`-Fixture
+# überschreibt get_current_user() mit einem Fake-Nutzer dieser ID, damit
+# bestehende (nicht auth-bezogene) Tests ihre per Factory angelegten Daten
+# weiterhin sehen, ohne dass jede einzelne Factory-Aufrufstelle angepasst
+# werden muss. db_session-only-Tests (kein HTTP-Layer) aktivieren den
+# Mandanten-Filter nie und sind von diesem Default unberührt.
+_DEFAULT_TEST_USER_ID = 1
+
 
 def application_factory(db: Session, **overrides) -> models.Application:
     defaults = dict(
@@ -29,6 +37,7 @@ def application_factory(db: Session, **overrides) -> models.Application:
         sub_status=None,
         is_headhunter=False,
         datum_bewerbung=date.today() - timedelta(days=fake.random_int(0, 60)),
+        user_id=_DEFAULT_TEST_USER_ID,
     )
     defaults.update(overrides)
     app = models.Application(**defaults)
@@ -43,6 +52,7 @@ def contact_factory(db: Session, **overrides) -> models.Contact:
         email=fake.unique.email(),
         firma=fake.company(),
         typ="hr",
+        user_id=_DEFAULT_TEST_USER_ID,
     )
     defaults.update(overrides)
     contact = models.Contact(**defaults)
@@ -58,6 +68,7 @@ def company_profile_factory(db: Session, **overrides) -> models.CompanyProfile:
         name_display=name,
         website=f"https://www.{fake.unique.domain_word()}.de/",
         sync_status="done",
+        user_id=_DEFAULT_TEST_USER_ID,
     )
     defaults.update(overrides)
     profile = models.CompanyProfile(**defaults)
@@ -103,6 +114,7 @@ def event_factory(db: Session, application: models.Application, **overrides) -> 
         datum=date.today() - timedelta(days=fake.random_int(0, 30)),
         titel=fake.sentence(nb_words=4),
         source="gmail",
+        user_id=application.user_id,
     )
     defaults.update(overrides)
     event = models.Event(**defaults)
