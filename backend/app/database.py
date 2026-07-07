@@ -1,6 +1,9 @@
 from sqlalchemy import create_engine
+from sqlalchemy import event as _event_module
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session as _OrmSession
+from sqlalchemy.orm import with_loader_criteria as _with_loader_criteria
 import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/jobtracker.db")
@@ -28,6 +31,54 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# ── Mandantentrennung: zentraler Query-Filter ──────────────────────────────
+#
+# Statt jede einzelne Query in ~20 Router-Dateien manuell um ein
+# `.filter_by(user_id=...)` zu ergänzen (fehleranfällig — eine vergessene
+# Stelle wäre ein echtes Datenleck zwischen Konten), wird die aktive Konto-ID
+# einmal pro Request an der DB-Session hinterlegt (siehe set_session_user()).
+# Ein SQLAlchemy-Session-Event wendet daraufhin automatisch einen Filter auf
+# JEDE SELECT-Query gegen ein mandantengebundenes Modell an — inklusive
+# Relationship-Lazy-Loads und Subqueries, solange sie über die ORM-Query-API
+# laufen (rohes db.execute(text(...)) umgeht das, ebenso wie Session.get()/
+# db.query(X).get(id) — siehe SQLAlchemy-Doku zu with_loader_criteria. Für
+# Primary-Key-Lookups auf Anfrage-Pfaden ist daher zusätzlich eine explizite
+# Eigentums-Prüfung nach dem Laden nötig.
+_SCOPED_MODEL_NAMES = [
+    "CompanyProfile", "Application", "Contact", "MergeAlias", "Event", "Attachment",
+    "GoogleSync", "SyncedItem", "PendingMatch", "ICloudSync", "CallsConfig", "LinkedInSync",
+    "AiSettings", "MapsSettings", "AgentSettings", "SyncSettings", "AuditLog",
+    "FilesConfig", "BackupConfig", "LogoSettings",
+]
+
+
+def set_session_user(db, user_id) -> None:
+    """Aktiviert den automatischen Mandanten-Filter für diese Session. Wird
+    pro HTTP-Request von get_current_user() aufgerufen, und von den
+    Hintergrund-Sync-Jobs für das ausführende Konto (siehe main.py)."""
+    db.info["current_user_id"] = user_id
+
+
+@_event_module.listens_for(_OrmSession, "do_orm_execute")
+def _apply_tenant_filter(execute_state):
+    if not execute_state.is_select:
+        return
+    user_id = execute_state.session.info.get("current_user_id")
+    if user_id is None:
+        return
+    # Lazy-Import: verhindert einen zirkulären Import beim Laden von
+    # database.py selbst (models.py importiert Base von hier). Zum Zeitpunkt,
+    # an dem tatsächlich eine Query läuft, ist app.models garantiert bereits
+    # importiert — Modell-Instanzen können sonst gar nicht existieren.
+    from app import models as _models
+
+    for name in _SCOPED_MODEL_NAMES:
+        cls = getattr(_models, name)
+        execute_state.statement = execute_state.statement.options(
+            _with_loader_criteria(cls, cls.user_id == user_id, include_aliases=True)
+        )
 
 
 def _migrate_status_fields():

@@ -9,6 +9,7 @@ from datetime import date, datetime
 
 from app.database import get_db
 from app import models, schemas
+from app.auth.dependencies import get_current_user
 from app.models import MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.audit import add_audit
 from app.dedup import norm_firma
@@ -74,7 +75,7 @@ def _compute_naechster_schritt(
 
     return ""
 
-def _find_or_create_company_profile(db: Session, firma_name: str) -> tuple[models.CompanyProfile, bool]:
+def _find_or_create_company_profile(db: Session, firma_name: str, user_id: int) -> tuple[models.CompanyProfile, bool]:
     """Match an existing CompanyProfile by normalized name or create a new one.
 
     Returns (profile, created) — created=True means a fresh "pending" profile
@@ -82,7 +83,8 @@ def _find_or_create_company_profile(db: Session, firma_name: str) -> tuple[model
     """
     key = norm_firma(firma_name)
     profile = db.query(models.CompanyProfile).filter(
-        models.CompanyProfile.name_norm == key
+        models.CompanyProfile.name_norm == key,
+        models.CompanyProfile.user_id == user_id,
     ).first()
     if profile:
         return profile, False
@@ -90,6 +92,7 @@ def _find_or_create_company_profile(db: Session, firma_name: str) -> tuple[model
         name_norm=key,
         name_display=firma_name,
         sync_status="pending",
+        user_id=user_id,
     )
     db.add(profile)
     db.flush()
@@ -99,11 +102,11 @@ def _find_or_create_company_profile(db: Session, firma_name: str) -> tuple[model
 def _ensure_company_profile(db: Session, app: models.Application) -> None:
     """Create or link CompanyProfile for the application's firma (and zielfirma if HH)."""
     if app.firma:
-        profile, _ = _find_or_create_company_profile(db, app.firma)
+        profile, _ = _find_or_create_company_profile(db, app.firma, app.user_id)
         app.company_profile_id = profile.id
 
     if app.is_headhunter and app.zielfirma_bei_hh:
-        zprofile, _ = _find_or_create_company_profile(db, app.zielfirma_bei_hh)
+        zprofile, _ = _find_or_create_company_profile(db, app.zielfirma_bei_hh, app.user_id)
         app.target_company_profile_id = zprofile.id
 
 
@@ -116,8 +119,9 @@ def list_applications(
     search: Optional[str] = Query(None),
     show_rejected: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    q = db.query(models.Application)
+    q = db.query(models.Application).filter(models.Application.user_id == current_user.id)
 
     if main_status:
         q = q.filter(models.Application.main_status == main_status)
@@ -247,8 +251,8 @@ def list_applications(
 
 
 @router.get("/stats", response_model=schemas.StatsResponse)
-def get_stats(db: Session = Depends(get_db)):
-    all_apps = db.query(models.Application).all()
+def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    all_apps = db.query(models.Application).filter(models.Application.user_id == current_user.id).all()
     total = len(all_apps)
     rejected = sum(1 for a in all_apps if a.main_status == "rejected")
     active = total - rejected
@@ -267,7 +271,7 @@ def get_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/ai-assess-all")
-async def ai_assess_all(db: Session = Depends(get_db)):
+async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     import asyncio
     from app.models import AiSettings
     from app.ai.tasks import assess_application
@@ -319,6 +323,7 @@ async def extract_from_linkedin_url(
     payload: schemas.ExtractFromUrlRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     if "linkedin.com" not in payload.url:
         raise HTTPException(400, "Bitte einen LinkedIn-Job-Link angeben.")
@@ -352,7 +357,7 @@ async def extract_from_linkedin_url(
     result["stellenanzeige_url"] = payload.url
     result["company_profile_id"] = None
     if result.get("firma"):
-        profile, created = _find_or_create_company_profile(db, result["firma"])
+        profile, created = _find_or_create_company_profile(db, result["firma"], current_user.id)
         db.commit()
         result["company_profile_id"] = profile.id
         result["firma"] = profile.name_display or result["firma"]
@@ -363,7 +368,7 @@ async def extract_from_linkedin_url(
 
 
 @router.get("/{app_id}", response_model=schemas.ApplicationRead)
-def get_application(app_id: int, db: Session = Depends(get_db)):
+def get_application(app_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
@@ -380,9 +385,13 @@ def get_application(app_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=schemas.ApplicationRead, status_code=201)
-def create_application(payload: schemas.ApplicationCreate, db: Session = Depends(get_db)):
+def create_application(
+    payload: schemas.ApplicationCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     data = payload.model_dump()
-    app = models.Application(**data)
+    app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
     db.add(app)
     db.flush()  # get app.id before creating event
@@ -392,17 +401,23 @@ def create_application(payload: schemas.ApplicationCreate, db: Session = Depends
         typ="bewerbung",
         datum=app.datum_bewerbung or date.today(),
         titel="Bewerbung eingereicht",
+        user_id=current_user.id,
     )
     db.add(event)
     add_audit(db, "create", "user", app_id=app.id,
-              new_value=f"{app.firma} – {app.rolle}")
+              new_value=f"{app.firma} – {app.rolle}", user_id=current_user.id)
     db.commit()
     db.refresh(app)
     return app
 
 
 @router.patch("/{app_id}", response_model=schemas.ApplicationRead)
-def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Session = Depends(get_db)):
+def update_application(
+    app_id: int,
+    payload: schemas.ApplicationUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
@@ -428,7 +443,8 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
             old_v = getattr(app, f, None)
             if str(old_v or "") != str(v or ""):
                 add_audit(db, "update", "user", app_id=app_id,
-                          field=f, old_value=str(old_v or ""), new_value=str(v or ""))
+                          field=f, old_value=str(old_v or ""), new_value=str(v or ""),
+                          user_id=current_user.id)
 
     # Direct company profile assignment: look up name and skip _ensure_company_profile
     direct_cp_id = update_data.pop("company_profile_id", None)
@@ -439,7 +455,10 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
         setattr(app, field, value)
 
     if direct_cp_id is not None:
-        cp = db.get(models.CompanyProfile, direct_cp_id)
+        # Explizit nach user_id gefiltert statt db.get(): verhindert, dass eine
+        # fremde CompanyProfile-ID (von einem anderen Konto) übernommen wird —
+        # db.get()/Query.get() umgehen den automatischen Mandanten-Filter.
+        cp = db.query(models.CompanyProfile).filter_by(id=direct_cp_id, user_id=current_user.id).first()
         if cp:
             app.company_profile_id = cp.id
             app.firma = cp.name_display or cp.name_norm
@@ -448,7 +467,7 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
         _ensure_company_profile(db, app)
 
     if direct_tcp_id is not None:
-        tcp = db.get(models.CompanyProfile, direct_tcp_id)
+        tcp = db.query(models.CompanyProfile).filter_by(id=direct_tcp_id, user_id=current_user.id).first()
         if tcp:
             app.target_company_profile_id = tcp.id
             app.zielfirma_bei_hh = tcp.name_display or tcp.name_norm
@@ -461,10 +480,11 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
             typ="status",
             datum=date.today(),
             titel=_status_label(new_main, new_sub),
+            user_id=current_user.id,
         ))
         add_audit(db, "status_change", "user", app_id=app_id,
                   field="main_status", old_value=old_main, new_value=new_main,
-                  reason="manuell geändert")
+                  reason="manuell geändert", user_id=current_user.id)
 
     db.commit()
     db.refresh(app)
@@ -472,19 +492,27 @@ def update_application(app_id: int, payload: schemas.ApplicationUpdate, db: Sess
 
 
 @router.delete("/{app_id}", status_code=204)
-def delete_application(app_id: int, db: Session = Depends(get_db)):
+def delete_application(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
     add_audit(db, "delete", "user", app_id=app_id,
-              old_value=f"{app.firma} – {app.rolle}")
+              old_value=f"{app.firma} – {app.rolle}", user_id=current_user.id)
     db.delete(app)
     db.commit()
 
 
 # ── AI Assessment ────────────────────────────────────────────────────────
 @router.post("/{app_id}/ai-assess")
-async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
+async def ai_assess_single(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     app = (
         db.query(models.Application)
         .options(joinedload(models.Application.events))
@@ -516,26 +544,45 @@ async def ai_assess_single(app_id: int, db: Session = Depends(get_db)):
 
 # ── Events ──────────────────────────────────────────────────────────────
 @router.get("/{app_id}/events", response_model=List[schemas.EventRead])
-def list_events(app_id: int, db: Session = Depends(get_db)):
+def list_events(app_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     return db.query(models.Event).filter(models.Event.application_id == app_id).order_by(models.Event.datum.desc()).all()
 
 
+def _get_owned_application(db: Session, app_id: int, current_user: models.User) -> models.Application:
+    """Lädt eine Bewerbung und stellt sicher, dass sie dem aktuellen Konto gehört
+    — wichtig für Schreib-Operationen mit einer aus dem Request stammenden
+    app_id, da der automatische Mandanten-Filter nur Lesezugriffe absichert."""
+    app = db.query(models.Application).filter(models.Application.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+    return app
+
+
 @router.post("/{app_id}/events", response_model=schemas.EventRead, status_code=201)
-def add_event(app_id: int, payload: schemas.EventBase, db: Session = Depends(get_db)):
-    event = models.Event(application_id=app_id, **payload.model_dump())
+def add_event(
+    app_id: int,
+    payload: schemas.EventBase,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    app = _get_owned_application(db, app_id, current_user)
+    event = models.Event(application_id=app_id, **payload.model_dump(), user_id=current_user.id)
     db.add(event)
     # Sync datum_bewerbung when a bewerbung event is added
     if event.typ == "bewerbung" and event.datum:
-        app = db.query(models.Application).get(app_id)
-        if app:
-            app.datum_bewerbung = event.datum
+        app.datum_bewerbung = event.datum
     db.commit()
     db.refresh(event)
     return event
 
 
 @router.delete("/{app_id}/events/{event_id}", status_code=204)
-def delete_event(app_id: int, event_id: int, db: Session = Depends(get_db)):
+def delete_event(
+    app_id: int,
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     event = db.query(models.Event).filter(
         models.Event.id == event_id,
         models.Event.application_id == app_id,
@@ -546,7 +593,7 @@ def delete_event(app_id: int, event_id: int, db: Session = Depends(get_db)):
     db.delete(event)
     # If the deleted event was a bewerbung event, recalculate datum_bewerbung from remaining events
     if was_bewerbung:
-        app = db.query(models.Application).get(app_id)
+        app = db.query(models.Application).filter(models.Application.id == app_id).first()
         if app:
             remaining = (
                 db.query(models.Event)
@@ -559,7 +606,13 @@ def delete_event(app_id: int, event_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{app_id}/events/{event_id}", response_model=schemas.EventRead)
-def update_event(app_id: int, event_id: int, payload: schemas.EventUpdate, db: Session = Depends(get_db)):
+def update_event(
+    app_id: int,
+    event_id: int,
+    payload: schemas.EventUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     event = db.query(models.Event).filter(
         models.Event.id == event_id,
         models.Event.application_id == app_id,
@@ -570,7 +623,7 @@ def update_event(app_id: int, event_id: int, payload: schemas.EventUpdate, db: S
         setattr(event, field, value)
     # Sync datum_bewerbung when a bewerbung event date changes
     if event.typ == "bewerbung" and event.datum:
-        app = db.query(models.Application).get(app_id)
+        app = db.query(models.Application).filter(models.Application.id == app_id).first()
         if app:
             app.datum_bewerbung = event.datum
     db.commit()
@@ -580,19 +633,20 @@ def update_event(app_id: int, event_id: int, payload: schemas.EventUpdate, db: S
 
 # ── Contacts ─────────────────────────────────────────────────────────────
 @router.get("/{app_id}/contacts", response_model=List[schemas.ContactRead])
-def list_contacts(app_id: int, db: Session = Depends(get_db)):
-    app = db.query(models.Application).filter(models.Application.id == app_id).first()
-    if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+def list_contacts(app_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    app = _get_owned_application(db, app_id, current_user)
     return app.contacts
 
 
 @router.post("/{app_id}/contacts", response_model=schemas.ContactRead, status_code=201)
-def add_contact(app_id: int, payload: schemas.ContactBase, db: Session = Depends(get_db)):
-    app = db.query(models.Application).filter(models.Application.id == app_id).first()
-    if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
-    contact = models.Contact(**payload.model_dump())
+def add_contact(
+    app_id: int,
+    payload: schemas.ContactBase,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    app = _get_owned_application(db, app_id, current_user)
+    contact = models.Contact(**payload.model_dump(), user_id=current_user.id)
     db.add(contact)
     db.flush()
     app.contacts.append(contact)
@@ -602,10 +656,14 @@ def add_contact(app_id: int, payload: schemas.ContactBase, db: Session = Depends
 
 
 @router.patch("/{app_id}/contacts/{contact_id}", response_model=schemas.ContactRead)
-def update_contact(app_id: int, contact_id: int, payload: schemas.ContactUpdate, db: Session = Depends(get_db)):
-    app = db.query(models.Application).filter(models.Application.id == app_id).first()
-    if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+def update_contact(
+    app_id: int,
+    contact_id: int,
+    payload: schemas.ContactUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    app = _get_owned_application(db, app_id, current_user)
     contact = next((c for c in app.contacts if c.id == contact_id), None)
     if not contact:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
@@ -617,7 +675,12 @@ def update_contact(app_id: int, contact_id: int, payload: schemas.ContactUpdate,
 
 
 @router.put("/{app_id}/contacts/{contact_id}", response_model=schemas.ContactRead)
-def link_contact(app_id: int, contact_id: int, db: Session = Depends(get_db)):
+def link_contact(
+    app_id: int,
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Link an existing contact to an application (no-op if already linked)."""
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
@@ -633,7 +696,12 @@ def link_contact(app_id: int, contact_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{app_id}/contacts/{contact_id}", status_code=204)
-def delete_contact(app_id: int, contact_id: int, db: Session = Depends(get_db)):
+def delete_contact(
+    app_id: int,
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
