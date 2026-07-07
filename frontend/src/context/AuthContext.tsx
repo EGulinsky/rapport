@@ -7,6 +7,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   verifyEmail: (email: string, code: string) => Promise<void>
+  resendCode: (email: string) => Promise<void>
   forgotPassword: (email: string) => Promise<void>
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>
   logout: () => void
@@ -56,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshUser()
   }
 
+  async function resendCode(email: string) {
+    await api.auth.resendCode(email)
+  }
+
   async function forgotPassword(email: string) {
     await api.auth.forgotPassword(email)
   }
@@ -70,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, forgotPassword, resetPassword, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, resendCode, forgotPassword, resetPassword, logout }}>
       {children}
     </AuthContext.Provider>
   )

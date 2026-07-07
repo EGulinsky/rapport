@@ -4,6 +4,7 @@ Passwort-Reset per Code sowie Passwort-Änderung im eingeloggten Zustand.
 
 POST /api/auth/register          — Konto anlegen, Bestätigungscode per E-Mail
 POST /api/auth/verify-email      — Code prüfen, Konto aktivieren, JWT zurückgeben
+POST /api/auth/resend-code       — neuen Bestätigungscode senden (unverifiziertes Konto)
 POST /api/auth/login             — Login, JWT zurückgeben
 POST /api/auth/forgot-password   — Reset-Code per E-Mail (immer 200, keine User-Enumeration)
 POST /api/auth/reset-password    — Reset-Code prüfen, neues Passwort setzen
@@ -46,6 +47,10 @@ class VerifyEmailPayload(BaseModel):
 class LoginPayload(BaseModel):
     email: EmailStr
     password: str
+
+
+class ResendCodePayload(BaseModel):
+    email: EmailStr
 
 
 class ForgotPasswordPayload(BaseModel):
@@ -138,6 +143,20 @@ def verify_email(payload: VerifyEmailPayload, db: Session = Depends(get_db)):
         claim_unowned_data(db, user.id)
 
     return AuthTokenResponse(access_token=create_access_token(user.id))
+
+
+@router.post("/resend-code")
+def resend_code(payload: ResendCodePayload, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter_by(email=payload.email).first()
+    if user and not user.email_verified:
+        code = _issue_code(db, user, "verify_email")
+        try:
+            send_verification_code(user.email, code, "verify_email")
+        except EmailNotConfigured as e:
+            raise HTTPException(502, str(e))
+    # Immer dieselbe Antwort — verhindert Rückschlüsse auf registrierte/verifizierte
+    # Adressen (User-Enumeration), analog zu forgot-password.
+    return {"message": "Falls ein unbestätigtes Konto mit dieser E-Mail-Adresse existiert, wurde ein neuer Code gesendet."}
 
 
 @router.post("/login", response_model=AuthTokenResponse)

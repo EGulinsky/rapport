@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.34.4',
+    date: '2026-07-07',
+    changes: [
+      'Neu: "Code erneut senden" auf der E-Mail-Bestätigen-Seite. Vorher gab es keinen Weg, einen neuen Bestätigungscode zu bekommen, wenn der ursprüngliche abgelaufen war oder der Versand fehlgeschlagen ist — eine erneute Registrierung mit derselben Adresse schlug mit "bereits registriert" fehl.',
+    ],
+  },
+  {
     version: '3.34.3',
     date: '2026-07-07',
     changes: [

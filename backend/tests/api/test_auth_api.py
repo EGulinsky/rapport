@@ -88,6 +88,35 @@ class TestVerifyEmail:
         assert resp.status_code == 404
 
 
+class TestResendCode:
+    def test_positiv_neuer_code_kann_bestaetigten(self, real_auth_client, captured_email):
+        _register(real_auth_client, captured_email)
+
+        resp = real_auth_client.post("/api/auth/resend-code", json={"email": "test@example.com"})
+
+        assert resp.status_code == 200
+        assert captured_email["purpose"] == "verify_email"
+        neuer_code = captured_email["code"]
+        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": neuer_code})
+        assert verify_resp.status_code == 200
+
+    def test_negativ_bereits_bestaetigtes_konto_bekommt_keinen_neuen_code(self, real_auth_client, captured_email):
+        _register(real_auth_client, captured_email)
+        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+        captured_email.clear()
+
+        resp = real_auth_client.post("/api/auth/resend-code", json={"email": "test@example.com"})
+
+        assert resp.status_code == 200
+        assert captured_email == {}  # kein Versand ausgelöst
+
+    def test_corner_case_unbekannte_email_liefert_trotzdem_200_ohne_versand(self, real_auth_client, captured_email):
+        resp = real_auth_client.post("/api/auth/resend-code", json={"email": "nichtregistriert@example.com"})
+
+        assert resp.status_code == 200
+        assert captured_email == {}  # keine User-Enumeration: gleiche Antwort, kein Versand
+
+
 class TestLogin:
     def test_positiv_login_nach_verifizierung(self, real_auth_client, captured_email):
         _register(real_auth_client, captured_email)
