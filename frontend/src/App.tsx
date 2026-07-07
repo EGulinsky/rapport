@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud } from 'lucide-react'
 import { CompanySearchInput } from './components/CompanySearchInput'
-import { api } from './api/client'
+import { api, authFetch } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
 import { ApplicationModal } from './components/ApplicationModal'
@@ -50,7 +50,10 @@ function BackendGate({ children }: { children: React.ReactNode }) {
     async function poll() {
       while (!cancelled) {
         try {
-          const res = await fetch('/api/applications/stats')
+          // Bewusst ein Endpunkt ohne Login-Pflicht (startup-check) — BackendGate
+          // prüft nur, ob das Backend überhaupt hochgefahren ist, nicht ob wir
+          // eingeloggt sind (applications/stats erfordert jetzt current_user).
+          const res = await fetch('/api/startup-check')
           if (res.ok) { setReady(true); return }
         } catch { /* still starting */ }
         await new Promise(r => setTimeout(r, 1500))
@@ -312,7 +315,7 @@ export default function App() {
                   setAiAssessingAll(true)
                   setAiAssessProgress(null)
                   try {
-                    const resp = await fetch(api.applications.aiAssessAllUrl())
+                    const resp = await authFetch(api.applications.aiAssessAllUrl())
                     if (!resp.body) throw new Error('Kein Stream')
                     const reader = resp.body.getReader()
                     const decoder = new TextDecoder()

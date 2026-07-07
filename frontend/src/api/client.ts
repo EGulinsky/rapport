@@ -2,14 +2,53 @@ import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, 
 
 const BASE = '/api'
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
+// ── Auth token storage + fetch wrapper ──────────────────────────────────────
+const TOKEN_KEY = 'rapport_auth_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
+/** Dispatched on any 401 response (except calls opting out via skipAuthHandling) so
+ * AuthContext can clear its user state — the actual redirect happens via route guards. */
+export const AUTH_UNAUTHORIZED_EVENT = 'rapport:unauthorized'
+
+interface AuthFetchOptions extends RequestInit {
+  /** Skip the automatic token-clear + logout-event on 401. Use for endpoints where
+   * a 401 means "wrong input" (e.g. change-password's old_password), not "session expired". */
+  skipAuthHandling?: boolean
+}
+
+export async function authFetch(url: string, options?: AuthFetchOptions): Promise<Response> {
+  const { skipAuthHandling, ...init } = options ?? {}
+  const token = getToken()
+  const headers = new Headers(init.headers)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(url, { ...init, headers })
+  if (res.status === 401 && !skipAuthHandling) {
+    setToken(null)
+    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
+  }
+  return res
+}
+
+async function request<T>(path: string, options?: AuthFetchOptions): Promise<T> {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (options?.headers) new Headers(options.headers).forEach((v, k) => headers.set(k, v))
+  const res = await authFetch(`${BASE}${path}`, { ...options, headers })
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`${res.status}: ${err}`)
+    const raw = await res.text()
+    let message = raw
+    try {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.detail === 'string') message = parsed.detail
+    } catch { /* not JSON — keep raw text */ }
+    throw new Error(message || `${res.status}`)
   }
   return res.json()
 }
@@ -40,7 +79,7 @@ export const api = {
       }),
 
     delete: (id: number) =>
-      fetch(`${BASE}/applications/${id}`, { method: 'DELETE' }),
+      authFetch(`${BASE}/applications/${id}`, { method: 'DELETE' }),
 
     stats: () => request<Stats>('/applications/stats'),
 
@@ -54,7 +93,7 @@ export const api = {
       ),
 
     deleteEvent: (appId: number, eventId: number) =>
-      fetch(`${BASE}/applications/${appId}/events/${eventId}`, { method: 'DELETE' }).then(r => {
+      authFetch(`${BASE}/applications/${appId}/events/${eventId}`, { method: 'DELETE' }).then(r => {
         if (!r.ok) throw new Error(`${r.status}`)
       }),
     updateEvent: (appId: number, eventId: number, data: { typ?: string; datum?: string; titel?: string; notiz?: string }) =>
@@ -91,7 +130,7 @@ export const api = {
       }),
 
     delete: (appId: number, contactId: number) =>
-      fetch(`${BASE}/applications/${appId}/contacts/${contactId}`, { method: 'DELETE' }),
+      authFetch(`${BASE}/applications/${appId}/contacts/${contactId}`, { method: 'DELETE' }),
 
     bulkDelete: (ids: number[], all = false) =>
       request<{ deleted: number }>('/contacts/bulk', {
@@ -131,7 +170,7 @@ export const api = {
   export: {
     excel: async (showRejected = true): Promise<void> => {
       const qs = `?show_rejected=${showRejected}`
-      const res = await fetch(`${BASE}/export/excel${qs}`)
+      const res = await authFetch(`${BASE}/export/excel${qs}`)
       if (!res.ok) throw new Error(await res.text())
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -145,7 +184,7 @@ export const api = {
     },
     pdf: async (since?: string): Promise<void> => {
       const qs = since ? `?since=${since}` : ''
-      const res = await fetch(`${BASE}/export/pdf${qs}`)
+      const res = await authFetch(`${BASE}/export/pdf${qs}`)
       if (!res.ok) throw new Error(await res.text())
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -209,7 +248,7 @@ export const api = {
   files: {
     status: () => request<FilesConfig>('/sync/files/status'),
     sync: () => request<SyncResult>('/sync/files', { method: 'POST' }),
-    reset: () => fetch(`${BASE}/sync/files/reset`, { method: 'POST' }),
+    reset: () => authFetch(`${BASE}/sync/files/reset`, { method: 'POST' }),
     browse: (path?: string) => {
       const qs = path ? `?path=${encodeURIComponent(path)}` : ''
       return request<FileBrowseResult>(`/sync/files/browse${qs}`)
@@ -237,9 +276,9 @@ export const api = {
     googleSaveCredentials: (data: { client_id: string; client_secret: string }) =>
       request<GoogleSyncStatus>('/sync/google/credentials', { method: 'POST', body: JSON.stringify(data) }),
     googleAuthUrl: () => request<{ url: string }>('/sync/google/auth'),
-    googleDisconnect: () => fetch(`${BASE}/sync/google`, { method: 'DELETE' }),
-    resetGmailSync: () => fetch(`${BASE}/sync/google/gmail/reset`, { method: 'POST' }),
-    resetCalendarSync: () => fetch(`${BASE}/sync/google/calendar/reset`, { method: 'POST' }),
+    googleDisconnect: () => authFetch(`${BASE}/sync/google`, { method: 'DELETE' }),
+    resetGmailSync: () => authFetch(`${BASE}/sync/google/gmail/reset`, { method: 'POST' }),
+    resetCalendarSync: () => authFetch(`${BASE}/sync/google/calendar/reset`, { method: 'POST' }),
     syncGmail: () => request<SyncResult>('/sync/google/gmail', { method: 'POST' }),
     syncCalendar: () => request<SyncResult>('/sync/google/calendar', { method: 'POST' }),
   },
@@ -249,20 +288,20 @@ export const api = {
     saveCredentials: (data: { apple_id: string; app_password: string; icloud_email?: string; web_password?: string }) =>
       request<ICloudSyncStatus>('/sync/icloud/credentials', { method: 'POST', body: JSON.stringify(data) }),
     test: () => request<{ status: string; message: string }>('/sync/icloud/test', { method: 'POST' }),
-    disconnect: () => fetch(`${BASE}/sync/icloud`, { method: 'DELETE' }),
+    disconnect: () => authFetch(`${BASE}/sync/icloud`, { method: 'DELETE' }),
     syncMail: () => request<SyncResult>('/sync/icloud/mail', { method: 'POST' }),
-    resetMail: () => fetch(`${BASE}/sync/icloud/mail/reset`, { method: 'POST' }),
+    resetMail: () => authFetch(`${BASE}/sync/icloud/mail/reset`, { method: 'POST' }),
     syncCalendar: () => request<SyncResult>('/sync/icloud/calendar', { method: 'POST' }),
-    resetCalendar: () => fetch(`${BASE}/sync/icloud/calendar/reset`, { method: 'POST' }),
+    resetCalendar: () => authFetch(`${BASE}/sync/icloud/calendar/reset`, { method: 'POST' }),
     syncReminders: () => request<SyncResult>('/sync/icloud/reminders', { method: 'POST' }),
-    resetReminders: () => fetch(`${BASE}/sync/icloud/reminders/reset`, { method: 'POST' }),
+    resetReminders: () => authFetch(`${BASE}/sync/icloud/reminders/reset`, { method: 'POST' }),
     syncContacts: () => request<SyncResult>('/sync/icloud/contacts', { method: 'POST' }),
     syncNotes: () => request<SyncResult>('/sync/icloud/notes', { method: 'POST' }),
-    resetNotes: () => fetch(`${BASE}/sync/icloud/notes/reset`, { method: 'POST' }),
+    resetNotes: () => authFetch(`${BASE}/sync/icloud/notes/reset`, { method: 'POST' }),
     verify2fa: (code: string) => request<SyncResult>('/sync/icloud/notes/verify-2fa', { method: 'POST', body: JSON.stringify({ code }) }),
-    saveWebPassword: (password: string) => fetch(`${BASE}/sync/icloud/web-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: password }) }),
+    saveWebPassword: (password: string) => authFetch(`${BASE}/sync/icloud/web-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: password }) }),
     syncCalls: () => request<SyncResult>('/sync/icloud/calls', { method: 'POST' }),
-    resetCalls: () => fetch(`${BASE}/sync/icloud/calls/reset`, { method: 'POST' }),
+    resetCalls: () => authFetch(`${BASE}/sync/icloud/calls/reset`, { method: 'POST' }),
     callsStatus: () => request<CallsStatus>('/sync/icloud/calls/status'),
     callsSettings: (enabled: boolean) => request<CallsStatus>('/sync/icloud/calls/settings', {
       method: 'POST',
@@ -287,7 +326,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reject: (id: number) => fetch(`${BASE}/review/${id}`, { method: 'DELETE' }),
+    reject: (id: number) => authFetch(`${BASE}/review/${id}`, { method: 'DELETE' }),
   },
 
   cleanup: {
@@ -308,11 +347,25 @@ export const api = {
   },
 
   attachments: {
-    download: (id: number) => `${BASE}/attachments/${id}/download`,
+    // Kein direkter <a href>-Link mehr möglich, da der Download jetzt einen
+    // Authorization-Header braucht (Browser-Navigation kann keine Header
+    // mitschicken) — stattdessen Blob laden und Download programmatisch
+    // auslösen, analog zu export.excel/export.pdf.
+    download: async (id: number, filename: string): Promise<void> => {
+      const res = await authFetch(`${BASE}/attachments/${id}/download`)
+      if (!res.ok) throw new Error(await res.text())
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    },
     upload: async (eventId: number, file: File): Promise<{ id: number; filename: string; size_bytes: number }> => {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch(`${BASE}/attachments/${eventId}/upload`, { method: 'POST', body: form })
+      const res = await authFetch(`${BASE}/attachments/${eventId}/upload`, { method: 'POST', body: form })
       if (!res.ok) throw new Error(await res.text())
       return res.json()
     },
@@ -332,7 +385,7 @@ export const api = {
     excel: async (file: File): Promise<ImportResult> => {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch(`${BASE}/import/excel`, { method: 'POST', body: form })
+      const res = await authFetch(`${BASE}/import/excel`, { method: 'POST', body: form })
       if (!res.ok) throw new Error(await res.text())
       return res.json()
     },
@@ -392,7 +445,7 @@ export const api = {
       ).toString() : ''
       return request<AuditLogResponse>(`/audit/${qs}`)
     },
-    clear: () => fetch(`${BASE}/audit/`, { method: 'DELETE' }).then(r => r.json()),
+    clear: () => authFetch(`${BASE}/audit/`, { method: 'DELETE' }).then(r => r.json()),
   },
 
   companies: {
@@ -413,7 +466,7 @@ export const api = {
     uploadLogo: async (id: number, file: File): Promise<void> => {
       const form = new FormData()
       form.append('file', file)
-      await fetch(`/api/companies/${id}/logo`, {method: 'POST', body: form})
+      await authFetch(`/api/companies/${id}/logo`, {method: 'POST', body: form})
     },
     deleteLogo: (id: number) => request<{ok: boolean}>(`/companies/${id}/logo`, {method: 'DELETE'}),
     assignContact: (companyId: number, contactId: number) =>
@@ -431,6 +484,46 @@ export const api = {
   geo: {
     search: (q: string) => request<{ label: string }[]>(`/geo/search?q=${encodeURIComponent(q)}`),
   },
+
+  auth: {
+    register: (email: string, password: string) =>
+      request<{ message: string }>('/auth/register', {
+        method: 'POST', body: JSON.stringify({ email, password }),
+      }),
+    verifyEmail: (email: string, code: string) =>
+      request<AuthTokenResponse>('/auth/verify-email', {
+        method: 'POST', body: JSON.stringify({ email, code }),
+      }),
+    login: (email: string, password: string) =>
+      request<AuthTokenResponse>('/auth/login', {
+        method: 'POST', body: JSON.stringify({ email, password }),
+      }),
+    forgotPassword: (email: string) =>
+      request<{ message: string }>('/auth/forgot-password', {
+        method: 'POST', body: JSON.stringify({ email }),
+      }),
+    resetPassword: (email: string, code: string, new_password: string) =>
+      request<{ message: string }>('/auth/reset-password', {
+        method: 'POST', body: JSON.stringify({ email, code, new_password }),
+      }),
+    me: () => request<AuthUser>('/auth/me'),
+    changePassword: (old_password: string, new_password: string) =>
+      request<{ message: string }>('/auth/change-password', {
+        method: 'POST', body: JSON.stringify({ old_password, new_password }),
+        skipAuthHandling: true, // 401 hier heißt "altes Passwort falsch", nicht "Session abgelaufen"
+      }),
+  },
+}
+
+export interface AuthTokenResponse {
+  access_token: string
+  token_type: string
+}
+
+export interface AuthUser {
+  id: number
+  email: string
+  email_verified: boolean
 }
 
 export interface StartupCheck {

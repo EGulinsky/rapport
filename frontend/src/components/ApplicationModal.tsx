@@ -2260,10 +2260,10 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
       {(event.attachments ?? []).length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {event.attachments!.map(att => (
-            <a
+            <button
               key={att.id}
-              href={api.attachments.download(att.id)}
-              download={att.filename}
+              type="button"
+              onClick={() => api.attachments.download(att.id, att.filename)}
               className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
             >
               <Paperclip className="h-3 w-3 text-gray-400" />
@@ -2272,7 +2272,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
                 <span className="text-gray-400">({(att.size_bytes / 1024).toFixed(0)} KB)</span>
               )}
               <Download className="h-2.5 w-2.5 text-gray-400" />
-            </a>
+            </button>
           ))}
         </div>
       )}
