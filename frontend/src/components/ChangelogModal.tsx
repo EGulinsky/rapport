@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.34.0',
+    date: '2026-07-07',
+    changes: [
+      'Neues Feature (Phase 1/5, Backend-Fundament): Benutzerkonten mit E-Mail+Passwort. Registrierung mit 6-stelligem Bestätigungscode per E-Mail, Login, Passwort-Reset per Code, Passwort ändern — /api/auth/register, /verify-email, /login, /forgot-password, /reset-password, /me, /change-password. Noch nicht aktiv: bestehende Bewerbungen/Kontakte/Einstellungen sind noch nicht an Konten gebunden (folgt in Phase 2/3), Frontend-Login-Oberfläche folgt in Phase 4.',
+    ],
+  },
+  {
     version: '3.33.15',
     date: '2026-07-06',
     changes: [

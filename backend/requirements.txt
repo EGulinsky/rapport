@@ -19,3 +19,7 @@ icloudpy
 playwright==1.49.0
 fpdf2==2.8.3
 loguru==0.7.2
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
+email-validator==2.2.0

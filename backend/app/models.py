@@ -507,3 +507,30 @@ class LogoSettings(Base):
 
     id      = Column(Integer, primary_key=True)
     api_key = Column(String, nullable=True)   # Logo.dev public pk_ key
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    email          = Column(String, unique=True, nullable=False, index=True)
+    password_hash  = Column(String, nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class EmailVerificationCode(Base):
+    """6-stelliger Code für E-Mail-Bestätigung und Passwort-Reset — gleicher
+    Mechanismus, unterschieden über `purpose`."""
+    __tablename__ = "email_verification_codes"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code       = Column(String, nullable=False)
+    purpose    = Column(String, nullable=False)  # "verify_email" | "reset_password"
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
