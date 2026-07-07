@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.34.3',
+    date: '2026-07-07',
+    changes: [
+      'Benutzerkonten Phase 3/5 + 4/5: echte Mandantentrennung ist jetzt aktiv. Alle Endpunkte verlangen eine Anmeldung und liefern ausschließlich die Daten des eigenen Kontos (Bewerbungen, Kontakte, Firmen, Termine, alle Sync-Einstellungen). Neue Login-/Registrierungs-Oberfläche inkl. E-Mail-Bestätigung und Passwort-vergessen-Flow sowie ein neuer "Konto"-Tab in den Einstellungen zum Passwort ändern und Abmelden.',
+    ],
+  },
+  {
     version: '3.34.2',
     date: '2026-07-07',
     changes: [
