@@ -7,6 +7,7 @@ from typing import Optional
 from app.database import get_db
 from app import models
 from app.models import MAIN_STATUS_LABELS
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -107,7 +108,7 @@ def _success_by_group(apps: list[models.Application], group_fn) -> list[dict]:
 
 
 @router.get("/summary")
-def analytics_summary(db: Session = Depends(get_db)):
+def analytics_summary(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     apps = db.query(models.Application).options(joinedload(models.Application.company_profile)).all()
 
     if not apps:

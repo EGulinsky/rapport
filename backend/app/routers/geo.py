@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.ai.provider import decrypt_api_key
 from app.database import get_db
 from app import models
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/geo", tags=["geo"])
 
@@ -21,8 +22,8 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "rapport/1.0 (personal single-user job application tracker)"
 
 
-def _get_maps_api_key(db: Session) -> str | None:
-    cfg = db.query(models.MapsSettings).first()
+def _get_maps_api_key(db: Session, user_id: int) -> str | None:
+    cfg = db.query(models.MapsSettings).filter_by(user_id=user_id).first()
     if not cfg or not cfg.api_key_enc:
         return None
     try:
@@ -83,12 +84,16 @@ async def _search_nominatim(term: str) -> list[dict]:
 
 
 @router.get("/search")
-async def search_location(q: str = Query(..., min_length=2), db: Session = Depends(get_db)) -> list[dict]:
+async def search_location(
+    q: str = Query(..., min_length=2),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> list[dict]:
     term = q.strip()
     if not term:
         return []
 
-    api_key = _get_maps_api_key(db)
+    api_key = _get_maps_api_key(db, current_user.id)
     if api_key:
         return await _search_google_places(term, api_key)
     return await _search_nominatim(term)

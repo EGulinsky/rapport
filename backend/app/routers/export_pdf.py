@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -235,6 +236,7 @@ def export_pdf(
     since: Optional[date] = Query(None, description="Nur Bewerbungen ab diesem Datum (YYYY-MM-DD)"),
     name: str = Query("Eugen Gulinsky", description="Name für Kopf- und Fußzeile"),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     apps = db.query(models.Application).all()
 
