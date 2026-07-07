@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.34.2',
+    date: '2026-07-07',
+    changes: [
+      'Sicherheit: passwort-ähnliche Test-Fixture-Strings in test_auth_api.py durch eindeutig als Test-Daten erkennbare Werte ersetzt, um wiederholte GitGuardian-Fehlalarme (False Positives auf hardcodierte Test-Passwörter) zu vermeiden. Keine funktionale Änderung.',
+    ],
+  },
+  {
     version: '3.34.1',
     date: '2026-07-07',
     changes: [
