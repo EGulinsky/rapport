@@ -11,6 +11,7 @@ from app.database import get_db
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured
 from app.ai.tasks import test_connection
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -26,7 +27,7 @@ def _to_read(cfg: models.AiSettings) -> schemas.AiSettingsRead:
 
 
 @router.get("/ai", response_model=schemas.AiSettingsRead)
-def get_ai_settings(db: Session = Depends(get_db)):
+def get_ai_settings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.AiSettings).first()
     if not cfg:
         return schemas.AiSettingsRead(
@@ -40,10 +41,14 @@ def get_ai_settings(db: Session = Depends(get_db)):
 
 
 @router.post("/ai", response_model=schemas.AiSettingsRead)
-def save_ai_settings(payload: schemas.AiSettingsWrite, db: Session = Depends(get_db)):
+def save_ai_settings(
+    payload: schemas.AiSettingsWrite,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.AiSettings).first()
     if not cfg:
-        cfg = models.AiSettings()
+        cfg = models.AiSettings(user_id=current_user.id)
         db.add(cfg)
 
     cfg.provider = payload.provider
@@ -60,7 +65,7 @@ def save_ai_settings(payload: schemas.AiSettingsWrite, db: Session = Depends(get
 
 
 @router.delete("/ai/key", response_model=schemas.AiSettingsRead)
-def clear_api_key(db: Session = Depends(get_db)):
+def clear_api_key(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.AiSettings).first()
     if cfg:
         cfg.api_key_enc = None
@@ -71,16 +76,20 @@ def clear_api_key(db: Session = Depends(get_db)):
 
 
 @router.get("/maps", response_model=schemas.MapsSettingsRead)
-def get_maps_settings(db: Session = Depends(get_db)):
+def get_maps_settings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.MapsSettings).first()
     return schemas.MapsSettingsRead(has_key=bool(cfg and cfg.api_key_enc))
 
 
 @router.post("/maps", response_model=schemas.MapsSettingsRead)
-def save_maps_settings(payload: schemas.MapsSettingsWrite, db: Session = Depends(get_db)):
+def save_maps_settings(
+    payload: schemas.MapsSettingsWrite,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.MapsSettings).first()
     if not cfg:
-        cfg = models.MapsSettings()
+        cfg = models.MapsSettings(user_id=current_user.id)
         db.add(cfg)
 
     if payload.api_key and payload.api_key.strip():
@@ -94,7 +103,7 @@ def save_maps_settings(payload: schemas.MapsSettingsWrite, db: Session = Depends
 
 
 @router.delete("/maps/key", response_model=schemas.MapsSettingsRead)
-def clear_maps_key(db: Session = Depends(get_db)):
+def clear_maps_key(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.MapsSettings).first()
     if cfg:
         cfg.api_key_enc = None
@@ -103,16 +112,20 @@ def clear_maps_key(db: Session = Depends(get_db)):
 
 
 @router.get("/agent", response_model=schemas.AgentSettingsRead)
-def get_agent_settings(db: Session = Depends(get_db)):
+def get_agent_settings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.AgentSettings).first()
     return schemas.AgentSettingsRead(url=cfg.url if cfg else None, has_token=bool(cfg and cfg.token_enc))
 
 
 @router.post("/agent", response_model=schemas.AgentSettingsRead)
-def save_agent_settings(payload: schemas.AgentSettingsWrite, db: Session = Depends(get_db)):
+def save_agent_settings(
+    payload: schemas.AgentSettingsWrite,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.AgentSettings).first()
     if not cfg:
-        cfg = models.AgentSettings()
+        cfg = models.AgentSettings(user_id=current_user.id)
         db.add(cfg)
 
     cfg.url = payload.url.strip() if payload.url and payload.url.strip() else None
@@ -127,7 +140,7 @@ def save_agent_settings(payload: schemas.AgentSettingsWrite, db: Session = Depen
 
 
 @router.delete("/agent/token", response_model=schemas.AgentSettingsRead)
-def clear_agent_token(db: Session = Depends(get_db)):
+def clear_agent_token(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.AgentSettings).first()
     if cfg:
         cfg.token_enc = None
@@ -137,23 +150,27 @@ def clear_agent_token(db: Session = Depends(get_db)):
 
 
 @router.get("/agent/health", response_model=schemas.AgentHealth)
-async def get_agent_health(db: Session = Depends(get_db)):
+async def get_agent_health(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     from app.agent_client import agent_health
     data = await agent_health(db)
     return schemas.AgentHealth(**data)
 
 
 @router.get("/logo")
-def get_logo_settings(db: Session = Depends(get_db)):
+def get_logo_settings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.LogoSettings).first()
     return {"api_key": cfg.api_key if cfg else None}
 
 
 @router.post("/logo")
-def save_logo_settings(payload: dict, db: Session = Depends(get_db)):
+def save_logo_settings(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.LogoSettings).first()
     if not cfg:
-        cfg = models.LogoSettings()
+        cfg = models.LogoSettings(user_id=current_user.id)
         db.add(cfg)
     cfg.api_key = payload.get("api_key") or None
     db.commit()
@@ -161,10 +178,10 @@ def save_logo_settings(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.get("/sync")
-def get_sync_settings(db: Session = Depends(get_db)):
+def get_sync_settings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.SyncSettings).first()
     if not cfg:
-        cfg = models.SyncSettings()
+        cfg = models.SyncSettings(user_id=current_user.id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)
@@ -186,10 +203,14 @@ def get_sync_settings(db: Session = Depends(get_db)):
 
 
 @router.post("/sync")
-def save_sync_settings(payload: dict, db: Session = Depends(get_db)):
+def save_sync_settings(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.SyncSettings).first()
     if not cfg:
-        cfg = models.SyncSettings()
+        cfg = models.SyncSettings(user_id=current_user.id)
         db.add(cfg)
     for key, val in payload.items():
         if hasattr(cfg, key) and isinstance(val, bool):
@@ -198,14 +219,14 @@ def save_sync_settings(payload: dict, db: Session = Depends(get_db)):
         cfg.audit_log_level = payload["audit_log_level"]
     db.commit()
     db.refresh(cfg)
-    return get_sync_settings(db)
+    return get_sync_settings(db, current_user)
 
 
 @router.get("/files")
-def get_files_config(db: Session = Depends(get_db)):
+def get_files_config(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.FilesConfig).first()
     if not cfg:
-        cfg = models.FilesConfig(enabled=True)
+        cfg = models.FilesConfig(enabled=True, user_id=current_user.id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)
@@ -217,10 +238,14 @@ def get_files_config(db: Session = Depends(get_db)):
 
 
 @router.post("/files")
-def save_files_config(payload: dict, db: Session = Depends(get_db)):
+def save_files_config(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.FilesConfig).first()
     if not cfg:
-        cfg = models.FilesConfig()
+        cfg = models.FilesConfig(user_id=current_user.id)
         db.add(cfg)
     if "folder_path" in payload:
         fp = (payload["folder_path"] or "").strip().strip("'\"") or None
@@ -229,11 +254,15 @@ def save_files_config(payload: dict, db: Session = Depends(get_db)):
         cfg.enabled = payload["enabled"]
     db.commit()
     db.refresh(cfg)
-    return get_files_config(db)
+    return get_files_config(db, current_user)
 
 
 @router.post("/ai/test")
-async def test_ai(payload: Optional[schemas.AiSettingsWrite] = None, db: Session = Depends(get_db)):
+async def test_ai(
+    payload: Optional[schemas.AiSettingsWrite] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     # If form values are passed, test against them directly (without saving)
     if payload:
         try:
@@ -305,7 +334,10 @@ _POPULAR_OLLAMA_MODELS = [
 
 
 @router.get("/ollama/models")
-async def list_ollama_models(base_url: str = "http://localhost:11434"):
+async def list_ollama_models(
+    base_url: str = "http://localhost:11434",
+    current_user: models.User = Depends(get_current_user),
+):
     installed: list[str] = []
     reachable = False
     try:
@@ -324,7 +356,11 @@ async def list_ollama_models(base_url: str = "http://localhost:11434"):
 
 
 @router.get("/ollama/pull")
-async def pull_ollama_model(model: str, base_url: str = "http://localhost:11434"):
+async def pull_ollama_model(
+    model: str,
+    base_url: str = "http://localhost:11434",
+    current_user: models.User = Depends(get_current_user),
+):
     async def _stream():
         try:
             async with httpx.AsyncClient(timeout=None) as client:
