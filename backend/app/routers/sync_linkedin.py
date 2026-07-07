@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.ai.provider import decrypt_api_key, encrypt_api_key
 from app.database import get_db
 from app import models
+from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
 log = get_logger("sync", source="linkedin")
@@ -97,7 +98,7 @@ class LinkedInConfigStatus(BaseModel):
 # ── Config endpoints ──────────────────────────────────────────────────────────
 
 @router.get("/config", response_model=LinkedInConfigStatus)
-def get_config(db: Session = Depends(get_db)):
+def get_config(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.LinkedInSync).first()
     if not cfg:
         return LinkedInConfigStatus(configured=False)
@@ -110,7 +111,11 @@ def get_config(db: Session = Depends(get_db)):
 
 
 @router.post("/config", response_model=LinkedInConfigStatus)
-def save_config(payload: LinkedInConfigWrite, db: Session = Depends(get_db)):
+def save_config(
+    payload: LinkedInConfigWrite,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.LinkedInSync).first()
     if cfg:
         cfg.email = payload.email.strip()
@@ -120,6 +125,7 @@ def save_config(payload: LinkedInConfigWrite, db: Session = Depends(get_db)):
         cfg = models.LinkedInSync(
             email=payload.email.strip(),
             password_enc=encrypt_api_key(payload.password),
+            user_id=current_user.id,
         )
         db.add(cfg)
     db.commit()
@@ -133,8 +139,9 @@ def save_config(payload: LinkedInConfigWrite, db: Session = Depends(get_db)):
 
 
 @router.delete("/config")
-def delete_config(db: Session = Depends(get_db)):
-    db.query(models.LinkedInSync).delete()
+def delete_config(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Bulk .delete() umgeht den zentralen Mandanten-Filter — daher explizit gefiltert.
+    db.query(models.LinkedInSync).filter(models.LinkedInSync.user_id == current_user.id).delete()
     db.commit()
     _reset_state()
     return {"ok": True}
@@ -143,7 +150,7 @@ def delete_config(db: Session = Depends(get_db)):
 # ── Status / run endpoints ────────────────────────────────────────────────────
 
 @router.get("/status")
-def get_status():
+def get_status(current_user: models.User = Depends(get_current_user)):
     return dict(_state)
 
 
@@ -152,7 +159,12 @@ class RunSyncRequest(BaseModel):
 
 
 @router.post("/run")
-def run_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db), body: RunSyncRequest = Body(default=RunSyncRequest())):
+def run_sync(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    body: RunSyncRequest = Body(default=RunSyncRequest()),
+    current_user: models.User = Depends(get_current_user),
+):
     cfg = db.query(models.LinkedInSync).first()
     if not cfg:
         raise HTTPException(400, "LinkedIn not configured")
@@ -167,7 +179,7 @@ def run_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db), b
 
 
 @router.post("/clear-session")
-def clear_session(db: Session = Depends(get_db)):
+def clear_session(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.LinkedInSync).first()
     if cfg:
         cfg.session_cookies = None
@@ -180,7 +192,7 @@ class TwoFaPayload(BaseModel):
 
 
 @router.post("/submit-2fa")
-def submit_two_fa(payload: TwoFaPayload):
+def submit_two_fa(payload: TwoFaPayload, current_user: models.User = Depends(get_current_user)):
     global _2fa_code_input
     if _state["status"] != "needs_2fa":
         raise HTTPException(409, "No 2FA pending")
@@ -649,7 +661,7 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     return jobs
 
 
-async def _scrape_messages(page, db: Session, apps_list: list) -> int:
+async def _scrape_messages(page, db: Session, apps_list: list, user_id: Optional[int] = None) -> int:
     """Scrape LinkedIn inbox and create timeline events for application-related conversations.
 
     Matching strategy (two passes, no blind thread-opens):
@@ -806,10 +818,11 @@ async def _scrape_messages(page, db: Session, apps_list: list) -> int:
                     notiz=preview,
                     source="linkedin_msg",
                     external_id=thread_id,
+                    user_id=user_id,
                 ))
                 created += 1
 
-            mark_synced(db, "linkedin_msg", thread_id)
+            mark_synced(db, "linkedin_msg", thread_id, user_id)
             try:
                 db.commit()
             except Exception:
@@ -848,7 +861,9 @@ def _quick_match(job: dict, target_app: "models.Application") -> bool:
     return False
 
 
-def _find_or_create_application(db: Session, job: dict) -> tuple[models.Application, bool, str | None, str]:
+def _find_or_create_application(
+    db: Session, job: dict, user_id: Optional[int] = None
+) -> tuple[models.Application, bool, str | None, str]:
     """Match job to existing application or create new. Returns (app, created, pending_status).
 
     pending_status is set when a new app was created but the LI source implies a status
@@ -965,13 +980,14 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         main_status=initial_status,
         linkedin_job_id=li_job_id or None,
         stellenanzeige_url=job.get("stellenanzeige_url") or None,
+        user_id=user_id,
     )
     db.add(new_app)
     db.flush()
 
     from app.audit import add_audit
     add_audit(db, "create", "linkedin", app_id=new_app.id,
-              new_value=f"{job['company']} – {job['title']}")
+              new_value=f"{job['company']} – {job['title']}", user_id=user_id)
 
     event_typ = "bewerbung" if initial_status not in ("prospecting", "rejected") else "notiz"
     event_titel = {
@@ -987,6 +1003,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
         datum=applied_date_obj,
         titel=event_titel,
         source="linkedin",
+        user_id=user_id,
     ))
     # pending_status (review-queue trigger) nur bei "rejected" — für jeden anderen
     # intended_status wurde initial_status bereits identisch gesetzt, ein Review-
@@ -998,7 +1015,7 @@ def _find_or_create_application(db: Session, job: dict) -> tuple[models.Applicat
 _STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
 
 
-def _process_linkedin_job(db: Session, job: dict) -> dict:
+def _process_linkedin_job(db: Session, job: dict, user_id: Optional[int] = None) -> dict:
     """Match/create an application from one scraped LI job and apply the
     status-progression + PendingMatch-dedup rules.
 
@@ -1008,7 +1025,7 @@ def _process_linkedin_job(db: Session, job: dict) -> dict:
 
     Returns {"result": "created"|"updated"|"skipped", "app_id": int,
     "match_grund": str, ...}."""
-    app, was_created, pending_status, match_grund = _find_or_create_application(db, job)
+    app, was_created, pending_status, match_grund = _find_or_create_application(db, job, user_id)
     pfx = f"[LI #{app.id}]"
     log.debug("{} job_id={} firma={!r} rolle={!r} kat={} hint={} raw={!r} match={}",
               pfx, job.get("id", ""), job.get("company", ""), job.get("title", ""),
@@ -1029,6 +1046,7 @@ def _process_linkedin_job(db: Session, job: dict) -> dict:
                 suggested_app_id=app.id,
                 suggested_main_status=pending_status,
                 status_only=True,
+                user_id=user_id,
             ))
             pending_match_created = True
             log.info("{} neu angelegt, zur Überprüfung: applied → {} | match={}", pfx, pending_status, match_grund)
@@ -1092,6 +1110,7 @@ def _process_linkedin_job(db: Session, job: dict) -> dict:
             suggested_main_status=target_status,
             suggested_sub_status=sub_hint,
             status_only=True,
+            user_id=user_id,
         ))
         pending_match_created = True
         log.info("{} Status-Vorschlag erstellt: {} → {} | match={}", pfx, old_status, target_status, match_grund)
@@ -1113,7 +1132,7 @@ def _run_sync_task(cfg_id: int, target_app_id: int | None = None):
 
 
 async def _async_sync(cfg_id: int, target_app_id: int | None = None):
-    from app.database import SessionLocal
+    from app.database import SessionLocal, set_session_user
 
     db = SessionLocal()
     try:
@@ -1122,6 +1141,9 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             _state["status"] = "error"
             _state["step"] = "Konfiguration nicht gefunden"
             return
+        user_id = cfg.user_id
+        if user_id is not None:
+            set_session_user(db, user_id)
 
         email = cfg.email
         password = decrypt_api_key(cfg.password_enc)
@@ -1204,7 +1226,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             def _process(job: dict) -> None:
                 nonlocal created, updated, skipped
                 try:
-                    outcome = _process_linkedin_job(db, job)
+                    outcome = _process_linkedin_job(db, job, user_id)
                     if outcome["result"] == "created":
                         created += 1
                     elif outcome["result"] == "updated":
@@ -1274,7 +1296,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
                 # Scrape messages before closing the browser session
                 apps_for_msg = db.query(models.Application).all()
-                msg_created = await _scrape_messages(page, db, apps_for_msg)
+                msg_created = await _scrape_messages(page, db, apps_for_msg, user_id)
                 _state["msg_created"] = msg_created
 
                 await browser.close()
@@ -1416,12 +1438,12 @@ def _split_headline(headline: Optional[str]) -> tuple[Optional[str], Optional[st
 
 
 @router.get("/people/search")
-async def search_people(q: str = Query(..., min_length=2)):
+async def search_people(q: str = Query(..., min_length=2), current_user: models.User = Depends(get_current_user)):
     from app.routers.sync_company import _get_linkedin_context
 
     li_ctx = None
     try:
-        li_ctx = await _get_linkedin_context()
+        li_ctx = await _get_linkedin_context(current_user.id)
     except Exception as e:
         log.warning("Personensuche: LinkedIn-Browser-Start fehlgeschlagen: {}", e)
     if not li_ctx:
@@ -1448,7 +1470,11 @@ class PeopleImportPayload(BaseModel):
 
 
 @router.post("/people/import")
-def import_people(body: PeopleImportPayload, db: Session = Depends(get_db)):
+def import_people(
+    body: PeopleImportPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """Importiert vom User ausgewählte LinkedIn-Personen (aus /people/search)
     als echte Contact-Zeilen. Explizite User-Aktion, keine Relevanz-Prüfung."""
     app_obj = None
@@ -1473,6 +1499,7 @@ def import_people(body: PeopleImportPayload, db: Session = Depends(get_db)):
         rolle, firma = _split_headline(cand.headline)
         contact = models.Contact(
             name=cand.name, linkedin_url=cand.profile_url, rolle=rolle, firma=firma,
+            user_id=current_user.id,
         )
         db.add(contact)
         db.flush()
