@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.35.1',
+    date: '2026-07-08',
+    changes: [
+      'PDF-Export: "Termine der letzten 4 Wochen" berücksichtigt jetzt nur noch echte Kalendereinträge (Gespräche/Interviews/Termine sowie Google-/iCloud-Kalender), keine Anrufe mehr — dieselbe Definition wie im Kalender-Tab.',
+    ],
+  },
+  {
     version: '3.35.0',
     date: '2026-07-08',
     changes: [
