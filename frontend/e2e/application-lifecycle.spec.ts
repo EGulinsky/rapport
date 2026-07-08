@@ -22,7 +22,7 @@ test.describe('Application Lifecycle (Journey 1)', () => {
     await page.locator('textarea[placeholder="Kommentar (optional)"]').fill('E2E Test application')
 
     // Submit
-    await page.getByRole('button', { name: 'Anlegen' }).click()
+    await page.getByRole('button', { name: 'Anlegen', exact: true }).click()
 
     // Verify the app appears in the kanban
     await expect(page.getByText('E2E Testfirma GmbH').first()).toBeVisible({ timeout: 5_000 })
