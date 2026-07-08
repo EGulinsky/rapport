@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.37.0',
+    date: '2026-07-08',
+    changes: [
+      'E2E Journey 2: Kanban Drag & Drop — Karte per Maus (page.mouse) von "Beworben" nach "Gespräch HR/HH" ziehen (Statusänderung), Sub-Status setzen, dann Karte in "Angebotsverhandlung" ziehen (Sub-Status-Reset durch Backend verifiziert). Custom dragTo-Funktion für @dnd-kit-Kompatibilität (PointerSensor + 8px-ActivationConstraint).',
+    ],
+  },
+  {
     version: '3.36.0',
     date: '2026-07-08',
     changes: [
