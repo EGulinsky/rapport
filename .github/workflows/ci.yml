@@ -101,6 +101,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build playwright base image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: docker build -f ./backend/Dockerfile.playwright-base -t rapport-playwright-base:latest ./backend/
+
       - name: Build and start test stack (backend + frontend only)
         run: docker compose -p rapport-test -f docker-compose.test.yml up -d --build backend-test frontend-test
 
