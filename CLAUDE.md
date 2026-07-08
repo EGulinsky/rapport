@@ -177,7 +177,7 @@ Aktueller Stand v3.36.0 — Phase 5 E2E gestartet, erster Journey-Test implement
 
 | # | Journey | Status |
 |---|---------|--------|
-| 2 | Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset | ❌ |
+| 2 | Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset | ✅ |
 | 3 | LinkedIn-Link importieren → Formular vorausgefüllt → speichern | ❌ |
 | 4 | Bereinigen-Button kontextabhängig (Vorschau → Ausführen) | ❌ |
 | 5 | Merge-Dialog (Bewerbungen/Kontakte/Firmen) | ❌ |
