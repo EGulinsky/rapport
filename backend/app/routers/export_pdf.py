@@ -29,6 +29,8 @@ STATUS_LABEL = {
 
 TYP_LABEL = {
     "gespräch": "Gespräch",
+    "interview": "Interview",
+    "termin":   "Termin",
     "anruf":    "Anruf",
     "status":   "Gespräch",
     "notiz":    "Gespräch",
@@ -231,6 +233,25 @@ def _build_pdf(apps: list, appointments: list, since: Optional[date], name: str)
     return buf.getvalue()
 
 
+def _fetch_recent_appointments(db: Session, cutoff: date) -> list[models.Event]:
+    """Echte Kalendereinträge der letzten Wochen — dieselbe Definition wie
+    routers/calendar.py und cleanup.py's _calendar_filter, damit Anrufe
+    (typ="anruf") o.ä. hier nicht als Termin auftauchen."""
+    return (
+        db.query(models.Event)
+        .join(models.Application, models.Event.application_id == models.Application.id)
+        .filter(
+            or_(
+                models.Event.typ.in_(models.CALENDAR_TYPEN),
+                models.Event.source.in_(models.CALENDAR_SOURCES),
+            ),
+            models.Event.datum >= cutoff,
+        )
+        .order_by(models.Event.datum)
+        .all()
+    )
+
+
 @router.get("/pdf")
 def export_pdf(
     since: Optional[date] = Query(None, description="Nur Bewerbungen ab diesem Datum (YYYY-MM-DD)"),
@@ -241,19 +262,7 @@ def export_pdf(
     apps = db.query(models.Application).all()
 
     cutoff = date.today() - timedelta(weeks=4)
-    appointments = (
-        db.query(models.Event)
-        .join(models.Application, models.Event.application_id == models.Application.id)
-        .filter(
-            or_(
-                models.Event.typ.in_(["gespräch", "anruf"]),
-                models.Event.source.in_(["gcal", "icloud_cal"]),
-            ),
-            models.Event.datum >= cutoff,
-        )
-        .order_by(models.Event.datum)
-        .all()
-    )
+    appointments = _fetch_recent_appointments(db, cutoff)
 
     pdf_bytes = _build_pdf(apps, appointments, since, name)
 
