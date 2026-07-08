@@ -433,6 +433,12 @@ export interface AuditEntry {
   app_id: number | null
   app_firma: string | null
   app_rolle: string | null
+  contact_id: number | null
+  contact_name: string | null
+  company_profile_id: number | null
+  company_name: string | null
+  event_id: number | null
+  event_titel: string | null
   timestamp: string
   action: string
   field: string | null

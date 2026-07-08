@@ -28,6 +28,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.audit import add_audit
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
@@ -1446,12 +1447,20 @@ async def _sync_contacts_http(
                 existing = db.query(models.Contact).filter_by(name=fn).first()
             if existing:
                 if linkedin_url and not existing.linkedin_url:
+                    add_audit(db, "update", "sync", contact_id=existing.id,
+                              field="linkedin_url", old_value=None, new_value=linkedin_url, user_id=user_id)
                     existing.linkedin_url = linkedin_url
                 if tel_val and not existing.telefon:
+                    add_audit(db, "update", "sync", contact_id=existing.id,
+                              field="telefon", old_value=None, new_value=tel_val, user_id=user_id)
                     existing.telefon = tel_val
                 if org_val and not existing.firma:
+                    add_audit(db, "update", "sync", contact_id=existing.id,
+                              field="firma", old_value=None, new_value=org_val, user_id=user_id)
                     existing.firma = org_val
                 if title_val and not existing.rolle:
+                    add_audit(db, "update", "sync", contact_id=existing.id,
+                              field="rolle", old_value=None, new_value=title_val, user_id=user_id)
                     existing.rolle = title_val
                 if vorname_val and not existing.vorname:
                     # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
@@ -1512,6 +1521,9 @@ async def _sync_contacts_http(
             )
             db.add(contact)
             db.flush()
+            add_audit(db, "create", "sync", contact_id=contact.id,
+                      new_value=contact.name, reason="automatisch aus iCloud-Adressbuch importiert",
+                      user_id=user_id)
             linked_ids = list({*mention_app_ids, *firma_app_ids})
             for aid in linked_ids:
                 app_obj = db.query(models.Application).get(aid)
@@ -1640,6 +1652,10 @@ def import_contacts(
         db.flush()
         if app_obj:
             contact.applications.append(app_obj)
+        add_audit(db, "create", "user", contact_id=contact.id,
+                  app_id=app_obj.id if app_obj else None,
+                  new_value=contact.name, reason="Import aus iCloud-Kontaktsuche",
+                  user_id=current_user.id)
         imported += 1
 
     db.commit()
@@ -1751,7 +1767,10 @@ def reset_calls_sync(db: Session = Depends(get_db), current_user: models.User = 
     calls_cfg = _get_calls_cfg(db, current_user.id)
     calls_cfg.last_sync = None
     purge_source(db, "icloud_calls", current_user.id)
-    db.query(models.Event).filter_by(source="icloud_calls", user_id=current_user.id).delete()
+    deleted = db.query(models.Event).filter_by(source="icloud_calls", user_id=current_user.id).delete()
+    if deleted:
+        add_audit(db, "delete", "user", old_value=f"{deleted} synchronisierte Anrufe",
+                  reason="Anruf-Sync manuell zurückgesetzt", user_id=current_user.id)
     db.commit()
 
 
@@ -1842,7 +1861,7 @@ async def _do_icloud_calls(user_id: int) -> dict:
             notiz = f"Dauer: {duration_str}" + (f"  ·  {time_str} Uhr" if time_str else "")
 
             for app_id in app_ids:
-                db.add(models.Event(
+                call_event = models.Event(
                     application_id=app_id,
                     typ="anruf",
                     datum=call_date,
@@ -1851,7 +1870,11 @@ async def _do_icloud_calls(user_id: int) -> dict:
                     source="icloud_calls",
                     external_id=source_key,
                     user_id=user_id,
-                ))
+                )
+                db.add(call_event)
+                db.flush()
+                add_audit(db, "create", "icloud_calls", app_id=app_id, event_id=call_event.id,
+                          new_value=titel, user_id=user_id)
                 created += 1
 
             _mark_synced(db, "icloud_calls", source_key, user_id)

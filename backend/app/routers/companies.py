@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime, date
 import base64
 
+from app.audit import add_audit
 from app.database import get_db, SessionLocal, set_session_user
 from app.models import CompanyProfile, User
 from app.auth.dependencies import get_current_user
@@ -156,6 +157,9 @@ def create_company(
         return existing
     profile = CompanyProfile(name_norm=key, name_display=name, sync_status="pending", user_id=current_user.id)
     db.add(profile)
+    db.flush()
+    add_audit(db, "create", "user", company_profile_id=profile.id,
+              new_value=name, user_id=current_user.id)
     db.commit()
     db.refresh(profile)
     profile.app_count = 0  # type: ignore[assignment]
@@ -317,9 +321,14 @@ def update_company(
                         db.query(CompanyProfile).filter_by(id=ancestor.parent_company_id, user_id=current_user.id).first()
                         if ancestor.parent_company_id else None
                     )
-            setattr(profile, field, value)
+            new_value = value
         else:
-            setattr(profile, field, value or None)
+            new_value = value or None
+        old_v = getattr(profile, field, None)
+        if str(old_v or "") != str(new_value or ""):
+            add_audit(db, "update", "user", company_profile_id=profile.id,
+                      field=field, old_value=old_v, new_value=new_value, user_id=current_user.id)
+        setattr(profile, field, new_value)
 
     db.commit()
     db.refresh(profile)
@@ -408,9 +417,16 @@ def _run_link_contacts(user_id: int, allowed_norms: set[str] | None = None):
                 db.add(profile)
                 db.flush()
                 created += 1
+                add_audit(db, "create", "system", company_profile_id=profile.id,
+                          new_value=profile.name_display,
+                          reason="automatisch aus Kontakt-Firmenname erstellt", user_id=user_id)
             if c.company_profile_id != profile.id:
+                old_cp = c.company_profile_id
                 c.company_profile_id = profile.id
                 linked += 1
+                add_audit(db, "update", "system", contact_id=c.id,
+                          field="company_profile_id", old_value=old_cp, new_value=profile.id,
+                          reason="automatisch verknüpft", user_id=user_id)
             _LINK_PROGRESS["linked"] = linked
             _LINK_PROGRESS["created"] = created
         db.commit()
@@ -438,6 +454,8 @@ async def upload_company_logo(
     mime = file.content_type or "image/png"
     b64 = base64.b64encode(data).decode()
     profile.logo_data = f"data:{mime};base64,{b64}"
+    add_audit(db, "update", "user", company_profile_id=profile.id,
+              field="logo_data", user_id=current_user.id)
     db.commit()
     return {"ok": True}
 
@@ -452,6 +470,8 @@ def delete_company_logo(
     if not profile:
         raise HTTPException(404)
     profile.logo_data = None
+    add_audit(db, "update", "user", company_profile_id=profile.id,
+              field="logo_data", new_value=None, reason="Logo entfernt", user_id=current_user.id)
     db.commit()
     return {"ok": True}
 
@@ -470,7 +490,10 @@ def assign_contact_to_company(
     contact = db.query(m.Contact).filter_by(id=contact_id, user_id=current_user.id).first()
     if not contact:
         raise HTTPException(404)
+    old_cp = contact.company_profile_id
     contact.company_profile_id = company_id
+    add_audit(db, "update", "user", contact_id=contact.id,
+              field="company_profile_id", old_value=old_cp, new_value=company_id, user_id=current_user.id)
     db.commit()
     return {"ok": True}
 
@@ -488,6 +511,8 @@ def unassign_contact_from_company(
         raise HTTPException(404)
     if contact.company_profile_id == company_id:
         contact.company_profile_id = None
+        add_audit(db, "update", "user", contact_id=contact.id,
+                  field="company_profile_id", old_value=company_id, new_value=None, user_id=current_user.id)
         db.commit()
     return {"ok": True}
 
@@ -502,10 +527,13 @@ def bulk_delete_companies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    deleted = (
-        db.query(CompanyProfile)
-        .filter(CompanyProfile.id.in_(body.ids), CompanyProfile.user_id == current_user.id)
-        .delete(synchronize_session=False)
+    q = db.query(CompanyProfile).filter(
+        CompanyProfile.id.in_(body.ids), CompanyProfile.user_id == current_user.id
     )
+    to_delete = q.all()
+    for p in to_delete:
+        add_audit(db, "delete", "user", company_profile_id=p.id,
+                  old_value=p.name_display or p.name_norm, user_id=current_user.id)
+    deleted = q.delete(synchronize_session=False)
     db.commit()
     return {"deleted": deleted}

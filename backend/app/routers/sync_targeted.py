@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.audit import add_audit
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import decrypt_api_key
@@ -344,16 +345,21 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         notiz = "\n".join(notiz_parts) or None
 
         try:
-            db.add(models.Event(
+            gcal_titel = summary or "Kalendertermin"
+            gcal_event = models.Event(
                 application_id=app_dict["id"],
                 typ="gespräch",
                 datum=date_hint.date() if date_hint else None,
-                titel=summary or "Kalendertermin",
+                titel=gcal_titel,
                 notiz=notiz,
                 source="gcal",
                 external_id=ev_id,
                 user_id=user_id,
-            ))
+            )
+            db.add(gcal_event)
+            db.flush()
+            add_audit(db, "create", "gcal", app_id=app_dict["id"], event_id=gcal_event.id,
+                      new_value=gcal_titel, user_id=user_id)
             mark_synced(db, "gcal", ev_id, user_id)
             created += 1
             # Auto-create contacts from organizer + attendees
@@ -599,16 +605,21 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
 
         log.debug("{} {!r} → CREATED gespräch (Kalendertermin, Adress-Match)", pfx, summary)
         try:
-            db.add(models.Event(
+            ical_titel = summary or "Kalendertermin"
+            ical_event = models.Event(
                 application_id=app_dict["id"],
                 typ="gespräch",
                 datum=date_hint.date() if date_hint else None,
-                titel=summary or "Kalendertermin",
+                titel=ical_titel,
                 notiz=notiz,
                 source="icloud_cal",
                 external_id=uid,
                 user_id=user_id,
-            ))
+            )
+            db.add(ical_event)
+            db.flush()
+            add_audit(db, "create", "icloud_cal", app_id=app_dict["id"], event_id=ical_event.id,
+                      new_value=ical_titel, user_id=user_id)
             mark_synced(db, "icloud_cal", uid, user_id)
             created += 1
             # Auto-create contacts from calendar participants
@@ -763,12 +774,20 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
 
             if existing:
                 if linkedin_url and not existing.linkedin_url:
+                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
+                              field="linkedin_url", old_value=None, new_value=linkedin_url, user_id=user_id)
                     existing.linkedin_url = linkedin_url
                 if tel_val and not existing.telefon:
+                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
+                              field="telefon", old_value=None, new_value=tel_val, user_id=user_id)
                     existing.telefon = tel_val
                 if org_val and not existing.firma:
+                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
+                              field="firma", old_value=None, new_value=org_val, user_id=user_id)
                     existing.firma = org_val
                 if title_val and not existing.rolle:
+                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
+                              field="rolle", old_value=None, new_value=title_val, user_id=user_id)
                     existing.rolle = title_val
                 if name_in_app_text:
                     db.execute(text(
@@ -782,6 +801,9 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 )
                 db.add(contact)
                 db.flush()
+                add_audit(db, "create", "sync", contact_id=contact.id, app_id=app.id,
+                          new_value=contact.name, reason="automatisch aus gezieltem iCloud-Sync erstellt",
+                          user_id=user_id)
                 if name_in_app_text:
                     db.execute(text(
                         "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
@@ -982,7 +1004,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         if time_str:
             notiz += f"  ·  {time_str} Uhr" if notiz else f"{time_str} Uhr"
 
-        db.add(models.Event(
+        call_event = models.Event(
             application_id=app.id,
             typ="notiz",
             datum=date_hint.date() if date_hint else None,
@@ -990,7 +1012,11 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
             notiz=notiz or None,
             source="icloud_calls",
             user_id=user_id,
-        ))
+        )
+        db.add(call_event)
+        db.flush()
+        add_audit(db, "create", "icloud_calls", app_id=app.id, event_id=call_event.id,
+                  new_value=titel, user_id=user_id)
         mark_synced(db, "icloud_calls", call_key, user_id)
         created += 1
 
@@ -1029,6 +1055,10 @@ def reset_targeted_sync(
         models.SyncedItem.user_id == current_user.id,
     ).delete()
 
+    if deleted_events:
+        add_audit(db, "delete", "user", app_id=app_id,
+                  old_value=f"{deleted_events} synchronisierte Termine",
+                  reason="Gezielter Sync manuell zurückgesetzt", user_id=current_user.id)
     db.commit()
     return {"deleted_events": deleted_events, "deleted_items": deleted_items}
 
@@ -1765,6 +1795,9 @@ def manual_assign(
             user_id=current_user.id,
         )
         db.add(ev)
+        db.flush()
+        add_audit(db, "create", "user", app_id=app_id, event_id=ev.id,
+                  new_value=ev.titel, reason="manuell zugewiesen", user_id=current_user.id)
         mark_synced(db, src, ext_id, current_user.id)
         db.commit()
         db.refresh(ev)
@@ -1789,6 +1822,7 @@ def manual_assign(
             }
 
         # Move event to this application
+        old_app_id = src_event.application_id
         src_event.application_id = app_id
         if body.event_type:
             src_event.typ = body.event_type
@@ -1799,6 +1833,9 @@ def manual_assign(
                 src_event.datum = _date.fromisoformat(body.datum)
             except ValueError:
                 pass
+        add_audit(db, "update", "user", app_id=app_id, event_id=src_event.id,
+                  field="application_id", old_value=old_app_id, new_value=app_id,
+                  reason="manuell umgehängt", user_id=current_user.id)
         db.commit()
         db.refresh(src_event)
         return {"conflict": False, "event_id": src_event.id}
@@ -1833,6 +1870,9 @@ def manual_assign(
         }
 
     if conflict_event and body.remove_from_other:
+        add_audit(db, "delete", "user", app_id=app_id, event_id=conflict_event.id,
+                  old_value=conflict_event.titel, reason="Konflikt bei manueller Zuweisung entfernt",
+                  user_id=current_user.id)
         db.delete(conflict_event)
 
     event_typ = body.event_type or pm.event_type or "notiz"
@@ -1850,6 +1890,9 @@ def manual_assign(
         user_id=current_user.id,
     )
     db.add(ev)
+    db.flush()
+    add_audit(db, "create", "user", app_id=app_id, event_id=ev.id,
+              new_value=ev.titel, reason="PendingMatch manuell zugewiesen", user_id=current_user.id)
     pm.review_status = "approved"
     db.commit()
     db.refresh(ev)

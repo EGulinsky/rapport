@@ -19,6 +19,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app import models
+from app.audit import add_audit
 from app.logger import get_logger
 
 log = get_logger("sync", source="targeted")
@@ -276,9 +277,13 @@ def _upsert_contact(
             existing.letzter_kontakt = event_date
         # Fill empty fields from footer — existing values always win
         if not existing.telefon and extra.get('telefon'):
-            existing.telefon = extra['telefon']
+            old_v, existing.telefon = existing.telefon, extra['telefon']
+            add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
+                      field="telefon", old_value=old_v, new_value=existing.telefon, user_id=user_id)
         if not existing.rolle and extra.get('rolle'):
-            existing.rolle = extra['rolle']
+            old_v, existing.rolle = existing.rolle, extra['rolle']
+            add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
+                      field="rolle", old_value=old_v, new_value=existing.rolle, user_id=user_id)
         # INSERT OR IGNORE bypasses ORM relationship tracking — no autoflush race
         db.execute(_LINK_SQL, {"cid": existing.id, "aid": app_id})
         return
@@ -299,6 +304,8 @@ def _upsert_contact(
     db.add(contact)
     db.flush()  # get contact.id
     db.execute(_LINK_SQL, {"cid": contact.id, "aid": app_id})
+    add_audit(db, "create", "sync", contact_id=contact.id, app_id=app_id,
+              new_value=contact.name, reason="automatisch aus E-Mail-Sync erstellt", user_id=user_id)
 
 
 def upsert_contact_from_sender(
@@ -811,7 +818,7 @@ def _save_deterministic_event(
         notiz = time_pfx.rstrip('\n') or None
 
     log.debug("{} {!r} → CREATED typ={} datum={} ({})", pfx, det['titel'], det['typ'], datum, det.get('reason', '?'))
-    db.add(models.Event(
+    new_event = models.Event(
         application_id=det['app_id'],
         typ=det['typ'],
         datum=datum,
@@ -820,7 +827,11 @@ def _save_deterministic_event(
         source=source,
         external_id=external_id,
         user_id=user_id,
-    ))
+    )
+    db.add(new_event)
+    db.flush()
+    add_audit(db, "create", source, app_id=det['app_id'], event_id=new_event.id,
+              new_value=new_event.titel, user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender (mail events only)
@@ -959,7 +970,7 @@ def save_classified_event(
     if app_obj and _predates_bewerbung(datum, app_obj):
         mark_synced(db, source, external_id, user_id)
         return False
-    db.add(models.Event(
+    new_event = models.Event(
         application_id=target_app["id"],
         typ=_map_event_type(result.get("event_type", "note")),
         datum=datum,
@@ -969,7 +980,11 @@ def save_classified_event(
         source=source,
         external_id=external_id,
         user_id=user_id,
-    ))
+    )
+    db.add(new_event)
+    db.flush()
+    add_audit(db, "create", source, app_id=target_app["id"], event_id=new_event.id,
+              new_value=new_event.titel, user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender, extract phone/role from mail footer

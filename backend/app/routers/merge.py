@@ -134,9 +134,20 @@ def merge_companies(
     winner = companies[req.winner_id]
     losers = [companies[i] for i in req.loser_ids if i in companies]
 
+    old_values = {
+        field: getattr(winner, field)
+        for field in req.field_overrides
+        if field in MERGEABLE_COMPANY_FIELDS
+    }
     for field, source_id in req.field_overrides.items():
         if field in MERGEABLE_COMPANY_FIELDS and source_id in companies:
             setattr(winner, field, getattr(companies[source_id], field))
+    for field, old_v in old_values.items():
+        new_v = getattr(winner, field)
+        if str(old_v or "") != str(new_v or ""):
+            add_audit(db, "update", "user", company_profile_id=winner.id,
+                      field=field, old_value=old_v, new_value=new_v,
+                      reason="Zusammenführen: Feld übernommen", user_id=current_user.id)
 
     winner_name = winner.name_display or winner.name_norm
 
@@ -165,8 +176,13 @@ def merge_companies(
                               field="zielfirma_bei_hh", old_value=old_ziel, new_value=winner_name,
                               reason="Firmen zusammengeführt", user_id=current_user.id)
         for contact in list(loser.direct_contacts):
+            old_firma = contact.firma
             contact.company_profile = winner
             contact.firma = winner_name
+            if str(old_firma or "") != str(winner_name or ""):
+                add_audit(db, "update", "user", contact_id=contact.id,
+                          field="firma", old_value=old_firma, new_value=winner_name,
+                          reason="Firmen zusammengeführt", user_id=current_user.id)
         db.flush()
 
         add_audit(db, "merge", "user", app_id=None,
@@ -195,10 +211,21 @@ def merge_contacts(
     winner = contacts_map[req.winner_id]
     losers = [contacts_map[i] for i in req.loser_ids if i in contacts_map]
 
-    # Apply field overrides to winner
+    # Apply field overrides to winner, logging every changed field
+    old_values = {
+        field: getattr(winner, field)
+        for field in req.field_overrides
+        if field in MERGEABLE_CONTACT_FIELDS
+    }
     for field, source_id in req.field_overrides.items():
         if field in MERGEABLE_CONTACT_FIELDS and source_id in contacts_map:
             setattr(winner, field, getattr(contacts_map[source_id], field))
+    for field, old_v in old_values.items():
+        new_v = getattr(winner, field)
+        if str(old_v or "") != str(new_v or ""):
+            add_audit(db, "update", "user", contact_id=winner.id,
+                      field=field, old_value=old_v, new_value=new_v,
+                      reason="Zusammenführen: Feld übernommen", user_id=current_user.id)
 
     for loser in losers:
         db.add(models.MergeAlias(
@@ -214,6 +241,10 @@ def merge_contacts(
             if app not in winner.applications:
                 winner.applications.append(app)
 
+        add_audit(db, "merge", "user", contact_id=winner.id,
+                  old_value=f"{loser.name} (#{loser.id})",
+                  new_value=f"{winner.name} (#{winner.id})",
+                  reason="Zusammengeführt", user_id=current_user.id)
         db.delete(loser)
 
     db.commit()

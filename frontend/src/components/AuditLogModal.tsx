@@ -36,7 +36,11 @@ const SOURCE_LABELS: Record<string, string> = {
   merge: 'Merge',
   gcal: 'Google Kalender',
   icloud_cal: 'iCloud Kalender',
+  icloud_calls: 'iCloud Anrufe',
+  local_files: 'Lokale Dateien',
+  sync: 'Sync',
   system: 'Automatisch',
+  db_trigger: 'Automatisch (DB)',
 }
 
 const PAGE_SIZE = 50
@@ -140,7 +144,7 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
               <tr>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-32">Zeitpunkt</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-24">Aktion</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-500">Bewerbung</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500">Bezug</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-20">Quelle</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500">Änderung</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-36">Grund</th>
@@ -159,13 +163,34 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
                     </span>
                   </td>
                   <td className="px-3 py-2 text-gray-700 max-w-[200px]">
-                    {e.app_firma && (
-                      <span className="truncate block">
-                        <span className="font-medium">{e.app_firma}</span>
-                        {e.app_rolle && <span className="text-gray-400"> – {e.app_rolle}</span>}
-                      </span>
-                    )}
-                    {e.app_id && <span className="text-gray-300">#{e.app_id}</span>}
+                    {(() => {
+                      const primary = e.contact_name
+                        ? { label: e.contact_name, tag: 'Kontakt', id: e.contact_id }
+                        : e.company_name
+                        ? { label: e.company_name, tag: 'Firma', id: e.company_profile_id }
+                        : e.event_titel
+                        ? { label: e.event_titel, tag: 'Termin', id: e.event_id }
+                        : null
+                      return (
+                        <>
+                          {primary && (
+                            <span className="truncate block">
+                              <span className="font-medium">{primary.label}</span>{' '}
+                              <span className="text-gray-300">#{primary.id}</span>{' '}
+                              <span className="text-[10px] text-gray-400">{primary.tag}</span>
+                            </span>
+                          )}
+                          {e.app_firma && (
+                            <span className={clsx('truncate block', primary && 'text-[11px] text-gray-400')}>
+                              {primary && '→ '}
+                              <span className={primary ? '' : 'font-medium'}>{e.app_firma}</span>
+                              {e.app_rolle && <span> – {e.app_rolle}</span>}{' '}
+                              <span className="text-gray-300">#{e.app_id}</span>
+                            </span>
+                          )}
+                        </>
+                      )
+                    })()}
                   </td>
                   <td className="px-3 py-2 text-gray-500">{SOURCE_LABELS[e.source] ?? e.source}</td>
                   <td className="px-3 py-2 text-gray-600 max-w-[240px]">
