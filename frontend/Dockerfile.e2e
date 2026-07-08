@@ -1,0 +1,11 @@
+# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/playwright:v1.49.0
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+CMD ["npx", "playwright", "test", "--config", "e2e/playwright.config.ts"]

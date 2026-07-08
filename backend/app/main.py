@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -207,6 +208,11 @@ app.include_router(sync_company.router)
 app.include_router(companies.router)
 app.include_router(startup_check.router)
 app.include_router(geo.router)
+
+
+if os.environ.get("E2E_TESTING"):
+    from app.routers import test_e2e
+    app.include_router(test_e2e.router)
 
 
 @app.get("/health")

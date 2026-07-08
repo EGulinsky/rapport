@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.36.0',
+    date: '2026-07-08',
+    changes: [
+      'Testkonzept Phase 5 (E2E): Playwright-Infrastruktur aufgebaut mit Docker-basiertem E2E-Runner, Testbenutzer-Setup über /api/e2e/setup-user, erster E2E-Test für den Bewerbungs-Lebenszyklus (Anlegen, Statuswechsel, Absage). Neuer CI-Job "E2E (Playwright)" läuft bei Push auf main — startet isolierten Test-Stack (docker-compose.test.yml), führt die Playwright-Suite aus und baut alles ab. linkedin_job_description.py weiterhin bei 0 % (Phase-4-Lücke, für Phase 6 vorgemerkt).',
+    ],
+  },
+  {
     version: '3.35.1',
     date: '2026-07-08',
     changes: [

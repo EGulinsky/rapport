@@ -20,6 +20,7 @@ services:
       - LOG_LEVEL=INFO
       - SEQ_URL=http://seq-not-used:5341
       - FILES_BRIDGE_URL=http://host.docker.internal:9998
+      - E2E_TESTING=true
     volumes:
       - rapport-test-data:/app/data
     ports:
@@ -27,6 +28,21 @@ services:
     networks:
       default:
         ipv4_address: 192.168.118.10
+
+  e2e-runner:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    container_name: rapport-e2e
+    environment:
+      - E2E_BASE_URL=http://frontend-test:80
+      - E2E_API_URL=http://backend-test:8000
+    networks:
+      default:
+        ipv4_address: 192.168.118.12
+    depends_on:
+      - backend-test
+      - frontend-test
 
   frontend-test:
     build:
