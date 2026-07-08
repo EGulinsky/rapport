@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.38.0',
+    date: '2026-07-08',
+    changes: [
+      'E2E Journey 3: LinkedIn-Link importieren → Formular vorausgefüllt → speichern. Mockt den Backend-Endpoint /api/applications/extract-from-linkedin-url via page.route(), prüft Vorbelegung von Firma, Rolle, Quelle und Kommentar im NewApplicationModal und speichert die Bewerbung ab.',
+    ],
+  },
+  {
     version: '3.37.0',
     date: '2026-07-08',
     changes: [
