@@ -44,15 +44,23 @@ def merge_applications(
     winner = apps[req.winner_id]
     losers = [apps[i] for i in req.loser_ids if i in apps]
 
-    # Apply field overrides to winner, logging status changes explicitly
-    old_main = winner.main_status
+    # Apply field overrides to winner, logging every changed field
+    old_values = {
+        field: getattr(winner, field)
+        for field in req.field_overrides
+        if field in MERGEABLE_APP_FIELDS
+    }
     for field, source_id in req.field_overrides.items():
         if field in MERGEABLE_APP_FIELDS and source_id in apps:
             setattr(winner, field, getattr(apps[source_id], field))
-    if winner.main_status != old_main:
-        add_audit(db, "status_change", "user", app_id=winner.id,
-                  field="main_status", old_value=old_main, new_value=winner.main_status,
-                  reason="Zusammenführen: Status übernommen", user_id=current_user.id)
+    for field, old_v in old_values.items():
+        new_v = getattr(winner, field)
+        if str(old_v or "") != str(new_v or ""):
+            is_status = field == "main_status"
+            add_audit(db, "status_change" if is_status else "update", "user", app_id=winner.id,
+                      field=field, old_value=old_v, new_value=new_v,
+                      reason="Zusammenführen: Status übernommen" if is_status else "Zusammenführen: Feld übernommen",
+                      user_id=current_user.id)
 
     for loser in losers:
         # Store alias so future syncs recognise the old identifiers
@@ -140,12 +148,22 @@ def merge_companies(
         # nulls their FK back out on commit — silently undoing the reassignment
         # (live-reproduced bug, caught by tests, never shipped as a live incident).
         for app in list(loser.applications):
+            old_firma = app.firma
             app.company_profile = winner
             app.firma = winner_name
+            if str(old_firma or "") != str(winner_name or ""):
+                add_audit(db, "update", "user", app_id=app.id,
+                          field="firma", old_value=old_firma, new_value=winner_name,
+                          reason="Firmen zusammengeführt", user_id=current_user.id)
         for app in list(loser.hh_applications):
+            old_ziel = app.zielfirma_bei_hh
             app.target_company_profile = winner
             if app.zielfirma_bei_hh:
                 app.zielfirma_bei_hh = winner_name
+                if str(old_ziel or "") != str(winner_name or ""):
+                    add_audit(db, "update", "user", app_id=app.id,
+                              field="zielfirma_bei_hh", old_value=old_ziel, new_value=winner_name,
+                              reason="Firmen zusammengeführt", user_id=current_user.id)
         for contact in list(loser.direct_contacts):
             contact.company_profile = winner
             contact.firma = winner_name

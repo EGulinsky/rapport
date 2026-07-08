@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.34.5',
+    date: '2026-07-08',
+    changes: [
+      'Audit-Log: mehrere Lücken geschlossen, in denen Änderungen an Bewerbungen bisher nicht protokolliert wurden — u.a. einige Felder im Bearbeiten-Dialog (Ort, Headhunter-Flag, Gesprächsnotizen), Firmenzuordnung, Teilstatus-Wechsel, KI-Bewertung, automatische Datum-Ergänzung, stille LinkedIn-Sync-Korrekturen, nicht-Status-Felder beim Zusammenführen von Bewerbungen sowie automatisch gelöschte Duplikate bei der Bereinigung. Neue Quelle "Automatisch" für Einträge, die nicht von einer manuellen Aktion stammen.',
+    ],
+  },
+  {
     version: '3.34.4',
     date: '2026-07-07',
     changes: [

@@ -36,6 +36,7 @@ const SOURCE_LABELS: Record<string, string> = {
   merge: 'Merge',
   gcal: 'Google Kalender',
   icloud_cal: 'iCloud Kalender',
+  system: 'Automatisch',
 }
 
 const PAGE_SIZE = 50

@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.audit import add_audit
 from app.database import get_db
 from app import models
 from app.dedup import dedup_key, norm_firma
@@ -416,6 +417,10 @@ async def cleanup_run(
                         keeper.contacts.append(contact)
                 dup.contacts.clear()
                 db.flush()
+                add_audit(db, "delete", "system", app_id=keeper_id,
+                          old_value=f"{dup.firma} – {dup.rolle} (#{dup.id})",
+                          reason=f"Duplikat automatisch bereinigt, zusammengeführt in #{keeper_id}",
+                          user_id=current_user.id)
                 db.delete(dup)
                 deleted_apps += 1
         db.commit()
