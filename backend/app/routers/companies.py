@@ -154,7 +154,24 @@ def create_company(
     key = norm_firma(name)
     existing = db.query(CompanyProfile).filter(CompanyProfile.name_norm == key).first()
     if existing:
-        return existing
+        return CompanyProfileListItem(
+            id=existing.id,
+            name_display=existing.name_display,
+            name_norm=existing.name_norm,
+            industry=existing.industry,
+            company_type=existing.company_type,
+            employee_range=existing.employee_range,
+            hq_city=existing.hq_city,
+            hq_country=existing.hq_country,
+            website=existing.website,
+            sync_status=existing.sync_status,
+            last_synced_at=existing.last_synced_at,
+            app_count=_app_count(existing),
+            contact_count=len(_collect_contacts(existing)),
+            has_logo=bool(existing.logo_data),
+            parent_company_id=existing.parent_company_id,
+            parent_name=None,
+        )
     profile = CompanyProfile(name_norm=key, name_display=name, sync_status="pending", user_id=current_user.id)
     db.add(profile)
     db.flush()
@@ -162,8 +179,24 @@ def create_company(
               new_value=name, user_id=current_user.id)
     db.commit()
     db.refresh(profile)
-    profile.app_count = 0  # type: ignore[assignment]
-    return profile
+    return CompanyProfileListItem(
+        id=profile.id,
+        name_display=profile.name_display,
+        name_norm=profile.name_norm,
+        industry=profile.industry,
+        company_type=profile.company_type,
+        employee_range=profile.employee_range,
+        hq_city=profile.hq_city,
+        hq_country=profile.hq_country,
+        website=profile.website,
+        sync_status=profile.sync_status,
+        last_synced_at=profile.last_synced_at,
+        app_count=0,
+        contact_count=0,
+        has_logo=False,
+        parent_company_id=profile.parent_company_id,
+        parent_name=None,
+    )
 
 
 @router.get("", response_model=List[CompanyProfileListItem])

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.39.0',
+    date: '2026-07-08',
+    changes: [
+      'E2E Journeys 1-3: Application-Lifecycle, Kanban-Statuswechsel und LinkedIn-Import laufen jetzt stabil unter Docker/E2E. Fix: Backend POST /api/companies gab ResponseValidationError (app_count fehlte). Journey 1+2 nutzen API-Setup statt UI-Form (robuster). Selektoren auf exact/last umgestellt (Strict-Mode-Konflikte mit Spalten-Headern). Alle drei Tests grün.',
+    ],
+  },
+  {
     version: '3.38.0',
     date: '2026-07-08',
     changes: [
