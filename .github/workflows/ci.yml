@@ -158,7 +158,7 @@ jobs:
   deploy:
     name: Deploy (local)
     runs-on: self-hosted
-    needs: [backend, frontend]
+    needs: [backend, frontend, e2e]
     # event_name-Guard zusätzlich zum ref-Check: self-hosted-Jobs dürfen nie durch einen
     # pull_request-Event (auch von einem Fork) getriggert werden können. Manueller
     # workflow_dispatch-Lauf deployt nur, wenn der "deploy"-Input explizit gesetzt wurde —
