@@ -1,6 +1,6 @@
 # rapport – Technische Architektur
 
-> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.33.1, 2026-07-05). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.35.1, 2026-07-08). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagramme sind als [Mermaid](https://mermaid.js.org/) eingebettet — GitHub rendert sie automatisch beim Anzeigen der Datei. Kein externes Tool zum Betrachten nötig; zum Bearbeiten reicht ein Texteditor.
 
@@ -12,7 +12,8 @@
 4. [Statusübergänge](#4-statusübergänge)
 5. [Workflows](#5-workflows)
 6. [Datenmodell](#6-datenmodell)
-7. [CI/CD](#7-cicd)
+7. [Authentifizierung & Mandantentrennung](#7-authentifizierung--mandantentrennung)
+8. [CI/CD](#8-cicd)
 
 ---
 
@@ -100,14 +101,19 @@ backend/app/
 ├── database.py               SQLAlchemy-Engine + SessionLocal + get_db + Inline-Migrationen
 ├── models.py                  ORM-Modelle, Status-Enums, Excel-Mapping-Konstanten
 ├── schemas.py                 Pydantic Request/Response-Schemas
-├── audit.py                   add_audit() – Audit-Log-Helper (Level: off/normal/verbose)
+├── audit.py                   add_audit() – Audit-Log-Helper (Level: off/normal/verbose), referenziert Application/Contact/CompanyProfile/Event
 ├── dedup.py                   norm_firma()/norm_rolle()/dedup_key() – Normalisierung für Dublettenerkennung
 ├── logger.py                  Loguru-Setup, JSON-Log + Seq-Sink (CLEF)
 ├── linkedin_job_description.py  Job-Beschreibung + Firmenname von LinkedIn-URL laden (Playwright)
 ├── ai/
 │   ├── provider.py          litellm-Wrapper, Fernet-Kryptographie, AINotConfigured/AIRateLimited/AIBadRequest
 │   └── tasks.py              Klassifikations-/Bewertungs-/Extraktions-Prompts (assess_application, extract_application_from_text, match_and_classify, …)
+├── auth/
+│   ├── security.py          Passwort-Hashing (bcrypt), JWT encode/decode, 6-stellige Bestätigungscodes
+│   ├── dependencies.py       get_current_user() – Dependency, liest Bearer-Token, aktiviert Mandanten-Filter
+│   └── email.py               SMTP-Versand der Bestätigungscodes (Registrierung/Passwort-Reset)
 └── routers/
+    ├── auth.py                Registrierung, E-Mail-Bestätigung, Login, Passwort-Reset, Konto (siehe §7)
     ├── applications.py       CRUD + Events + Contacts + KI-Bewertung + LinkedIn-Import
     ├── contacts.py            Globale Kontaktverwaltung
     ├── companies.py           Firmenprofile: CRUD, Logo, Kontakt-Verknüpfung
@@ -139,9 +145,13 @@ backend/app/
 ```
 frontend/src/
 ├── App.tsx                 Root-Komponente: Tabs (Bewerbungen/Kontakte/Firmen/Kalender/Auswertungen), Toolbar, Modal-Orchestrierung
+├── AppRoutes.tsx             Routing: /login, /register, /verify-email, /forgot-password, /reset-password, geschützte Root-Route
 ├── types.ts                 TypeScript-Typen, Status-Labels/Farben, Konstanten
-├── api/client.ts             Fetch-Wrapper für alle Backend-Calls, gruppiert nach Namespace
+├── api/client.ts             Fetch-Wrapper für alle Backend-Calls, gruppiert nach Namespace; hängt Bearer-Token an, behandelt 401 zentral
+├── context/AuthContext.tsx    Login-Status, Token in localStorage, login()/register()/logout()/…
+├── pages/auth/                LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, AuthLayout
 └── components/
+    ├── RequireAuth.tsx          Route-Guard: leitet zu /login um, wenn nicht angemeldet
     ├── ApplicationTable.tsx    Sortierbare Tabellenansicht
     ├── KanbanBoard.tsx          Kanban mit Drag & Drop
     ├── ApplicationModal.tsx     Detail/Edit-Modal: Lifecycle-Bar, Timeline, Anhänge, Kontakte, KI-Bewertung
@@ -158,7 +168,7 @@ frontend/src/
     ├── MergeDialog.tsx                 AppMergeDialog / CompanyMergeDialog / ContactMergeDialog
     ├── CleanupModal.tsx                 Dubletten-Bereinigung, kontextsensitiv (scope-Prop)
     ├── ReviewModal.tsx                   Review-Inbox für KI-/Sync-Vorschläge
-    ├── SettingsModal.tsx                  Einstellungen (Tabs: Sync/KI/Google/iCloud/Anrufe/Dokumente/LinkedIn/Backup/Logos/Karten/Agent)
+    ├── SettingsModal.tsx                  Einstellungen (Tabs: Konto/Sync/KI/Google/iCloud/Anrufe/Dokumente/LinkedIn/Backup/Logos/Karten/Agent)
     ├── SyncButton.tsx                      Globaler Sync-Trigger + Fortschrittsanzeige
     ├── ImportButton.tsx / ExportButton.tsx / PdfExportButton.tsx / ImportExportMenu.tsx
     ├── AuditLogModal.tsx                   Audit-Trail-Ansicht
@@ -172,6 +182,21 @@ frontend/src/
 ## 2. API-Schnittstellen (intern)
 
 Swagger UI: `http://localhost:8000/docs`
+
+Alle Endpunkte außer `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/resend-code`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/startup-check` und `/health` verlangen `Authorization: Bearer <jwt>`. Details siehe [§7](#7-authentifizierung--mandantentrennung).
+
+### Authentifizierung
+
+| Methode | Pfad | Beschreibung |
+|---|---|---|
+| `POST` | `/api/auth/register` | Konto anlegen, Bestätigungscode per E-Mail (409 falls bereits registriert) |
+| `POST` | `/api/auth/verify-email` | Code prüfen, Konto aktivieren, JWT zurückgeben |
+| `POST` | `/api/auth/resend-code` | Neuen Bestätigungscode senden (unverifiziertes Konto) |
+| `POST` | `/api/auth/login` | Login, JWT zurückgeben (403 falls E-Mail nicht bestätigt) |
+| `POST` | `/api/auth/forgot-password` | Reset-Code per E-Mail (immer 200, keine User-Enumeration) |
+| `POST` | `/api/auth/reset-password` | Reset-Code prüfen, neues Passwort setzen |
+| `GET` | `/api/auth/me` | Aktuelles Konto (erfordert Login) |
+| `POST` | `/api/auth/change-password` | Passwort ändern (erfordert Login) |
 
 ### Bewerbungen
 
@@ -483,6 +508,8 @@ flowchart TB
 
 ```mermaid
 erDiagram
+    USER ||--o{ APPLICATION : besitzt
+    USER ||--o{ EMAIL_VERIFICATION_CODE : hat
     APPLICATION ||--o{ EVENT : hat
     APPLICATION }o--o{ CONTACT : "contact_application"
     APPLICATION ||--o{ PENDING_MATCH : "schlägt vor für"
@@ -492,7 +519,23 @@ erDiagram
     CONTACT }o--o| COMPANY_PROFILE : "direkt zugeordnet"
     COMPANY_PROFILE ||--o{ COMPANY_PROFILE : "Mutter-/Tochterfirma"
     APPLICATION ||--o{ AUDIT_LOG : protokolliert
+    CONTACT ||--o{ AUDIT_LOG : protokolliert
+    COMPANY_PROFILE ||--o{ AUDIT_LOG : protokolliert
+    EVENT ||--o{ AUDIT_LOG : protokolliert
 
+    USER {
+        int id PK
+        string email UK
+        string password_hash
+        bool email_verified
+    }
+    EMAIL_VERIFICATION_CODE {
+        int id PK
+        int user_id FK
+        string code
+        string purpose
+        datetime expires_at
+    }
     APPLICATION {
         int id PK
         string firma
@@ -541,22 +584,47 @@ erDiagram
     AUDIT_LOG {
         int id PK
         int app_id FK
+        int contact_id FK
+        int company_profile_id FK
+        int event_id FK
         string action
         text old_value
         text new_value
     }
 ```
 
-**Singleton-Konfigurationstabellen** (genau eine Zeile pro Installation, keine ER-Relationen): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
+**Mandantentrennung:** Bis auf `users` und `email_verification_codes` selbst tragen praktisch alle Tabellen (~20 insgesamt — Kern-Entitäten wie oben plus alle Konfigurationstabellen) eine `user_id`-Spalte; siehe [§7](#7-authentifizierung--mandantentrennung) für den zentralen Filter-Mechanismus. Der Übersichtlichkeit halber ist `user_id` nicht in jedem ER-Diagramm-Block einzeln aufgeführt.
 
-**Weitere Tabellen ohne direkte FK-Relation:** `synced_items` (Dedup-Ledger über alle Sync-Quellen), `merge_aliases` (behält alte Kennungen zusammengeführter Bewerbungen/Kontakte, damit künftige Syncs weiterhin auf den kanonischen Datensatz auflösen).
+**Konfigurationstabellen** (genau eine Zeile pro **Konto**, keine ER-Relationen untereinander): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
+
+**Weitere Tabellen ohne direkte FK-Relation:** `synced_items` (Dedup-Ledger über alle Sync-Quellen, pro Konto), `merge_aliases` (behält alte Kennungen zusammengeführter Bewerbungen/Kontakte, damit künftige Syncs weiterhin auf den kanonischen Datensatz auflösen).
 
 ### Tabellen im Detail
+
+#### `users`
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `email` | VARCHAR UNIQUE, indexed | |
+| `password_hash` | VARCHAR | bcrypt |
+| `email_verified` | BOOLEAN | Erst nach Code-Bestätigung `true` |
+| `created_at` | DATETIME | |
+
+#### `email_verification_codes`
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `user_id` | INTEGER FK NOT NULL | → `users.id` |
+| `code` | VARCHAR(6) | |
+| `purpose` | VARCHAR | `verify_email` \| `reset_password` |
+| `expires_at` | DATETIME | 15 Minuten Gültigkeit |
+| `used_at` | DATETIME NULL | Verhindert Wiederverwendung |
 
 #### `applications`
 
 | Spalte | Typ | Beschreibung |
 |---|---|---|
+| `user_id` | INTEGER FK NOT NULL | → `users.id` — wie auf praktisch allen übrigen Tabellen (siehe [§7](#7-authentifizierung--mandantentrennung)), hier nur einmal exemplarisch aufgeführt |
 | `firma`, `rolle` | VARCHAR NOT NULL | |
 | `main_status` / `sub_status` | VARCHAR | Siehe [Statusübergänge](#4-statusübergänge) |
 | `is_headhunter` / `zielfirma_bei_hh` | BOOLEAN / VARCHAR | |
@@ -626,12 +694,12 @@ erDiagram
 
 | Spalte | Typ | Beschreibung |
 |---|---|---|
-| `app_id` | INTEGER FK NULL, ON DELETE SET NULL, indexed | → `applications.id` |
+| `app_id` / `contact_id` / `company_profile_id` / `event_id` | INTEGER FK NULL, ON DELETE SET NULL, je indexed | → `applications.id` / `contacts.id` / `company_profiles.id` / `events.id`. Mehrere können gleichzeitig gesetzt sein (z. B. ein Kontakt-Update im Kontext einer konkreten Bewerbung) |
 | `action` | VARCHAR | `create`, `update`, `delete`, `status_change`, `merge`, `import` |
 | `field`, `old_value`, `new_value`, `reason` | | |
-| `source` | VARCHAR | Default `"user"` |
+| `source` | VARCHAR | `user` (manuelle Aktion), `system` (automatischer Server-Vorgang ohne konkreten Sync-Provider, z. B. Backfill), `sync` (generischer Sync-Pfad ohne spezifischen Provider), sonst der jeweilige Sync-Provider (`gmail`, `icloud_mail`, `gcal`, `icloud_cal`, `icloud_calls`, `linkedin`, `local_files`, …), außerdem `import`, `merge`, `db_trigger` (Sicherheitsnetz-Trigger auf `applications.main_status`, siehe unten) |
 
-Verbosity über `sync_settings.audit_log_level` steuerbar (`off`/`normal`/`verbose`).
+Deckt Neuanlagen/Änderungen/Löschungen über praktisch jeden Code-Pfad ab, der eine der vier referenzierten Tabellen anfasst — manuelle CRUD-Endpunkte, Zusammenführen, Bereinigen/Dedup, und alle Sync-Provider. Verbosity über `sync_settings.audit_log_level` steuerbar (`off`/`normal`/`verbose`) — im Level `normal` werden reine Feld-Updates (`action="update"`) unterdrückt, `create`/`delete`/`status_change`/`merge`/`import` immer geloggt. Zusätzlich zu den Python-seitigen Aufrufen von `add_audit()` gibt es einen DB-Trigger (`trg_main_status_change`), der jede Änderung an `applications.main_status` unabhängig vom Code-Pfad als Sicherheitsnetz mitschreibt (`source="db_trigger"`), dedupliziert gegen innerhalb von 2 Sekunden bereits vom Python-Pfad geschriebene identische Einträge.
 
 #### `synced_items` (Dedup-Ledger)
 
@@ -641,7 +709,7 @@ Verbosity über `sync_settings.audit_log_level` steuerbar (`off`/`normal`/`verbo
 
 `entity_type` (`application`|`contact`), `canonical_id`, plus die ursprünglichen Kennungen (`alias_firma`, `alias_rolle`, `alias_li_job_id`, `alias_name`, `alias_email`) — damit ein zusammengeführter Datensatz bei künftigen Syncs weiterhin über seine alte Kennung gefunden wird.
 
-#### Singleton-Konfigurationstabellen
+#### Konfigurationstabellen (eine Zeile pro Konto)
 
 | Tabelle | Zweck | Sensible Felder (Fernet-verschlüsselt) |
 |---|---|---|
@@ -664,7 +732,57 @@ Funktionen in `app/ai/provider.py`: `encrypt_api_key()` / `decrypt_api_key()`.
 
 ---
 
-## 7. CI/CD
+## 7. Authentifizierung & Mandantentrennung
+
+rapport ist ein Multi-Account-System: mehrere Konten können dieselbe Installation nutzen, jedes sieht ausschließlich seine eigenen Daten. Registrierung ist dauerhaft offen (kein Invite-Zwang).
+
+### 7.1 Registrierung, Verifizierung, Login
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant Mail as SMTP (Resend)
+
+    U->>FE: E-Mail + Passwort
+    FE->>BE: POST /api/auth/register
+    BE->>BE: User anlegen (email_verified=false), 6-stelliger Code (15 Min gültig)
+    BE->>Mail: Bestätigungscode senden
+    BE-->>FE: 201
+    U->>FE: Code eingeben (oder "Code erneut senden")
+    FE->>BE: POST /api/auth/verify-email
+    BE->>BE: email_verified=true
+    alt erstes je bestätigtes Konto
+        BE->>BE: claim_unowned_data() – bisherige user_id=NULL-Zeilen diesem Konto zuordnen
+    end
+    BE-->>FE: JWT (7 Tage gültig)
+    FE->>FE: Token in localStorage, alle weiteren Requests mit Authorization: Bearer
+```
+
+Passwort-Reset läuft analog über denselben Code-Mechanismus (`purpose="reset_password"` statt `"verify_email"`), ausgelöst über `POST /api/auth/forgot-password` (immer 200, keine User-Enumeration) → `POST /api/auth/reset-password`. Passwörter: bcrypt-Hash (`app/auth/security.py`). Codes: `EmailVerificationCode`, `used_at` verhindert Wiederverwendung. SMTP-Konfiguration (aktuell Resend als Provider) über Env-Vars `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`; ohne diese liefert `register`/`forgot-password` `502 EmailNotConfigured` (die DB-Zeile inkl. Code wird trotzdem committet, bevor der Sendeversuch scheitert).
+
+### 7.2 Zentraler Mandanten-Filter
+
+Statt jede Query in den ~20 Router-Dateien einzeln um `.filter_by(user_id=...)` zu ergänzen (fehleranfällig — eine vergessene Stelle wäre ein echtes Datenleck zwischen Konten), setzt `get_current_user()` (`app/auth/dependencies.py`) nach erfolgreicher Token-Prüfung einmal pro Request `set_session_user(db, user.id)`. Ein SQLAlchemy-`do_orm_execute`-Event (`app/database.py::_apply_tenant_filter`) hängt daraufhin automatisch `with_loader_criteria(cls, cls.user_id == user_id)` an **jede** SELECT-Query gegen eine der ~19 mandantengebundenen Modellklassen (`_SCOPED_MODEL_NAMES` in `database.py`) — inklusive Relationship-Lazy-Loads und Subqueries, solange sie über die ORM-Query-API laufen.
+
+**Bekannte Grenze:** rohes `db.execute(text(...))`, `Session.get()` und `db.query(X).get(id)` umgehen den Filter (SQLAlchemy-Verhalten von `with_loader_criteria`). Primary-Key-Lookups auf Anfrage-Pfaden brauchen deshalb zusätzlich eine explizite Eigentums-Prüfung nach dem Laden (`filter_by(id=..., user_id=current_user.id)` statt `.get(id)`) — im Zuge der Mandantentrennung wurden alle bekannten Stellen dieser Art durchgegangen und gefixt, inklusive eines dabei gefundenen echten Cross-Tenant-Lecks (`sync_targeted.py::get_result` prüfte Eigentümerschaft nicht).
+
+**Hintergrundjobs ohne Request-Kontext** (Sync-Loop in `main.py`, Backup-Scheduler, OAuth-Callbacks von Google/LinkedIn) haben keinen `current_user` — hier übernimmt `get_first_user_id(db)` (`database.py`) pragmatisch das am längsten bestehende Konto. Bewusste Vereinfachung fürs aktuelle Ein-Konto-Regelbetrieb-Szenario, kein Multi-Tenant-fähiger Hintergrundbetrieb.
+
+**Bewusst ohne Login:** `GET /api/startup-check` — dient auch als unauthentifizierter Health-Check per curl; nutzt `get_first_user_id`/`set_session_user` intern, falls bereits ein Konto existiert.
+
+### 7.3 Datenmigration bei Erstinbetriebnahme
+
+Vor Einführung der Konten gehörten alle Zeilen niemandem (`user_id IS NULL`). `claim_unowned_data()` (`database.py`) wird einmalig innerhalb der `verify-email`-Transaktion aufgerufen, wenn dies das erste je bestätigte Konto ist, und ordnet alle `user_id IS NULL`-Zeilen über alle ~20 Tabellen diesem Konto zu.
+
+### 7.4 Bekannte offene Punkte
+
+- **CORS ist aktuell noch nicht eingeschränkt** (`main.py`: `CORSMiddleware(allow_origins=["*"])`) — ursprünglich für Phase 1 der Benutzerkonten vorgesehen, aber noch nicht umgesetzt. In Kombination mit Bearer-Token-Auth (kein Cookie-basiertes CSRF-Risiko, aber Token-Diebstahl über beliebige Origin bei XSS) sollte das vor einer Öffnung für nicht-vertrauenswürdige Netzwerke nachgezogen werden.
+
+---
+
+## 8. CI/CD
 
 Datei: `.github/workflows/ci.yml` · Self-hosted Runner auf dem Mac.
 
