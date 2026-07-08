@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.ai.provider import decrypt_api_key, encrypt_api_key
+from app.audit import add_audit
 from app.database import get_db
 from app import models
 from app.auth.dependencies import get_current_user
@@ -25,6 +26,13 @@ from app.logger import get_logger
 log = get_logger("sync", source="linkedin")
 
 router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
+
+
+def _audit_backfill(db: Session, app: "models.Application", field: str, old_value, new_value, user_id) -> None:
+    """Protokolliert eine stille Feld-Ergänzung an einer bestehenden Bewerbung durch den LinkedIn-Sync."""
+    add_audit(db, "update", "linkedin", app_id=app.id,
+              field=field, old_value=old_value, new_value=new_value,
+              reason="automatisch aus LinkedIn ergänzt", user_id=user_id)
 
 
 def _commit_with_retry(db, retries: int = 5, delay: float = 2.0) -> None:
@@ -896,9 +904,12 @@ def _find_or_create_application(
             if li_job_id and not app.linkedin_job_id:
                 app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
+                old_rolle = app.rolle
                 app.rolle = clean_title
+                _audit_backfill(db, app, "rolle", old_rolle, clean_title, user_id)
             if job.get("ort") and not app.ort:
                 app.ort = job["ort"]
+                _audit_backfill(db, app, "ort", None, job["ort"], user_id)
             return app, False, None, f"job_id:{li_job_id}→#{app.id}"
 
     # 2. Normalized-equality match: both company AND role must match after
@@ -923,9 +934,12 @@ def _find_or_create_application(
             if li_job_id and not app.linkedin_job_id:
                 app.linkedin_job_id = li_job_id
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
+                old_rolle = app.rolle
                 app.rolle = clean_title
+                _audit_backfill(db, app, "rolle", old_rolle, clean_title, user_id)
             if job.get("ort") and not app.ort:
                 app.ort = job["ort"]
+                _audit_backfill(db, app, "ort", None, job["ort"], user_id)
             return app, False, None, f"firma+rolle→#{app.id}"
 
     # 2.5 Check merge aliases: after a manual merge the loser's identifiers are stored here
@@ -985,7 +999,6 @@ def _find_or_create_application(
     db.add(new_app)
     db.flush()
 
-    from app.audit import add_audit
     add_audit(db, "create", "linkedin", app_id=new_app.id,
               new_value=f"{job['company']} – {job['title']}", user_id=user_id)
 
@@ -1060,9 +1073,12 @@ def _process_linkedin_job(db: Session, job: dict, user_id: Optional[int] = None)
     job_url = job.get("stellenanzeige_url") or None
     if job_url and not app.stellenanzeige_url:
         app.stellenanzeige_url = job_url
+        _audit_backfill(db, app, "stellenanzeige_url", None, job_url, user_id)
     if not app.datum_bewerbung and job.get("applied_date"):
         try:
-            app.datum_bewerbung = date.fromisoformat(str(job["applied_date"]))
+            new_datum = date.fromisoformat(str(job["applied_date"]))
+            app.datum_bewerbung = new_datum
+            _audit_backfill(db, app, "datum_bewerbung", None, str(new_datum), user_id)
         except Exception:
             pass
     db.flush()

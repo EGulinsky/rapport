@@ -213,6 +213,10 @@ def list_applications(
                 if eb:
                     app.datum_bewerbung = eb
                     fixed_any = True
+                    add_audit(db, "update", "system", app_id=app.id,
+                              field="datum_bewerbung", old_value=None, new_value=str(eb),
+                              reason="automatisch aus frühestem Bewerbungs-Ereignis ergänzt",
+                              user_id=current_user.id)
             # Compute ghosting from DB letztes_update BEFORE overwriting it in-memory.
             # A "Bewerbung eingereicht" event with datum=today (set by sync) would
             # otherwise push letztes_update to today and suppress ghosting.
@@ -297,11 +301,16 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
             if i > 0:
                 await asyncio.sleep(delay_s)
             try:
+                old_color = app.ai_color
                 result = await assess_application(db, app)
                 app.ai_color = result["color"]
                 app.ai_next_step = result["next_step"]
                 app.ai_reasoning = result.get("reasoning", "")
                 app.ai_assessed_at = datetime.utcnow()
+                if str(old_color or "") != str(app.ai_color or ""):
+                    add_audit(db, "update", "user", app_id=app.id,
+                              field="ai_color", old_value=old_color, new_value=app.ai_color,
+                              reason="KI-Bewertung", user_id=current_user.id)
                 db.commit()
                 updated += 1
                 yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma})}\n\n"
@@ -437,7 +446,9 @@ def update_application(
 
     # Capture field-level changes before applying them (verbose mode)
     AUDIT_FIELDS = {"firma", "rolle", "zielfirma_bei_hh", "wurde_besetzt_von", "quelle",
-                    "datum_bewerbung", "kommentar", "stellenanzeige_url"}
+                    "datum_bewerbung", "letztes_update", "kommentar", "stellenanzeige_url",
+                    "ort", "is_headhunter",
+                    "gespraech_1", "gespraech_2", "gespraech_3", "gespraech_4", "gespraech_5"}
     for f, v in update_data.items():
         if f in AUDIT_FIELDS:
             old_v = getattr(app, f, None)
@@ -460,8 +471,13 @@ def update_application(
         # db.get()/Query.get() umgehen den automatischen Mandanten-Filter.
         cp = db.query(models.CompanyProfile).filter_by(id=direct_cp_id, user_id=current_user.id).first()
         if cp:
+            old_firma = app.firma
             app.company_profile_id = cp.id
             app.firma = cp.name_display or cp.name_norm
+            if str(old_firma or "") != str(app.firma or ""):
+                add_audit(db, "update", "user", app_id=app_id,
+                          field="firma", old_value=old_firma, new_value=app.firma,
+                          reason="Firmenzuordnung geändert", user_id=current_user.id)
         firma_changed = False  # profile already set, no need to re-derive
     elif firma_changed:
         _ensure_company_profile(db, app)
@@ -469,8 +485,13 @@ def update_application(
     if direct_tcp_id is not None:
         tcp = db.query(models.CompanyProfile).filter_by(id=direct_tcp_id, user_id=current_user.id).first()
         if tcp:
+            old_ziel = app.zielfirma_bei_hh
             app.target_company_profile_id = tcp.id
             app.zielfirma_bei_hh = tcp.name_display or tcp.name_norm
+            if str(old_ziel or "") != str(app.zielfirma_bei_hh or ""):
+                add_audit(db, "update", "user", app_id=app_id,
+                          field="zielfirma_bei_hh", old_value=old_ziel, new_value=app.zielfirma_bei_hh,
+                          reason="Firmenzuordnung geändert", user_id=current_user.id)
 
     new_main = app.main_status
     new_sub  = app.sub_status
@@ -482,9 +503,14 @@ def update_application(
             titel=_status_label(new_main, new_sub),
             user_id=current_user.id,
         ))
-        add_audit(db, "status_change", "user", app_id=app_id,
-                  field="main_status", old_value=old_main, new_value=new_main,
-                  reason="manuell geändert", user_id=current_user.id)
+        if new_main != old_main:
+            add_audit(db, "status_change", "user", app_id=app_id,
+                      field="main_status", old_value=old_main, new_value=new_main,
+                      reason="manuell geändert", user_id=current_user.id)
+        if new_sub != old_sub:
+            add_audit(db, "status_change", "user", app_id=app_id,
+                      field="sub_status", old_value=old_sub, new_value=new_sub,
+                      reason="manuell geändert", user_id=current_user.id)
 
     db.commit()
     db.refresh(app)
@@ -534,10 +560,15 @@ async def ai_assess_single(
         raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
     except AIBadRequest as e:
         raise HTTPException(400, str(e))
+    old_color = app.ai_color
     app.ai_color = result["color"]
     app.ai_next_step = result["next_step"]
     app.ai_reasoning = result.get("reasoning", "")
     app.ai_assessed_at = datetime.utcnow()
+    if str(old_color or "") != str(app.ai_color or ""):
+        add_audit(db, "update", "user", app_id=app.id,
+                  field="ai_color", old_value=old_color, new_value=app.ai_color,
+                  reason="KI-Bewertung", user_id=current_user.id)
     db.commit()
     return result
 
