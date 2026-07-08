@@ -32,25 +32,31 @@ Detaillierte, gepflegte Übersicht (Router, Komponenten, Datenmodell): [docs/ARC
 ```
 rapport/
 ├── CLAUDE.md · README.md · docker-compose.yml (Services: backend, frontend, seq)
-├── .github/workflows/ci.yml     # ruff + tsc + docker buildx, self-hosted runner + deploy
-├── docs/ARCHITECTURE.md         # Technische Architektur inkl. Mermaid-Diagrammen
+│   docker-compose.test.yml    # Isolierte Testumgebung (eigene DB, Ports 3001/8001)
+├── .github/workflows/ci.yml   # Jobs: backend, frontend, e2e, docker, deploy, notify-failure
+├── docs/
+│   ├── ARCHITECTURE.md         # Technische Architektur inkl. Mermaid-Diagrammen
+│   └── TEST_KONZEPT.md         # Testkonzept (Phase 1–4 abgeschlossen, Phase 5 E2E gestartet)
 ├── backend/app/
 │   ├── main.py · database.py · models.py · schemas.py
 │   ├── audit.py · dedup.py · logger.py · linkedin_job_description.py
 │   ├── ai/{provider,tasks}.py
-│   └── routers/  applications · contacts · companies · merge · cleanup ·
+│   └── routers/  applications · contacts · companies · merge · cleanup · test_e2e ·
 │                 import_excel · export_excel · export_pdf · attachments ·
 │                 settings · calendar · analytics · audit_log · backup ·
 │                 sync_{common,google,icloud,targeted,files,linkedin,company} ·
-│                 review · startup_check
+│                 review · startup_check · auth
+├── frontend/
+│   ├── src/ (s.u.)
+│   ├── e2e/                    # Playwright-E2E-Tests (Phase 5)
+│   │   ├── playwright.config.ts
+│   │   ├── fixtures.ts         # authToken-Fixture (E2E_USER via /api/e2e/setup-user)
+│   │   └── *.spec.ts           # User-Journey-Tests
+│   ├── Dockerfile.e2e          # mcr.microsoft.com/playwright als Base
+│   └── nginx.conf · nginx.test.conf
 └── frontend/src/
     ├── App.tsx · types.ts · api/client.ts
-    └── components/  ApplicationTable · KanbanBoard · ApplicationModal ·
-                      CalendarView · StatsBar · StatusBadge/Popover ·
-                      ContactsView/Modal · CompaniesView/Modal/Logo/FilterPicker ·
-                      MergeDialog · CleanupModal · ReviewModal · SettingsModal ·
-                      SyncButton · Import/Export/PdfExportButton · AuditLogModal ·
-                      AnalyticsView · ChangelogModal · StartupWarningBanner
+    └── components/  ApplicationTable · KanbanBoard · ApplicationModal · …
 ```
 
 ## Datenbank
@@ -123,8 +129,8 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner auf dem Mac.  
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 357 Tests) → `frontend` (tsc + vite build) → `docker` (buildx) → `deploy` (self-hosted). Zusätzlich laufen bei Push auf `main` 93 L3-Integrationstests (`pytest -m integration`).  
-Deploy: `git pull` → Docker Buildx baut neue Images auf dem Runner → `docker compose up -d --build` → Health-Poll → macOS-Notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (Testkonzept, Phase 1–4 umgesetzt, nur LinkedIn-Playwright-Fixture-Replay aus Phase 6 offen).  
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 447 Tests) → `frontend` (tsc + vite build) → `e2e` (Playwright via docker-compose.test.yml, main-Push + workflow_dispatch) → `docker` (buildx, wartet auf e2e) → `deploy` (self-hosted). Zusätzlich laufen bei Push auf `main` 93 L3-Integrationstests (`pytest -m integration`).  
+Deploy: `git pull` → Docker Buildx baut neue Images auf dem Runner → `docker compose up -d --build` → Health-Poll → macOS-Notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (Testkonzept, Phase 1–4 abgeschlossen, Phase 5 E2E gestartet).  
 Push auf `main` löst immer Test+Deploy aus. Manuell (z.B. auf einem Feature-Branch) per `gh workflow run ci.yml --ref <branch>` nur testen, oder mit `-f deploy=true` zusätzlich deployen (deployt dabei immer den `main`-Head, unabhängig vom gewählten `--ref`).
 
 ## Wichtige Konstanten
@@ -142,7 +148,54 @@ PATH="$PWD/.venv_build/bin:$PATH" packaging/build_dmg.sh <version>
 ```
 Danach alten launchd-Job entladen (`launchctl unload -w ~/Library/LaunchAgents/com.rapport.agent.plist`), neue App nach `/Applications` kopieren, einmal öffnen (self-registriert). Config/Token liegt in `~/Library/Application Support/RapportAgent/config.json` — bleibt bei App-Updates erhalten, solange der Ordner nicht gelöscht wird.
 
+## E2E-Tests (Playwright)
+
+E2E-Tests laufen im isolierten Test-Stack (`docker-compose.test.yml`):
+```bash
+# Test-Stack starten + E2E-Tests ausführen
+docker compose -p rapport-test -f docker-compose.test.yml up -d --build backend-test frontend-test
+# Warten bis Backend bereit, dann:
+docker compose -p rapport-test -f docker-compose.test.yml run --rm e2e-runner
+# Aufräumen
+docker compose -p rapport-test -f docker-compose.test.yml down -v
+```
+
+Test-Dateien in `frontend/e2e/`. Basis-Fixture (`fixtures.ts`) registriert einen E2E-Testnutzer
+über `POST /api/e2e/setup-user` (nur aktiv bei `E2E_TESTING=true`). Der Auth-Token wird
+in `localStorage` gesetzt, danach lädt die App als authentifizierter Nutzer.
+
 ## Excel-Datei
 
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`  
 Sheet: `Tracking`, 17 Spalten — Mapping in `models.py` unter `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
+
+## Nächste Schritte (Testkonzept Phase 5)
+
+Aktueller Stand v3.36.0 — Phase 5 E2E gestartet, erster Journey-Test implementiert.
+
+**Verbleibende E2E-Journeys (priorisiert nach Impact):**
+
+| # | Journey | Status |
+|---|---------|--------|
+| 2 | Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset | ❌ |
+| 3 | LinkedIn-Link importieren → Formular vorausgefüllt → speichern | ❌ |
+| 4 | Bereinigen-Button kontextabhängig (Vorschau → Ausführen) | ❌ |
+| 5 | Merge-Dialog (Bewerbungen/Kontakte/Firmen) | ❌ |
+| 6 | Targeted-Sync für eine Bewerbung (gemockte Quellen) | ❌ |
+| 7 | Manuelle Kandidatenzuordnung (Suche → Multiselect → Import) | ❌ |
+| 8 | KI-Bewertung: "Neu bewerten" → Ampel + Reasoning | ❌ |
+| 9 | Batch-KI-Bewertung mit Live-Fortschritt (+ Rate-Limit-Simulation) | ❌ |
+| 10 | Firmen-Sync mit Markierung (nur Auswahl) | ❌ |
+| 11 | Backup konfigurieren → manueller Lauf → Restore | ❌ |
+| 12 | Excel-Import (Originalformat) → Export → Round-Trip-Vergleich | ❌ |
+
+**Phase-4-Lücke:** `linkedin_job_description.py` bei 0 % Coverage (LinkedIn-Playwright-Fixure-Replay,
+für Phase 6 vorgemerkt). Kann jederzeit nachgeholt werden, bevor Phase 5 abgeschlossen ist.
+
+**Hinweise für die Implementierung:**
+- E2E-Tests in `frontend/e2e/` ablegen, Muster in `application-lifecycle.spec.ts` folgen
+- `test.beforeEach` in der Datei oder `test.describe.configure` für Setup nutzen
+- `authToken`-Fixture registriert automatisch einen E2E-Testnutzer
+- Selektoren nach Text/Inhalt (keine `data-testid` im Projekt)
+- Für gemockte externe Quellen: Playwright `page.route()`-Interception nutzen
+- Neuen Test in der bestehenden `.spec.ts`-Datei oder als separate Datei anlegen
