@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.agent_client import agent_get, agent_post
+from app.audit import add_audit
 from app.database import get_db, SessionLocal, set_session_user
 from app import models
 from app.auth.dependencies import get_current_user
@@ -164,7 +165,7 @@ async def _do_local_files(user_id: int) -> dict:
                     continue
 
                 date_hint = datetime.fromtimestamp(modified, tz=timezone.utc) if modified else None
-                db.add(models.Event(
+                new_event = models.Event(
                     application_id=app_id,
                     source="local_files",
                     external_id=file_id,
@@ -173,7 +174,11 @@ async def _do_local_files(user_id: int) -> dict:
                     titel=name,
                     notiz=path,
                     user_id=user_id,
-                ))
+                )
+                db.add(new_event)
+                db.flush()
+                add_audit(db, "create", "local_files", app_id=app_id, event_id=new_event.id,
+                          new_value=name, user_id=user_id)
                 mark_synced(db, "local_files", file_id, user_id)
                 created += 1
 
@@ -273,7 +278,7 @@ async def attach_file(
             file_id = hashlib.md5(fpath.encode()).hexdigest()[:20]
             if db.query(models.SyncedItem).filter_by(source="local_files", external_id=file_id).first():
                 continue
-            db.add(models.Event(
+            file_event = models.Event(
                 application_id=req.app_id,
                 source="local_files",
                 external_id=file_id,
@@ -282,7 +287,11 @@ async def attach_file(
                 titel=fname,
                 notiz=fpath,
                 user_id=current_user.id,
-            ))
+            )
+            db.add(file_event)
+            db.flush()
+            add_audit(db, "create", "user", app_id=req.app_id, event_id=file_event.id,
+                      new_value=fname, reason="Datei manuell angehängt", user_id=current_user.id)
             mark_synced(db, "local_files", file_id, current_user.id)
             created += 1
         db.commit()
@@ -300,6 +309,9 @@ async def attach_file(
         user_id=current_user.id,
     )
     db.add(ev)
+    db.flush()
+    add_audit(db, "create", "user", app_id=req.app_id, event_id=ev.id,
+              new_value=name, reason="Datei manuell angehängt", user_id=current_user.id)
     mark_synced(db, "local_files", file_id, current_user.id)
     db.commit()
     db.refresh(ev)

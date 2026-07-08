@@ -96,6 +96,10 @@ async def approve_match(
                         keeper.applications.append(app)
                 dup.applications.clear()
                 db.flush()
+                add_audit(db, "delete", "system", contact_id=keeper.id,
+                          old_value=f"{dup.name} (#{dup.id})",
+                          reason=f"Duplikat automatisch bereinigt, zusammengeführt in #{keeper.id}",
+                          user_id=current_user.id)
                 db.delete(dup)
         match.review_status = "approved"
         db.commit()
@@ -114,6 +118,8 @@ async def approve_match(
         if dup_event_id:
             ev = db.query(Event).filter_by(id=dup_event_id, user_id=current_user.id).first()
             if ev:
+                add_audit(db, "delete", "user", app_id=app.id, event_id=ev.id,
+                          old_value=ev.titel, reason="Duplikat manuell bereinigt", user_id=current_user.id)
                 db.delete(ev)
         match.review_status = "approved"
         db.commit()
@@ -142,10 +148,13 @@ async def approve_match(
                 user_id=current_user.id,
             )
             db.add(status_event)
+            db.flush()
             add_audit(db, "status_change", match.source or "user",
                       app_id=app.id, field="main_status",
                       old_value=old_main, new_value=new_main,
                       reason="PendingMatch genehmigt", user_id=current_user.id)
+            add_audit(db, "create", match.source or "user", app_id=app.id, event_id=status_event.id,
+                      new_value=status_event.titel, reason="PendingMatch genehmigt", user_id=current_user.id)
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": status_event.id if new_main else None}
@@ -163,6 +172,9 @@ async def approve_match(
         user_id=current_user.id,
     )
     db.add(event)
+    db.flush()
+    add_audit(db, "create", match.source or "user", app_id=body.application_id, event_id=event.id,
+              new_value=event.titel, reason="PendingMatch genehmigt", user_id=current_user.id)
     match.review_status = "approved"
     db.commit()
     return {"status": "approved", "event_id": event.id}

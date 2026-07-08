@@ -818,16 +818,21 @@ async def _scrape_messages(page, db: Session, apps_list: list, user_id: Optional
                 )
                 if existing:
                     continue
-                db.add(models.Event(
+                msg_titel = f"LinkedIn-Nachricht: {participant[:80]}"
+                msg_event = models.Event(
                     application_id=app_id,
                     typ="mail",
                     datum=today,
-                    titel=f"LinkedIn-Nachricht: {participant[:80]}",
+                    titel=msg_titel,
                     notiz=preview,
                     source="linkedin_msg",
                     external_id=thread_id,
                     user_id=user_id,
-                ))
+                )
+                db.add(msg_event)
+                db.flush()
+                add_audit(db, "create", "linkedin", app_id=app_id, event_id=msg_event.id,
+                          new_value=msg_titel, user_id=user_id)
                 created += 1
 
             mark_synced(db, "linkedin_msg", thread_id, user_id)
@@ -1010,14 +1015,18 @@ def _find_or_create_application(
         "rejected":    "Archiviert / Abgelehnt",
     }.get(initial_status, "Bewerbung eingereicht")
 
-    db.add(models.Event(
+    li_event = models.Event(
         application_id=new_app.id,
         typ=event_typ,
         datum=applied_date_obj,
         titel=event_titel,
         source="linkedin",
         user_id=user_id,
-    ))
+    )
+    db.add(li_event)
+    db.flush()
+    add_audit(db, "create", "linkedin", app_id=new_app.id, event_id=li_event.id,
+              new_value=event_titel, user_id=user_id)
     # pending_status (review-queue trigger) nur bei "rejected" — für jeden anderen
     # intended_status wurde initial_status bereits identisch gesetzt, ein Review-
     # Vorschlag wäre dort ein sinnloser No-op ("X → X", live in PendingMatch gefunden).
@@ -1521,6 +1530,10 @@ def import_people(
         db.flush()
         if app_obj:
             contact.applications.append(app_obj)
+        add_audit(db, "create", "user", contact_id=contact.id,
+                  app_id=app_obj.id if app_obj else None,
+                  new_value=contact.name, reason="Import aus LinkedIn-Personensuche",
+                  user_id=current_user.id)
         imported += 1
 
     db.commit()

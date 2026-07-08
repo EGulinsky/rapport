@@ -413,8 +413,11 @@ def create_application(
         user_id=current_user.id,
     )
     db.add(event)
+    db.flush()
     add_audit(db, "create", "user", app_id=app.id,
               new_value=f"{app.firma} – {app.rolle}", user_id=current_user.id)
+    add_audit(db, "create", "user", app_id=app.id, event_id=event.id,
+              new_value=event.titel, user_id=current_user.id)
     db.commit()
     db.refresh(app)
     return app
@@ -496,13 +499,17 @@ def update_application(
     new_main = app.main_status
     new_sub  = app.sub_status
     if new_main != old_main or new_sub != old_sub:
-        db.add(models.Event(
+        status_event = models.Event(
             application_id=app_id,
             typ="status",
             datum=date.today(),
             titel=_status_label(new_main, new_sub),
             user_id=current_user.id,
-        ))
+        )
+        db.add(status_event)
+        db.flush()
+        add_audit(db, "create", "user", app_id=app_id, event_id=status_event.id,
+                  new_value=status_event.titel, user_id=current_user.id)
         if new_main != old_main:
             add_audit(db, "status_change", "user", app_id=app_id,
                       field="main_status", old_value=old_main, new_value=new_main,
@@ -599,6 +606,9 @@ def add_event(
     app = _get_owned_application(db, app_id, current_user)
     event = models.Event(application_id=app_id, **payload.model_dump(), user_id=current_user.id)
     db.add(event)
+    db.flush()
+    add_audit(db, "create", "user", app_id=app_id, event_id=event.id,
+              new_value=event.titel, user_id=current_user.id)
     # Sync datum_bewerbung when a bewerbung event is added
     if event.typ == "bewerbung" and event.datum:
         app.datum_bewerbung = event.datum
@@ -621,6 +631,8 @@ def delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event nicht gefunden")
     was_bewerbung = event.typ == "bewerbung"
+    add_audit(db, "delete", "user", app_id=app_id, event_id=event.id,
+              old_value=event.titel, user_id=current_user.id)
     db.delete(event)
     # If the deleted event was a bewerbung event, recalculate datum_bewerbung from remaining events
     if was_bewerbung:
@@ -651,6 +663,10 @@ def update_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event nicht gefunden")
     for field, value in payload.model_dump(exclude_unset=True).items():
+        old_v = getattr(event, field, None)
+        if str(old_v or "") != str(value or ""):
+            add_audit(db, "update", "user", app_id=app_id, event_id=event.id,
+                      field=field, old_value=old_v, new_value=value, user_id=current_user.id)
         setattr(event, field, value)
     # Sync datum_bewerbung when a bewerbung event date changes
     if event.typ == "bewerbung" and event.datum:
@@ -681,6 +697,8 @@ def add_contact(
     db.add(contact)
     db.flush()
     app.contacts.append(contact)
+    add_audit(db, "create", "user", app_id=app_id, contact_id=contact.id,
+              new_value=contact.name, user_id=current_user.id)
     db.commit()
     db.refresh(contact)
     return contact
@@ -699,6 +717,10 @@ def update_contact(
     if not contact:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     for field, value in payload.model_dump(exclude_unset=True).items():
+        old_v = getattr(contact, field, None)
+        if str(old_v or "") != str(value or ""):
+            add_audit(db, "update", "user", app_id=app_id, contact_id=contact.id,
+                      field=field, old_value=old_v, new_value=value, user_id=current_user.id)
         setattr(contact, field, value)
     db.commit()
     db.refresh(contact)
@@ -743,5 +765,7 @@ def delete_contact(
     app.contacts.remove(contact)
     db.flush()
     if not contact.applications:
+        add_audit(db, "delete", "user", app_id=app_id, contact_id=contact.id,
+                  old_value=contact.name, user_id=current_user.id)
         db.delete(contact)
     db.commit()

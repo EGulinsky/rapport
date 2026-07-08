@@ -484,9 +484,14 @@ async def cleanup_run(
         step_i += 1
         event_groups = _find_event_groups(db, calendar_only=calendar_only)
         for g in event_groups:
+            keeper_id = g["keep"]["id"]
             for rem in g["remove"]:
                 ev = db.query(models.Event).filter_by(id=rem["id"], user_id=current_user.id).first()
                 if ev:
+                    add_audit(db, "delete", "system", app_id=ev.application_id, event_id=ev.id,
+                              old_value=ev.titel,
+                              reason=f"Duplikat automatisch bereinigt, entspricht #{keeper_id}",
+                              user_id=current_user.id)
                     db.delete(ev)
                     deleted_events += 1
         db.commit()

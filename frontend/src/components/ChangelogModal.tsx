@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.35.0',
+    date: '2026-07-08',
+    changes: [
+      'Audit-Log erfasst jetzt auch alle Neuanlagen, Änderungen und Löschungen von Kontakten, Firmen und Kalendereinträgen — bisher nur Bewerbungen. Deckt manuelle Aktionen (Kontakt-/Firmen-Zusammenführen, Termin manuell zuweisen/verschieben, Sync zurücksetzen) genauso ab wie automatische Sync-Vorgänge (neue Kontakte aus E-Mails/iCloud, Firmen-Anreicherung via LinkedIn/Wikidata, synchronisierte Termine). Der Audit-Log-Dialog zeigt den jeweiligen Bezug (Kontakt/Firma/Termin, ggf. mit zugehöriger Bewerbung) direkt in der Übersicht an.',
+    ],
+  },
+  {
     version: '3.34.5',
     date: '2026-07-08',
     changes: [

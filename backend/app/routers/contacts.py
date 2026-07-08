@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from pydantic import BaseModel
 
+from app.audit import add_audit
 from app.database import get_db
 from app import models, schemas
 from app.auth.dependencies import get_current_user
@@ -71,6 +72,9 @@ def create_contact(
 ):
     contact = models.Contact(**body.model_dump(), user_id=current_user.id)
     db.add(contact)
+    db.flush()
+    add_audit(db, "create", "user", contact_id=contact.id,
+              new_value=contact.name, user_id=current_user.id)
     db.commit()
     db.refresh(contact)
     return {"id": contact.id, "name": contact.name, "firma": contact.firma,
@@ -102,6 +106,10 @@ def patch_contact(
     if not contact:
         raise HTTPException(404)
     for field, value in body.model_dump(exclude_unset=True).items():
+        old_v = getattr(contact, field, None)
+        if str(old_v or "") != str(value or ""):
+            add_audit(db, "update", "user", contact_id=contact.id,
+                      field=field, old_value=old_v, new_value=value, user_id=current_user.id)
         setattr(contact, field, value)
     db.commit()
     return {"ok": True}
@@ -123,6 +131,10 @@ def bulk_delete_contacts(
     q = db.query(models.Contact).filter(models.Contact.user_id == current_user.id)
     if not body.all:
         q = q.filter(models.Contact.id.in_(body.ids))
+    to_delete = q.all()
+    for c in to_delete:
+        add_audit(db, "delete", "user", contact_id=c.id,
+                  old_value=c.name, user_id=current_user.id)
     deleted = q.delete(synchronize_session=False)
     db.commit()
     return {"deleted": deleted}

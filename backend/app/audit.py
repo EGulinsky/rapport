@@ -23,6 +23,9 @@ def add_audit(
     source: str,
     *,
     app_id: Optional[int] = None,
+    contact_id: Optional[int] = None,
+    company_profile_id: Optional[int] = None,
+    event_id: Optional[int] = None,
     field: Optional[str] = None,
     old_value: Optional[str] = None,
     new_value: Optional[str] = None,
@@ -32,7 +35,10 @@ def add_audit(
     """Append one audit entry if the current log level permits it.
 
     action values: create | update | delete | status_change | merge | import
-    source values: user | gmail | icloud_mail | linkedin | import | merge | …
+    source values: user | gmail | icloud_mail | linkedin | import | merge | system | …
+    app_id/contact_id/company_profile_id/event_id: welche Entität betroffen ist —
+    mehrere können gleichzeitig gesetzt sein (z.B. ein Kontakt-Update im Kontext
+    einer Bewerbung), müssen es aber nicht.
     user_id: das anlegende Konto bei Anfragen aus einem HTTP-Request (current_user.id) —
     bei Hintergrund-Sync-Quellen (gmail/icloud_mail/linkedin/…) None, sofern kein
     ausführendes Konto bekannt ist.
@@ -46,6 +52,9 @@ def add_audit(
     from app import models
     db.add(models.AuditLog(
         app_id=app_id,
+        contact_id=contact_id,
+        company_profile_id=company_profile_id,
+        event_id=event_id,
         action=action,
         field=field,
         old_value=str(old_value) if old_value is not None else None,

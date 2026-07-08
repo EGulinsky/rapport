@@ -621,6 +621,38 @@ def _migrate_audit_log():
     conn.close()
 
 
+def _migrate_audit_log_entities():
+    """Add contact_id / company_profile_id / event_id columns to audit_log —
+    bislang konnte Audit-Log nur Bewerbungen referenzieren (app_id)."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'")
+    if not cur.fetchone():
+        conn.close()
+        return
+
+    cur.execute("PRAGMA table_info(audit_log)")
+    cols = {row[1] for row in cur.fetchall()}
+    for col, ref in (
+        ("contact_id", "contacts(id)"),
+        ("company_profile_id", "company_profiles(id)"),
+        ("event_id", "events(id)"),
+    ):
+        if col not in cols:
+            cur.execute(f"ALTER TABLE audit_log ADD COLUMN {col} INTEGER REFERENCES {ref}")
+            cur.execute(f"CREATE INDEX ix_audit_log_{col} ON audit_log ({col})")
+
+    conn.commit()
+    conn.close()
+
+
 def _migrate_company_profiles():
     """Add company_profile_id / target_company_profile_id FKs to applications."""
     import sqlite3
@@ -864,6 +896,7 @@ def init_db():
     _migrate_linkedin_job_id()
     _migrate_pre_rejection_status()
     _migrate_audit_log()
+    _migrate_audit_log_entities()
     _migrate_contact_company_profile()
     _migrate_contact_vorname()
     _migrate_company_logo()

@@ -15,6 +15,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.audit import add_audit
 from app.database import get_db, SessionLocal, set_session_user
 from app import models
 from app.auth.dependencies import get_current_user
@@ -459,6 +460,7 @@ async def resolve_company_candidate(
         return
     name = profile.name_display or profile.name_norm
     now = datetime.now(timezone.utc)
+    old_sync_status = profile.sync_status
 
     if linkedin_url:
         data: dict = {}
@@ -483,6 +485,9 @@ async def resolve_company_candidate(
         profile.sync_status = "done"
         profile.sync_error = None if data else "LinkedIn-Auswahl übernommen, aber Scrape fehlgeschlagen"
         profile.last_synced_at = now
+        add_audit(db, "update", "user", company_profile_id=profile.id,
+                  field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
+                  reason=f"manuell aufgelöst → LinkedIn {linkedin_url}", user_id=user_id)
         log.info("'{}': manuell aufgelöst → LinkedIn {}", name, linkedin_url)
         return
 
@@ -494,6 +499,9 @@ async def resolve_company_candidate(
         profile.sync_status = "done"
         profile.sync_error = "Kein LinkedIn-/Wikidata-Treffer gefunden"
         profile.last_synced_at = now
+        add_audit(db, "update", "user", company_profile_id=profile.id,
+                  field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
+                  reason="manuell aufgelöst → 'keiner davon', auch kein Wikidata-Treffer", user_id=user_id)
         log.info("'{}': manuell aufgelöst → 'keiner davon', auch kein Wikidata-Treffer", name)
         return
 
@@ -504,6 +512,9 @@ async def resolve_company_candidate(
         profile.sync_status = "failed"
         profile.sync_error = f"SPARQL: {e}"[:500]
         profile.last_synced_at = now
+        add_audit(db, "update", "user", company_profile_id=profile.id,
+                  field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
+                  reason="manuell aufgelöst → Wikidata-SPARQL-Fehler", user_id=user_id)
         return
 
     data = sparql_data.get(qid, {})
@@ -520,6 +531,9 @@ async def resolve_company_candidate(
     profile.sync_status = "done"
     profile.sync_error = None if data else "Kein Wikidata-Datensatz (nur Basistreffer)"
     profile.last_synced_at = now
+    add_audit(db, "update", "user", company_profile_id=profile.id,
+              field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
+              reason=f"manuell aufgelöst → 'keiner davon', Wikidata {profile.sync_source}", user_id=user_id)
     log.info("'{}': manuell aufgelöst → 'keiner davon', Wikidata {}", name, profile.sync_source)
 
 
@@ -629,6 +643,9 @@ def reset_failed(db: Session = Depends(get_db), current_user: models.User = Depe
     for p in updated:
         p.sync_status = "pending"
         p.sync_error = None
+        add_audit(db, "update", "user", company_profile_id=p.id,
+                  field="sync_status", old_value="failed", new_value="pending",
+                  reason="Massen-Reset fehlgeschlagener Syncs", user_id=current_user.id)
     db.commit()
     return {"reset": len(updated)}
 
@@ -645,8 +662,12 @@ def reset_profile(
     ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
+    old_status = profile.sync_status
     profile.sync_status = "pending"
     profile.sync_error = None
+    add_audit(db, "update", "user", company_profile_id=profile.id,
+              field="sync_status", old_value=old_status, new_value="pending",
+              reason="manuell zurückgesetzt", user_id=current_user.id)
     db.commit()
     return {"ok": True, "id": profile_id}
 
@@ -783,9 +804,13 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 for pid in chunk_pids:
                     p = db.query(models.CompanyProfile).get(pid)
                     if p:
+                        old_status = p.sync_status
                         p.sync_status = "failed"
                         p.sync_error = f"SPARQL: {e}"[:500]
                         p.last_synced_at = now
+                        add_audit(db, "update", "system", company_profile_id=p.id,
+                                  field="sync_status", old_value=old_status, new_value="failed",
+                                  reason=p.sync_error, user_id=user_id)
                 db.commit()
                 db.close()
                 sparql_failed_pids.update(chunk_pids)
@@ -820,6 +845,7 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
             p = db.query(models.CompanyProfile).get(pid)
             if not p:
                 continue
+            old_status = p.sync_status
 
             if pid in needs_review_map:
                 candidates = needs_review_map[pid]
@@ -844,6 +870,9 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.sync_status = "needs_review"
                 p.sync_error = None
                 p.last_synced_at = now
+                add_audit(db, "update", "system", company_profile_id=p.id,
+                          field="sync_status", old_value=old_status, new_value=p.sync_status,
+                          reason="mehrere LinkedIn-Treffer, manuelle Auswahl nötig", user_id=user_id)
                 continue
 
             if pid in wikidata_fallback_pids and pid not in wikidata_attempted_pids:
@@ -871,6 +900,9 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.sync_status = "done"
                 p.sync_error = None
                 p.last_synced_at = now
+                add_audit(db, "update", "system", company_profile_id=p.id,
+                          field="sync_status", old_value=old_status, new_value=p.sync_status,
+                          reason="automatisch via LinkedIn synchronisiert", user_id=user_id)
 
             elif pid in qid_map:
                 qid = qid_map[pid]
@@ -894,6 +926,9 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.sync_status = "done"
                 p.sync_error = None if data else "Kein Wikidata-Datensatz (nur Basistreffer)"
                 p.last_synced_at = now
+                add_audit(db, "update", "system", company_profile_id=p.id,
+                          field="sync_status", old_value=old_status, new_value=p.sync_status,
+                          reason="automatisch via Wikidata synchronisiert", user_id=user_id)
 
             else:
                 # Weder LinkedIn (eindeutig) noch Wikidata hatten einen Treffer.
@@ -903,6 +938,9 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.sync_error = ("Kein LinkedIn-/Wikidata-Treffer gefunden" if li_tried
                                  else "Kein Wikidata-Treffer gefunden")
                 p.last_synced_at = now
+                add_audit(db, "update", "system", company_profile_id=p.id,
+                          field="sync_status", old_value=old_status, new_value=p.sync_status,
+                          reason=p.sync_error, user_id=user_id)
 
             log.info("Synced '{}' ({}): industry={} emp={}",
                      p.name_display, p.sync_source, p.industry, p.employee_count)
