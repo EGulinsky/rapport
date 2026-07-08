@@ -10,7 +10,7 @@ async function createApplication(page: Page) {
   await page.locator('input[placeholder="Firma suchen…"]').fill(COMPANY)
   await page.getByText(`"${COMPANY}" neu anlegen`).click()
   await page.locator('input[placeholder="Rolle *"]').fill(ROLE)
-  await page.getByRole('button', { name: 'Anlegen' }).click()
+  await page.getByRole('button', { name: 'Anlegen', exact: true }).click()
   await expect(page.getByText(COMPANY).first()).toBeVisible({ timeout: 5_000 })
 }
 

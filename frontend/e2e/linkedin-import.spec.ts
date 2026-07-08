@@ -57,7 +57,7 @@ test.describe('LinkedIn Import (Journey 3)', () => {
     await expect(page.locator('textarea[placeholder="Kommentar (optional)"]')).toHaveValue(COMMENT)
 
     // ── 6. Submit the form ──────────────────────────────────────────────
-    await page.getByRole('button', { name: 'Anlegen' }).click()
+    await page.getByRole('button', { name: 'Anlegen', exact: true }).click()
 
     // ── 7. Verify the application appears in the kanban board ───────────
     await expect(page.getByText(COMPANY).first()).toBeVisible({ timeout: 5_000 })
