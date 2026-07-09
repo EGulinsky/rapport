@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.42.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 6: Targeted-Sync mit gemockten Backend-Endpoints (page.route) und title-basiertem Sync-Button-Selektor.',
+    ],
+  },
+  {
     version: '3.41.0',
     date: '2026-07-09',
     changes: [
