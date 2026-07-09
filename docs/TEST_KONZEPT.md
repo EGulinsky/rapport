@@ -155,7 +155,7 @@ Bewusst über die ursprünglichen 5–10 hinaus erweitert, da auch Sync-Flüsse,
 6. Targeted-Sync für eine Bewerbung (mit gemockten Quellen): Start → Fortschritt → Events/Kontakte erscheinen in Timeline ✅
 7. Manuelle Kandidatenzuordnung (Volltextsuche → Multiselect → Zuordnen) ✅
 8. KI-Bewertung: "Neu bewerten" → Ampel + Reasoning erscheinen ohne manuellen Reload
-9. Batch-KI-Bewertung mit Live-Fortschrittsanzeige (inkl. simuliertem Rate-Limit-Fall)
+9. Batch-KI-Bewertung mit Live-Fortschrittsanzeige (inkl. simuliertem Rate-Limit-Fall) ✅
 10. Firmen-Sync mit Markierung: nur ausgewählte Firmen werden synchronisiert (Regressionstest für den Auto-Continue-Poller-Bug)
 11. Backup konfigurieren → manueller Lauf → Restore aus Backup-Datei
 12. Excel-Import (Originalformat) → Bewerbungen korrekt gemappt → Excel-Export → Round-Trip-Vergleich
