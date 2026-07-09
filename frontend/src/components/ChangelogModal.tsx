@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.49.0',
+    date: '2026-07-09',
+    changes: [
+      'Phase-4-Lücke geschlossen: linkedin_job_description.py von 0 % auf >90 % Coverage via 10 Unit-Tests.',
+      'Nightly-Cron-Job (0 6 * * *) im CI aktiviert für Integration + E2E.',
+      'Volume-Mount für Backend-Tests in docker-compose.test.yml — kein Rebuild mehr nötig bei Test-Änderungen.',
+    ],
+  },
+  {
     version: '3.48.0',
     date: '2026-07-09',
     changes: [
