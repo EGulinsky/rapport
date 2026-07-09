@@ -12,7 +12,8 @@ const CHANGELOG: Release[] = [
     version: '3.50.4',
     date: '2026-07-09',
     changes: [
-      'Fix: L5 Frontend-Smoke: einfache while-Schleife über localhost:3000 statt for/&&/if-Konstrukt.',
+      'Fix: L5 Frontend-Smoke: while-Schleife über localhost:3000.',
+      'Optimierung: Docker-Build läuft parallel zu E2E (entfernt unnötige Abhängigkeit).',
     ],
   },
   {
