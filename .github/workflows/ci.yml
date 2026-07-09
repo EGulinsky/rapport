@@ -143,7 +143,7 @@ jobs:
   docker:
     name: Docker build check
     runs-on: ubuntu-latest
-    needs: [backend, frontend, e2e]
+    needs: [backend, frontend]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.deploy)
 
     steps:
@@ -273,7 +273,7 @@ jobs:
   notify-failure:
     name: Fehler-Benachrichtigung
     runs-on: self-hosted
-    needs: [backend, frontend, docker, deploy]
+    needs: [backend, frontend, docker, deploy, e2e]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && always() && contains(needs.*.result, 'failure')
     steps:
       - name: macOS-Notification + Claude-Signal
@@ -281,6 +281,7 @@ jobs:
           FAILED=""
           [ "${{ needs.backend.result }}"  = "failure" ] && FAILED="${FAILED} Backend"
           [ "${{ needs.frontend.result }}" = "failure" ] && FAILED="${FAILED} Frontend"
+          [ "${{ needs.e2e.result }}"      = "failure" ] && FAILED="${FAILED} E2E"
           [ "${{ needs.docker.result }}"   = "failure" ] && FAILED="${FAILED} Docker"
           [ "${{ needs.deploy.result }}"   = "failure" ] && FAILED="${FAILED} Deploy"
           TIME=$(date '+%H:%M')
