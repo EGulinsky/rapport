@@ -9,10 +9,10 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '3.50.1',
+    version: '3.50.4',
     date: '2026-07-09',
     changes: [
-      'Fix: L5 Smoke-Test Frontend: && durch if ersetzt (set -e brach Abbruch).',
+      'Fix: L5 Frontend-Smoke: einfache while-Schleife über localhost:3000 statt for/&&/if-Konstrukt.',
     ],
   },
   {

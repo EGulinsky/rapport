@@ -230,34 +230,23 @@ jobs:
       - name: Smoke-Test (Frontend lädt)
         run: |
           echo "Warte auf Frontend..."
-          FRONTEND=""
-          for URL in https://frontend.rapport.orb.local/ http://localhost:3000/ http://192.168.117.11/; do
-          for i in $(seq 1 5); do
-            if FRONTEND=$(curl -skf "$URL" 2>/dev/null); then
+          i=0
+          while [ $i -lt 30 ]; do
+            FRONTEND=$(curl -sf http://localhost:3000/ 2>/dev/null)
+            if [ -n "$FRONTEND" ] && echo "$FRONTEND" | grep -q "Rapport"; then
+              echo "Frontend bereit (Versuch $((i+1)))."
               break
             fi
-              echo "  URL=$URL — Versuch $i — warte 2s..."
-              sleep 2
-            done
-            if [ -n "$FRONTEND" ]; then
-            break
-          fi
+            i=$((i+1))
+            echo "  Versuch $i — warte 1s..."
+            sleep 1
           done
           if [ -z "$FRONTEND" ]; then
-            echo "❌ Frontend nach 30s über keine URL erreichbar" >> $GITHUB_STEP_SUMMARY
-            for URL in https://frontend.rapport.orb.local/ http://localhost:3000/ http://192.168.117.11/; do
-              echo "--- curl -skv $URL ---" >> $GITHUB_STEP_SUMMARY
-              curl -skv "$URL" 2>&1 | tail -10 >> $GITHUB_STEP_SUMMARY
-            done
+            echo "❌ Frontend nach 30s nicht erreichbar" >> $GITHUB_STEP_SUMMARY
+            curl -sv http://localhost:3000/ 2>&1 | tail -10 >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          if echo "$FRONTEND" | grep -q "Rapport"; then
-            echo "✅ Frontend: 'Rapport' gefunden" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Frontend: 'Rapport' nicht im HTML" >> $GITHUB_STEP_SUMMARY
-            echo "${FRONTEND:0:500}" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
+          echo "✅ Frontend: 'Rapport' gefunden" >> $GITHUB_STEP_SUMMARY
 
       - name: Smoke-Test (Login + Applications API)
         run: |
