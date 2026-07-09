@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.41.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 5: Merge-Dialog (zwei Bewerbungen mit unterschiedlichen Feldern über Tabellenansicht zusammenführen). Fix: CI docker build check läuft jetzt vor deploy.',
+    ],
+  },
+  {
     version: '3.40.0',
     date: '2026-07-08',
     changes: [
