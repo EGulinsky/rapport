@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.50.0',
+    date: '2026-07-09',
+    changes: [
+      'L5 Smoke-Test nach Deploy: Backend Health, Frontend-Ladetest, Login + API-Call.',
+      'Testkonzept Phase 1–6 vollständig abgeschlossen.',
+    ],
+  },
+  {
     version: '3.49.0',
     date: '2026-07-09',
     changes: [

@@ -171,11 +171,13 @@ Sheet: `Tracking`, 17 Spalten — Mapping in `models.py` unter `EXCEL_IMPORT_MAP
 
 ## Nächste Schritte (Testkonzept Phase 6)
 
-Aktueller Stand v3.49.0 — **Phasen 1–6 abgeschlossen**. Nächstes offen: Smoke-Job nach Deploy.
+Aktueller Stand v3.50.0 — **Phasen 1–6 abgeschlossen**. Nächstes offen: —
 
 **Phase-4-Lücke geschlossen:** `linkedin_job_description.py` von 0 % auf >90 % Line-Coverage via 10 Unit-Tests (Playwright-Orch. gemockt + JS-Selektoren-Strukturprüfung).
 
 **Nightly-Cron-Job:** `0 6 * * *` im CI aktiviert.
+
+**L5 Smoke-Job nach Deploy:** Backend-Health, Frontend-Ladetest, Login + API-Call.
 
 **E2E-Journeys:**
 

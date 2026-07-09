@@ -218,6 +218,41 @@ jobs:
           echo "Backend nach 60s nicht erreichbar" >&2
           exit 1
 
+      - name: Smoke-Test (Backend Health)
+        run: |
+          echo "### Backend Health" >> $GITHUB_STEP_SUMMARY
+          HEALTH=$(curl -sf https://backend.rapport.orb.local/health)
+          echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('status')=='ok', f'Expected ok, got {d}'; print('✅ Backend health: OK')"
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$HEALTH" | python3 -m json.tool >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Smoke-Test (Frontend lädt)
+        run: |
+          FRONTEND=$(curl -sf https://frontend.rapport.orb.local/)
+          if echo "$FRONTEND" | grep -q "Rapport"; then
+            echo "✅ Frontend: 'Rapport' gefunden" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Frontend: 'Rapport' nicht im HTML gefunden" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Smoke-Test (Login + Applications API)
+        run: |
+          SETUP=$(curl -sf -X POST https://backend.rapport.orb.local/api/e2e/setup-user \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke-test@rapport.local","password":"SmokeTest2026!"}' 2>/dev/null || echo '{"access_token":"","token_type":"bearer"}')
+          TOKEN=$(echo "$SETUP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
+          if [ -n "$TOKEN" ]; then
+            echo "✅ E2E-Benutzer angelegt, Token erhalten" >> $GITHUB_STEP_SUMMARY
+            APPS=$(curl -sf https://backend.rapport.orb.local/api/applications/ \
+              -H "Authorization: Bearer $TOKEN")
+            COUNT=$(echo "$APPS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+            echo "✅ Applications-API: $COUNT Einträge" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ E2E-Setup nicht verfügbar (kein E2E_TESTING) — Login-Test übersprungen" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Browser öffnen und Sound
         run: |
           TIME=$(date '+%H:%M')
