@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.43.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 7: Manuelle Kandidatenzuordnung via page.evaluate für Checkbox-Selektion im Dialog-Overlay.',
+    ],
+  },
+  {
     version: '3.42.0',
     date: '2026-07-09',
     changes: [
