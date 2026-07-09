@@ -48,3 +48,5 @@ test-results-integration.xml
 .venv_test/
 *.dmg
 agent/packaging/dmg_staging/
+backup/
+backend/jobtracker.db

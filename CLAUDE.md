@@ -171,12 +171,13 @@ Sheet: `Tracking`, 17 Spalten — Mapping in `models.py` unter `EXCEL_IMPORT_MAP
 
 ## Nächste Schritte (Testkonzept Phase 5)
 
-Aktueller Stand v3.36.0 — Phase 5 E2E gestartet, erster Journey-Test implementiert.
+Aktueller Stand v3.48.0 — **Phase 5 abgeschlossen** (12/12 E2E-Journeys). Nächster Schritt: Phase-4-Lücke (LinkedIn-Playwright-Fixture-Replay).
 
-**Verbleibende E2E-Journeys (priorisiert nach Impact):**
+**E2E-Journeys:**
 
 | # | Journey | Status |
 |---|---------|--------|
+| 1 | Application Lifecycle (anlegen → Statuswechsel → ablehnen) | ✅ |
 | 2 | Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset | ✅ |
 | 3 | LinkedIn-Link importieren → Formular vorausgefüllt → speichern | ✅ |
 | 4 | Bereinigen-Button kontextabhängig (Vorschau → Ausführen) | ✅ |
@@ -185,9 +186,9 @@ Aktueller Stand v3.36.0 — Phase 5 E2E gestartet, erster Journey-Test implement
 | 7 | Manuelle Kandidatenzuordnung (Suche → Multiselect → Import) | ✅ |
 | 8 | KI-Bewertung: "Neu bewerten" → Ampel + Reasoning | ✅ |
 | 9 | Batch-KI-Bewertung mit Live-Fortschritt (+ Rate-Limit-Simulation) | ✅ |
-| 10 | Firmen-Sync mit Markierung (nur Auswahl) | ❌ |
-| 11 | Backup konfigurieren → manueller Lauf → Restore | ❌ |
-| 12 | Excel-Import (Originalformat) → Export → Round-Trip-Vergleich | ❌ |
+| 10 | Firmen-Sync mit Markierung (nur Auswahl) | ✅ |
+| 11 | Backup konfigurieren → manueller Lauf → Restore | ✅ |
+| 12 | Excel-Import (Originalformat) → Export → Round-Trip-Vergleich | ✅ |
 
 **Phase-4-Lücke:** `linkedin_job_description.py` bei 0 % Coverage (LinkedIn-Playwright-Fixure-Replay,
 für Phase 6 vorgemerkt). Kann jederzeit nachgeholt werden, bevor Phase 5 abgeschlossen ist.

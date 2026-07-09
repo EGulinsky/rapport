@@ -9,6 +9,28 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.48.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 12: Excel-Import, Export und Round-Trip über die Im/Export-Menü-Schaltfläche.',
+      'Phase 5 des Testkonzepts abgeschlossen — alle 12 E2E-User-Journeys implementiert.',
+    ],
+  },
+  {
+    version: '3.47.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 11: Backup konfigurieren, manuell sichern, Backup-Liste anzeigen, Wiederherstellung mit Bestätigungsdialog.',
+    ],
+  },
+  {
+    version: '3.46.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 10: Firmen-Sync mit Auswahl mehrerer Firmen und Scoped-Sync (kein Auto-Continue).',
+    ],
+  },
+  {
     version: '3.45.0',
     date: '2026-07-09',
     changes: [
