@@ -23,6 +23,8 @@ services:
       - E2E_TESTING=true
     volumes:
       - rapport-test-data:/app/data
+      - ./backend/tests:/app/tests
+      - ./backend/requirements-dev.txt:/app/requirements-dev.txt
     ports:
       - "8001:8000"
     networks:

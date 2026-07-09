@@ -169,9 +169,13 @@ in `localStorage` gesetzt, danach lädt die App als authentifizierter Nutzer.
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`  
 Sheet: `Tracking`, 17 Spalten — Mapping in `models.py` unter `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
 
-## Nächste Schritte (Testkonzept Phase 5)
+## Nächste Schritte (Testkonzept Phase 6)
 
-Aktueller Stand v3.48.0 — **Phase 5 abgeschlossen** (12/12 E2E-Journeys). Nächster Schritt: Phase-4-Lücke (LinkedIn-Playwright-Fixture-Replay).
+Aktueller Stand v3.49.0 — **Phasen 1–6 abgeschlossen**. Nächstes offen: Smoke-Job nach Deploy.
+
+**Phase-4-Lücke geschlossen:** `linkedin_job_description.py` von 0 % auf >90 % Line-Coverage via 10 Unit-Tests (Playwright-Orch. gemockt + JS-Selektoren-Strukturprüfung).
+
+**Nightly-Cron-Job:** `0 6 * * *` im CI aktiviert.
 
 **E2E-Journeys:**
 
@@ -189,9 +193,6 @@ Aktueller Stand v3.48.0 — **Phase 5 abgeschlossen** (12/12 E2E-Journeys). Näc
 | 10 | Firmen-Sync mit Markierung (nur Auswahl) | ✅ |
 | 11 | Backup konfigurieren → manueller Lauf → Restore | ✅ |
 | 12 | Excel-Import (Originalformat) → Export → Round-Trip-Vergleich | ✅ |
-
-**Phase-4-Lücke:** `linkedin_job_description.py` bei 0 % Coverage (LinkedIn-Playwright-Fixure-Replay,
-für Phase 6 vorgemerkt). Kann jederzeit nachgeholt werden, bevor Phase 5 abgeschlossen ist.
 
 **Hinweise für die Implementierung:**
 - E2E-Tests in `frontend/e2e/` ablegen, Muster in `application-lifecycle.spec.ts` folgen
