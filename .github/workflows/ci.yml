@@ -232,12 +232,16 @@ jobs:
           echo "Warte auf Frontend..."
           FRONTEND=""
           for URL in https://frontend.rapport.orb.local/ http://localhost:3000/ http://192.168.117.11/; do
-            for i in $(seq 1 5); do
-              FRONTEND=$(curl -skf "$URL" 2>/dev/null) && break
+          for i in $(seq 1 5); do
+            if FRONTEND=$(curl -skf "$URL" 2>/dev/null); then
+              break
+            fi
               echo "  URL=$URL — Versuch $i — warte 2s..."
               sleep 2
             done
-            [ -n "$FRONTEND" ] && break
+            if [ -n "$FRONTEND" ]; then
+            break
+          fi
           done
           if [ -z "$FRONTEND" ]; then
             echo "❌ Frontend nach 30s über keine URL erreichbar" >> $GITHUB_STEP_SUMMARY
