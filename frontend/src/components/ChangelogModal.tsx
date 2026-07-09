@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.40.0',
+    date: '2026-07-08',
+    changes: [
+      'E2E Journey 4: Cleanup-Bereinigung (Dubletten erkennen + löschen). Fix: CleanupModal rief onDone() synchron nach setPhase("done") auf → React 18 batching closhte Modal vor Render der "Bereinigung abgeschlossen"-Meldung. onDone() jetzt mit setTimeout(200) asynchron.',
+    ],
+  },
+  {
     version: '3.39.0',
     date: '2026-07-08',
     changes: [
