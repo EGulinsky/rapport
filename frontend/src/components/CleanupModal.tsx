@@ -61,7 +61,8 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
       stopPolling()
       setResult(res)
       setPhase('done')
-      onDone()
+      // Defer so React renders the done/error phase before unmounting
+      setTimeout(() => onDone(), 200)
     } catch (e) {
       stopPolling()
       setError(String(e))
