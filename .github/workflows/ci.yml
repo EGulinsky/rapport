@@ -229,11 +229,23 @@ jobs:
 
       - name: Smoke-Test (Frontend lädt)
         run: |
-          FRONTEND=$(curl -sf https://frontend.rapport.orb.local/)
+          echo "Warte auf Frontend..."
+          for i in $(seq 1 15); do
+            FRONTEND=$(curl -skf https://frontend.rapport.orb.local/ 2>/dev/null) && break
+            echo "  Versuch $i fehlgeschlagen — warte 2s..."
+            sleep 2
+          done
+          if [ -z "$FRONTEND" ]; then
+            echo "❌ Frontend nach 30s nicht erreichbar" >> $GITHUB_STEP_SUMMARY
+            echo "Letzter Fehler:" >> $GITHUB_STEP_SUMMARY
+            curl -skv https://frontend.rapport.orb.local/ 2>&1 | tail -20 >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
           if echo "$FRONTEND" | grep -q "Rapport"; then
             echo "✅ Frontend: 'Rapport' gefunden" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ Frontend: 'Rapport' nicht im HTML gefunden" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Frontend: 'Rapport' nicht im HTML" >> $GITHUB_STEP_SUMMARY
+            echo "${FRONTEND:0:500}" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
