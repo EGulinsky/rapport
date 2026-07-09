@@ -12,7 +12,7 @@ const CHANGELOG: Release[] = [
     version: '3.50.1',
     date: '2026-07-09',
     changes: [
-      'Fix: L5 Smoke-Test Frontend-Check mit 3 URL-Fallbacks + Retry + if statt && (set -e Bug).',
+      'Fix: L5 Smoke-Test Frontend: && durch if ersetzt (set -e brach Abbruch).',
     ],
   },
   {
