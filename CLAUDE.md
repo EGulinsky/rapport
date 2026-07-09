@@ -184,7 +184,7 @@ Aktueller Stand v3.36.0 — Phase 5 E2E gestartet, erster Journey-Test implement
 | 6 | Targeted-Sync für eine Bewerbung (gemockte Quellen) | ✅ |
 | 7 | Manuelle Kandidatenzuordnung (Suche → Multiselect → Import) | ✅ |
 | 8 | KI-Bewertung: "Neu bewerten" → Ampel + Reasoning | ✅ |
-| 9 | Batch-KI-Bewertung mit Live-Fortschritt (+ Rate-Limit-Simulation) | ❌ |
+| 9 | Batch-KI-Bewertung mit Live-Fortschritt (+ Rate-Limit-Simulation) | ✅ |
 | 10 | Firmen-Sync mit Markierung (nur Auswahl) | ❌ |
 | 11 | Backup konfigurieren → manueller Lauf → Restore | ❌ |
 | 12 | Excel-Import (Originalformat) → Export → Round-Trip-Vergleich | ❌ |

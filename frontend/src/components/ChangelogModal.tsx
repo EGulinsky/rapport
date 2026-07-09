@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.45.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 9: Batch-KI-Bewertung mit SSE-Mock (page.route mit Verzögerung) und Rate-Limit-Simulation.',
+    ],
+  },
+  {
     version: '3.44.0',
     date: '2026-07-09',
     changes: [
