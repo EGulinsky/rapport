@@ -1,6 +1,6 @@
 # rapport – Testkonzept
 
-> Status: **Phase 1–3 umgesetzt, Phase 4 fast abgeschlossen** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI, L3-Integrationstests (KI-Provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) laufen bei Push auf `main`. Nur noch LinkedIn-Playwright-Fixture-Replay sowie Phase 5–6 (E2E-Suite, Nightly-Job) stehen aus. Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
+> Status: **Phase 1–4 abgeschlossen, Phase 5 7/12 E2E-Journeys** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI, L3-Integrationstests (KI-Provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) laufen bei Push auf `main`. Aus Phase 4 nur noch LinkedIn-Playwright-Fixture-Replay offen (Phase 6). Phase 5 läuft aktiv: 7 von 12 E2E-User-Journeys umgesetzt, 5 verbleibend (KI-Bewertungen, Firmen-Sync, Backup/Restore, Excel-Roundtrip). Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
 
 ## 0. Ausgangslage (Stand bei Konzepterstellung, 2026-07-01)
 
@@ -147,13 +147,13 @@ Grundsatz: **Mocken an der Netzwerkgrenze, nicht an der Businesslogik-Grenze** �
 
 Bewusst über die ursprünglichen 5–10 hinaus erweitert, da auch Sync-Flüsse, Merge-Dialog und Backup/Restore end-to-end abgesichert werden sollen:
 
-1. Bewerbung anlegen → Status durchklicken → Absage → Reasoning sichtbar
-2. Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset
-3. LinkedIn-Link importieren → Formular vorausgefüllt → Firma gematcht/angelegt → speichern
-4. Bereinigen-Button zeigt kontextabhängige Kategorie, Vorschau → Ausführen → Liste aktualisiert sich
-5. Merge-Dialog (Bewerbungen/Kontakte/Firmen): Auswahl → Zusammenführen → Reassignment sichtbar
-6. Targeted-Sync für eine Bewerbung (mit gemockten Quellen): Start → Fortschritt → Events/Kontakte erscheinen in Timeline
-7. Manuelle Kandidatenzuordnung (Volltextsuche → Multiselect → Zuordnen)
+1. Bewerbung anlegen → Status durchklicken → Absage → Reasoning sichtbar ✅
+2. Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset ✅
+3. LinkedIn-Link importieren → Formular vorausgefüllt → Firma gematcht/angelegt → speichern ✅
+4. Bereinigen-Button zeigt kontextabhängige Kategorie, Vorschau → Ausführen → Liste aktualisiert sich ✅
+5. Merge-Dialog (Bewerbungen/Kontakte/Firmen): Auswahl → Zusammenführen → Reassignment sichtbar ✅
+6. Targeted-Sync für eine Bewerbung (mit gemockten Quellen): Start → Fortschritt → Events/Kontakte erscheinen in Timeline ✅
+7. Manuelle Kandidatenzuordnung (Volltextsuche → Multiselect → Zuordnen) ✅
 8. KI-Bewertung: "Neu bewerten" → Ampel + Reasoning erscheinen ohne manuellen Reload
 9. Batch-KI-Bewertung mit Live-Fortschrittsanzeige (inkl. simuliertem Rate-Limit-Fall)
 10. Firmen-Sync mit Markierung: nur ausgewählte Firmen werden synchronisiert (Regressionstest für den Auto-Continue-Poller-Bug)
@@ -296,8 +296,8 @@ frontend/
 | **1** ✅ | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
 | **2** ✅ | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert — `test_dedup.py`, `test_naechster_schritt.py`, `test_crypto.py` |
 | **3** ✅ | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features — `test_merge_api.py`, `test_cleanup_app_groups.py`, `test_cleanup_contact_groups.py`, `test_cleanup_api.py`, plus organisch entstandene Bugfix-Tests (Companies-Dedup, Event-Groups, iCloud-Kontakte-Sync, Applications-API). Dabei zwei kritische, live reproduzierte Datenverlust-Bugs in `merge.py`/`cleanup.py` gefunden und behoben (Events wurden bei Bewerbungs-Merge/-Bereinigung durch die `delete-orphan`-Kaskade mitgelöscht statt umgehängt) |
-| **4** 🔶 | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | **KI-Provider, Google (Calendar/Gmail/Token-Refresh), LinkedIn-Statuslogik + MergeAlias-Fallback, `sync_targeted.py` (Einzelbewerbungs-Sync) und iCloud (Mail/Calendar/Reminders/Contacts/Notes) sind vollständig gemockt und getestet** — jeweils über die passende Netzwerkgrenze (`googleapiclient.discovery.build`, `imaplib.IMAP4_SSL`, `caldav.DAVClient`, `fetch_all_vcards()`, `litellm.acompletion`, lokaler Agent über `httpx.AsyncClient`). Details zu den einzelnen Schritten, gefundenen Live-Bugs (u.a. LinkedIn-No-op-Reviews, fehlende `external_id` bei gezielt erzeugten Kalender-Events, `vobj_str()`-Repr-Bug bei iCloud-Kalender-/Erinnerungstiteln, zwei iCloud-Kontakte-Massenimport-Bugs) und Coverage-Sprüngen je Datei: siehe Commit-Historie und Changelog (v3.33.x, Juli 2026). Einzig offen aus Phase 4: LinkedIn-Playwright-Fixture-Replay (siehe Abschnitt 3/Nightly-Tier, Phase 6) |
-| **5** | E2E-Suite (5–10 Journeys) + Smoke-Job nach Deploy | Vollständige Pyramide steht |
+| **4** ✅ | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | **KI-Provider, Google (Calendar/Gmail/Token-Refresh), LinkedIn-Statuslogik + MergeAlias-Fallback, `sync_targeted.py` (Einzelbewerbungs-Sync) und iCloud (Mail/Calendar/Reminders/Contacts/Notes) sind vollständig gemockt und getestet** — jeweils über die passende Netzwerkgrenze (`googleapiclient.discovery.build`, `imaplib.IMAP4_SSL`, `caldav.DAVClient`, `fetch_all_vcards()`, `litellm.acompletion`, lokaler Agent über `httpx.AsyncClient`). Details zu den einzelnen Schritten, gefundenen Live-Bugs (u.a. LinkedIn-No-op-Reviews, fehlende `external_id` bei gezielt erzeugten Kalender-Events, `vobj_str()`-Repr-Bug bei iCloud-Kalender-/Erinnerungstiteln, zwei iCloud-Kontakte-Massenimport-Bugs) und Coverage-Sprüngen je Datei: siehe Commit-Historie und Changelog (v3.33.x, Juli 2026). Einzig offen aus Phase 4: LinkedIn-Playwright-Fixture-Replay (siehe Abschnitt 3/Nightly-Tier, Phase 6) |
+| **5** 🔶 | E2E-Suite (12 Journeys) + Smoke-Job nach Deploy | **7 von 12 E2E-Journeys umgesetzt** (Lifecycle, Kanban, LinkedIn-Import, Cleanup, Merge, Targeted-Sync, Manuelle Zuordnung). Verbleibend: KI-Bewertung, Batch-KI, Firmen-Sync, Backup/Restore, Excel-Roundtrip. Smoke-Job nach Deploy noch offen. |
 | **6** | Nightly-Job, Fixture-Pflege-Routine (LinkedIn-HTML altert) | Dauerbetrieb |
 
 Reihenfolge ist ein Vorschlag — Diskussionspunkt, ob z. B. Mocking-Infrastruktur früher kommen soll, wenn Sync-Bugs aktuell am schmerzhaftesten sind.

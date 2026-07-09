@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.44.0',
+    date: '2026-07-09',
+    changes: [
+      'E2E Journey 8: KI-Bewertung (Neu bewerten → Ampel + Reasoning) mit gemocktem /ai-assess-Endpoint.',
+    ],
+  },
+  {
     version: '3.43.0',
     date: '2026-07-09',
     changes: [
