@@ -31,6 +31,21 @@ def _expired_cfg(db_session) -> models.GoogleSync:
 
 
 class TestRefreshIfNeeded:
+    def test_positiv_erfolgreicher_refresh_speichert_neuen_token(self, db_session, monkeypatch):
+        cfg = _expired_cfg(db_session)
+
+        def _fake_refresh(self, request):
+            self.token = "refreshed-access-token"
+            self.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
+
+        monkeypatch.setattr(Credentials, "refresh", _fake_refresh)
+
+        result = _refresh_if_needed(cfg, db_session)
+
+        assert result.token == "refreshed-access-token"
+        assert cfg.access_token_enc is not None
+        assert cfg.token_expiry is not None
+
     def test_negativ_invalid_grant_loescht_tokens_und_wirft_hilfreiche_meldung(self, db_session, monkeypatch):
         cfg = _expired_cfg(db_session)
 
