@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: [
     ['list'],
-    ['junit', { outputFile: 'test-results-e2e.xml' }],
+    ['junit', { outputFile: 'e2e-report/test-results-e2e.xml' }],
   ],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3001',

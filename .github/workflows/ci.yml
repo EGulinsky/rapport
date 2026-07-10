@@ -127,17 +127,12 @@ jobs:
           exit 1
 
       - name: Run E2E tests
-        run: docker compose -p rapport-test -f docker-compose.test.yml run e2e-runner
-
-      - name: Collect test results
-        if: always()
-        run: |
-          docker cp rapport-e2e:/app/e2e/test-results-e2e.xml ./test-results-e2e.xml 2>/dev/null || true
+        run: docker compose -p rapport-test -f docker-compose.test.yml run --rm e2e-runner
 
       - name: Test summary
         if: always()
         run: |
-          python3 .github/scripts/junit_summary.py test-results-e2e.xml "E2E" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          python3 .github/scripts/junit_summary.py e2e-report/test-results-e2e.xml "E2E" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
       - name: Teardown
         if: always()

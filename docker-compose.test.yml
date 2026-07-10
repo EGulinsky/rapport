@@ -39,6 +39,13 @@ services:
     environment:
       - E2E_BASE_URL=http://frontend-test:80
       - E2E_API_URL=http://backend-test:8000
+    volumes:
+      # docker compose run ignores container_name and mints a fresh
+      # <project>-<service>-run-<hash> name each time — a JUnit report
+      # collected via `docker cp <fixed-name>:...` after the fact would
+      # therefore always miss. Writing straight to a bind-mounted host
+      # directory sidesteps the container-name guessing game entirely.
+      - ./e2e-report:/app/e2e/e2e-report
     networks:
       default:
         ipv4_address: 192.168.118.12

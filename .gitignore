@@ -41,6 +41,8 @@ htmlcov/
 .coverage.*
 test-results.xml
 test-results-integration.xml
+test-results-e2e.xml
+e2e-report/
 
 # Playwright base image build tracking (runner-local, not for versioning)
 .playwright-base-hash
