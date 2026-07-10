@@ -36,6 +36,8 @@ def merge_applications(
 ):
     if not req.loser_ids:
         raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+    if req.winner_id in req.loser_ids:
+        raise HTTPException(400, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
     all_ids = [req.winner_id] + req.loser_ids
     apps = {a.id: a for a in db.query(models.Application).filter(models.Application.id.in_(all_ids)).all()}
     if len(apps) != len(all_ids):
@@ -126,6 +128,8 @@ def merge_companies(
 ):
     if not req.loser_ids:
         raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+    if req.winner_id in req.loser_ids:
+        raise HTTPException(400, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
     all_ids = [req.winner_id] + req.loser_ids
     companies = {c.id: c for c in db.query(models.CompanyProfile).filter(models.CompanyProfile.id.in_(all_ids)).all()}
     if len(companies) != len(all_ids):
@@ -203,6 +207,8 @@ def merge_contacts(
 ):
     if not req.loser_ids:
         raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+    if req.winner_id in req.loser_ids:
+        raise HTTPException(400, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
     all_ids = [req.winner_id] + req.loser_ids
     contacts_map = {c.id: c for c in db.query(models.Contact).filter(models.Contact.id.in_(all_ids)).all()}
     if len(contacts_map) != len(all_ids):

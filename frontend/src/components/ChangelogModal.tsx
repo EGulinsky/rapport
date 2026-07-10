@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.51.1',
+    date: '2026-07-10',
+    changes: [
+      'Fix: Zusammenführen (Bewerbungen/Kontakte/Firmen) lehnt es jetzt sauber mit einer verständlichen Fehlermeldung ab, wenn der Gewinner versehentlich auch als Verlierer ausgewählt wurde, statt mit einer verwirrenden "nicht gefunden"-Meldung zu scheitern.',
+      'CI: Lint-Fehler (ungenutzter Import) und 4 fehlgeschlagene Merge-Regressionstests aus dem letzten Commit behoben.',
+    ],
+  },
+  {
     version: '3.51.0',
     date: '2026-07-10',
     changes: [
