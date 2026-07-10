@@ -169,9 +169,62 @@ in `localStorage` gesetzt, danach lädt die App als authentifizierter Nutzer.
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`  
 Sheet: `Tracking`, 17 Spalten — Mapping in `models.py` unter `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
 
-## Nächste Schritte (Testkonzept Phase 6)
+## Work State (Session v3.51.0 – 2026-07-10)
 
-Aktueller Stand v3.50.0 — **Phasen 1–6 abgeschlossen**. Nächstes offen: —
+Aktuelle Version: **v3.51.0** (Build-Nummer aus `frontend/src/version.ts`).
+
+### In diesem Session erledigt
+
+**Bugfix:**
+- `_find_or_create_application()` in `sync_linkedin.py:1030` ruft jetzt `_ensure_company_profile(db, new_app)` auf, damit neue LinkedIn-Bewerbungen sofort ein CompanyProfile erhalten (statt `company_profile_id = NULL`).
+
+**Neue Backend-Endpunkte** (`sync_linkedin.py`, Ende der Datei):
+- `GET /api/sync/linkedin/companies/search?q=...` — LinkedIn-Firmensuche (reusing `_get_linkedin_context` + `_linkedin_search_candidates` aus `sync_company.py`)
+- `POST /api/sync/linkedin/companies/import` — Body `{candidates: [{name, url}]}`, dedupliziert per `norm_firma()`, legt `CompanyProfile` an
+- Beide folgen dem Pattern von `/people/search` und `/people/import`
+
+**Neue Frontend-Komponenten:**
+- `frontend/src/components/NewCompanyModal.tsx` — manuelle Firmenanlage (Name → `api.companies.create()`), gemisst an `NewContactModal`
+- `frontend/src/components/CompanyImportModal.tsx` — LinkedIn-Suche + Mehrfachauswahl + Import (gemisst an `ContactImportModal`, nur LinkedIn-Quelle)
+
+**App.tsx-Änderungen:**
+- Imports für beide neuen Modals hinzugefügt
+- State `showNewCompany`, `showCompanyImport` + `setShowCompanyImport`
+- "Neu"-Dropdown: Dritter Zweig für `mainView === 'companies'` mit "Manuell anlegen" + "Aus LinkedIn importieren"
+- Modal-Rendering unterhalb der Contact-Modals
+
+**API-Client** (`frontend/src/api/client.ts`):
+- `api.companies.searchLinkedIn(q: string)` → `GET /sync/linkedin/companies/search`
+- `api.companies.importFromLinkedIn(candidates)` → `POST /sync/linkedin/companies/import`
+
+**Types** (`frontend/src/types.ts`):
+- `LinkedInCompanyCandidate { name, url, snippet? }` hinzugefügt
+
+**Tests (6 neue Dateien, +803 Zeilen):**
+- `backend/tests/api/test_analytics_tenant_scoping.py`
+- `backend/tests/api/test_merge_edge_cases.py`
+- `backend/tests/api/test_review_api.py`
+- `backend/tests/component/test_cleanup_exec.py`
+- `backend/tests/component/test_sync_common_purge_source.py`
+- `backend/tests/unit/test_ai_response_schema.py`
+
+**CI-Optimierung:**
+- Job-Timeout: Backend 15min, Frontend 10min, E2E 20min (`.github/workflows/ci.yml`)
+- Hintergrund: Ein CI-Lauf hing 24+ Min; Tests laufen lokal in 62s / CI in ~2min
+
+**Coverage:** 39% gesamt (9673 Zeilen, Stand 2026-07-10)
+
+### Offen / Nächste Schritte
+- Die neuen Endpoints (`/companies/search`, `/companies/import`) haben noch keine Unit-Tests
+- `NewCompanyModal` und `CompanyImportModal` haben noch keine E2E-Tests
+- Coverage-Lücken: `sync_google.py` 16%, `sync_icloud.py` 16%, `sync_linkedin.py` 39%
+
+### Commits
+```
+8949e76 Tests: Analytics-Tenant-Scoping, Merge-Edge-Cases, Review-API, Cleanup-Exec, Purge-Source, AI-Response-Schema
+3750b26 CI: Job-Timeout 15min (Backend) / 10min (Frontend) / 20min (E2E)
+4e6d2eb v3.51.0 LinkedIn company import + batch-sync company-profile fix
+```
 
 **Phase-4-Lücke geschlossen:** `linkedin_job_description.py` von 0 % auf >90 % Line-Coverage via 10 Unit-Tests (Playwright-Orch. gemockt + JS-Selektoren-Strukturprüfung).
 
