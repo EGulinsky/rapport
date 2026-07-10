@@ -127,7 +127,7 @@ jobs:
           exit 1
 
       - name: Run E2E tests
-        run: docker compose -p rapport-test -f docker-compose.test.yml run --rm e2e-runner
+        run: docker compose -p rapport-test -f docker-compose.test.yml run e2e-runner
 
       - name: Collect test results
         if: always()

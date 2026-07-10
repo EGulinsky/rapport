@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.54.1',
+    date: '2026-07-10',
+    changes: [
+      'Fix: CI-Schritt "Collect test results" fand nie einen E2E-Testreport, weil der Playwright-Container durch --rm sofort nach Testende entfernt wurde, bevor der anschließende docker cp-Schritt ihn auslesen konnte ("kein Testreport gefunden"). Betraf nur die Report-Zusammenfassung, nicht das eigentliche CI-Ergebnis (Playwright meldet Fehlschläge weiterhin korrekt).',
+    ],
+  },
+  {
     version: '3.54.0',
     date: '2026-07-10',
     changes: [
