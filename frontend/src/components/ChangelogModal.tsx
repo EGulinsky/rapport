@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.1',
+    date: '2026-07-10',
+    changes: [
+      'Doku: CLAUDE.md um den aktuellen Session-Stand ergänzt (Dokuübersetzung, Git-Historie-Umschreibung, Konto-Profil/CV, Audit-Log-Typ/Grund, CI-E2E-Report-Fix, Mehrfachauswahl-Löschen).',
+    ],
+  },
+  {
     version: '3.55.0',
     date: '2026-07-10',
     changes: [
