@@ -170,6 +170,12 @@ export interface LinkedInPeopleCandidate {
   profile_url: string
 }
 
+export interface LinkedInCompanyCandidate {
+  name: string
+  url: string
+  snippet?: string | null
+}
+
 export interface Attachment {
   id: number
   filename: string

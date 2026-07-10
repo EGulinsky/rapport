@@ -475,6 +475,14 @@ export const api = {
       request<{ok: boolean}>(`/companies/${companyId}/contacts/${contactId}`, {method: 'DELETE'}),
     bulkDelete: (ids: number[]) =>
       request<{ deleted: number }>('/companies/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) }),
+
+    searchLinkedIn: (q: string) =>
+      request<import('../types').LinkedInCompanyCandidate[]>(`/sync/linkedin/companies/search?q=${encodeURIComponent(q)}`),
+    importFromLinkedIn: (candidates: import('../types').LinkedInCompanyCandidate[]) =>
+      request<{ imported: number; skipped: number }>('/sync/linkedin/companies/import', {
+        method: 'POST',
+        body: JSON.stringify({ candidates }),
+      }),
   },
 
   startup: {

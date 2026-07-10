@@ -9,6 +9,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.51.0',
+    date: '2026-07-10',
+    changes: [
+      'Fix: Batch-Sync erstellt jetzt CompanyProfile für neue LinkedIn-Bewerbungen.',
+      'Neu: Firmen manuell anlegen über "Neu"-Button im Firmen-Tab.',
+      'Neu: Firmen aus LinkedIn importieren (Suche + Mehrfachauswahl).',
+      'Neu: GET/POST /api/sync/linkedin/companies/search + /import Endpoints.',
+    ],
+  },
+  {
     version: '3.50.4',
     date: '2026-07-09',
     changes: [
