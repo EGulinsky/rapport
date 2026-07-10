@@ -310,7 +310,8 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
                 if str(old_color or "") != str(app.ai_color or ""):
                     add_audit(db, "update", "user", app_id=app.id,
                               field="ai_color", old_value=old_color, new_value=app.ai_color,
-                              reason="KI-Bewertung", user_id=current_user.id)
+                              reason=f"KI-Bewertung: {app.ai_reasoning[:200]}" if app.ai_reasoning else "KI-Bewertung",
+                              user_id=current_user.id)
                 db.commit()
                 updated += 1
                 yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma})}\n\n"
@@ -575,7 +576,8 @@ async def ai_assess_single(
     if str(old_color or "") != str(app.ai_color or ""):
         add_audit(db, "update", "user", app_id=app.id,
                   field="ai_color", old_value=old_color, new_value=app.ai_color,
-                  reason="KI-Bewertung", user_id=current_user.id)
+                  reason=f"KI-Bewertung: {app.ai_reasoning[:200]}" if app.ai_reasoning else "KI-Bewertung",
+                  user_id=current_user.id)
     db.commit()
     return result
 

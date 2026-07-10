@@ -900,9 +900,11 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.sync_status = "done"
                 p.sync_error = None
                 p.last_synced_at = now
+                li_url = data.get("linkedin_company_url")
                 add_audit(db, "update", "system", company_profile_id=p.id,
                           field="sync_status", old_value=old_status, new_value=p.sync_status,
-                          reason="automatisch via LinkedIn synchronisiert", user_id=user_id)
+                          reason=f"automatisch via LinkedIn synchronisiert ({li_url})" if li_url else "automatisch via LinkedIn synchronisiert",
+                          user_id=user_id)
 
             elif pid in qid_map:
                 qid = qid_map[pid]
@@ -928,7 +930,8 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.last_synced_at = now
                 add_audit(db, "update", "system", company_profile_id=p.id,
                           field="sync_status", old_value=old_status, new_value=p.sync_status,
-                          reason="automatisch via Wikidata synchronisiert", user_id=user_id)
+                          reason=f"automatisch via Wikidata synchronisiert ({qid})" if data else "automatisch via Wikidata synchronisiert (nur Basistreffer, kein Datensatz)",
+                          user_id=user_id)
 
             else:
                 # Weder LinkedIn (eindeutig) noch Wikidata hatten einen Treffer.

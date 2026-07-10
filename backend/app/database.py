@@ -876,6 +876,48 @@ def _migrate_user_profile():
     conn.close()
 
 
+def _migrate_audit_log_entity_type():
+    """Add an explicit entity_type column to audit_log (application/contact/
+    company/event) — inferring the type from which FK column is set is
+    unreliable (rows can have several FKs set, e.g. a contact created in the
+    context of an application, or none at all, e.g. company merges). Backfills
+    existing rows using the same contact>company>event>application precedence
+    the frontend already used to infer a type client-side."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'")
+    if not cur.fetchone():
+        conn.close()
+        return
+
+    cur.execute("PRAGMA table_info(audit_log)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "entity_type" not in cols:
+        cur.execute("ALTER TABLE audit_log ADD COLUMN entity_type TEXT")
+        cur.execute("CREATE INDEX ix_audit_log_entity_type ON audit_log (entity_type)")
+
+    cur.execute(
+        "UPDATE audit_log SET entity_type = "
+        "CASE "
+        "WHEN contact_id IS NOT NULL THEN 'contact' "
+        "WHEN company_profile_id IS NOT NULL THEN 'company' "
+        "WHEN event_id IS NOT NULL THEN 'event' "
+        "WHEN app_id IS NOT NULL THEN 'application' "
+        "ELSE entity_type END "
+        "WHERE entity_type IS NULL"
+    )
+
+    conn.commit()
+    conn.close()
+
+
 def claim_unowned_data(db, user_id: int) -> None:
     """Weist einem Konto alle Zeilen zu, die noch keinem Nutzer gehören
     (user_id IS NULL) — der einmalige Übergang von der bisherigen Ein-
@@ -919,6 +961,7 @@ def init_db():
     _migrate_pre_rejection_status()
     _migrate_audit_log()
     _migrate_audit_log_entities()
+    _migrate_audit_log_entity_type()
     _migrate_contact_company_profile()
     _migrate_contact_vorname()
     _migrate_company_logo()

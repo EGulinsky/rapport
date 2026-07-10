@@ -772,22 +772,28 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
             if not existing:
                 existing = db.query(models.Contact).filter_by(name=name).first()
 
+            match_reason = "in Bewerbungstext/E-Mail erwähnt" if name_in_app_text else f"Firma {org_val!r} passt zu Bewerbung {app.firma!r}"
+
             if existing:
                 if linkedin_url and not existing.linkedin_url:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="linkedin_url", old_value=None, new_value=linkedin_url, user_id=user_id)
+                              field="linkedin_url", old_value=None, new_value=linkedin_url,
+                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
                     existing.linkedin_url = linkedin_url
                 if tel_val and not existing.telefon:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="telefon", old_value=None, new_value=tel_val, user_id=user_id)
+                              field="telefon", old_value=None, new_value=tel_val,
+                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
                     existing.telefon = tel_val
                 if org_val and not existing.firma:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="firma", old_value=None, new_value=org_val, user_id=user_id)
+                              field="firma", old_value=None, new_value=org_val,
+                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
                     existing.firma = org_val
                 if title_val and not existing.rolle:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="rolle", old_value=None, new_value=title_val, user_id=user_id)
+                              field="rolle", old_value=None, new_value=title_val,
+                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
                     existing.rolle = title_val
                 if name_in_app_text:
                     db.execute(text(
@@ -802,7 +808,8 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 db.add(contact)
                 db.flush()
                 add_audit(db, "create", "sync", contact_id=contact.id, app_id=app.id,
-                          new_value=contact.name, reason="automatisch aus gezieltem iCloud-Sync erstellt",
+                          new_value=contact.name,
+                          reason=f"automatisch aus gezieltem iCloud-Sync erstellt ({match_reason})",
                           user_id=user_id)
                 if name_in_app_text:
                     db.execute(text(

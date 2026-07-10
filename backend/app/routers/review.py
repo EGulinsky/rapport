@@ -149,12 +149,13 @@ async def approve_match(
             )
             db.add(status_event)
             db.flush()
+            approve_reason = f"PendingMatch genehmigt (Konfidenz {match.confidence}%): {match.extract[:150]}" if match.extract else f"PendingMatch genehmigt (Konfidenz {match.confidence}%)"
             add_audit(db, "status_change", match.source or "user",
                       app_id=app.id, field="main_status",
                       old_value=old_main, new_value=new_main,
-                      reason="PendingMatch genehmigt", user_id=current_user.id)
+                      reason=approve_reason, user_id=current_user.id)
             add_audit(db, "create", match.source or "user", app_id=app.id, event_id=status_event.id,
-                      new_value=status_event.titel, reason="PendingMatch genehmigt", user_id=current_user.id)
+                      new_value=status_event.titel, reason=approve_reason, user_id=current_user.id)
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": status_event.id if new_main else None}
@@ -173,8 +174,9 @@ async def approve_match(
     )
     db.add(event)
     db.flush()
+    approve_reason = f"PendingMatch genehmigt (Konfidenz {match.confidence}%): {match.extract[:150]}" if match.extract else f"PendingMatch genehmigt (Konfidenz {match.confidence}%)"
     add_audit(db, "create", match.source or "user", app_id=body.application_id, event_id=event.id,
-              new_value=event.titel, reason="PendingMatch genehmigt", user_id=current_user.id)
+              new_value=event.titel, reason=approve_reason, user_id=current_user.id)
     match.review_status = "approved"
     db.commit()
     return {"status": "approved", "event_id": event.id}

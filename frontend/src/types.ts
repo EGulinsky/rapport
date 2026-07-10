@@ -445,6 +445,7 @@ export interface AuditEntry {
   company_name: string | null
   event_id: number | null
   event_titel: string | null
+  entity_type: 'application' | 'contact' | 'company' | 'event' | null
   timestamp: string
   action: string
   field: string | null

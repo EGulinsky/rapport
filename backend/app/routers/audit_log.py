@@ -16,6 +16,7 @@ def list_audit(
     contact_id: Optional[int] = Query(None),
     company_profile_id: Optional[int] = Query(None),
     event_id: Optional[int] = Query(None),
+    entity_type: Optional[str] = Query(None),
     limit: int = Query(200, le=1000),
     offset: int = Query(0),
     current_user: models.User = Depends(get_current_user),
@@ -29,6 +30,8 @@ def list_audit(
         q = q.filter(models.AuditLog.company_profile_id == company_profile_id)
     if event_id is not None:
         q = q.filter(models.AuditLog.event_id == event_id)
+    if entity_type is not None:
+        q = q.filter(models.AuditLog.entity_type == entity_type)
     total = q.count()
     rows = q.offset(offset).limit(limit).all()
     return {
@@ -45,6 +48,7 @@ def list_audit(
                 "company_name": (r.company_profile.name_display or r.company_profile.name_norm) if r.company_profile else None,
                 "event_id": r.event_id,
                 "event_titel": r.event.titel if r.event else None,
+                "entity_type": r.entity_type,
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None,
                 "action": r.action,
                 "field": r.field,

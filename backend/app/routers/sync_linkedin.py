@@ -29,11 +29,12 @@ log = get_logger("sync", source="linkedin")
 router = APIRouter(prefix="/api/sync/linkedin", tags=["sync"])
 
 
-def _audit_backfill(db: Session, app: "models.Application", field: str, old_value, new_value, user_id) -> None:
+def _audit_backfill(db: Session, app: "models.Application", field: str, old_value, new_value, user_id, match_reason: str | None = None) -> None:
     """Protokolliert eine stille Feld-Ergänzung an einer bestehenden Bewerbung durch den LinkedIn-Sync."""
+    reason = f"automatisch aus LinkedIn ergänzt ({match_reason})" if match_reason else "automatisch aus LinkedIn ergänzt"
     add_audit(db, "update", "linkedin", app_id=app.id,
               field=field, old_value=old_value, new_value=new_value,
-              reason="automatisch aus LinkedIn ergänzt", user_id=user_id)
+              reason=reason, user_id=user_id)
 
 
 def _commit_with_retry(db, retries: int = 5, delay: float = 2.0) -> None:
@@ -912,10 +913,10 @@ def _find_or_create_application(
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 old_rolle = app.rolle
                 app.rolle = clean_title
-                _audit_backfill(db, app, "rolle", old_rolle, clean_title, user_id)
+                _audit_backfill(db, app, "rolle", old_rolle, clean_title, user_id, match_reason=f"LinkedIn-Job-ID {li_job_id} erkannt")
             if job.get("ort") and not app.ort:
                 app.ort = job["ort"]
-                _audit_backfill(db, app, "ort", None, job["ort"], user_id)
+                _audit_backfill(db, app, "ort", None, job["ort"], user_id, match_reason=f"LinkedIn-Job-ID {li_job_id} erkannt")
             return app, False, None, f"job_id:{li_job_id}→#{app.id}"
 
     # 2. Normalized-equality match: both company AND role must match after
@@ -942,10 +943,10 @@ def _find_or_create_application(
             if clean_title and _needs_rolle_cleanup(app.rolle or ""):
                 old_rolle = app.rolle
                 app.rolle = clean_title
-                _audit_backfill(db, app, "rolle", old_rolle, clean_title, user_id)
+                _audit_backfill(db, app, "rolle", old_rolle, clean_title, user_id, match_reason=f"Firma+Rolle abgeglichen mit {job['company']!r}")
             if job.get("ort") and not app.ort:
                 app.ort = job["ort"]
-                _audit_backfill(db, app, "ort", None, job["ort"], user_id)
+                _audit_backfill(db, app, "ort", None, job["ort"], user_id, match_reason=f"Firma+Rolle abgeglichen mit {job['company']!r}")
             return app, False, None, f"firma+rolle→#{app.id}"
 
     # 2.5 Check merge aliases: after a manual merge the loser's identifiers are stored here
@@ -1097,12 +1098,12 @@ def _process_linkedin_job(db: Session, job: dict, user_id: Optional[int] = None)
     job_url = job.get("stellenanzeige_url") or None
     if job_url and not app.stellenanzeige_url:
         app.stellenanzeige_url = job_url
-        _audit_backfill(db, app, "stellenanzeige_url", None, job_url, user_id)
+        _audit_backfill(db, app, "stellenanzeige_url", None, job_url, user_id, match_reason=f"passend zu LinkedIn-Match {match_grund}")
     if not app.datum_bewerbung and job.get("applied_date"):
         try:
             new_datum = date.fromisoformat(str(job["applied_date"]))
             app.datum_bewerbung = new_datum
-            _audit_backfill(db, app, "datum_bewerbung", None, str(new_datum), user_id)
+            _audit_backfill(db, app, "datum_bewerbung", None, str(new_datum), user_id, match_reason=f"passend zu LinkedIn-Match {match_grund}")
         except Exception:
             pass
     db.flush()

@@ -831,7 +831,7 @@ def _save_deterministic_event(
     db.add(new_event)
     db.flush()
     add_audit(db, "create", source, app_id=det['app_id'], event_id=new_event.id,
-              new_value=new_event.titel, user_id=user_id)
+              new_value=new_event.titel, reason=det.get('reason'), user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender (mail events only)
@@ -983,8 +983,9 @@ def save_classified_event(
     )
     db.add(new_event)
     db.flush()
+    ai_reason = f"KI erkannt: {ai_extract} (Konfidenz {confidence:.0%})" if ai_extract else f"KI-Klassifizierung (Konfidenz {confidence:.0%})"
     add_audit(db, "create", source, app_id=target_app["id"], event_id=new_event.id,
-              new_value=new_event.titel, user_id=user_id)
+              new_value=new_event.titel, reason=ai_reason, user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender, extract phone/role from mail footer
