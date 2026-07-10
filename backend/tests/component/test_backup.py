@@ -227,3 +227,163 @@ class TestRestoreFromFile:
                     backup_module.RestoreFileRequest(path="/does/not/exist.zip"), db=db_session,
                 )
         assert getattr(exc_info.value, "status_code", None) == 500
+
+
+class TestGetOrCreate:
+    def test_positiv_legt_config_an_wenn_keine_existiert(self, db_session):
+        assert db_session.query(models.BackupConfig).count() == 0
+
+        cfg = backup_module._get_or_create(db_session, user_id=1)
+
+        assert cfg.id is not None
+        assert db_session.query(models.BackupConfig).count() == 1
+
+    def test_positiv_gibt_bestehende_config_zurueck(self, db_session):
+        existing = models.BackupConfig(enabled=True, backup_folder="/x", user_id=1)
+        db_session.add(existing)
+        db_session.commit()
+
+        cfg = backup_module._get_or_create(db_session, user_id=1)
+
+        assert cfg.id == existing.id
+        assert db_session.query(models.BackupConfig).count() == 1
+
+
+class TestListBackupsErrorHandling:
+    async def test_negativ_agent_fehler_liefert_leere_liste(self, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            raise ConnectionError("Agent nicht erreichbar")
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await backup_module._list_backups(db_session, "/backups")
+
+        assert result == []
+
+
+# ── API-Level (HTTP-Layer, nicht nur die darunterliegenden Funktionen) ──────
+
+class TestBackupStatusApi:
+    def test_positiv_status_ohne_ordner_liefert_leere_backup_liste(self, client, db_session):
+        resp = client.get("/api/backup/status")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["backups"] == []
+        assert body["enabled"] is False
+
+    def test_positiv_status_mit_ordner_ruft_agent_ab(self, client, db_session):
+        _enable_backup(db_session)
+
+        async def fake_get(self, url, params=None, **kwargs):
+            return _mock_response([{"name": "a.zip", "path": "/backups/a.zip"}])
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/status")
+
+        assert resp.status_code == 200
+        assert resp.json()["backups"] == [{"name": "a.zip", "path": "/backups/a.zip"}]
+
+
+class TestSaveSettingsApi:
+    def test_positiv_speichert_und_liefert_config_zurueck(self, client, db_session):
+        resp = client.post("/api/backup/settings", json={
+            "enabled": True, "backup_folder": "/Users/me/Backups", "frequency_hours": 12, "keep_count": 5,
+        })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["enabled"] is True
+        assert body["backup_folder"] == "/Users/me/Backups"
+        assert body["frequency_hours"] == 12
+        assert body["keep_count"] == 5
+
+    def test_corner_case_frequency_und_keep_count_werden_auf_mindestens_1_geklemmt(self, client, db_session):
+        resp = client.post("/api/backup/settings", json={
+            "enabled": True, "backup_folder": "/x", "frequency_hours": 0, "keep_count": -3,
+        })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["frequency_hours"] == 1
+        assert body["keep_count"] == 1
+
+
+class TestRunBackupApi:
+    def test_positiv_erfolgreicher_backup_lauf(self, client, db_session, tmp_path):
+        _make_sqlite_file(backup_module.DB_PATH)
+        _enable_backup(db_session)
+
+        async def fake_post(self, url, json=None, **kwargs):
+            return _mock_response({"success": True, "filename": json["filename"]})
+
+        with patch("httpx.AsyncClient.post", new=fake_post):
+            resp = client.post("/api/backup/run")
+
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_negativ_backup_fehlschlag_liefert_500(self, client, db_session):
+        # Kein BackupConfig angelegt → do_backup() liefert success=False.
+        resp = client.post("/api/backup/run")
+
+        assert resp.status_code == 500
+
+
+class TestPickFolderApi:
+    def test_positiv_liefert_gewaehlten_ordner(self, client, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            return _mock_response({"path": "/Users/me/Backups"})
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/pick-folder")
+
+        assert resp.status_code == 200
+        assert resp.json()["path"] == "/Users/me/Backups"
+
+    def test_negativ_keine_auswahl_liefert_400(self, client, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            return _mock_response({"error": "Kein Ordner ausgewählt"}, status=400)
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/pick-folder")
+
+        assert resp.status_code == 400
+
+    def test_negativ_agent_nicht_erreichbar_liefert_503(self, client, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            raise ConnectionError("nicht erreichbar")
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/pick-folder")
+
+        assert resp.status_code == 503
+
+
+class TestPickFileApi:
+    def test_positiv_liefert_gewaehlte_datei(self, client, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            return _mock_response({"path": "/Users/me/Desktop/backup.zip"})
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/pick-file")
+
+        assert resp.status_code == 200
+        assert resp.json()["path"] == "/Users/me/Desktop/backup.zip"
+
+    def test_negativ_keine_auswahl_liefert_400(self, client, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            return _mock_response({"error": "Keine Datei ausgewählt"}, status=400)
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/pick-file")
+
+        assert resp.status_code == 400
+
+    def test_negativ_agent_nicht_erreichbar_liefert_503(self, client, db_session):
+        async def fake_get(self, url, params=None, **kwargs):
+            raise ConnectionError("nicht erreichbar")
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            resp = client.get("/api/backup/pick-file")
+
+        assert resp.status_code == 503

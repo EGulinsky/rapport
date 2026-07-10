@@ -240,3 +240,65 @@ class TestCleanupEventAudit:
         assert db_session.get(models.Event, dup.id) is None
         audit = db_session.query(models.AuditLog).filter_by(event_id=dup.id, action="delete").first()
         assert audit is not None
+
+
+class TestAuditLogListFilters:
+    def test_positiv_filter_nach_app_id(self, client, db_session):
+        _make_verbose(db_session)
+        app1 = application_factory(db_session, firma="App eins")
+        app2 = application_factory(db_session, firma="App zwei")
+        db_session.commit()
+        client.patch(f"/api/applications/{app1.id}", json={"kommentar": "x"})
+        client.patch(f"/api/applications/{app2.id}", json={"kommentar": "y"})
+
+        resp = client.get("/api/audit/", params={"app_id": app1.id})
+
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 1
+        assert all(i["app_id"] == app1.id for i in items)
+
+    def test_positiv_filter_nach_company_profile_id(self, client, db_session):
+        cp1 = company_profile_factory(db_session, name_display="Firma 1")
+        cp2 = company_profile_factory(db_session, name_display="Firma 2")
+        db_session.commit()
+        _make_verbose(db_session)
+        client.patch(f"/api/companies/{cp1.id}", json={"industry": "Software"})
+        client.patch(f"/api/companies/{cp2.id}", json={"industry": "Hardware"})
+
+        resp = client.get("/api/audit/", params={"company_profile_id": cp1.id})
+
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 1
+        assert all(i["company_profile_id"] == cp1.id for i in items)
+
+    def test_positiv_filter_nach_event_id(self, client, db_session):
+        _make_verbose(db_session)
+        app = application_factory(db_session)
+        ev1 = event_factory(db_session, app, titel="Erstes")
+        ev2 = event_factory(db_session, app, titel="Zweites")
+        db_session.commit()
+        client.patch(f"/api/applications/{app.id}/events/{ev1.id}", json={"titel": "Geändert 1"})
+        client.patch(f"/api/applications/{app.id}/events/{ev2.id}", json={"titel": "Geändert 2"})
+
+        resp = client.get("/api/audit/", params={"event_id": ev1.id})
+
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 1
+        assert all(i["event_id"] == ev1.id for i in items)
+
+
+class TestClearAuditLog:
+    def test_positiv_loescht_alle_eintraege_des_kontos(self, client, db_session):
+        app = application_factory(db_session)
+        db_session.commit()
+        client.post(f"/api/applications/{app.id}/events", json={"typ": "notiz", "titel": "x"})
+        assert db_session.query(models.AuditLog).count() > 0
+
+        resp = client.delete("/api/audit/")
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] > 0
+        assert db_session.query(models.AuditLog).count() == 0
