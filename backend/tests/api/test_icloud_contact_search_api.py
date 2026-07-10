@@ -95,6 +95,63 @@ class TestSearchContacts:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_negativ_carddav_fehler_liefert_502(self, client, db_session):
+        _icloud_cfg(db_session)
+
+        async def _raise(cfg):
+            raise RuntimeError("401 Unauthorized")
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=_raise):
+            resp = client.get("/api/sync/icloud/contacts/search?q=Test")
+
+        assert resp.status_code == 502
+
+    def test_negativ_unparsbare_vcard_wird_uebersprungen(self, client, db_session):
+        _icloud_cfg(db_session)
+        vcards = ["BEGIN:VCARD\nVERSION:3.0\nEND:VCARD", _vcard("Erika Musterfrau", email="erika@example.com")]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.get("/api/sync/icloud/contacts/search?q=Erika")
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    def test_positiv_bereits_vorhandener_kontakt_wird_ueber_alten_vollnamen_gefunden(self, client, db_session):
+        # Alt-Kontakt (vor dem Vorname/Nachname-Split): name enthält den vollen
+        # Anzeigenamen (fn), nicht nur den Nachnamen wie das strukturierte N:-Feld.
+        _icloud_cfg(db_session)
+        contact_factory(db_session, name="Erika Musterfrau", email=None)
+        vcards = [_vcard("Erika Musterfrau", n=("Musterfrau", "Erika"))]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.get("/api/sync/icloud/contacts/search?q=Erika")
+
+        assert resp.status_code == 200
+        assert resp.json()[0]["already_imported"] is True
+
+    def test_negativ_duplikate_werden_dedupliziert(self, client, db_session):
+        _icloud_cfg(db_session)
+        vcards = [
+            _vcard("Erika Musterfrau", email="erika@example.com"),
+            _vcard("Erika Musterfrau", email="erika@example.com"),
+        ]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.get("/api/sync/icloud/contacts/search?q=Erika")
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    def test_corner_case_ergebnisse_werden_bei_30_treffern_begrenzt(self, client, db_session):
+        _icloud_cfg(db_session)
+        vcards = [_vcard(f"Testperson {i}", email=f"test{i}@example.com") for i in range(35)]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.get("/api/sync/icloud/contacts/search?q=Testperson")
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 30
+
 
 class TestImportContacts:
     def test_positiv_importiert_neue_kandidaten(self, client, db_session):
@@ -145,3 +202,21 @@ class TestImportContacts:
             "application_id": 999999,
         })
         assert resp.status_code == 404
+
+    def test_positiv_bereits_vorhandener_kontakt_wird_trotzdem_mit_bewerbung_verlinkt(self, client, db_session):
+        # Der Kontakt existiert schon (wird übersprungen, kein Duplikat), aber
+        # wenn eine application_id mitgeschickt wird und die Verknüpfung noch
+        # fehlt, wird sie trotzdem nachgetragen.
+        contact = contact_factory(db_session, name="Schon Da", email="schonda@example.com")
+        app = application_factory(db_session)
+        db_session.commit()
+
+        resp = client.post("/api/sync/icloud/contacts/import", json={
+            "candidates": [{"name": "Schon Da", "email": "schonda@example.com"}],
+            "application_id": app.id,
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["skipped"] == 1
+        db_session.refresh(contact)
+        assert app in contact.applications

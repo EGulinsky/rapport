@@ -177,3 +177,99 @@ class TestSyncContactsHttp:
 
         assert created == 0
         assert any("Keine vCards" in e for e in errors)
+
+    async def test_negativ_unparsbare_vcard_wird_uebersprungen_rest_wird_verarbeitet(self, db_session, monkeypatch):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        cfg = _cfg(db_session)
+        good = icloud_vcard("Erika Musterfrau", family="Musterfrau", given="Erika", email="erika@contoso.com", org="Contoso AG")
+        broken = "BEGIN:VCARD\nVERSION:3.0\nEND:VCARD"  # kein FN -> _parse_vcard() liefert None
+
+        async def fake_fetch(cfg_arg):
+            return [broken, good]
+
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
+
+        created, errors = await _sync_contacts_http(cfg, db_session)
+
+        assert errors == []
+        assert created == 1
+
+    async def test_positiv_bestehender_kontakt_wird_um_telefon_firma_und_rolle_angereichert(self, db_session, monkeypatch):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        existing = models.Contact(name="Musterfrau", vorname="Erika", email="erika@contoso.com")
+        db_session.add(existing)
+        db_session.commit()
+        cfg = _cfg(db_session)
+        raw = icloud_vcard(
+            "Erika Musterfrau", family="Musterfrau", given="Erika", email="erika@contoso.com",
+            org="Contoso AG", title="Recruiterin", tel="+49 30 1234567",
+        )
+
+        async def fake_fetch(cfg_arg):
+            return [raw]
+
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
+
+        created, errors = await _sync_contacts_http(cfg, db_session)
+
+        assert created == 0
+        assert existing.telefon == "+49 30 1234567"
+        assert existing.firma == "Contoso AG"
+        assert existing.rolle == "Recruiterin"
+
+    async def test_positiv_reiner_domain_match_ohne_erwaehnung_oder_firma_textmatch_importiert(self, db_session, monkeypatch):
+        # Regressionsfall (dritte Variante): CompanyProfile ist an eine echte
+        # Bewerbung angebunden UND die E-Mail-Domain matcht — aber der
+        # Firmenname im vCard-ORG-Feld matcht KEINE Bewerbung per Text
+        # (unterschiedliche Namen), und der Kontakt wird auch nirgends erwähnt.
+        # Der Domain-Match allein muss hier ausreichen (match_reason "E-Mail-
+        # Domain passt zu Firma").
+        cp = company_profile_factory(
+            db_session, name_display="Contoso Holding", name_norm=norm_firma("Contoso Holding"),
+            website="https://www.contoso-holding.de/",
+        )
+        application_factory(db_session, firma="Ganz anderer Bewerbungsname GmbH", company_profile_id=cp.id)
+        db_session.commit()
+        cfg = _cfg(db_session)
+        raw = icloud_vcard("Neue Person", email="neu@contoso-holding.de", org="Contoso Holding")
+
+        async def fake_fetch(cfg_arg):
+            return [raw]
+
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
+
+        created, errors = await _sync_contacts_http(cfg, db_session)
+
+        assert created == 1
+        contact = db_session.query(models.Contact).filter_by(email="neu@contoso-holding.de").one()
+        assert contact.company_profile_id == cp.id
+
+    async def test_negativ_unerwarteter_fehler_bei_einem_kontakt_stoppt_nicht_den_gesamten_sync(
+        self, db_session, monkeypatch
+    ):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        cfg = _cfg(db_session)
+        broken_org_vcard = icloud_vcard("Kaputte Person", email="kaputt@contoso.com", org="Contoso AG")
+        good_vcard = icloud_vcard("Gute Person", email="gut@web.de", org="Contoso AG")
+
+        async def fake_fetch(cfg_arg):
+            return [broken_org_vcard, good_vcard]
+
+        real_norm_firma = __import__("app.dedup", fromlist=["norm_firma"]).norm_firma
+
+        def _flaky_norm_firma(name):
+            if name == "Contoso AG" and not getattr(_flaky_norm_firma, "_called", False):
+                _flaky_norm_firma._called = True
+                raise RuntimeError("norm-firma-boom")
+            return real_norm_firma(name)
+
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
+        monkeypatch.setattr("app.dedup.norm_firma", _flaky_norm_firma)
+
+        created, errors = await _sync_contacts_http(cfg, db_session)
+
+        assert created == 1
+        assert any("norm-firma-boom" in e for e in errors)

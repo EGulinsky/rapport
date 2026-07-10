@@ -10,11 +10,13 @@ test_sync_targeted_agent_sources.py). Der pyicloud-basierte Pfad
 Alt-Code (Frontend ruft nur noch /sync/icloud/notes auf) und bleibt bewusst
 ungetestet.
 """
-from unittest.mock import MagicMock
+import hashlib
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app import models
+from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_notes
 from tests.factories import application_factory
 
@@ -102,6 +104,104 @@ class TestDoIcloudNotesNeueNotizen:
 
         assert result["errors"] == []
         assert result["created"] == 7
+
+    async def test_negativ_bereits_synctes_liefert_skip_ohne_erneute_verarbeitung(self, db_session, icloud_sync, monkeypatch):
+        application_factory(db_session, firma="Contoso AG")
+        note_key = hashlib.md5(b"note-already").hexdigest()[:16]
+        db_session.add(models.SyncedItem(source="icloud_notes", external_id=note_key, user_id=1))
+        db_session.commit()
+        notes = [{"id": "note-already", "name": "Contoso Vorbereitung", "body": "Fragen für das Interview bei Contoso AG."}]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(notes)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        result = await _do_icloud_notes(1)
+
+        assert result["created"] == 0
+        assert result["skipped"] == 1
+
+    async def test_corner_case_kaputtes_datumsfeld_wird_ignoriert_statt_absturz(self, db_session, icloud_sync, monkeypatch):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        notes = [{
+            "id": "note-baddate", "name": "Contoso Vorbereitung",
+            "body": "Fragen für das Interview bei Contoso AG.", "creationDate": "kein-gueltiges-datum",
+        }]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(notes)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        result = await _do_icloud_notes(1)
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+
+    async def test_negativ_ai_not_configured_innerhalb_batch_beendet_sync_sauber(
+        self, db_session, icloud_sync, monkeypatch
+    ):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        notes = [{"id": "note-ai-1", "name": "Contoso Vorbereitung", "body": "Interview bei Contoso AG."}]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(notes)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=AINotConfigured("kein Provider konfiguriert")),
+        )
+
+        result = await _do_icloud_notes(1)
+
+        assert result["created"] == 0
+        assert any("kein Provider konfiguriert" in e for e in result["errors"])
+
+    async def test_negativ_ai_rate_limited_innerhalb_batch_beendet_sync_sauber(
+        self, db_session, icloud_sync, monkeypatch
+    ):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        notes = [{"id": "note-ai-2", "name": "Contoso Vorbereitung", "body": "Interview bei Contoso AG."}]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(notes)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=AIRateLimited("Tageslimit erreicht")),
+        )
+
+        result = await _do_icloud_notes(1)
+
+        assert result["created"] == 0
+        assert any("AI-Tageslimit" in e for e in result["errors"])
+
+    async def test_negativ_unerwarteter_fehler_innerhalb_batch_stoppt_nicht_den_gesamten_sync(
+        self, db_session, icloud_sync, monkeypatch
+    ):
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+        notes = [{"id": "note-ai-3", "name": "Contoso Vorbereitung", "body": "Interview bei Contoso AG."}]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(notes)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=RuntimeError("process-item-boom")),
+        )
+
+        result = await _do_icloud_notes(1)
+
+        assert result["created"] == 0
+        assert any("process-item-boom" in e for e in result["errors"])
 
 
 class TestDoIcloudNotesFehler:
