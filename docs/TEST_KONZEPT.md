@@ -1,40 +1,40 @@
-# rapport – Testkonzept
+# rapport – Test Concept
 
-> Status: **Phase 1–6 abgeschlossen** (siehe Rollout-Plan, Abschnitt 11) — PR-Gate mit L0/L1/L2-Tests läuft in CI, L3-Integrationstests (KI-Provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) laufen bei Push auf `main` und Nightly-Cron. `linkedin_job_description.py` von 0 % auf >90 % Line-Coverage. Alle 12 E2E-User-Journeys umgesetzt. L5 Smoke-Job nach Deploy aktiv (Backend Health, Frontend, Login + API). Die in Abschnitt 12 aufgeführten Entscheidungen bleiben verbindliche Leitplanken für die weitere Umsetzung.
+> Status: **Phases 1–6 complete** (see rollout plan, section 11) — the PR gate with L0/L1/L2 tests runs in CI, L3 integration tests (AI provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) run on push to `main` and on the nightly cron. `linkedin_job_description.py` went from 0% to >90% line coverage. All 12 E2E user journeys implemented. L5 smoke job active after deploy (backend health, frontend, login + API). The decisions listed in section 12 remain binding guardrails for further implementation.
 
-## 0. Ausgangslage (Stand bei Konzepterstellung, 2026-07-01)
+## 0. Starting Point (as of concept creation, 2026-07-01)
 
-Zum Zeitpunkt dieses Konzepts existierte **keine** automatisierte Testabdeckung. Die CI-Pipeline (`ci.yml`) prüfte nur:
-- Backend: `ruff` (Lint) + `pyright` (informativ, `continue-on-error`)
+At the time this concept was written, **no** automated test coverage existed. The CI pipeline (`ci.yml`) only checked:
+- Backend: `ruff` (lint) + `pyright` (informational, `continue-on-error`)
 - Frontend: `tsc --noEmit` + `vite build`
-- Docker-Buildbarkeit
+- Docker buildability
 
-Es gab einen einzelnen Standalone-Script (`backend/test_linkedin_extraction.py`), der LinkedIn-Scraping-JS gegen manuell erfasste HTML-Dateien testet — kein Test-Runner, kein CI-Anschluss, aber ein brauchbares Muster (Fixture-Replay statt Live-Scraping). Dieses Skript existiert weiterhin unverändert als eigenständiges Debug-Tool (nicht Teil der formalen Suite unten).
+There was a single standalone script (`backend/test_linkedin_extraction.py`) that tests LinkedIn scraping JS against manually captured HTML files — no test runner, no CI hookup, but a usable pattern (fixture replay instead of live scraping). This script still exists unchanged as a standalone debug tool (not part of the formal suite below).
 
-**Aktueller Stand (602 Tests insgesamt, Stand 2026-07-07):** `backend/tests/` (447 Tests, Marker `unit`/`component`/`api`), `agent/tests/` (51 Tests) und `frontend/src/**/*.test.tsx` (11 Tests) laufen bei jedem Push als Pflicht-Gate (siehe `ci.yml`). Davon 41 neue Tests aus Phase 1+2 des neuen Benutzerkonten-Features (Passwort-Hashing, JWT, Bestätigungscodes, vollständiger Register/Verify/Login/Reset-HTTP-Fluss über `/api/auth/*`, sowie `claim_unowned_data()` — der einmalige Übergang des bisherigen kontolosen Datenbestands auf das erste bestätigte Konto — und der per-Nutzer-Unique-Index auf `CompanyProfile.name_norm`. Query-Scoping über die Fachrouter folgt in Phase 3, siehe `docs/ARCHITECTURE.md`). Zusätzlich 49 neue Tests für den LinkedIn-Import (Stellenausschreibungs-Textextraktion, Bewerbungsdatum-Parsing, Firmenname-Übernahme, LinkedIn-Job-ID-Zuordnung) — `sync_linkedin.py` von 37 % auf 42 % Coverage. Zusätzlich laufen bei Push auf `main` 93 L3-Integrationstests (`pytest -m integration`: KI-Provider-Flow, Google-Calendar-Sync, Gmail-Sync, domain-basierte Matching-Logik des gezielten Einzelbewerbungs-Syncs in `sync_targeted.py`, sowie iCloud Mail (IMAP), Calendar + Reminders (CalDAV), Contacts (CardDAV) und jetzt auch Notes — jeweils global und im gezielten Sync). Gezielte Fehlerfall-Lücken-Analyse (siehe Abschnitt 3) hat zusätzlich den Google-Token-Refresh-Fehlerpfad und den LinkedIn-MergeAlias-Fallback als Blindflecken identifiziert und geschlossen. Beim Schreiben der `sync_targeted.py`-Tests einen echten Bug gefunden und gefixt: die dort direkt erzeugten Kalender-Events (Google + iCloud) setzten `external_id` nicht, wodurch `list_candidates()`/`manual_assign()` sie nicht zuverlässig wiederfinden konnten. Beim Aufbau der iCloud-CalDAV-Tests einen zweiten, unabhängigen Bug in drei Funktionen gefunden und gefixt (`_do_icloud_cal()`/`_do_icloud_reminders()` in `sync_icloud.py`, `_sync_icloud_reminders_for_app()` in `sync_targeted.py`): `str()` wurde direkt auf ein vobject-ContentLine-Objekt angewendet statt auf dessen `.value`, wodurch Kalendertitel/Erinnerungstexte als `<SUMMARY{}Text>` statt als Klartext gespeichert wurden — betraf produktiv jeden über iCloud synchronisierten Kalender-/Erinnerungs-Eintrag (3 betroffene Produktiv-Events identifiziert und bereinigt). Fix zentralisiert als `vobj_str()` in `sync_common.py`. Beim Recherchieren des Notizen-Syncs für Tests festgestellt: der aktive Notizen-Sync (`POST /sync/icloud/notes`) läuft längst über den lokalen Rapport-Agenten statt über die pyicloud-API/2FA-Login — der alte pyicloud-Pfad (`_sync_notes_with_api`/`_get_pyicloud_api`/`/notes/_legacy`) ist unbenutzter Alt-Code, den das Frontend nicht mehr aufruft. LinkedIn-Playwright-Fixture-Replay, L4 E2E und der Nightly-Job aus diesem Konzept sind noch nicht umgesetzt. Gemessene Zeilenabdeckung und wo die größten Lücken liegen: siehe [Abschnitt 10](#10-abdeckungsziele-vorschlag-kein-dogma).
-
----
-
-## 1. Ziele
-
-1. **Regressionen verhindern**, bevor sie deployed werden (aktuell: CI grün ≠ Feature funktioniert)
-2. **Schnelles Feedback** für den überwiegenden Teil der Änderungen (Sekunden, nicht Minuten)
-3. **Vertrauen in riskante Bereiche** — Sync-Logik, Statusübergänge, Dublettenerkennung/Merge, Kryptographie — wo stille Datenfehler teuer sind
-4. **Keine Abhängigkeit von echten externen Diensten** im Regelbetrieb (kein echtes Gmail-Konto, kein echter LinkedIn-Login in CI)
-5. **Nicht bei jedem Push die volle Suite** — abgestufte Ausführung nach Risiko/Kosten
+**Current status (602 tests total, as of 2026-07-07):** `backend/tests/` (447 tests, markers `unit`/`component`/`api`), `agent/tests/` (51 tests) and `frontend/src/**/*.test.tsx` (11 tests) run on every push as a mandatory gate (see `ci.yml`). Of these, 41 new tests come from Phase 1+2 of the new user-account feature (password hashing, JWT, confirmation codes, the full register/verify/login/reset HTTP flow via `/api/auth/*`, and `claim_unowned_data()` — the one-time transition of the previously account-less data set to the first confirmed account — and the per-user unique index on `CompanyProfile.name_norm`. Query scoping across the feature routers follows in Phase 3, see `docs/ARCHITECTURE.md`). An additional 49 new tests cover the LinkedIn import (job-posting text extraction, application-date parsing, company-name carryover, LinkedIn job-ID matching) — `sync_linkedin.py` went from 37% to 42% coverage. In addition, 93 L3 integration tests run on push to `main` (`pytest -m integration`: AI provider flow, Google Calendar sync, Gmail sync, the domain-based matching logic of targeted single-application sync in `sync_targeted.py`, and iCloud Mail (IMAP), Calendar + Reminders (CalDAV), Contacts (CardDAV) and now also Notes — each both globally and in targeted sync). A targeted gap analysis of error paths (see section 3) additionally identified and closed the Google token-refresh error path and the LinkedIn MergeAlias fallback as blind spots. While writing the `sync_targeted.py` tests, a real bug was found and fixed: the calendar events created directly there (Google + iCloud) did not set `external_id`, so `list_candidates()`/`manual_assign()` could not reliably find them again. While building the iCloud CalDAV tests, a second, independent bug was found and fixed in three functions (`_do_icloud_cal()`/`_do_icloud_reminders()` in `sync_icloud.py`, `_sync_icloud_reminders_for_app()` in `sync_targeted.py`): `str()` was applied directly to a vobject ContentLine object instead of to its `.value`, causing calendar titles/reminder texts to be stored as `<SUMMARY{}Text>` instead of plain text — this affected, in production, every calendar/reminder entry synced via iCloud (3 affected production events identified and cleaned up). Fix centralized as `vobj_str()` in `sync_common.py`. While researching the notes sync for tests, it was found that the active notes sync (`POST /sync/icloud/notes`) has long run via the local Rapport Agent instead of the pyicloud API/2FA login — the old pyicloud path (`_sync_notes_with_api`/`_get_pyicloud_api`/`/notes/_legacy`) is unused legacy code that the frontend no longer calls. LinkedIn Playwright fixture replay, L4 E2E, and the nightly job from this concept are not yet implemented. Measured line coverage and where the biggest gaps are: see [section 10](#10-coverage-targets-proposal-not-dogma).
 
 ---
 
-## 2. Testpyramide / Stufenmodell
+## 1. Goals
+
+1. **Prevent regressions** before they are deployed (currently: green CI ≠ working feature)
+2. **Fast feedback** for the large majority of changes (seconds, not minutes)
+3. **Confidence in risky areas** — sync logic, status transitions, duplicate detection/merge, cryptography — where silent data errors are costly
+4. **No dependency on real external services** in normal operation (no real Gmail account, no real LinkedIn login in CI)
+5. **Not the full suite on every push** — tiered execution by risk/cost
+
+---
+
+## 2. Test Pyramid / Tier Model
 
 ```mermaid
 flowchart TB
-    L0["L0 · Unit<br/>reine Funktionen, keine DB/Netzwerk<br/>~Millisekunden, sehr viele"]
-    L1["L1 · Component/Service<br/>DB (temp. SQLite), keine Fremdsysteme<br/>~10–100ms, viele"]
-    L2["L2 · API/Contract<br/>FastAPI TestClient gegen echte Router<br/>~100ms–1s, moderat viele"]
-    L3["L3 · Integration<br/>Volle Sync-Flows, Fremdsysteme gemockt an der Netzwerkgrenze<br/>~1–5s, wenige, gezielt"]
-    L4["L4 · E2E / UI<br/>Playwright gegen echten Docker-Stack, kritische User Journeys<br/>~5–30s, sehr wenige"]
-    L5["L5 · Smoke<br/>Minimaler Health-Check gegen live deployte Instanz<br/>~1–5s, eine Handvoll"]
+    L0["L0 · Unit<br/>pure functions, no DB/network<br/>~milliseconds, very many"]
+    L1["L1 · Component/Service<br/>DB (temp SQLite), no external systems<br/>~10–100ms, many"]
+    L2["L2 · API/Contract<br/>FastAPI TestClient against real routers<br/>~100ms–1s, moderately many"]
+    L3["L3 · Integration<br/>Full sync flows, external systems mocked at the network boundary<br/>~1–5s, few, targeted"]
+    L4["L4 · E2E / UI<br/>Playwright against a real Docker stack, critical user journeys<br/>~5–30s, very few"]
+    L5["L5 · Smoke<br/>Minimal health check against the live deployed instance<br/>~1–5s, a handful"]
 
     L0 --> L1 --> L2 --> L3 --> L4 --> L5
     style L0 fill:#dcfce7
@@ -45,210 +45,210 @@ flowchart TB
     style L5 fill:#e0e7ff
 ```
 
-Faustregel: **je höher die Stufe, desto teurer/langsamer, desto weniger Fälle** — aber jede Stufe deckt etwas ab, das die darunterliegende nicht kann.
+Rule of thumb: **the higher the tier, the more expensive/slower, the fewer cases** — but every tier covers something the one below it can't.
 
-| Stufe | Beispiel in diesem Projekt | Wieviele? |
+| Tier | Example in this project | How many? |
 |---|---|---|
-| **L0 Unit** | `norm_firma()`, `dedup_key()`, `_compute_naechster_schritt()`, Statuswechsel-Regeln, Fernet-Ver-/Entschlüsselung | 100+ |
-| **L1 Component** | `_find_company_groups()` gegen echte SQLite-Testdatenbank mit synthetischen Firmenprofilen; `merge_companies()`; Excel-Import-Mapping | 50–100 |
-| **L2 API/Contract** | `POST /api/applications/` → Response-Schema stimmt, Event wird angelegt; `PATCH` löst korrekt `abgesagt`-Flag aus; Fehlerfälle (404, 422) | 80–150 |
-| **L3 Integration** | Targeted-Sync-Lauf mit gemocktem Gmail/GCal/iCloud → korrekte Events + Kontakte + PendingMatches; LinkedIn-Import mit HTML-Fixture; KI-Bewertung mit gemocktem LLM | 20–40 |
-| **L4 E2E** | "Bewerbung anlegen → Status durchklicken → Absage → Reasoning sichtbar"; "LinkedIn-Link importieren → Formular vorausgefüllt → speichern" | 5–10 kritische Journeys |
-| **L5 Smoke** | `GET /health` antwortet, `GET /api/applications/` liefert 200, Frontend lädt, DB erreichbar | 5–8 Checks |
+| **L0 Unit** | `norm_firma()`, `dedup_key()`, `_compute_naechster_schritt()`, status-change rules, Fernet encryption/decryption | 100+ |
+| **L1 Component** | `_find_company_groups()` against a real SQLite test database with synthetic company profiles; `merge_companies()`; Excel import mapping | 50–100 |
+| **L2 API/Contract** | `POST /api/applications/` → response schema is correct, event is created; `PATCH` correctly triggers the `abgesagt` flag; error cases (404, 422) | 80–150 |
+| **L3 Integration** | Targeted-sync run with mocked Gmail/GCal/iCloud → correct events + contacts + PendingMatches; LinkedIn import with HTML fixture; AI assessment with a mocked LLM | 20–40 |
+| **L4 E2E** | "Create application → click through statuses → rejection → reasoning visible"; "import LinkedIn link → form pre-filled → save" | 5–10 critical journeys |
+| **L5 Smoke** | `GET /health` responds, `GET /api/applications/` returns 200, frontend loads, DB reachable | 5–8 checks |
 
 ---
 
-## 3. Fallkategorien (Positiv / Negativ / Corner / Fehleingaben)
+## 3. Case Categories (Positive / Negative / Corner / Invalid Input)
 
-Für **jede getestete Funktion/jeden Endpoint** wird durchdekliniert, soweit relevant:
+For **every tested function/endpoint**, the following is worked through where relevant:
 
-| Kategorie | Bedeutung | Beispiel |
+| Category | Meaning | Example |
 |---|---|---|
-| **Positiv** | Erwarteter Normalfall | Bewerbung mit gültigen Pflichtfeldern anlegen |
-| **Negativ** | Erwarteter Fehlerfall, korrekt abgelehnt | Bewerbung ohne `firma` → 422 |
-| **Corner Case** | Grenzwert, seltene aber gültige Kombination | Firma mit leerem `website`-Feld beim Dedup-Check; Bewerbung ohne jegliche Events; Statuswechsel von `signed` direkt zu `rejected` |
-| **Fehleingabe** | Ungültige/böswillige Eingabe, muss robust behandelt werden | SQL-artiger String in `firma`, Riesentext in `kommentar`, negative IDs, doppeltes JSON-Encoding, XSS-Payload in Freitextfeldern |
-| **Fremdsystem-Fehler** | Externe Abhängigkeit liefert Unerwartetes | Gmail-API 429/500, LinkedIn zeigt geänderte Seitenstruktur, KI-Provider liefert kaputtes JSON, iCloud-2FA-Timeout |
+| **Positive** | Expected normal case | Create an application with valid required fields |
+| **Negative** | Expected error case, correctly rejected | Application without `firma` → 422 |
+| **Corner case** | Boundary value, rare but valid combination | Company with an empty `website` field during dedup check; application with no events at all; status change directly from `signed` to `rejected` |
+| **Invalid input** | Invalid/malicious input, must be handled robustly | SQL-like string in `firma`, huge text in `kommentar`, negative IDs, double JSON encoding, XSS payload in free-text fields |
+| **External-system error** | External dependency returns something unexpected | Gmail API 429/500, LinkedIn shows a changed page structure, AI provider returns broken JSON, iCloud 2FA timeout |
 
-Dies wird nicht als separate Teststufe geführt, sondern als **Pflicht-Checkliste pro Testfall-Gruppe** — z. B. bekommt jeder API-Endpoint-Test mindestens einen Fall aus jeder zutreffenden Kategorie, keine reine Happy-Path-Sammlung.
+This is not tracked as a separate test tier, but as a **mandatory checklist per test-case group** — e.g. every API endpoint test gets at least one case from each applicable category, not just a collection of happy paths.
 
-**Besonders scharf zu testen** (aus der Session-Historie bekannte Fehlerquellen):
-- Race Conditions bei Scoped-Sync (Auto-Continue-Poller-Bug)
-- Leere/`null`-Firmenname bei KI-Extraktion (Headhunter-Anonymisierung)
-- Gehashte/wechselnde externe HTML-Struktur (LinkedIn)
-- Rate-Limit-Verhalten der KI-Provider
-- Gleichzeitige Statusänderung durch Sync + manuellen User-Edit
-
----
-
-## 4. Synthetische Testdaten
-
-**Prinzip:** Keine echten Namen/E-Mails/Firmen aus der Produktiv-DB in Tests. Realistisch, aber generiert und deterministisch.
-
-- **Backend:** `factory_boy` oder `polyfactory` (Pydantic-nativ) für Model-Factories — `ApplicationFactory`, `ContactFactory`, `CompanyProfileFactory`, `EventFactory` mit sinnvollen Defaults und gezielt überschreibbaren Feldern für Edge Cases
-- **Deterministischer Zufall:** fester Seed pro Testlauf (`Faker.seed(1234)`), damit Fehlschläge reproduzierbar sind
-- **Zeitabhängige Logik einfrieren:** `freezegun`/`time-machine` für alles, was von `date.today()` abhängt (`naechster_schritt`, Ghosting-Erkennung, KI-Prompt-Datum) — sonst werden Tests an bestimmten Wochentagen/Monatsenden flaky
-- **Realistische Volumina für Integrationstests:** z. B. 50 Bewerbungen mit überlappenden Firmennamen, um Dedup-Grenzfälle zu provozieren (ähnlich der echten Tochterfirmen-Duplikate, die die Cleanup-Funktion live gefunden hat)
-- **Kein produktives Datenbank-Backup als Testfixture** — auch nicht anonymisiert, um zu vermeiden, dass reale Bewerbungsdaten (Firmen, Kontakte) versehentlich in Test-Snapshots landen
+**To be tested with particular rigor** (known sources of error from the session history):
+- Race conditions in scoped sync (auto-continue poller bug)
+- Empty/`null` company name during AI extraction (headhunter anonymization)
+- Hashed/changing external HTML structure (LinkedIn)
+- Rate-limit behavior of AI providers
+- Concurrent status change via sync + manual user edit
 
 ---
 
-## 5. Mocking-Strategie für externe Systeme
+## 4. Synthetic Test Data
 
-Grundsatz: **Mocken an der Netzwerkgrenze, nicht an der Businesslogik-Grenze** — d. h. wir mocken HTTP-Calls/IMAP-Sockets, nicht `sync_google.py`-Funktionen selbst. Das stellt sicher, dass wir die echte Parsing-/Fehlerbehandlungs-Logik mittesten.
+**Principle:** No real names/emails/companies from the production DB in tests. Realistic, but generated and deterministic.
 
-| Externes System | Verbindungsart | Mock-Ansatz |
+- **Backend:** `factory_boy` or `polyfactory` (Pydantic-native) for model factories — `ApplicationFactory`, `ContactFactory`, `CompanyProfileFactory`, `EventFactory` with sensible defaults and fields that can be selectively overridden for edge cases
+- **Deterministic randomness:** fixed seed per test run (`Faker.seed(1234)`), so failures are reproducible
+- **Freeze time-dependent logic:** `freezegun`/`time-machine` for anything that depends on `date.today()` (`naechster_schritt`, ghosting detection, AI prompt date) — otherwise tests become flaky on certain weekdays/month-ends
+- **Realistic volumes for integration tests:** e.g. 50 applications with overlapping company names, to provoke dedup edge cases (similar to the real subsidiary-company duplicates that the cleanup function found live)
+- **No production database backup as a test fixture** — not even anonymized, to avoid real application data (companies, contacts) accidentally ending up in test snapshots
+
+---
+
+## 5. Mocking Strategy for External Systems
+
+Principle: **mock at the network boundary, not at the business-logic boundary** — i.e. we mock HTTP calls/IMAP sockets, not the `sync_google.py` functions themselves. This ensures the real parsing/error-handling logic is tested as well.
+
+| External system | Connection type | Mocking approach |
 |---|---|---|
-| **Gmail / Google Calendar** | REST via `google-api-python-client` | `respx` (httpx-Mocking, da litellm/httpx darunterliegen) oder dediziertes `google-api-python-client`-Transport-Mock mit aufgezeichneten JSON-Fixtures (echte, aber anonymisierte Response-Struktur) |
-| **iCloud Mail (IMAP)** | `imaplib`/IMAP-Protokoll | In-Memory-Fake-IMAP-Server (z. B. `imapclient`-Testserver oder eigener minimaler Mock, der `SEARCH`/`FETCH` bedient) — kein echtes Apple-Konto in CI |
-| **iCloud CalDAV/CardDAV** | XML über HTTP | Lokaler Fake-HTTP-Server mit statischen VCALENDAR/VCARD-Fixtures |
-| **LinkedIn (Playwright-Scraping)** | Browser-Automatisierung gegen echte Website | **Playwright `page.route()`-Interception** oder lokaler Static-File-Server, der aufgezeichnete HTML-Snapshots ausliefert (Formalisierung des bestehenden `test_linkedin_extraction.py`-Musters) — Chromium läuft weiterhin echt (testet reales DOM-Parsing), aber ohne Netzwerkzugriff auf linkedin.com |
-| **AI-Provider (litellm)** | HTTP zu Groq/Anthropic/OpenAI/Ollama | Fake-Provider-Implementierung, die deterministische JSON-Antworten zurückgibt (inkl. gezielt kaputter/leerer Antworten für Fehlerfall-Tests); für L3-Integrationstests zusätzlich `respx`-Mocks auf HTTP-Ebene, um auch das Rate-Limit-/Auth-Error-Handling von `litellm` selbst zu testen |
-| **macOS-Bridges (files_bridge, Calls)** | HTTP lokal | Einfacher Fake-HTTP-Server in Tests (z. B. via `pytest-httpserver`) |
-| **LinkedIn-Firmenseite / Wikidata / Clearbit** (Firmenanreicherung) | Playwright bzw. HTTP | Playwright-Interception für die Firmenseite, `respx`-Fixtures für Wikidata-Search/SPARQL + Clearbit, inkl. "nichts gefunden"-Fall |
+| **Gmail / Google Calendar** | REST via `google-api-python-client` | `respx` (httpx mocking, since litellm/httpx sit underneath) or a dedicated `google-api-python-client` transport mock with recorded JSON fixtures (real but anonymized response structure) |
+| **iCloud Mail (IMAP)** | `imaplib`/IMAP protocol | In-memory fake IMAP server (e.g. an `imapclient` test server or a custom minimal mock that serves `SEARCH`/`FETCH`) — no real Apple account in CI |
+| **iCloud CalDAV/CardDAV** | XML over HTTP | Local fake HTTP server with static VCALENDAR/VCARD fixtures |
+| **LinkedIn (Playwright scraping)** | Browser automation against the real website | **Playwright `page.route()` interception** or a local static-file server that serves recorded HTML snapshots (formalizing the existing `test_linkedin_extraction.py` pattern) — Chromium still runs for real (tests real DOM parsing), but without network access to linkedin.com |
+| **AI provider (litellm)** | HTTP to Groq/Anthropic/OpenAI/Ollama | Fake provider implementation that returns deterministic JSON responses (including deliberately broken/empty responses for error-case tests); for L3 integration tests, additional `respx` mocks at the HTTP level to also test `litellm`'s own rate-limit/auth-error handling |
+| **macOS bridges (files_bridge, Calls)** | Local HTTP | Simple fake HTTP server in tests (e.g. via `pytest-httpserver`) |
+| **LinkedIn company page / Wikidata / Clearbit** (company enrichment) | Playwright resp. HTTP | Playwright interception for the company page, `respx` fixtures for Wikidata search/SPARQL + Clearbit, including the "nothing found" case |
 
-**Wichtig:** Für jedes gemockte System muss mindestens **ein Fehlerfall-Fixture** existieren (Timeout, 401, 429, kaputtes JSON/XML, leere Antwort) — nicht nur der Erfolgsfall.
+**Important:** for every mocked system there must be at least **one error-case fixture** (timeout, 401, 429, broken JSON/XML, empty response) — not just the success case.
 
 ---
 
-## 6. Tooling-Vorschlag
+## 6. Tooling Proposal
 
-| Bereich | Tool | Begründung |
+| Area | Tool | Rationale |
 |---|---|---|
-| Backend Test-Runner | `pytest` + `pytest-asyncio` | Standard, gute FastAPI-Integration |
-| Backend Coverage | `pytest-cov` | Coverage-Reports, Threshold-Gates |
-| Backend Factories | `polyfactory` | Pydantic-/SQLAlchemy-nativ, weniger Boilerplate als factory_boy |
-| Backend HTTP-Mocking | `respx` | Mockt `httpx` (Basis von litellm-Calls und eigenen HTTP-Clients) sauber auf Transport-Ebene |
-| Backend Zeit-Mocking | `freezegun` oder `time-machine` | Deterministische `date.today()`-abhängige Tests |
-| Backend DB-Isolation | SQLite `tmp_path`-Fixture pro Testlauf (kein Testcontainer nötig, da Projekt selbst SQLite nutzt) | Konsistent mit Produktivsetup |
-| Backend API-Tests | `fastapi.testclient.TestClient` / `httpx.AsyncClient` | Kein echter Server nötig |
-| Frontend Unit/Component | `vitest` + `@testing-library/react` | Passt zu Vite-Setup, schnell |
-| Frontend API-Mocking | `msw` (Mock Service Worker) | Fängt `fetch`-Calls von `api/client.ts` ab, funktioniert in Tests und im Dev-Modus gleichermaßen |
-| E2E | `Playwright` (bereits Backend-Dependency, gleiche Sprache/Ökosystem nutzbar) | Steuert echten Browser gegen echten Docker-Compose-Stack |
-| Contract-Absicherung | OpenAPI-Schema-Snapshot-Test (FastAPI generiert automatisch) | Verhindert unbeabsichtigte Breaking Changes an der API, ohne jeden Endpoint einzeln pflegen zu müssen |
+| Backend test runner | `pytest` + `pytest-asyncio` | Standard, good FastAPI integration |
+| Backend coverage | `pytest-cov` | Coverage reports, threshold gates |
+| Backend factories | `polyfactory` | Pydantic/SQLAlchemy-native, less boilerplate than factory_boy |
+| Backend HTTP mocking | `respx` | Cleanly mocks `httpx` (the basis for litellm calls and our own HTTP clients) at the transport level |
+| Backend time mocking | `freezegun` or `time-machine` | Deterministic `date.today()`-dependent tests |
+| Backend DB isolation | SQLite `tmp_path` fixture per test run (no test container needed, since the project itself uses SQLite) | Consistent with the production setup |
+| Backend API tests | `fastapi.testclient.TestClient` / `httpx.AsyncClient` | No real server needed |
+| Frontend unit/component | `vitest` + `@testing-library/react` | Fits the Vite setup, fast |
+| Frontend API mocking | `msw` (Mock Service Worker) | Intercepts `fetch` calls from `api/client.ts`, works identically in tests and in dev mode |
+| E2E | `Playwright` (already a backend dependency, same language/ecosystem reusable) | Drives a real browser against a real Docker Compose stack |
+| Contract safeguarding | OpenAPI schema snapshot test (FastAPI generates automatically) | Prevents unintended breaking changes to the API without having to maintain every endpoint individually |
 
 ---
 
-## 7. Testfall-Matrix pro Funktionsbereich (Auszug — vollständig zu erarbeiten)
+## 7. Test-Case Matrix per Functional Area (excerpt — to be completed in full)
 
-| Bereich | L0 Unit | L1 Component | L2 API | L3 Integration | L4 E2E |
+| Area | L0 Unit | L1 Component | L2 API | L3 Integration | L4 E2E |
 |---|---|---|---|---|---|
-| Statusübergänge | Regelfunktionen (`abgesagt`-Auto-Set, `sub_status`-Reset) | — | PATCH-Endpoint löst Event aus | — | Kanban Drag&Drop ändert Status sichtbar |
-| Dedup/Cleanup | `norm_firma`, `dedup_key` | `_find_*_groups()` gegen Test-DB mit bekannten Dubletten-Mustern | `/cleanup/preview` + `scope`-Filterung | Voller Cleanup-Run inkl. Merge-Reassignment | Bereinigen-Button zeigt richtige Kategorie |
-| Sync (Gmail/GCal/iCloud) | Parsing-Helper (Datum, Footer-Extraktion) | Kontakt-Upsert-Logik | Targeted-Sync-Endpoint-Response-Shape | Voller Sync-Lauf mit Fixture-Daten → korrekte Events/PendingMatches | — (zu langsam/fragil für E2E) |
-| LinkedIn-Import | URL-Validierung, Firmenname-Extraktions-Fallbacks | — | `/extract-from-linkedin-url` mit gemocktem Playwright-Response | Voller Import-Flow mit HTML-Fixture → korrektes Firma-Matching | Import-Button → Formular vorausgefüllt |
-| KI-Bewertung | Prompt-Building, Response-Parsing | `assess_application()` mit Fake-Provider | `/ai-assess`-Endpoint Fehlerfälle (429, kein Provider konfiguriert) | Batch-Lauf mit mehreren Fake-Responses inkl. Rate-Limit-Simulation | "Neu bewerten" aktualisiert UI sofort |
-| Verschlüsselung | `encrypt_api_key`/`decrypt_api_key` Round-Trip, falscher Key | — | Settings-Endpoint speichert nie Klartext in Response | — | — |
-| Merge/Firmen | — | `merge_companies()` Reassignment-Korrektheit | `/merge/companies` Fehlerfälle (nicht existente ID) | — | Merge-Dialog End-to-End |
+| Status transitions | Rule functions (`abgesagt` auto-set, `sub_status` reset) | — | PATCH endpoint triggers event | — | Kanban drag & drop visibly changes status |
+| Dedup/cleanup | `norm_firma`, `dedup_key` | `_find_*_groups()` against test DB with known duplicate patterns | `/cleanup/preview` + `scope` filtering | Full cleanup run incl. merge reassignment | Cleanup button shows the right category |
+| Sync (Gmail/GCal/iCloud) | Parsing helpers (date, footer extraction) | Contact-upsert logic | Targeted-sync endpoint response shape | Full sync run with fixture data → correct events/PendingMatches | — (too slow/fragile for E2E) |
+| LinkedIn import | URL validation, company-name extraction fallbacks | — | `/extract-from-linkedin-url` with mocked Playwright response | Full import flow with HTML fixture → correct company matching | Import button → form pre-filled |
+| AI assessment | Prompt building, response parsing | `assess_application()` with fake provider | `/ai-assess` endpoint error cases (429, no provider configured) | Batch run with multiple fake responses incl. rate-limit simulation | "Reassess" updates UI immediately |
+| Encryption | `encrypt_api_key`/`decrypt_api_key` round-trip, wrong key | — | Settings endpoint never stores plaintext in the response | — | — |
+| Merge/companies | — | `merge_companies()` reassignment correctness | `/merge/companies` error cases (non-existent ID) | — | Merge dialog end-to-end |
 
-*(Diese Matrix ist als Startpunkt gedacht — wird in der Umsetzung pro Bereich vervollständigt.)*
+*(This matrix is meant as a starting point — it will be completed per area during implementation.)*
 
-### 7.1 E2E-Journey-Liste (erweitert — Entscheidung aus Abschnitt 12)
+### 7.1 E2E Journey List (expanded — decision from section 12)
 
-Bewusst über die ursprünglichen 5–10 hinaus erweitert, da auch Sync-Flüsse, Merge-Dialog und Backup/Restore end-to-end abgesichert werden sollen:
+Deliberately expanded beyond the original 5–10, since sync flows, the merge dialog, and backup/restore should also be covered end-to-end:
 
-1. Bewerbung anlegen → Status durchklicken → Absage → Reasoning sichtbar ✅
-2. Kanban Drag & Drop ändert Status inkl. Sub-Status-Reset ✅
-3. LinkedIn-Link importieren → Formular vorausgefüllt → Firma gematcht/angelegt → speichern ✅
-4. Bereinigen-Button zeigt kontextabhängige Kategorie, Vorschau → Ausführen → Liste aktualisiert sich ✅
-5. Merge-Dialog (Bewerbungen/Kontakte/Firmen): Auswahl → Zusammenführen → Reassignment sichtbar ✅
-6. Targeted-Sync für eine Bewerbung (mit gemockten Quellen): Start → Fortschritt → Events/Kontakte erscheinen in Timeline ✅
-7. Manuelle Kandidatenzuordnung (Volltextsuche → Multiselect → Zuordnen) ✅
-8. KI-Bewertung: "Neu bewerten" → Ampel + Reasoning erscheinen ohne manuellen Reload
-9. Batch-KI-Bewertung mit Live-Fortschrittsanzeige (inkl. simuliertem Rate-Limit-Fall) ✅
-10. Firmen-Sync mit Markierung: nur ausgewählte Firmen werden synchronisiert (Regressionstest für den Auto-Continue-Poller-Bug) ✅
-11. Backup konfigurieren → manueller Lauf → Restore aus Backup-Datei
-12. Excel-Import (Originalformat) → Bewerbungen korrekt gemappt → Excel-Export → Round-Trip-Vergleich
+1. Create application → click through statuses → rejection → reasoning visible ✅
+2. Kanban drag & drop changes status incl. sub-status reset ✅
+3. Import LinkedIn link → form pre-filled → company matched/created → save ✅
+4. Cleanup button shows context-dependent category, preview → run → list updates ✅
+5. Merge dialog (applications/contacts/companies): select → merge → reassignment visible ✅
+6. Targeted sync for one application (with mocked sources): start → progress → events/contacts appear in the timeline ✅
+7. Manual candidate assignment (full-text search → multiselect → assign) ✅
+8. AI assessment: "Reassess" → traffic light + reasoning appear without a manual reload
+9. Batch AI assessment with live progress display (incl. simulated rate-limit case) ✅
+10. Company sync with selection: only selected companies are synced (regression test for the auto-continue poller bug) ✅
+11. Configure backup → manual run → restore from backup file
+12. Excel import (original format) → applications correctly mapped → Excel export → round-trip comparison
 
 ---
 
-## 8. Abstufung in der CI (Kernanforderung: nicht jedes Mal alles)
+## 8. Tiering in CI (Core Requirement: Not Everything Every Time)
 
 ```mermaid
 flowchart LR
-    subgraph PR["Jeder Push / PR (Pflicht-Gate zum Mergen)"]
+    subgraph PR["Every push / PR (mandatory merge gate)"]
         direction TB
         U["L0 Unit<br/>~5–15s"] --> C["L1 Component<br/>~10–30s"]
         C --> A["L2 API/Contract<br/>~20–60s"]
         FU["Frontend Unit/Component<br/>~10–20s"]
     end
 
-    subgraph Main["Push auf main (vor Deploy)"]
+    subgraph Main["Push to main (before deploy)"]
         direction TB
-        PR2["alles aus PR-Stufe"] --> I["L3 Integration<br/>(kritische Flows)<br/>~1–3min"]
+        PR2["everything from the PR tier"] --> I["L3 Integration<br/>(critical flows)<br/>~1–3min"]
     end
 
-    subgraph Nightly["Nächtlich (Cron) / manuell"]
+    subgraph Nightly["Nightly (cron) / manual"]
         direction TB
-        FullI["L3 Integration<br/>volle Matrix<br/>~5–10min"] --> E2E["L4 E2E<br/>~5–10min"]
-        E2E --> LI["LinkedIn-Fixture-Regression<br/>(HTML-Snapshots neu abspielen)"]
+        FullI["L3 Integration<br/>full matrix<br/>~5–10min"] --> E2E["L4 E2E<br/>~5–10min"]
+        E2E --> LI["LinkedIn fixture regression<br/>(replay HTML snapshots)"]
     end
 
-    subgraph Deploy["Nach Deploy (self-hosted Runner)"]
-        S["L5 Smoke<br/>gegen echte laufende Instanz<br/>~10–20s"]
+    subgraph Deploy["After deploy (self-hosted runner)"]
+        S["L5 Smoke<br/>against the real running instance<br/>~10–20s"]
     end
 
-    PR -.->|"grün ⟹ mergebar"| Main
-    Main -.->|"grün ⟹ deploybar"| Deploy
+    PR -.->|"green ⟹ mergeable"| Main
+    Main -.->|"green ⟹ deployable"| Deploy
 ```
 
-**Umsetzung über pytest-Marker + separate CI-Jobs**, analog zum bestehenden `ci.yml`-Muster:
+**Implemented via pytest markers + separate CI jobs**, analogous to the existing `ci.yml` pattern:
 
 ```python
-@pytest.mark.unit          # L0 — läuft immer
-@pytest.mark.component     # L1 — läuft immer
-@pytest.mark.api           # L2 — läuft immer
-@pytest.mark.integration   # L3 — läuft bei main-Push + nightly
-@pytest.mark.slow          # zusätzliche Markierung für explizit langsame Fälle
+@pytest.mark.unit          # L0 — always runs
+@pytest.mark.component     # L1 — always runs
+@pytest.mark.api           # L2 — always runs
+@pytest.mark.integration   # L3 — runs on main push + nightly
+@pytest.mark.slow          # additional marker for explicitly slow cases
 ```
 
 ```bash
-# PR-Gate:
+# PR gate:
 pytest -m "unit or component or api"
 
-# Main-Push (vor Deploy):
+# Main push (before deploy):
 pytest -m "unit or component or api or integration"
 
 # Nightly:
-pytest -m "integration" --full-matrix   # erweiterte Fixture-Sets
+pytest -m "integration" --full-matrix   # extended fixture sets
 pytest tests/e2e/ --headed=false
 ```
 
-Frontend analog: `vitest run` (unit/component) immer, `playwright test` nur auf main-Push/nightly.
+Frontend analogously: `vitest run` (unit/component) always, `playwright test` only on main push/nightly.
 
-**Zusätzlicher Job:** `smoke` läuft nach erfolgreichem Deploy (Erweiterung des bestehenden `deploy`-Jobs in `ci.yml`) gegen die echte, gerade deployte Instanz — fängt Docker-/Konfigurationsprobleme ab, die in keiner der vorherigen Stufen sichtbar wären (z. B. fehlende Env-Var, kaputtes Volume-Mount).
+**Additional job:** `smoke` runs after a successful deploy (extension of the existing `deploy` job in `ci.yml`) against the real, just-deployed instance — catches Docker/configuration problems that would not be visible at any earlier tier (e.g. a missing env var, a broken volume mount).
 
 ---
 
-## 9. Vorgeschlagene Ordnerstruktur
+## 9. Proposed Folder Structure
 
 ```
 backend/
 └── tests/
-    ├── conftest.py              # geteilte Fixtures: temp-DB, Faker-Seed, Fake-AI-Provider
+    ├── conftest.py              # shared fixtures: temp DB, Faker seed, fake AI provider
     ├── factories.py              # ApplicationFactory, ContactFactory, CompanyProfileFactory, …
     ├── fixtures/
-    │   ├── linkedin_html/        # aufgezeichnete Job-/Profil-Seiten (formalisiert test_linkedin_extraction.py)
-    │   ├── gmail_responses/      # anonymisierte JSON-Fixtures
-    │   ├── icloud_caldav/        # VCALENDAR/VCARD-Beispiele
-    │   └── ai_responses/         # LLM-JSON-Antworten (gut + kaputt)
-    ├── unit/                     # L0 — 1:1 zu backend/app/-Modulen gespiegelt
+    │   ├── linkedin_html/        # recorded job/profile pages (formalizes test_linkedin_extraction.py)
+    │   ├── gmail_responses/      # anonymized JSON fixtures
+    │   ├── icloud_caldav/        # VCALENDAR/VCARD examples
+    │   └── ai_responses/         # LLM JSON responses (good + broken)
+    ├── unit/                     # L0 — mirrored 1:1 to backend/app/ modules
     │   ├── test_dedup.py
     │   ├── test_status_transitions.py
     │   └── test_crypto.py
-    ├── component/                 # L1 — mit Test-DB
+    ├── component/                 # L1 — with test DB
     │   ├── test_cleanup_company_groups.py
     │   └── test_merge_companies.py
     ├── api/                        # L2 — TestClient
     │   ├── test_applications_api.py
     │   └── test_cleanup_api.py
-    └── integration/                 # L3 — gemockte Fremdsysteme
+    └── integration/                 # L3 — mocked external systems
         ├── test_targeted_sync_flow.py
         ├── test_linkedin_import_flow.py
         └── test_ai_assessment_flow.py
 
 frontend/
-├── src/**/*.test.tsx           # Component-Tests neben der Komponente (vitest-Konvention)
+├── src/**/*.test.tsx           # component tests alongside the component (vitest convention)
 └── e2e/
     ├── application-lifecycle.spec.ts
     ├── linkedin-import.spec.ts
@@ -257,63 +257,63 @@ frontend/
 
 ---
 
-## 10. Abdeckungsziele (Vorschlag, kein Dogma)
+## 10. Coverage Targets (Proposal, Not Dogma)
 
-- **L0/L1 (Backend-Logik):** 80 %+ Line-Coverage auf `app/dedup.py`, `app/audit.py`, Statuslogik in `models.py`/`applications.py` — bewusst hoch, weil hier stille Fehler am teuersten sind
-- **L2 (API):** Jeder Endpoint mindestens 1 Positiv- + 1 Negativfall — kein prozentuales Ziel, sondern Checklisten-Vollständigkeit
-- **L3 (Integration):** Kein Coverage-Ziel — Fokus auf die 5–8 kritischsten End-to-End-Datenflüsse (Sync, LinkedIn-Import, KI-Bewertung, Cleanup/Merge)
-- **L4 (E2E):** Bewusst klein gehalten (5–10 Journeys) — teuer in Wartung, nur für Dinge, die sich nicht anders sinnvoll testen lassen (Drag & Drop, Modal-Interaktionen)
-- **Kein globales Coverage-Gate** (z. B. "80 % Gesamt") — führt erfahrungsgemäß zu sinnlosen Tests für Coverage-Zahlen statt echter Fehlerabdeckung
+- **L0/L1 (backend logic):** 80%+ line coverage on `app/dedup.py`, `app/audit.py`, status logic in `models.py`/`applications.py` — deliberately high, because silent errors here are the most costly
+- **L2 (API):** every endpoint at least 1 positive + 1 negative case — not a percentage target, but checklist completeness
+- **L3 (integration):** no coverage target — focus on the 5–8 most critical end-to-end data flows (sync, LinkedIn import, AI assessment, cleanup/merge)
+- **L4 (E2E):** deliberately kept small (5–10 journeys) — expensive to maintain, only for things that can't be meaningfully tested any other way (drag & drop, modal interactions)
+- **No global coverage gate** (e.g. "80% overall") — experience shows this leads to pointless tests written for coverage numbers rather than real error coverage
 
-### Ist-Stand (gemessen 2026-07-06, `pytest --cov=app`)
+### Current Status (measured 2026-07-06, `pytest --cov=app`)
 
-**Gesamt: 54 % Line-Coverage über `app/` (8978 Statements, 4086 ungetestet, Stand 2026-07-06).** Der Durchschnitt verschleiert eine sehr ungleiche Verteilung, die dem Rollout-Plan (Abschnitt 11) entspricht — hoch dort, wo Phase 1–4 bewusst zuerst angesetzt haben, niedrig dort, wo erst Phase 5–6 (E2E, LinkedIn-Fixture-Replay) sowie die dauerhaft niedrig priorisierten Dateien (`sync_linkedin.py`, `sync_files.py`, `export_pdf.py` u.a.) ansetzen:
+**Overall: 54% line coverage across `app/` (8978 statements, 4086 untested, as of 2026-07-06).** The average conceals a very uneven distribution that matches the rollout plan (section 11) — high where Phases 1–4 deliberately started first, low where Phases 5–6 (E2E, LinkedIn fixture replay) as well as the permanently lower-priority files (`sync_linkedin.py`, `sync_files.py`, `export_pdf.py` among others) start:
 
-| Bereich | Abdeckung | Einordnung |
+| Area | Coverage | Assessment |
 |---|---|---|
-| `dedup.py`, `models.py`, `schemas.py`, `startup_check.py`, `agent_client.py` | 98–100 % | 80 %-Ziel von oben erreicht — die "scharfen" L0-Bereiche aus Phase 2 |
-| `ai/provider.py` | **96 %** (↑ von 78 %) | Fehler-Mapping (AINotConfigured, AuthenticationError, JSON-Modus, Modell nicht gefunden) jetzt vollständig durch Gap-Closing-Tests abgedeckt |
-| `merge.py`, `cleanup.py`, `geo.py` | 84–96 % | Phase 3 |
-| `sync_common.py` | 76 % | Geteilte Sync-Helfer (Klassifikation, Firmen-/Kontakt-Index, `vobj_str()`) — indirekt über alle Sync-Router-Tests mitgetestet |
-| `applications.py`, `companies.py`, `settings.py`, `contacts.py`, `ai/tasks.py` | 40–64 % | API-Grundfälle abgedeckt, viele Edge Cases (noch) nicht |
-| `sync_google.py` | **65 %** (↑ von 62 %) | Gmail + Calendar inkl. "nicht verbunden"-Fällen und Token-Refresh-Fehlerpfad (`_refresh_if_needed`) jetzt abgedeckt, Rest (OAuth-Flow, Reset-Endpunkte) offen |
-| `sync_targeted.py` (1258 Zeilen, zweitgrößte Datei) | **57 %** (↑ von 5 %) | Logik-Helfer, API-Endpunkte, Domain-/Text-Filter für alle sechs Quellen (Gmail, Calendar, iCloud Mail/Calendar/Erinnerungen/Kontakte/Notizen) sowie Anrufe abgedeckt — Phase 4 für diese Datei damit vollständig |
-| `sync_linkedin.py` | **42 %** (↑ von 37 %) | Stellenausschreibungs-Textextraktion (`_extract_jobs_from_text`), Bewerbungsdatum-Parsing (`_parse_date`), LinkedIn-Job-ID-Matching (`_li_job_id_from_url`/`_quick_match`) sowie Firmenname-/Datum-Übernahme in `_find_or_create_application` jetzt abgedeckt. Der Playwright-Scraping-Teil (Login, Navigation, Scrolling) bleibt offen (Phase 6) |
-| `review.py`, `main.py`, `analytics.py` | 24–35 % | Größtenteils ungetestet |
-| `sync_icloud.py` (1275 Zeilen, größte Backend-Datei) | **50 %** (↑ von 23 %) | Mail (IMAP), Calendar + Reminders (CalDAV, inkl. Änderungserkennung/verwaiste Termine), Contacts (CardDAV, inkl. Regressionstests für zwei live verifizierte Massenimport-Bugs) und Notes (aktiver Sync läuft über den lokalen Agenten, nicht über pyicloud) abgedeckt. Der unbenutzte alte pyicloud-2FA-Login-Pfad (`_sync_notes_with_api`/`_get_pyicloud_api`/`/notes/_legacy`) bleibt bewusst ungetestet (Frontend ruft ihn nicht mehr auf) |
-| `sync_files.py`, `import_excel.py`, `export_pdf.py` | 16–17 % | So gut wie ungetestet |
-| `linkedin_job_description.py` | **>90 % nach Lines, ~95 % nach Branches** | Playwright-Orchestrierung vollständig gemockt getestet (7 async-Tests: Kein-Config, Happy-Path, Seite-nicht-erreichbar, Login-Erfolg/Fehlschlag, leere Beschreibung, Company-Retry). JS-Selektoren-Strukturprüfung (3 Tests). Phase-4-Lücke damit geschlossen. |
-| `database.py` | 8 % | Größtenteils historische Inline-Migrationen — geringere Priorität, da pro Migration nur einmalig beim Schema-Update relevant |
+| `dedup.py`, `models.py`, `schemas.py`, `startup_check.py`, `agent_client.py` | 98–100% | The 80% target from above reached — the "sharp" L0 areas from Phase 2 |
+| `ai/provider.py` | **96%** (↑ from 78%) | Error mapping (AINotConfigured, AuthenticationError, JSON mode, model not found) now fully covered by gap-closing tests |
+| `merge.py`, `cleanup.py`, `geo.py` | 84–96% | Phase 3 |
+| `sync_common.py` | 76% | Shared sync helpers (classification, company/contact index, `vobj_str()`) — indirectly covered through all sync-router tests |
+| `applications.py`, `companies.py`, `settings.py`, `contacts.py`, `ai/tasks.py` | 40–64% | API base cases covered, many edge cases (still) not |
+| `sync_google.py` | **65%** (↑ from 62%) | Gmail + Calendar incl. "not connected" cases and the token-refresh error path (`_refresh_if_needed`) now covered, rest (OAuth flow, reset endpoints) open |
+| `sync_targeted.py` (1258 lines, second-largest file) | **57%** (↑ from 5%) | Logic helpers, API endpoints, domain/text filters for all six sources (Gmail, Calendar, iCloud Mail/Calendar/Reminders/Contacts/Notes) as well as calls covered — Phase 4 for this file thus complete |
+| `sync_linkedin.py` | **42%** (↑ from 37%) | Job-posting text extraction (`_extract_jobs_from_text`), application-date parsing (`_parse_date`), LinkedIn job-ID matching (`_li_job_id_from_url`/`_quick_match`) as well as company-name/date carryover in `_find_or_create_application` now covered. The Playwright scraping part (login, navigation, scrolling) remains open (Phase 6) |
+| `review.py`, `main.py`, `analytics.py` | 24–35% | Largely untested |
+| `sync_icloud.py` (1275 lines, largest backend file) | **50%** (↑ from 23%) | Mail (IMAP), Calendar + Reminders (CalDAV, incl. change detection/orphaned events), Contacts (CardDAV, incl. regression tests for two live-verified bulk-import bugs) and Notes (active sync runs via the local agent, not via pyicloud) covered. The unused old pyicloud 2FA login path (`_sync_notes_with_api`/`_get_pyicloud_api`/`/notes/_legacy`) remains deliberately untested (the frontend no longer calls it) |
+| `sync_files.py`, `import_excel.py`, `export_pdf.py` | 16–17% | Essentially untested |
+| `linkedin_job_description.py` | **>90% by lines, ~95% by branches** | Playwright orchestration fully tested with mocks (7 async tests: no config, happy path, page unreachable, login success/failure, empty description, company retry). JS-selector structure check (3 tests). Phase 4 gap thus closed. |
+| `database.py` | 8% | Mostly historical inline migrations — lower priority, since each migration is only relevant once, at the time of the schema update |
 
-**Wichtig für die Priorisierung von Phase 4:** Die am dünnsten getesteten Dateien (`sync_linkedin.py`) sind exakt die Sync-Router, in denen die Session-Historie die meisten echten Produktivbugs gefunden hat (siehe Abschnitt 3, "Besonders scharf zu testen"). Die Coverage-Lücke ist also nicht zufällig, sondern markiert genau das aktuell größte Risiko.
+**Important for prioritizing Phase 4:** the thinnest-tested files (`sync_linkedin.py`) are exactly the sync routers where the session history has found the most real production bugs (see section 3, "To be tested with particular rigor"). The coverage gap is therefore not coincidental — it marks precisely the currently biggest risk.
 
 ---
 
-## 11. Rollout-Plan (Phasen, da Greenfield)
+## 11. Rollout Plan (Phases, Since Greenfield)
 
-| Phase | Inhalt | Ergebnis |
+| Phase | Content | Result |
 |---|---|---|
-| **1** ✅ | pytest/vitest-Setup, `conftest.py`, erste Factories, CI-Job-Gerüst (auch wenn fast leer) | Grundgerüst steht, PR-Gate existiert |
-| **2** ✅ | L0 Unit für die "scharfen" Bereiche aus Abschnitt 3 (Dedup, Statuslogik, Krypto) | Die bisher stillen Fehlerquellen sind abgesichert — `test_dedup.py`, `test_naechster_schritt.py`, `test_crypto.py` |
-| **3** ✅ | L1/L2 für Applications/Cleanup/Merge (aktivste Bereiche dieser Session) | Regressionsschutz für gerade gebaute Features — `test_merge_api.py`, `test_cleanup_app_groups.py`, `test_cleanup_contact_groups.py`, `test_cleanup_api.py`, plus organisch entstandene Bugfix-Tests (Companies-Dedup, Event-Groups, iCloud-Kontakte-Sync, Applications-API). Dabei zwei kritische, live reproduzierte Datenverlust-Bugs in `merge.py`/`cleanup.py` gefunden und behoben (Events wurden bei Bewerbungs-Merge/-Bereinigung durch die `delete-orphan`-Kaskade mitgelöscht statt umgehängt) |
-| **4** ✅ | Mocking-Infrastruktur für Gmail/iCloud/LinkedIn/AI + L3-Integrationstests | **KI-Provider, Google (Calendar/Gmail/Token-Refresh), LinkedIn-Statuslogik + MergeAlias-Fallback, `sync_targeted.py` (Einzelbewerbungs-Sync) und iCloud (Mail/Calendar/Reminders/Contacts/Notes) sind vollständig gemockt und getestet** — jeweils über die passende Netzwerkgrenze (`googleapiclient.discovery.build`, `imaplib.IMAP4_SSL`, `caldav.DAVClient`, `fetch_all_vcards()`, `litellm.acompletion`, lokaler Agent über `httpx.AsyncClient`). Details zu den einzelnen Schritten, gefundenen Live-Bugs (u.a. LinkedIn-No-op-Reviews, fehlende `external_id` bei gezielt erzeugten Kalender-Events, `vobj_str()`-Repr-Bug bei iCloud-Kalender-/Erinnerungstiteln, zwei iCloud-Kontakte-Massenimport-Bugs) und Coverage-Sprüngen je Datei: siehe Commit-Historie und Changelog (v3.33.x, Juli 2026). Einzig offen aus Phase 4: LinkedIn-Playwright-Fixture-Replay (siehe Abschnitt 3/Nightly-Tier, Phase 6) |
-| **5** ✅ | E2E-Suite (12 Journeys) + Smoke-Job nach Deploy | **Alle 12 E2E-Journeys umgesetzt** (Lifecycle, Kanban, LinkedIn-Import, Cleanup, Merge, Targeted-Sync, Manuelle Zuordnung, KI-Bewertung, Batch-KI, Firmen-Sync, Backup/Restore, Excel-Roundtrip). L5-Smoke-Job im Deploy aktiv (Backend Health, Frontend, Login + API). |
-| **6** ✅ | Nightly-Cron-Job, Fixture-Pflege-Routine (LinkedIn-HTML altert) | Nightly-Cron (`0 6 * * *`) im CI aktiviert (E2E + Integrationstests). LinkedIn-Playwright-Fixure-Replay via 10 Unit-Tests (7 async + 3 JS-Struktur) für `linkedin_job_description.py` abgeschlossen — Phase-4-Lücke geschlossen. |
+| **1** ✅ | pytest/vitest setup, `conftest.py`, first factories, CI job scaffold (even if nearly empty) | Basic scaffold in place, PR gate exists |
+| **2** ✅ | L0 unit tests for the "sharp" areas from section 3 (dedup, status logic, crypto) | The previously silent sources of error are now safeguarded — `test_dedup.py`, `test_naechster_schritt.py`, `test_crypto.py` |
+| **3** ✅ | L1/L2 for applications/cleanup/merge (most active areas of this session) | Regression protection for just-built features — `test_merge_api.py`, `test_cleanup_app_groups.py`, `test_cleanup_contact_groups.py`, `test_cleanup_api.py`, plus organically arising bugfix tests (company dedup, event groups, iCloud contact sync, applications API). Along the way, two critical, live-reproduced data-loss bugs were found and fixed in `merge.py`/`cleanup.py` (events were deleted along with the application during merge/cleanup by the `delete-orphan` cascade instead of being reassigned) |
+| **4** ✅ | Mocking infrastructure for Gmail/iCloud/LinkedIn/AI + L3 integration tests | **AI provider, Google (Calendar/Gmail/token refresh), LinkedIn status logic + MergeAlias fallback, `sync_targeted.py` (single-application sync), and iCloud (Mail/Calendar/Reminders/Contacts/Notes) are fully mocked and tested** — each at the appropriate network boundary (`googleapiclient.discovery.build`, `imaplib.IMAP4_SSL`, `caldav.DAVClient`, `fetch_all_vcards()`, `litellm.acompletion`, local agent via `httpx.AsyncClient`). Details on the individual steps, live bugs found (among others LinkedIn no-op reviews, missing `external_id` on targeted-sync-created calendar events, the `vobj_str()` repr bug in iCloud calendar/reminder titles, two iCloud contact bulk-import bugs) and per-file coverage jumps: see commit history and changelog (v3.33.x, July 2026). The only thing still open from Phase 4: LinkedIn Playwright fixture replay (see section 3/nightly tier, Phase 6) |
+| **5** ✅ | E2E suite (12 journeys) + smoke job after deploy | **All 12 E2E journeys implemented** (lifecycle, Kanban, LinkedIn import, cleanup, merge, targeted sync, manual assignment, AI assessment, batch AI, company sync, backup/restore, Excel round-trip). L5 smoke job active in deploy (backend health, frontend, login + API). |
+| **6** ✅ | Nightly cron job, fixture-maintenance routine (LinkedIn HTML ages) | Nightly cron (`0 6 * * *`) enabled in CI (E2E + integration tests). LinkedIn Playwright fixture replay via 10 unit tests (7 async + 3 JS structure) for `linkedin_job_description.py` complete — Phase 4 gap closed. |
 
-Reihenfolge ist ein Vorschlag — Diskussionspunkt, ob z. B. Mocking-Infrastruktur früher kommen soll, wenn Sync-Bugs aktuell am schmerzhaftesten sind.
+The ordering is a proposal — a discussion point on whether, e.g., mocking infrastructure should come earlier if sync bugs are currently the most painful.
 
 ---
 
-## 12. Entscheidungen (abgestimmt am 2026-07-01)
+## 12. Decisions (agreed on 2026-07-01)
 
-| # | Frage | Entscheidung |
+| # | Question | Decision |
 |---|---|---|
-| 1 | Reihenfolge der Phasen | **Scharfe Unit-Tests zuerst** (Dedup, Statuslogik, Krypto) — schnell wirksam, kaum Infra-Vorlauf. Mocking-Infrastruktur für Sync folgt in Phase 4 wie ursprünglich vorgeschlagen. |
-| 2 | Coverage-Ziele | **Checklisten-Ansatz** (siehe Abschnitt 10) — kein globales Prozent-Gate, Fokus auf echte Fehlerabdeckung statt Zahlenkosmetik. |
-| 3 | LinkedIn-Fixture-Pflege | **Manueller Trigger** — HTML-Snapshots werden bei Verdacht auf Scraper-Bruch neu aufgenommen, kein automatisierter Soll-Ist-Abgleich. |
-| 4 | E2E-Umfang | **Erweitert auf 12 Journeys** (statt 5–10) — Sync-Flüsse, Merge-Dialog, Backup/Restore und Excel-Roundtrip sind mit abzudecken. Siehe [Abschnitt 7.1](#71-e2e-journey-liste-erweitert--entscheidung-aus-abschnitt-12). |
-| 5 | Testdaten-Realismus | **Nur Faker-generiert** — kein anonymisierter Produktiv-Snapshot, kein Risiko dass echte Daten in Test-Fixtures landen. |
-| 6 | CI-Laufzeitbudget | **PR-Gate < 1 Minute** (L0+L1+L2) — wie ursprünglich vorgeschlagen. |
-| 7 | Umsetzungsumfang | **Volle Struktur** von L0 bis L5 — kein abgespecktes Grundgerüst, zahlt sich für den Wartungsaufwand mittelfristig aus. |
+| 1 | Order of phases | **Sharp unit tests first** (dedup, status logic, crypto) — quickly effective, barely any infra lead time. Mocking infrastructure for sync follows in Phase 4 as originally proposed. |
+| 2 | Coverage targets | **Checklist approach** (see section 10) — no global percentage gate, focus on real error coverage instead of number cosmetics. |
+| 3 | LinkedIn fixture maintenance | **Manual trigger** — HTML snapshots are re-recorded when a scraper break is suspected, no automated diff check. |
+| 4 | E2E scope | **Expanded to 12 journeys** (instead of 5–10) — sync flows, merge dialog, backup/restore, and Excel round-trip must also be covered. See [section 7.1](#71-e2e-journey-list-expanded--decision-from-section-12). |
+| 5 | Test-data realism | **Faker-generated only** — no anonymized production snapshot, no risk of real data ending up in test fixtures. |
+| 6 | CI runtime budget | **PR gate < 1 minute** (L0+L1+L2) — as originally proposed. |
+| 7 | Implementation scope | **Full structure** from L0 to L5 — no stripped-down scaffold, pays off for maintenance effort in the medium term. |
 
-Diese Entscheidungen sind ab jetzt bindend für die Umsetzung (siehe Rollout-Plan, Abschnitt 11).
+These decisions are binding for implementation from now on (see rollout plan, section 11).

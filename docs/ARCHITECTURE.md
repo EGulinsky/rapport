@@ -1,25 +1,25 @@
-# rapport – Technische Architektur
+# rapport – Technical Architecture
 
-> Dieses Dokument beschreibt die **aktuelle Implementierung** (Stand v3.35.1, 2026-07-08). Das ursprüngliche Planungsdokument mit Vision und Roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v3.35.1, 2026-07-08). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
-> Diagramme sind als [Mermaid](https://mermaid.js.org/) eingebettet — GitHub rendert sie automatisch beim Anzeigen der Datei. Kein externes Tool zum Betrachten nötig; zum Bearbeiten reicht ein Texteditor.
+> Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
-## Inhaltsverzeichnis
+## Table of Contents
 
-1. [System- und SW-Architektur](#1-system--und-sw-architektur)
-2. [API-Schnittstellen (intern)](#2-api-schnittstellen-intern)
-3. [Externe Schnittstellen (Sync-Quellen)](#3-externe-schnittstellen-sync-quellen)
-4. [Statusübergänge](#4-statusübergänge)
+1. [System and Software Architecture](#1-system-and-software-architecture)
+2. [API Interfaces (Internal)](#2-api-interfaces-internal)
+3. [External Interfaces (Sync Sources)](#3-external-interfaces-sync-sources)
+4. [Status Transitions](#4-status-transitions)
 5. [Workflows](#5-workflows)
-6. [Datenmodell](#6-datenmodell)
-7. [Authentifizierung & Mandantentrennung](#7-authentifizierung--mandantentrennung)
+6. [Data Model](#6-data-model)
+7. [Authentication & Multi-Tenancy](#7-authentication--multi-tenancy)
 8. [CI/CD](#8-cicd)
 
 ---
 
-## 1. System- und SW-Architektur
+## 1. System and Software Architecture
 
-### Überblick
+### Overview
 
 ```mermaid
 flowchart TB
@@ -27,24 +27,24 @@ flowchart TB
         FE["frontend<br/>nginx:alpine · Port 3000<br/>React 18 + TypeScript + Vite"]
         BE["backend<br/>Python 3.11 / uvicorn · Port 8000<br/>FastAPI"]
         DB[("SQLite (WAL)<br/>jobtracker.db<br/>Volume: jobtracker-data")]
-        SEQ["seq<br/>datalust/seq · Port 8088/5341<br/>strukturiertes Logging"]
+        SEQ["seq<br/>datalust/seq · Port 8088/5341<br/>structured logging"]
         FE <-->|"REST / JSON"| BE
         BE --> DB
         BE -.->|"CLEF logs"| SEQ
     end
 
-    subgraph Agent["Rapport Agent (außerhalb Docker, .app/launchd)"]
-        AgentSvc["agent/main.py<br/>Port 9996 · Bearer-Token-Auth<br/>Dateien / Notizen / Anrufe / Backup"]
+    subgraph Agent["Rapport Agent (outside Docker, .app/launchd)"]
+        AgentSvc["agent/main.py<br/>Port 9996 · Bearer-token auth<br/>Files / Notes / Calls / Backup"]
     end
 
-    subgraph External["Externe Dienste (optional, je Sync-Konfiguration)"]
+    subgraph External["External services (optional, per sync configuration)"]
         Gmail["Gmail API<br/>OAuth 2.0"]
         GCal["Google Calendar API<br/>OAuth 2.0"]
         ICloudMail["iCloud Mail<br/>IMAP :993"]
         ICloudCal["iCloud CalDAV/CardDAV"]
         LinkedIn["LinkedIn<br/>Playwright (headless Chromium)"]
-        AIProvider["AI-Provider<br/>Groq / Anthropic / OpenAI / Ollama"]
-        Enrichment["LinkedIn / Wikidata / Clearbit<br/>Firmendaten-Anreicherung"]
+        AIProvider["AI provider<br/>Groq / Anthropic / OpenAI / Ollama"]
+        Enrichment["LinkedIn / Wikidata / Clearbit<br/>company data enrichment"]
     end
 
     BE --> Gmail
@@ -54,306 +54,306 @@ flowchart TB
     BE --> LinkedIn
     BE --> AIProvider
     BE --> Enrichment
-    BE -.->|"HTTP + Bearer-Token"| AgentSvc
+    BE -.->|"HTTP + bearer token"| AgentSvc
 ```
 
-### Technologie-Stack
+### Technology Stack
 
-| Schicht | Technologie | Version |
+| Layer | Technology | Version |
 |---|---|---|
-| Frontend-Framework | React | 18 |
-| Frontend-Sprache | TypeScript | 5 |
-| Frontend-Styles | Tailwind CSS | 3 |
-| Frontend-Build | Vite | 5 |
-| Frontend-Serving | nginx (Alpine) | stable |
-| Backend-Framework | FastAPI | 0.110+ |
-| Backend-Sprache | Python | 3.11 |
-| Backend-Server | uvicorn | 0.29+ |
+| Frontend framework | React | 18 |
+| Frontend language | TypeScript | 5 |
+| Frontend styling | Tailwind CSS | 3 |
+| Frontend build | Vite | 5 |
+| Frontend serving | nginx (Alpine) | stable |
+| Backend framework | FastAPI | 0.110+ |
+| Backend language | Python | 3.11 |
+| Backend server | uvicorn | 0.29+ |
 | ORM | SQLAlchemy | 2.0 |
-| Datenbank | SQLite (WAL-Modus) | 3 |
-| Kryptographie | cryptography (Fernet) | 42+ |
-| AI-Klassifikation | litellm (Provider-unabhängig) | latest |
-| Excel-Import/Export | openpyxl | 3.1+ |
-| PDF-Export | fpdf2 | 2.8+ |
-| LinkedIn-Scraper / Job-Import | Playwright | latest |
+| Database | SQLite (WAL mode) | 3 |
+| Cryptography | cryptography (Fernet) | 42+ |
+| AI classification | litellm (provider-agnostic) | latest |
+| Excel import/export | openpyxl | 3.1+ |
+| PDF export | fpdf2 | 2.8+ |
+| LinkedIn scraper / job import | Playwright | latest |
 | Logging | Loguru → Seq (CLEF) | – |
-| Containerisierung | Docker Compose | v2 |
+| Containerization | Docker Compose | v2 |
 
-### Container-Konfiguration
+### Container Configuration
 
-**`docker-compose.yml`** definiert drei Services:
+**`docker-compose.yml`** defines three services:
 
 | Service | Image / Build | Port | Volume | Static IP |
 |---|---|---|---|---|
 | `backend` | `./backend` Dockerfile | `8000:8000` | `jobtracker-data:/app/data` | `192.168.117.10` |
-| `frontend` | `./frontend` Dockerfile (Build-Arg `BUILD_NUMBER`) | `3000:80` | – | `192.168.117.11` |
+| `frontend` | `./frontend` Dockerfile (build arg `BUILD_NUMBER`) | `3000:80` | – | `192.168.117.11` |
 | `seq` | `datalust/seq:latest` | `8088:80`, `5341:5341` | `seq-data:/data` | `192.168.117.13` |
 
-Beide App-Container erhalten `TZ=Europe/Berlin`. Backend zusätzlich `SEQ_URL=http://seq:5341` und `LOG_LEVEL=INFO`.
+Both app containers get `TZ=Europe/Berlin`. Backend additionally gets `SEQ_URL=http://seq:5341` and `LOG_LEVEL=INFO`.
 
-Das SQLite-File liegt im benannten Volume `jobtracker-data` unter `/app/data/jobtracker.db`. Das Schema wird beim Start via SQLAlchemy `create_all()` plus additive Inline-Migrationen in `database.py` angelegt/erweitert — kein Alembic.
+The SQLite file lives in the named volume `jobtracker-data` at `/app/data/jobtracker.db`. The schema is created/extended at startup via SQLAlchemy `create_all()` plus additive inline migrations in `database.py` — no Alembic.
 
-### Projektstruktur (Backend)
+### Project Structure (Backend)
 
 ```
 backend/app/
-├── main.py                  FastAPI-App, CORS, Lifespan, Router-Registrierung
-├── database.py               SQLAlchemy-Engine + SessionLocal + get_db + Inline-Migrationen
-├── models.py                  ORM-Modelle, Status-Enums, Excel-Mapping-Konstanten
-├── schemas.py                 Pydantic Request/Response-Schemas
-├── audit.py                   add_audit() – Audit-Log-Helper (Level: off/normal/verbose), referenziert Application/Contact/CompanyProfile/Event
-├── dedup.py                   norm_firma()/norm_rolle()/dedup_key() – Normalisierung für Dublettenerkennung
-├── logger.py                  Loguru-Setup, JSON-Log + Seq-Sink (CLEF)
-├── linkedin_job_description.py  Job-Beschreibung + Firmenname von LinkedIn-URL laden (Playwright)
+├── main.py                  FastAPI app, CORS, lifespan, router registration
+├── database.py               SQLAlchemy engine + SessionLocal + get_db + inline migrations
+├── models.py                  ORM models, status enums, Excel mapping constants
+├── schemas.py                 Pydantic request/response schemas
+├── audit.py                   add_audit() – audit log helper (level: off/normal/verbose), references Application/Contact/CompanyProfile/Event
+├── dedup.py                   norm_firma()/norm_rolle()/dedup_key() – normalization for duplicate detection
+├── logger.py                  Loguru setup, JSON log + Seq sink (CLEF)
+├── linkedin_job_description.py  Load job description + company name from a LinkedIn URL (Playwright)
 ├── ai/
-│   ├── provider.py          litellm-Wrapper, Fernet-Kryptographie, AINotConfigured/AIRateLimited/AIBadRequest
-│   └── tasks.py              Klassifikations-/Bewertungs-/Extraktions-Prompts (assess_application, extract_application_from_text, match_and_classify, …)
+│   ├── provider.py          litellm wrapper, Fernet cryptography, AINotConfigured/AIRateLimited/AIBadRequest
+│   └── tasks.py              Classification/assessment/extraction prompts (assess_application, extract_application_from_text, match_and_classify, …)
 ├── auth/
-│   ├── security.py          Passwort-Hashing (bcrypt), JWT encode/decode, 6-stellige Bestätigungscodes
-│   ├── dependencies.py       get_current_user() – Dependency, liest Bearer-Token, aktiviert Mandanten-Filter
-│   └── email.py               SMTP-Versand der Bestätigungscodes (Registrierung/Passwort-Reset)
+│   ├── security.py          Password hashing (bcrypt), JWT encode/decode, 6-digit confirmation codes
+│   ├── dependencies.py       get_current_user() – dependency, reads bearer token, activates tenant filter
+│   └── email.py               SMTP delivery of confirmation codes (registration/password reset)
 └── routers/
-    ├── auth.py                Registrierung, E-Mail-Bestätigung, Login, Passwort-Reset, Konto (siehe §7)
-    ├── applications.py       CRUD + Events + Contacts + KI-Bewertung + LinkedIn-Import
-    ├── contacts.py            Globale Kontaktverwaltung
-    ├── companies.py           Firmenprofile: CRUD, Logo, Kontakt-Verknüpfung
-    ├── merge.py                Bewerbungen/Firmen/Kontakte zusammenführen
-    ├── cleanup.py              Dublettenerkennung + -bereinigung (scope-fähig)
+    ├── auth.py                Registration, email confirmation, login, password reset, account (see §7)
+    ├── applications.py       CRUD + events + contacts + AI assessment + LinkedIn import
+    ├── contacts.py            Global contact management
+    ├── companies.py           Company profiles: CRUD, logo, contact linking
+    ├── merge.py                Merge applications/companies/contacts
+    ├── cleanup.py              Duplicate detection + cleanup (scope-capable)
     ├── import_excel.py        POST /api/import/excel
     ├── export_excel.py        GET /api/export/excel
     ├── export_pdf.py           GET /api/export/pdf
-    ├── attachments.py          Datei-Anhänge an Timeline-Events
-    ├── settings.py             AI-Settings, Logo-API-Key, Sync-Toggles, Ollama-Modelle
-    ├── geo.py                   Ortsautocomplete (Google Places, Fallback Nominatim)
+    ├── attachments.py          File attachments on timeline events
+    ├── settings.py             AI settings, logo API key, sync toggles, Ollama models
+    ├── geo.py                   Location autocomplete (Google Places, fallback Nominatim)
     ├── calendar.py             GET /api/calendar/events
-    ├── analytics.py            Pipeline-Funnel- und Absage-Statistiken
-    ├── audit_log.py            Audit-Trail lesen/löschen
-    ├── backup.py                Lokale DB-Backups konfigurieren/ausführen
-    ├── sync_common.py          Shared Helpers: Dedup, AI-Klassifikation, Kontakt-Upsert
+    ├── analytics.py            Pipeline funnel and rejection statistics
+    ├── audit_log.py            Read/delete audit trail
+    ├── backup.py                Configure/run local DB backups
+    ├── sync_common.py          Shared helpers: dedup, AI classification, contact upsert
     ├── sync_google.py          Google OAuth + Gmail + GCal
-    ├── sync_icloud.py          iCloud Mail/Kalender/Notizen/Erinnerungen/Kontakte/Anrufe
-    ├── sync_targeted.py        Pro-App-Sync über alle Quellen + manuelle Kandidatenzuordnung
-    ├── sync_files.py            Lokale Dokumente via Rapport Agent (Port 9996)
-    ├── sync_linkedin.py         LinkedIn-Playwright-Scraper (eigene Bewerbungen) mit 2FA-Inline
-    ├── sync_company.py          Firmendaten-Anreicherung (DuckDuckGo → Wikipedia → Clearbit-Logo)
-    ├── review.py                Manuelle Review-Queue (PendingMatches)
-    └── startup_check.py        Health-/Bridge-Konnektivitätscheck
+    ├── sync_icloud.py          iCloud mail/calendar/notes/reminders/contacts/calls
+    ├── sync_targeted.py        Per-application sync across all sources + manual candidate assignment
+    ├── sync_files.py            Local documents via Rapport Agent (port 9996)
+    ├── sync_linkedin.py         LinkedIn Playwright scraper (own applications) with inline 2FA
+    ├── sync_company.py          Company data enrichment (DuckDuckGo → Wikipedia → Clearbit logo)
+    ├── review.py                Manual review queue (PendingMatches)
+    └── startup_check.py        Health/bridge connectivity check
 ```
 
-### Projektstruktur (Frontend)
+### Project Structure (Frontend)
 
 ```
 frontend/src/
-├── App.tsx                 Root-Komponente: Tabs (Bewerbungen/Kontakte/Firmen/Kalender/Auswertungen), Toolbar, Modal-Orchestrierung
-├── AppRoutes.tsx             Routing: /login, /register, /verify-email, /forgot-password, /reset-password, geschützte Root-Route
-├── types.ts                 TypeScript-Typen, Status-Labels/Farben, Konstanten
-├── api/client.ts             Fetch-Wrapper für alle Backend-Calls, gruppiert nach Namespace; hängt Bearer-Token an, behandelt 401 zentral
-├── context/AuthContext.tsx    Login-Status, Token in localStorage, login()/register()/logout()/…
+├── App.tsx                 Root component: tabs (Applications/Contacts/Companies/Calendar/Analytics), toolbar, modal orchestration
+├── AppRoutes.tsx             Routing: /login, /register, /verify-email, /forgot-password, /reset-password, protected root route
+├── types.ts                 TypeScript types, status labels/colors, constants
+├── api/client.ts             Fetch wrapper for all backend calls, grouped by namespace; attaches bearer token, handles 401 centrally
+├── context/AuthContext.tsx    Login state, token in localStorage, login()/register()/logout()/…
 ├── pages/auth/                LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, AuthLayout
 └── components/
-    ├── RequireAuth.tsx          Route-Guard: leitet zu /login um, wenn nicht angemeldet
-    ├── ApplicationTable.tsx    Sortierbare Tabellenansicht
-    ├── KanbanBoard.tsx          Kanban mit Drag & Drop
-    ├── ApplicationModal.tsx     Detail/Edit-Modal: Lifecycle-Bar, Timeline, Anhänge, Kontakte, KI-Bewertung
-    ├── CalendarView.tsx          Kalender-Ansicht (Tag/Woche/Monat)
-    ├── StatsBar.tsx               KPI-Kacheln
-    ├── StatusBadge.tsx            Farbige Status-Badges
-    ├── StatusPopover.tsx          Inline-Statuswechsel
-    ├── ContactsView.tsx            Kontaktübersicht
-    ├── ContactModal.tsx            Kontakt-Detail/Edit
-    ├── CompaniesView.tsx            Firmenübersicht (Markierung → gescopter Sync/Merge/Bereinigen)
-    ├── CompanyModal.tsx              Firmenprofil-Detail/Edit
-    ├── CompanyLogo.tsx                Firmenlogo mit Fallback
-    ├── CompanyFilterPicker.tsx        Firmenfilter-Autocomplete
+    ├── RequireAuth.tsx          Route guard: redirects to /login when not signed in
+    ├── ApplicationTable.tsx    Sortable table view
+    ├── KanbanBoard.tsx          Kanban with drag & drop
+    ├── ApplicationModal.tsx     Detail/edit modal: lifecycle bar, timeline, attachments, contacts, AI assessment
+    ├── CalendarView.tsx          Calendar view (day/week/month)
+    ├── StatsBar.tsx               KPI tiles
+    ├── StatusBadge.tsx            Colored status badges
+    ├── StatusPopover.tsx          Inline status change
+    ├── ContactsView.tsx            Contacts overview
+    ├── ContactModal.tsx            Contact detail/edit
+    ├── CompaniesView.tsx            Companies overview (selection → scoped sync/merge/cleanup)
+    ├── CompanyModal.tsx              Company profile detail/edit
+    ├── CompanyLogo.tsx                Company logo with fallback
+    ├── CompanyFilterPicker.tsx        Company filter autocomplete
     ├── MergeDialog.tsx                 AppMergeDialog / CompanyMergeDialog / ContactMergeDialog
-    ├── CleanupModal.tsx                 Dubletten-Bereinigung, kontextsensitiv (scope-Prop)
-    ├── ReviewModal.tsx                   Review-Inbox für KI-/Sync-Vorschläge
-    ├── SettingsModal.tsx                  Einstellungen (Tabs: Konto/Sync/KI/Google/iCloud/Anrufe/Dokumente/LinkedIn/Backup/Logos/Karten/Agent)
-    ├── SyncButton.tsx                      Globaler Sync-Trigger + Fortschrittsanzeige
+    ├── CleanupModal.tsx                 Duplicate cleanup, context-sensitive (scope prop)
+    ├── ReviewModal.tsx                   Review inbox for AI/sync suggestions
+    ├── SettingsModal.tsx                  Settings (tabs: Account/Sync/AI/Google/iCloud/Calls/Documents/LinkedIn/Backup/Logos/Maps/Agent)
+    ├── SyncButton.tsx                      Global sync trigger + progress indicator
     ├── ImportButton.tsx / ExportButton.tsx / PdfExportButton.tsx / ImportExportMenu.tsx
-    ├── AuditLogModal.tsx                   Audit-Trail-Ansicht
-    ├── AnalyticsView.tsx                    Funnel-/Conversion-Dashboard
-    ├── ChangelogModal.tsx                   Versionsverlauf (CURRENT_VERSION hier gepflegt)
-    └── StartupWarningBanner.tsx             Warnbanner bei Bridge-/Verbindungsproblemen
+    ├── AuditLogModal.tsx                   Audit trail view
+    ├── AnalyticsView.tsx                    Funnel/conversion dashboard
+    ├── ChangelogModal.tsx                   Version history (CURRENT_VERSION maintained here)
+    └── StartupWarningBanner.tsx             Warning banner for bridge/connection problems
 ```
 
 ---
 
-## 2. API-Schnittstellen (intern)
+## 2. API Interfaces (Internal)
 
 Swagger UI: `http://localhost:8000/docs`
 
-Alle Endpunkte außer `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/resend-code`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/startup-check` und `/health` verlangen `Authorization: Bearer <jwt>`. Details siehe [§7](#7-authentifizierung--mandantentrennung).
+All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/resend-code`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/startup-check`, and `/health` require `Authorization: Bearer <jwt>`. Details in [§7](#7-authentication--multi-tenancy).
 
-### Authentifizierung
+### Authentication
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/auth/register` | Konto anlegen, Bestätigungscode per E-Mail (409 falls bereits registriert) |
-| `POST` | `/api/auth/verify-email` | Code prüfen, Konto aktivieren, JWT zurückgeben |
-| `POST` | `/api/auth/resend-code` | Neuen Bestätigungscode senden (unverifiziertes Konto) |
-| `POST` | `/api/auth/login` | Login, JWT zurückgeben (403 falls E-Mail nicht bestätigt) |
-| `POST` | `/api/auth/forgot-password` | Reset-Code per E-Mail (immer 200, keine User-Enumeration) |
-| `POST` | `/api/auth/reset-password` | Reset-Code prüfen, neues Passwort setzen |
-| `GET` | `/api/auth/me` | Aktuelles Konto (erfordert Login) |
-| `POST` | `/api/auth/change-password` | Passwort ändern (erfordert Login) |
+| `POST` | `/api/auth/register` | Create account, confirmation code by email (409 if already registered) |
+| `POST` | `/api/auth/verify-email` | Verify code, activate account, return JWT |
+| `POST` | `/api/auth/resend-code` | Send a new confirmation code (unverified account) |
+| `POST` | `/api/auth/login` | Login, return JWT (403 if email not confirmed) |
+| `POST` | `/api/auth/forgot-password` | Reset code by email (always 200, no user enumeration) |
+| `POST` | `/api/auth/reset-password` | Verify reset code, set new password |
+| `GET` | `/api/auth/me` | Current account (requires login) |
+| `POST` | `/api/auth/change-password` | Change password (requires login) |
 
-### Bewerbungen
+### Applications
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/applications/` | Liste (Filter: `main_status`, `search`, `show_rejected`) |
-| `GET` | `/api/applications/stats` | KPI-Zahlen |
-| `GET` | `/api/applications/ai-assess-all` | KI-Bewertung aller aktiven Bewerbungen (SSE-Stream mit Fortschritt) |
-| `POST` | `/api/applications/extract-from-linkedin-url` | Stellenanzeige von LinkedIn-URL laden, Felder per KI extrahieren + Firma matchen/anlegen |
-| `GET` | `/api/applications/{id}` | Detail mit Events + Contacts |
-| `POST` | `/api/applications/` | Neu anlegen (erstellt automatisch Event `bewerbung`) |
-| `PATCH` | `/api/applications/{id}` | Felder aktualisieren (erstellt Event bei Statuswechsel) |
-| `DELETE` | `/api/applications/{id}` | Löschen (kaskadiert Events + contact_application) |
-| `POST` | `/api/applications/{id}/ai-assess` | Einzelbewertung (Erfolgschance grün/gelb/rot + Begründung + nächster Schritt) |
+| `GET` | `/api/applications/` | List (filters: `main_status`, `search`, `show_rejected`) |
+| `GET` | `/api/applications/stats` | KPI numbers |
+| `GET` | `/api/applications/ai-assess-all` | AI assessment of all active applications (SSE stream with progress) |
+| `POST` | `/api/applications/extract-from-linkedin-url` | Load job posting from LinkedIn URL, extract fields via AI, match/create company |
+| `GET` | `/api/applications/{id}` | Detail with events + contacts |
+| `POST` | `/api/applications/` | Create new (automatically creates a `bewerbung` event) |
+| `PATCH` | `/api/applications/{id}` | Update fields (creates an event on status change) |
+| `DELETE` | `/api/applications/{id}` | Delete (cascades events + contact_application) |
+| `POST` | `/api/applications/{id}/ai-assess` | Single assessment (success chance green/yellow/red + reasoning + next step) |
 
-### Events (Timeline) & Kontakte (pro Bewerbung)
+### Events (Timeline) & Contacts (per Application)
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `GET`/`POST` | `/api/applications/{id}/events` | Timeline lesen / Event manuell hinzufügen |
-| `PATCH`/`DELETE` | `/api/applications/{id}/events/{eid}` | Event bearbeiten / löschen |
-| `GET`/`POST` | `/api/applications/{id}/contacts` | Kontakte der Bewerbung / anlegen+verknüpfen |
-| `PATCH`/`PUT`/`DELETE` | `/api/applications/{id}/contacts/{cid}` | Kontakt bearbeiten / Verknüpfung entfernen |
+| `GET`/`POST` | `/api/applications/{id}/events` | Read timeline / manually add an event |
+| `PATCH`/`DELETE` | `/api/applications/{id}/events/{eid}` | Edit / delete event |
+| `GET`/`POST` | `/api/applications/{id}/contacts` | Contacts of the application / create+link |
+| `PATCH`/`PUT`/`DELETE` | `/api/applications/{id}/contacts/{cid}` | Edit contact / remove link |
 
-### Kontakte (global) & Anhänge
+### Contacts (Global) & Attachments
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `GET`/`POST` | `/api/contacts/` | Alle Kontakte / anlegen |
-| `PATCH` | `/api/contacts/{id}` | Bearbeiten |
-| `DELETE` | `/api/contacts/bulk` | Mehrere löschen |
-| `POST` | `/api/attachments/{event_id}/upload` | Datei an Event anhängen |
-| `GET` | `/api/attachments/{id}/download` | Anhang herunterladen |
-| `DELETE` | `/api/attachments/{id}` | Anhang löschen |
+| `GET`/`POST` | `/api/contacts/` | All contacts / create |
+| `PATCH` | `/api/contacts/{id}` | Edit |
+| `DELETE` | `/api/contacts/bulk` | Delete multiple |
+| `POST` | `/api/attachments/{event_id}/upload` | Attach a file to an event |
+| `GET` | `/api/attachments/{id}/download` | Download attachment |
+| `DELETE` | `/api/attachments/{id}` | Delete attachment |
 
-### Firmen
+### Companies
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `GET`/`POST` | `/api/companies` | Liste / anlegen |
-| `GET`/`PATCH` | `/api/companies/{id}` | Detail / bearbeiten |
-| `POST`/`DELETE` | `/api/companies/{id}/logo` | Logo hochladen / löschen |
-| `POST`/`DELETE` | `/api/companies/{id}/contacts/{cid}` | Kontakt zuordnen / entfernen |
-| `DELETE` | `/api/companies/bulk` | Mehrere löschen |
-| `POST` | `/api/companies/link-contacts` | Verwaiste Kontakte anhand Firmenname automatisch verknüpfen (`?company_ids=` optional) |
-| `GET`/`POST` | `/api/companies/link-contacts/status` \| `/cancel` | Fortschritt / Abbrechen |
-| `GET`/`POST` | `/api/sync/company/status` \| `/run` | Firmendaten-Anreicherung: Status / Start (`?force=&company_ids=` optional) |
-| `POST` | `/api/sync/company/cancel` \| `/reset-lock` \| `/reset-failed` | Steuerung |
+| `GET`/`POST` | `/api/companies` | List / create |
+| `GET`/`PATCH` | `/api/companies/{id}` | Detail / edit |
+| `POST`/`DELETE` | `/api/companies/{id}/logo` | Upload / delete logo |
+| `POST`/`DELETE` | `/api/companies/{id}/contacts/{cid}` | Link / remove contact |
+| `DELETE` | `/api/companies/bulk` | Delete multiple |
+| `POST` | `/api/companies/link-contacts` | Automatically link orphaned contacts by company name (`?company_ids=` optional) |
+| `GET`/`POST` | `/api/companies/link-contacts/status` \| `/cancel` | Progress / cancel |
+| `GET`/`POST` | `/api/sync/company/status` \| `/run` | Company data enrichment: status / start (`?force=&company_ids=` optional) |
+| `POST` | `/api/sync/company/cancel` \| `/reset-lock` \| `/reset-failed` | Control |
 
-### Zusammenführen & Bereinigen
+### Merge & Cleanup
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/merge/applications` \| `/companies` \| `/contacts` | Zwei oder mehr Duplikate zu einem zusammenführen |
-| `GET` | `/api/cleanup/preview` | Gefundene Dubletten, optional `?scope=applications\|contacts\|companies\|events` |
-| `POST` | `/api/cleanup/run` | Bereinigung ausführen (gleicher `scope`-Parameter) |
-| `GET` | `/api/cleanup/progress` | Fortschritt |
+| `POST` | `/api/merge/applications` \| `/companies` \| `/contacts` | Merge two or more duplicates into one |
+| `GET` | `/api/cleanup/preview` | Duplicates found, optional `?scope=applications\|contacts\|companies\|events` |
+| `POST` | `/api/cleanup/run` | Run cleanup (same `scope` parameter) |
+| `GET` | `/api/cleanup/progress` | Progress |
 
 ### Import / Export
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/import/excel` | Excel-Upload (Sheet "Tracking") |
-| `GET` | `/api/export/excel` | Excel-Download (`?show_rejected=true` optional) |
-| `GET` | `/api/export/pdf` | PDF-Export der Eigenbemühungen |
+| `POST` | `/api/import/excel` | Excel upload ("Tracking" sheet) |
+| `GET` | `/api/export/excel` | Excel download (`?show_rejected=true` optional) |
+| `GET` | `/api/export/pdf` | PDF export of job-search activity |
 
-### Sync – Google / iCloud / Targeted / LinkedIn / Dateien
+### Sync – Google / iCloud / Targeted / LinkedIn / Files
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `POST`/`GET`/`DELETE` | `/api/sync/google/*` | OAuth-Credentials, Status, Gmail-/GCal-Sync |
-| `POST`/`GET`/`DELETE` | `/api/sync/icloud/*` | Mail/Kalender/Notizen/Erinnerungen/Kontakte/Anrufe |
-| `POST` | `/api/sync/targeted/{app_id}` | Alle Quellen für eine Bewerbung synchronisieren |
-| `GET` | `/api/sync/targeted/{app_id}/candidates` | Kandidaten für manuelle Zuordnung (Volltextsuche über alle Quellen) |
-| `POST` | `/api/sync/targeted/{app_id}/assign` | Kandidat manuell zuordnen |
-| `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn-Login, Session, Scraper-Start, 2FA |
-| `GET`/`POST` | `/api/sync/linkedin/people/search` \| `/people/import` | Manueller Kontakt-Import: LinkedIn-Personensuche → Auswahl importieren |
-| `GET`/`POST` | `/api/sync/icloud/contacts/search` \| `/contacts/import` | Manueller Kontakt-Import: volltextsuche im iCloud-Adressbuch → Auswahl importieren |
-| `GET`/`POST` | `/api/sync/files/*` | Lokale Dokumente (Rapport Agent) |
+| `POST`/`GET`/`DELETE` | `/api/sync/google/*` | OAuth credentials, status, Gmail/GCal sync |
+| `POST`/`GET`/`DELETE` | `/api/sync/icloud/*` | Mail/calendar/notes/reminders/contacts/calls |
+| `POST` | `/api/sync/targeted/{app_id}` | Sync all sources for one application |
+| `GET` | `/api/sync/targeted/{app_id}/candidates` | Candidates for manual assignment (full-text search across all sources) |
+| `POST` | `/api/sync/targeted/{app_id}/assign` | Manually assign a candidate |
+| `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn login, session, scraper start, 2FA |
+| `GET`/`POST` | `/api/sync/linkedin/people/search` \| `/people/import` | Manual contact import: LinkedIn people search → import selection |
+| `GET`/`POST` | `/api/sync/icloud/contacts/search` \| `/contacts/import` | Manual contact import: full-text search in iCloud address book → import selection |
+| `GET`/`POST` | `/api/sync/files/*` | Local documents (Rapport Agent) |
 
-### Kalender, Review, Analytics, Audit, Backup, Einstellungen
+### Calendar, Review, Analytics, Audit, Backup, Settings
 
-| Methode | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/calendar/events` | Alle Kalender-Events (`?start=&end=`) |
-| `GET`/`POST`/`DELETE` | `/api/review/*` | Review-Queue für KI-/Sync-Vorschläge |
-| `GET` | `/api/analytics/summary` | Pipeline-Funnel + Absage-Statistiken |
-| `GET`/`DELETE` | `/api/audit/` | Audit-Trail lesen / löschen |
-| `GET`/`POST` | `/api/backup/*` | Backup-Konfiguration, manueller Lauf, Restore |
-| `GET`/`POST`/`DELETE` | `/api/settings/*` | KI-Provider, Logo-Key, Sync-Toggles, Dokumente-Ordner, Agent-URL/Token, Karten-API-Key |
-| `GET` | `/api/startup-check` | Health-/Bridge-Konnektivitätscheck |
-| `GET` | `/api/geo/search` | Ortsautocomplete (Google Places, Fallback Nominatim) |
-| `GET` | `/health` | Health-Check |
+| `GET` | `/api/calendar/events` | All calendar events (`?start=&end=`) |
+| `GET`/`POST`/`DELETE` | `/api/review/*` | Review queue for AI/sync suggestions |
+| `GET` | `/api/analytics/summary` | Pipeline funnel + rejection statistics |
+| `GET`/`DELETE` | `/api/audit/` | Read / delete audit trail |
+| `GET`/`POST` | `/api/backup/*` | Backup configuration, manual run, restore |
+| `GET`/`POST`/`DELETE` | `/api/settings/*` | AI provider, logo key, sync toggles, documents folder, agent URL/token, maps API key |
+| `GET` | `/api/startup-check` | Health/bridge connectivity check |
+| `GET` | `/api/geo/search` | Location autocomplete (Google Places, fallback Nominatim) |
+| `GET` | `/health` | Health check |
 
 ---
 
-## 3. Externe Schnittstellen (Sync-Quellen)
+## 3. External Interfaces (Sync Sources)
 
 ### 3.1 Gmail API (Google OAuth 2.0)
 
-- **Protokoll:** REST, `google-auth` + `google-api-python-client`
-- **OAuth-Flow:** Authorization Code Flow; Redirect URI `http://localhost:8000/api/sync/google/callback`
-- **Tokens:** Fernet-verschlüsselt in `google_sync.access_token_enc` / `refresh_token_enc`
-- **Dedup:** `synced_items` mit `source="gmail"` und Gmail-Message-ID
+- **Protocol:** REST, `google-auth` + `google-api-python-client`
+- **OAuth flow:** authorization code flow; redirect URI `http://localhost:8000/api/sync/google/callback`
+- **Tokens:** Fernet-encrypted in `google_sync.access_token_enc` / `refresh_token_enc`
+- **Dedup:** `synced_items` with `source="gmail"` and Gmail message ID
 
 ### 3.2 Google Calendar API
 
-- **Sync-Strategie:** Events aus allen Kalendern; Firma/Rolle als Suchbegriff
-- **Änderungserkennung:** Verschobene/umbenannte Events werden bei erneutem Sync aktualisiert; nicht mehr vorhandene Events (nicht mehr im `uid_set` des Sync-Fensters) werden lokal gelöscht — externer Kalender hat immer Vorrang
-- **Kontakt-Extraktion:** Teilnehmer via `upsert_contact_from_sender`
+- **Sync strategy:** events from all calendars; company/role as search term
+- **Change detection:** moved/renamed events are updated on re-sync; events that no longer exist (no longer in the sync window's `uid_set`) are deleted locally — the external calendar always takes precedence
+- **Contact extraction:** participants via `upsert_contact_from_sender`
 
-### 3.3 iCloud Mail (IMAP) / Kalender (CalDAV) / Kontakte (CardDAV)
+### 3.3 iCloud Mail (IMAP) / Calendar (CalDAV) / Contacts (CardDAV)
 
-- **Mail:** `imap.mail.me.com:993`, App-Specific Password (Fernet-verschlüsselt)
-- **Kalender:** `caldav.icloud.com`, `vobject` für VCALENDAR-Parsing, gleiche Änderungserkennung wie GCal
-- **Kontakte/Notizen/Erinnerungen/Anrufe:** ergänzend synchronisierbar, je über eigene Toggles in `sync_settings`
-- **Manueller Kontakt-Import:** Volltextsuche im gesamten CardDAV-Adressbuch aus der Kontakte-Übersicht heraus (unabhängig vom automatischen Sync), bereits importierte Treffer werden markiert statt ausgeblendet
+- **Mail:** `imap.mail.me.com:993`, app-specific password (Fernet-encrypted)
+- **Calendar:** `caldav.icloud.com`, `vobject` for VCALENDAR parsing, same change detection as GCal
+- **Contacts/Notes/Reminders/Calls:** can be synced additionally, each via its own toggle in `sync_settings`
+- **Manual contact import:** full-text search across the entire CardDAV address book from the contacts overview (independent of automatic sync); already-imported matches are marked rather than hidden
 
 ### 3.4 LinkedIn (Playwright)
 
-Zwei getrennte Anwendungsfälle, beide über Headless Chromium:
+Two separate use cases, both via headless Chromium:
 
-1. **Eigene Bewerbungsaktivität synchronisieren** (`sync_linkedin.py`) — scraped die "Meine Jobs"-Kategorien des angemeldeten Accounts: SAVED, DRAFT + CLICKED_APPLY (beide → `prospecting`; LinkedIns Sammel-Tab "In Progress" ist nur eine Client-Ansicht dieser beiden echten Unterkategorien, je mit eigener, sonst nicht URL-adressierbarer Ansicht), APPLIED, INTERVIEWS, ARCHIVED
-2. **Einzelne Stellenanzeige importieren** (`linkedin_job_description.py`) — lädt eine konkrete `/jobs/view/`-URL, extrahiert Beschreibungstext (Tree-Walker-Heuristik, robust gegen LinkedIns gehashte CSS-Klassennamen) sowie den anzeigenschaltenden Firmennamen (Link zur Firmenseite im Anzeigenkopf + `document.title`-Pattern als Fallback — ebenfalls klassenname-unabhängig)
+1. **Sync own application activity** (`sync_linkedin.py`) — scrapes the "My Jobs" categories of the logged-in account: SAVED, DRAFT + CLICKED_APPLY (both → `prospecting`; LinkedIn's combined "In Progress" tab is just a client-side view of these two real sub-categories, each with its own otherwise-unaddressable URL), APPLIED, INTERVIEWS, ARCHIVED
+2. **Import a single job posting** (`linkedin_job_description.py`) — loads a specific `/jobs/view/` URL, extracts the description text (tree-walker heuristic, robust against LinkedIn's hashed CSS class names) as well as the posting company's name (link to the company page in the posting header + `document.title` pattern as a fallback — also class-name-independent)
 
-Beide nutzen dieselben Login-/2FA-/Consent-Helper. Session-Cookies werden in `linkedin_sync.session_cookies` gecacht.
+Both use the same login/2FA/consent helpers. Session cookies are cached in `linkedin_sync.session_cookies`.
 
-3. **Personen manuell importieren** (`people/search`, `people/import`) — Namenssuche über LinkedINs People-Search (text-basierte Card-Extraktion statt CSS-Selektoren, robust gegen gehashte Klassennamen), Auswahl als Kontakt anlegen
+3. **Manually import people** (`people/search`, `people/import`) — name search via LinkedIn's people search (text-based card extraction instead of CSS selectors, robust against hashed class names), selection is created as a contact
 
-### 3.5 Lokale Dokumente, Notizen & Anrufe (Rapport Agent)
+### 3.5 Local Documents, Notes & Calls (Rapport Agent)
 
-- **`agent/`** (Port 9996, läuft auf dem Mac als `.app`/`launchd`-Dienst, nicht in Docker) — ein einzelner Prozess ersetzt die früheren drei separaten Bridge-Skripte (`files_bridge.py`, `notes_bridge.py`, `calls_bridge.py`), mit Bearer-Token-Auth statt offener Ports
-- **Dateien-Modul** — liefert Dateiinhalte aus konfiguriertem Ordner, native Ordner-/Datei-Picker, Backup-Lesen/Schreiben
-- **Notizen-Modul** — iCloud-Notizen via AppleScript (JXA)
-- **Anrufe-Modul** — iPhone-Anrufliste (CallHistoryDB) + WhatsApp via AppleScript/SQLite
-- **Architektur:** OS-neutrale Provider-Interfaces (`agent/providers/base.py`) mit heute nur einer macOS-Implementierung — bewusst so angelegt, um später einen Windows-Adapter hinter derselben Schnittstelle nachzuziehen, ohne Backend/Frontend anzufassen
+- **`agent/`** (port 9996, runs on the Mac as a `.app`/`launchd` service, not in Docker) — a single process replaces the previous three separate bridge scripts (`files_bridge.py`, `notes_bridge.py`, `calls_bridge.py`), with bearer-token auth instead of open ports
+- **Files module** — serves file contents from a configured folder, native folder/file pickers, backup read/write
+- **Notes module** — iCloud Notes via AppleScript (JXA)
+- **Calls module** — iPhone call history (CallHistoryDB) + WhatsApp via AppleScript/SQLite
+- **Architecture:** OS-neutral provider interfaces (`agent/providers/base.py`) with only one macOS implementation today — deliberately designed this way to add a Windows adapter behind the same interface later without touching backend/frontend
 
-### 3.6 AI-Klassifikation & -Bewertung (litellm)
+### 3.6 AI Classification & Assessment (litellm)
 
-- **Provider:** Konfigurierbar — Groq (Standard, kostenlos), Anthropic, OpenAI, Ollama (lokal)
-- **Anwendungsfälle** (`ai/tasks.py`):
-  - `match_and_classify()` — Rohdaten (Mail/Kalender/Notiz) einer Bewerbung zuordnen, Event-Typ bestimmen
-  - `assess_application()` / `assess_rejected_application()` — Erfolgschance (grün/gelb/rot) inkl. Begründung und nächstem Schritt; bei Absagen stattdessen Absagegrund-Analyse
-  - `extract_application_from_text()` — Firma/Rolle/Quelle/Headhunter-Flag aus Stellenanzeigen-Text extrahieren (LinkedIn-Import)
-- **Fallback:** Bei `AINotConfigured` / `AIRateLimited` / `AIBadRequest` wird sauber degradiert statt zu crashen
+- **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Ollama (local)
+- **Use cases** (`ai/tasks.py`):
+  - `match_and_classify()` — assign raw data (mail/calendar/note) to an application, determine event type
+  - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead
+  - `extract_application_from_text()` — extract company/role/source/headhunter flag from job posting text (LinkedIn import)
+- **Fallback:** on `AINotConfigured` / `AIRateLimited` / `AIBadRequest`, degrades gracefully instead of crashing
 
-### 3.7 Firmendaten-Anreicherung (`sync_company.py`)
+### 3.7 Company Data Enrichment (`sync_company.py`)
 
-- **Quellen-Kaskade:** LinkedIn-Firmenseite (primär, Playwright — Branche/Standort/Mitarbeiterzahl/Logo) → Wikidata-Fallback (Search API + batch SPARQL, bei 0 LinkedIn-Treffern oder manuell als "keiner davon" aufgelöst) → Clearbit (Logo-Fallback über Domain, falls weder LinkedIn noch Wikidata ein Logo liefern)
-- **Disambiguierung:** Bei mehreren LinkedIn-Treffern landet die Firma als `pending` mit Kandidatenliste in der Review-Queue; manuelle Wahl inkl. "keiner davon" (→ Wikidata-Fallback für genau dieses eine Profil)
-- **Trigger:** Manuell über "Sync"/"Re-Sync" in der Firmenansicht (optional auf Markierung beschränkt), automatisch einmalig bei Neuanlage über LinkedIn-Import
+- **Source cascade:** LinkedIn company page (primary, Playwright — industry/location/employee count/logo) → Wikidata fallback (search API + batch SPARQL, on 0 LinkedIn hits or manually resolved as "none of these") → Clearbit (logo fallback via domain, if neither LinkedIn nor Wikidata provide a logo)
+- **Disambiguation:** with multiple LinkedIn hits, the company ends up as `pending` with a candidate list in the review queue; manual choice including "none of these" (→ Wikidata fallback for that one profile)
+- **Trigger:** manually via "Sync"/"Re-sync" in the companies view (optionally limited to a selection), automatically once on creation via LinkedIn import
 
 ---
 
-## 4. Statusübergänge
+## 4. Status Transitions
 
-### 4.1 Main-Status Pipeline
+### 4.1 Main Status Pipeline
 
 ```mermaid
 stateDiagram-v2
@@ -375,71 +375,71 @@ stateDiagram-v2
     rejected --> [*]
 
     note right of rejected
-        Von jedem Status aus erreichbar
+        Reachable from any status
         (abgesagt = true)
     end note
 ```
 
-| Status | Bedeutung |
+| Status | Meaning |
 |---|---|
-| `prospecting` | Anbahnung — Stelle identifiziert, noch nicht beworben |
-| `applied` | Beworben |
-| `hr` | Gespräch HR/HH |
-| `fb` | Gespräch Fachbereich |
-| `waiting` | Warten auf Entscheidung |
-| `negotiating` | Angebotsverhandlung |
-| `signed` | Unterschrift |
-| `rejected` | Absage |
+| `prospecting` | Prospecting — position identified, not yet applied |
+| `applied` | Applied |
+| `hr` | HR/recruiter interview |
+| `fb` | Hiring-manager/team interview |
+| `waiting` | Waiting for decision |
+| `negotiating` | Offer negotiation |
+| `signed` | Contract signed |
+| `rejected` | Rejected |
 
-**Wichtig:** Die Kanban-Lifecycle-Bar zeigt die 7 Hauptschritte + separate Absage-Node (`MAIN_PIPELINE` im Frontend enthält `rejected` bewusst nicht). Backend-seitig ist `rejected` in `PIPELINE_ORDER` als achte, letzte Stufe geführt (relevant für Sync-Statusvergleiche).
+**Important:** the Kanban lifecycle bar shows the 7 main steps + a separate rejected node (the frontend's `MAIN_PIPELINE` deliberately does not include `rejected`). On the backend, `rejected` is tracked in `PIPELINE_ORDER` as an eighth, final stage (relevant for sync status comparisons).
 
-### 4.2 Sub-Status (nur bei `hr` und `fb`)
+### 4.2 Sub-Status (only for `hr` and `fb`)
 
-`1_scheduled → 1_done → 2_scheduled → 2_done → … → 5_done` — Gesprächsrunden-Tracking. Beim Wechsel zu einem Status ohne Sub-Status wird `sub_status` automatisch auf `null` gesetzt.
+`1_scheduled → 1_done → 2_scheduled → 2_done → … → 5_done` — interview-round tracking. When switching to a status without a sub-status, `sub_status` is automatically set to `null`.
 
-### 4.3 Statuswechsel-Regeln (Backend `applications.py`)
+### 4.3 Status-Change Rules (Backend `applications.py`)
 
 ```
 PATCH /api/applications/{id}
   main_status → rejected    ⟹  abgesagt = True  (auto)
-  main_status → ≠rejected   ⟹  abgesagt = False (auto, wenn nicht explizit gesetzt)
+  main_status → ≠rejected   ⟹  abgesagt = False (auto, if not explicitly set)
   main_status → ≠{hr, fb}   ⟹  sub_status = None (auto)
-  Statuswechsel             ⟹  Event typ="status" wird automatisch angelegt
+  status change             ⟹  Event with typ="status" is created automatically
 ```
 
 ---
 
 ## 5. Workflows
 
-### 5.1 Targeted Sync (Pro-Bewerbung)
+### 5.1 Targeted Sync (Per Application)
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant FE as Frontend
     participant BE as Backend (Background Task)
-    participant Src as Externe Quellen
+    participant Src as External sources
 
-    U->>FE: "Sync" im App-Modal
+    U->>FE: "Sync" in the app modal
     FE->>BE: POST /api/sync/targeted/{app_id}
-    BE-->>FE: 202 (Task gestartet)
-    loop pro Quelle
-        BE->>Src: Query (Firma/Rolle-Filter)
-        Src-->>BE: Treffer
-        BE->>BE: is_synced()? → ggf. überspringen
+    BE-->>FE: 202 (task started)
+    loop per source
+        BE->>Src: query (company/role filter)
+        Src-->>BE: results
+        BE->>BE: is_synced()? → skip if so
         BE->>BE: AI classify_batch_for_app()
         alt Confidence ≥ 80
-            BE->>BE: Event direkt speichern + Kontakt-Upsert
+            BE->>BE: save event directly + contact upsert
         else Confidence < 80
-            BE->>BE: PendingMatch anlegen (Review-Queue)
+            BE->>BE: create PendingMatch (review queue)
         end
     end
-    FE->>BE: GET /progress (Polling)
+    FE->>BE: GET /progress (polling)
     BE-->>FE: done
-    FE->>U: Timeline aktualisiert
+    FE->>U: timeline updated
 ```
 
-### 5.2 LinkedIn-Import einer Stellenanzeige
+### 5.2 LinkedIn Import of a Job Posting
 
 ```mermaid
 sequenceDiagram
@@ -447,81 +447,81 @@ sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
     participant LI as LinkedIn (Playwright)
-    participant AI as AI-Provider
+    participant AI as AI provider
 
-    U->>FE: "Neu" → "Aus LinkedIn importieren" → Job-Link einfügen
+    U->>FE: "New" → "Import from LinkedIn" → paste job link
     FE->>BE: POST /extract-from-linkedin-url {url}
-    BE->>LI: Login/Session laden, Seite öffnen
-    LI-->>BE: Beschreibungstext + Firmenname (Seitenkopf-Link/Titel-Pattern)
-    BE->>AI: extract_application_from_text(Beschreibung)
-    AI-->>BE: firma, rolle, quelle, is_headhunter, zielfirma_bei_hh, kommentar
-    BE->>BE: Firma matchen (norm_firma) oder neu anlegen
-    alt Firma neu angelegt
-        BE-->>BE: Background: Firmendaten-Anreicherung (sync_company)
+    BE->>LI: load login/session, open page
+    LI-->>BE: description text + company name (header link/title pattern)
+    BE->>AI: extract_application_from_text(description)
+    AI-->>BE: company, role, source, is_headhunter, target company (if headhunter), comment
+    BE->>BE: match company (norm_firma) or create new
+    alt Company newly created
+        BE-->>BE: background: company data enrichment (sync_company)
     end
-    BE-->>FE: Vorausgefülltes Formular
-    FE->>U: Formular prüfen → "Anlegen"
+    BE-->>FE: pre-filled form
+    FE->>U: review form → "Create"
 ```
 
-### 5.3 KI-Bewertung (Erfolgschance)
+### 5.3 AI Assessment (Success Chance)
 
 ```mermaid
 flowchart LR
-    A[User: 'Neu bewerten'] --> B{Bewerbung abgesagt?}
-    B -- nein --> C["assess_application()<br/>Timeline vollständig + heutiges Datum als Kontext"]
-    B -- ja --> D["assess_rejected_application()<br/>Absagegrund-Analyse + Optimierungsvorschläge"]
-    C --> E["ai_color (grün/gelb/rot)<br/>ai_reasoning, ai_next_step"]
+    A[User: 'Reassess'] --> B{Application rejected?}
+    B -- no --> C["assess_application()<br/>full timeline + today's date as context"]
+    B -- yes --> D["assess_rejected_application()<br/>rejection-reason analysis + improvement suggestions"]
+    C --> E["ai_color (green/yellow/red)<br/>ai_reasoning, ai_next_step"]
     D --> E
-    E --> F[In DB gespeichert + sofort in Kanban/Tabelle sichtbar]
+    E --> F[Saved to DB + immediately visible in Kanban/table]
 ```
 
-Batch-Lauf ("KI bewerten" im Header) verarbeitet alle aktiven Bewerbungen nacheinander per Server-Sent-Events-Stream mit Live-Fortschrittsanzeige, überspringt abgesagte Bewerbungen, throttelt bei Groq/Gemini (Rate-Limits) automatisch.
+Batch run ("Assess with AI" in the header) processes all active applications one after another via a Server-Sent-Events stream with live progress, skips rejected applications, throttles automatically for Groq/Gemini (rate limits).
 
-### 5.4 Dubletten-Bereinigung (kontextsensitiv)
+### 5.4 Duplicate Cleanup (Context-Sensitive)
 
 ```mermaid
 flowchart TB
-    Btn["'Bereinigen'-Button<br/>(zeigt Kategorie der aktuellen Ansicht)"] --> Scope{aktuelle Ansicht}
-    Scope -- Bewerbungen --> App["scope=applications<br/>dedup_key(firma, rolle)"]
-    Scope -- Kontakte --> Con["scope=contacts<br/>Name + company_profile_id/norm_firma"]
-    Scope -- Firmen --> Comp["scope=companies<br/>Website-Domain (name_norm ist DB-unique)"]
-    Scope -- Kalender --> Ev["scope=events<br/>App-lokale + bewerbungsübergreifende Dubletten"]
-    App --> Merge1["Auto-Merge: Events+Kontakte übertragen, Duplikat löschen"]
-    Con --> Review["→ Review-Queue (PendingMatch)"]
-    Comp --> Merge2["merge_companies() — Apps/Kontakte umgehängt, Duplikat gelöscht"]
-    Ev --> Auto["App-lokal: Auto-Delete · Cross-App: → Review-Queue"]
+    Btn["'Cleanup' button<br/>(shows category of the current view)"] --> Scope{current view}
+    Scope -- Applications --> App["scope=applications<br/>dedup_key(firma, rolle)"]
+    Scope -- Contacts --> Con["scope=contacts<br/>name + company_profile_id/norm_firma"]
+    Scope -- Companies --> Comp["scope=companies<br/>website domain (name_norm is DB-unique)"]
+    Scope -- Calendar --> Ev["scope=events<br/>app-local + cross-application duplicates"]
+    App --> Merge1["auto-merge: transfer events+contacts, delete duplicate"]
+    Con --> Review["→ review queue (PendingMatch)"]
+    Comp --> Merge2["merge_companies() — apps/contacts reassigned, duplicate deleted"]
+    Ev --> Auto["app-local: auto-delete · cross-app: → review queue"]
 ```
 
-### 5.5 Weitere Workflows (kurz)
+### 5.5 Other Workflows (Brief)
 
-- **Manuelle Bewerbung anlegen** — `POST /api/applications/` → Event `typ="bewerbung"` automatisch mitangelegt
-- **Excel-Import/-Export** — `openpyxl`, Sheet "Tracking", 17 Spalten, Status-Mapping über `EXCEL_IMPORT_MAP`/`EXCEL_EXPORT_MAP`
-- **Kontakt-Upsert aus Sync** — `upsert_contact_from_sender()`: E-Mail-Adresse als Dedup-Schlüssel, Footer-Extraktion für Telefon/Rolle, `INSERT OR IGNORE` statt ORM-`append()` (vermeidet Autoflush-Races)
-- **`naechster_schritt`-Berechnung** — nicht in DB gespeichert, pro `GET /api/applications/`-Request aus Timeline-Events + Status abgeleitet
-- **Review-Queue** — Items mit KI-Konfidenz < 80 landen in `pending_matches`; User bestätigt (→ Event/Statuswechsel) oder verwirft
+- **Manually create an application** — `POST /api/applications/` → an event with `typ="bewerbung"` is created automatically
+- **Excel import/export** — `openpyxl`, "Tracking" sheet, 17 columns, status mapping via `EXCEL_IMPORT_MAP`/`EXCEL_EXPORT_MAP`
+- **Contact upsert from sync** — `upsert_contact_from_sender()`: email address as dedup key, footer extraction for phone/role, `INSERT OR IGNORE` instead of ORM `append()` (avoids autoflush races)
+- **`naechster_schritt` (next step) computation** — not stored in the DB, derived from timeline events + status on every `GET /api/applications/` request
+- **Review queue** — items with AI confidence < 80 land in `pending_matches`; the user confirms (→ event/status change) or discards
 
 ---
 
-## 6. Datenmodell
+## 6. Data Model
 
-### Entity-Relationship-Übersicht
+### Entity-Relationship Overview
 
 ```mermaid
 erDiagram
-    USER ||--o{ APPLICATION : besitzt
-    USER ||--o{ EMAIL_VERIFICATION_CODE : hat
-    APPLICATION ||--o{ EVENT : hat
+    USER ||--o{ APPLICATION : owns
+    USER ||--o{ EMAIL_VERIFICATION_CODE : has
+    APPLICATION ||--o{ EVENT : has
     APPLICATION }o--o{ CONTACT : "contact_application"
-    APPLICATION ||--o{ PENDING_MATCH : "schlägt vor für"
-    APPLICATION }o--|| COMPANY_PROFILE : "firma (company_profile_id)"
-    APPLICATION }o--o| COMPANY_PROFILE : "Zielfirma bei HH (target_company_profile_id)"
-    EVENT ||--o{ ATTACHMENT : hat
-    CONTACT }o--o| COMPANY_PROFILE : "direkt zugeordnet"
-    COMPANY_PROFILE ||--o{ COMPANY_PROFILE : "Mutter-/Tochterfirma"
-    APPLICATION ||--o{ AUDIT_LOG : protokolliert
-    CONTACT ||--o{ AUDIT_LOG : protokolliert
-    COMPANY_PROFILE ||--o{ AUDIT_LOG : protokolliert
-    EVENT ||--o{ AUDIT_LOG : protokolliert
+    APPLICATION ||--o{ PENDING_MATCH : "suggests for"
+    APPLICATION }o--|| COMPANY_PROFILE : "company (company_profile_id)"
+    APPLICATION }o--o| COMPANY_PROFILE : "target company for headhunter apps (target_company_profile_id)"
+    EVENT ||--o{ ATTACHMENT : has
+    CONTACT }o--o| COMPANY_PROFILE : "directly assigned"
+    COMPANY_PROFILE ||--o{ COMPANY_PROFILE : "parent/subsidiary"
+    APPLICATION ||--o{ AUDIT_LOG : logs
+    CONTACT ||--o{ AUDIT_LOG : logs
+    COMPANY_PROFILE ||--o{ AUDIT_LOG : logs
+    EVENT ||--o{ AUDIT_LOG : logs
 
     USER {
         int id PK
@@ -593,150 +593,150 @@ erDiagram
     }
 ```
 
-**Mandantentrennung:** Bis auf `users` und `email_verification_codes` selbst tragen praktisch alle Tabellen (~20 insgesamt — Kern-Entitäten wie oben plus alle Konfigurationstabellen) eine `user_id`-Spalte; siehe [§7](#7-authentifizierung--mandantentrennung) für den zentralen Filter-Mechanismus. Der Übersichtlichkeit halber ist `user_id` nicht in jedem ER-Diagramm-Block einzeln aufgeführt.
+**Multi-tenancy:** apart from `users` and `email_verification_codes` themselves, practically every table (~20 total — core entities as above plus all configuration tables) carries a `user_id` column; see [§7](#7-authentication--multi-tenancy) for the central filter mechanism. For clarity, `user_id` is not listed individually in every ER diagram block.
 
-**Konfigurationstabellen** (genau eine Zeile pro **Konto**, keine ER-Relationen untereinander): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
+**Configuration tables** (exactly one row per **account**, no ER relations among each other): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
 
-**Weitere Tabellen ohne direkte FK-Relation:** `synced_items` (Dedup-Ledger über alle Sync-Quellen, pro Konto), `merge_aliases` (behält alte Kennungen zusammengeführter Bewerbungen/Kontakte, damit künftige Syncs weiterhin auf den kanonischen Datensatz auflösen).
+**Other tables without a direct FK relation:** `synced_items` (dedup ledger across all sync sources, per account), `merge_aliases` (retains the old identifiers of merged applications/contacts so future syncs still resolve to the canonical record).
 
-### Tabellen im Detail
+### Tables in Detail
 
 #### `users`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
 | `email` | VARCHAR UNIQUE, indexed | |
 | `password_hash` | VARCHAR | bcrypt |
-| `email_verified` | BOOLEAN | Erst nach Code-Bestätigung `true` |
+| `email_verified` | BOOLEAN | Only `true` after code confirmation |
 | `created_at` | DATETIME | |
 
 #### `email_verification_codes`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
 | `user_id` | INTEGER FK NOT NULL | → `users.id` |
 | `code` | VARCHAR(6) | |
 | `purpose` | VARCHAR | `verify_email` \| `reset_password` |
-| `expires_at` | DATETIME | 15 Minuten Gültigkeit |
-| `used_at` | DATETIME NULL | Verhindert Wiederverwendung |
+| `expires_at` | DATETIME | 15-minute validity |
+| `used_at` | DATETIME NULL | Prevents reuse |
 
 #### `applications`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
-| `user_id` | INTEGER FK NOT NULL | → `users.id` — wie auf praktisch allen übrigen Tabellen (siehe [§7](#7-authentifizierung--mandantentrennung)), hier nur einmal exemplarisch aufgeführt |
-| `firma`, `rolle` | VARCHAR NOT NULL | |
-| `main_status` / `sub_status` | VARCHAR | Siehe [Statusübergänge](#4-statusübergänge) |
-| `is_headhunter` / `zielfirma_bei_hh` | BOOLEAN / VARCHAR | |
-| `quelle`, `wurde_besetzt_von` | VARCHAR NULL | |
-| `datum_bewerbung`, `letztes_update` | DATE NULL | `letztes_update` wird bei Abfrage in-memory durch `max(events.datum ≤ today)` überschrieben, falls größer |
-| `linkedin_job_id`, `stellenanzeige_url` | VARCHAR NULL | Für LinkedIn-Sync-Matching bzw. Import-Herkunft |
+| `user_id` | INTEGER FK NOT NULL | → `users.id` — like on practically every other table (see [§7](#7-authentication--multi-tenancy)), listed here only once as an example |
+| `firma`, `rolle` | VARCHAR NOT NULL | Company, role |
+| `main_status` / `sub_status` | VARCHAR | See [Status Transitions](#4-status-transitions) |
+| `is_headhunter` / `zielfirma_bei_hh` | BOOLEAN / VARCHAR | Headhunter flag / target company when applying via a headhunter |
+| `quelle`, `wurde_besetzt_von` | VARCHAR NULL | Source, filled by |
+| `datum_bewerbung`, `letztes_update` | DATE NULL | Application date, last update — `letztes_update` is overwritten in-memory on query by `max(events.datum ≤ today)` if larger |
+| `linkedin_job_id`, `stellenanzeige_url` | VARCHAR NULL | For LinkedIn sync matching / import origin (job posting URL) |
 | `company_profile_id` / `target_company_profile_id` | INTEGER FK | → `company_profiles.id` |
-| `ai_color` / `ai_reasoning` / `ai_next_step` / `ai_assessed_at` | VARCHAR/TEXT/VARCHAR/DATETIME | KI-Bewertung |
-| `gespraech_1`…`5` | TEXT NULL | Notizen (Excel-Import-Erbe) |
-| `abgesagt` (Property) | — | Berechnet aus `main_status == "rejected"` |
-| `ghosting` (Property) | — | Berechnet: > 14 Tage keine Aktivität |
+| `ai_color` / `ai_reasoning` / `ai_next_step` / `ai_assessed_at` | VARCHAR/TEXT/VARCHAR/DATETIME | AI assessment |
+| `gespraech_1`…`5` | TEXT NULL | Interview notes (legacy from Excel import) |
+| `abgesagt` (property) | — | Computed from `main_status == "rejected"` |
+| `ghosting` (property) | — | Computed: > 14 days with no activity |
 
 #### `events`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
 | `application_id` | INTEGER FK NOT NULL | → `applications.id` |
-| `typ` | VARCHAR | `bewerbung`, `status`, `gespräch`, `mail`, `calendar`, `call`, `notiz` |
-| `datum`, `titel`, `notiz`, `autor` | | |
+| `typ` | VARCHAR | `bewerbung` (application submitted), `status`, `gespräch` (interview), `mail`, `calendar`, `call`, `notiz` (note) |
+| `datum`, `titel`, `notiz`, `autor` | | Date, title, note, author |
 | `source` | VARCHAR | `gmail`, `gcal`, `icloud_mail`, `icloud_cal`, `calls`, `linkedin` |
-| `external_id` | VARCHAR NULL | Dedup- und Deep-Link-Schlüssel |
+| `external_id` | VARCHAR NULL | Dedup and deep-link key |
 
 #### `attachments`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
 | `event_id` | INTEGER FK NOT NULL, CASCADE | → `events.id` |
 | `filename`, `content_type`, `size_bytes` | | |
-| `storage_path` | VARCHAR | relativ zu `/app/data/attachments/` |
+| `storage_path` | VARCHAR | relative to `/app/data/attachments/` |
 | `source`, `external_id` | VARCHAR NULL | |
 
 #### `contacts` / `contact_application`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
-| `name`, `vorname`, `email`, `telefon`, `linkedin_url` | | |
-| `firma`, `rolle`, `typ` | | `typ`: `hr`, `hh`, `fb`, `other` |
+| `name`, `vorname`, `email`, `telefon`, `linkedin_url` | | Last name, first name, email, phone, LinkedIn URL |
+| `firma`, `rolle`, `typ` | | Company, role, type — `typ`: `hr`, `hh`, `fb`, `other` |
 | `company_profile_id` | INTEGER FK NULL | → `company_profiles.id` |
-| `letzter_kontakt` | DATE NULL | |
+| `letzter_kontakt` | DATE NULL | Last contact |
 
-`contact_application` (Join-Tabelle, `contact_id`+`application_id` PK/FK, CASCADE) — Inserts via `INSERT OR IGNORE` (Raw-SQL statt ORM-`append()`, vermeidet Autoflush-Races).
+`contact_application` (join table, `contact_id`+`application_id` PK/FK, CASCADE) — inserts via `INSERT OR IGNORE` (raw SQL instead of ORM `append()`, avoids autoflush races).
 
 #### `company_profiles`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
-| `name_norm` | VARCHAR UNIQUE, indexed | Normalisierter Name (`norm_firma()`) — **Dedup-Schlüssel bei Anlage**, daher können auf Namensebene keine Dubletten entstehen. Reale Dubletten (abweichende Schreibweise) werden stattdessen über die Website-Domain erkannt (`cleanup.py`) |
+| `name_norm` | VARCHAR UNIQUE, indexed | Normalized name (`norm_firma()`) — **dedup key at creation time**, so duplicates cannot occur at the name level. Real duplicates (spelling variants) are instead detected via the website domain (`cleanup.py`) |
 | `name_display`, `website`, `linkedin_company_url` | | |
 | `hq_city`, `hq_country`, `industry`, `company_type` | | |
 | `employee_range`, `employee_count`, `founded_year` | | |
-| `description`, `logo_data` | TEXT | Von `sync_company.py` befüllt |
+| `description`, `logo_data` | TEXT | Filled by `sync_company.py` |
 | `sync_status` / `sync_error` / `sync_source` / `last_synced_at` | | `pending` \| `done` \| `failed` |
-| `parent_company_id` | INTEGER FK NULL, self-referential | Mutter-/Tochterfirma |
+| `parent_company_id` | INTEGER FK NULL, self-referential | Parent/subsidiary company |
 
-#### `pending_matches` (Review-Queue)
+#### `pending_matches` (Review Queue)
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
 | `source`, `external_id`, `confidence` (0–100) | | |
 | `event_type`, `datum`, `titel`, `extract`, `raw_content` | | |
 | `suggested_app_id` | INTEGER FK NULL | → `applications.id` |
 | `suggested_main_status` / `suggested_sub_status` | | |
-| `status_only` | BOOLEAN | True = nur Statuswechsel, kein neues Event |
+| `status_only` | BOOLEAN | True = status change only, no new event |
 | `review_status` | VARCHAR | `pending`, `approved`, `rejected` |
 
 #### `audit_log`
 
-| Spalte | Typ | Beschreibung |
+| Column | Type | Description |
 |---|---|---|
-| `app_id` / `contact_id` / `company_profile_id` / `event_id` | INTEGER FK NULL, ON DELETE SET NULL, je indexed | → `applications.id` / `contacts.id` / `company_profiles.id` / `events.id`. Mehrere können gleichzeitig gesetzt sein (z. B. ein Kontakt-Update im Kontext einer konkreten Bewerbung) |
+| `app_id` / `contact_id` / `company_profile_id` / `event_id` | INTEGER FK NULL, ON DELETE SET NULL, each indexed | → `applications.id` / `contacts.id` / `company_profiles.id` / `events.id`. Several can be set at the same time (e.g. a contact update in the context of a specific application) |
 | `action` | VARCHAR | `create`, `update`, `delete`, `status_change`, `merge`, `import` |
 | `field`, `old_value`, `new_value`, `reason` | | |
-| `source` | VARCHAR | `user` (manuelle Aktion), `system` (automatischer Server-Vorgang ohne konkreten Sync-Provider, z. B. Backfill), `sync` (generischer Sync-Pfad ohne spezifischen Provider), sonst der jeweilige Sync-Provider (`gmail`, `icloud_mail`, `gcal`, `icloud_cal`, `icloud_calls`, `linkedin`, `local_files`, …), außerdem `import`, `merge`, `db_trigger` (Sicherheitsnetz-Trigger auf `applications.main_status`, siehe unten) |
+| `source` | VARCHAR | `user` (manual action), `system` (automatic server-side process with no specific sync provider, e.g. a backfill), `sync` (generic sync path with no specific provider), otherwise the respective sync provider (`gmail`, `icloud_mail`, `gcal`, `icloud_cal`, `icloud_calls`, `linkedin`, `local_files`, …), plus `import`, `merge`, `db_trigger` (safety-net trigger on `applications.main_status`, see below) |
 
-Deckt Neuanlagen/Änderungen/Löschungen über praktisch jeden Code-Pfad ab, der eine der vier referenzierten Tabellen anfasst — manuelle CRUD-Endpunkte, Zusammenführen, Bereinigen/Dedup, und alle Sync-Provider. Verbosity über `sync_settings.audit_log_level` steuerbar (`off`/`normal`/`verbose`) — im Level `normal` werden reine Feld-Updates (`action="update"`) unterdrückt, `create`/`delete`/`status_change`/`merge`/`import` immer geloggt. Zusätzlich zu den Python-seitigen Aufrufen von `add_audit()` gibt es einen DB-Trigger (`trg_main_status_change`), der jede Änderung an `applications.main_status` unabhängig vom Code-Pfad als Sicherheitsnetz mitschreibt (`source="db_trigger"`), dedupliziert gegen innerhalb von 2 Sekunden bereits vom Python-Pfad geschriebene identische Einträge.
+Covers creations/changes/deletions across practically every code path that touches one of the four referenced tables — manual CRUD endpoints, merges, cleanup/dedup, and all sync providers. Verbosity is controlled via `sync_settings.audit_log_level` (`off`/`normal`/`verbose`) — at level `normal`, pure field updates (`action="update"`) are suppressed; `create`/`delete`/`status_change`/`merge`/`import` are always logged. In addition to the Python-side `add_audit()` calls, there is a DB trigger (`trg_main_status_change`) that records every change to `applications.main_status` as a safety net regardless of code path (`source="db_trigger"`), deduplicated against identical entries already written by the Python path within 2 seconds.
 
-#### `synced_items` (Dedup-Ledger)
+#### `synced_items` (Dedup Ledger)
 
-`source` + `external_id` (Message-ID / Event-UID / MD5-Hash) — `SELECT 1 FROM synced_items WHERE source=? AND external_id=?` als Dedup-Check vor jedem Sync-Item.
+`source` + `external_id` (message ID / event UID / MD5 hash) — `SELECT 1 FROM synced_items WHERE source=? AND external_id=?` as a dedup check before every sync item.
 
 #### `merge_aliases`
 
-`entity_type` (`application`|`contact`), `canonical_id`, plus die ursprünglichen Kennungen (`alias_firma`, `alias_rolle`, `alias_li_job_id`, `alias_name`, `alias_email`) — damit ein zusammengeführter Datensatz bei künftigen Syncs weiterhin über seine alte Kennung gefunden wird.
+`entity_type` (`application`|`contact`), `canonical_id`, plus the original identifiers (`alias_firma`, `alias_rolle`, `alias_li_job_id`, `alias_name`, `alias_email`) — so that a merged record can still be found by its old identifier on future syncs.
 
-#### Konfigurationstabellen (eine Zeile pro Konto)
+#### Configuration Tables (One Row per Account)
 
-| Tabelle | Zweck | Sensible Felder (Fernet-verschlüsselt) |
+| Table | Purpose | Sensitive fields (Fernet-encrypted) |
 |---|---|---|
-| `google_sync` | OAuth-Client + Tokens, letzte Sync-Zeiten | `client_secret_enc`, `access_token_enc`, `refresh_token_enc` |
-| `icloud_sync` | Apple-ID + App-Passwort, Sync-Zeiten pro Feature | `app_password_enc`, `web_password_enc` |
-| `linkedin_sync` | LinkedIn-Login + Session-Cookies | `password_enc` |
-| `ai_settings` | KI-Provider/Modell/Key | `api_key_enc` |
-| `sync_settings` | Enable-Toggles pro Quelle + Audit-Log-Level | – |
-| `calls_config` / `files_config` | Bridge-Konfiguration | – |
-| `agent_settings` | Rapport-Agent-URL (Override) + Token | `token_enc` |
-| `maps_settings` | Google Places API-Key (Ortsautocomplete, Fallback Nominatim) | `api_key_enc` |
-| `backup_config` | Backup-Ordner, Frequenz, Aufbewahrung | – |
-| `logo_settings` | Logo.dev API-Key | – |
+| `google_sync` | OAuth client + tokens, last sync times | `client_secret_enc`, `access_token_enc`, `refresh_token_enc` |
+| `icloud_sync` | Apple ID + app password, per-feature sync times | `app_password_enc`, `web_password_enc` |
+| `linkedin_sync` | LinkedIn login + session cookies | `password_enc` |
+| `ai_settings` | AI provider/model/key | `api_key_enc` |
+| `sync_settings` | Per-source enable toggles + audit log level | – |
+| `calls_config` / `files_config` | Bridge configuration | – |
+| `agent_settings` | Rapport Agent URL (override) + token | `token_enc` |
+| `maps_settings` | Google Places API key (location autocomplete, fallback Nominatim) | `api_key_enc` |
+| `backup_config` | Backup folder, frequency, retention | – |
+| `logo_settings` | Logo.dev API key | – |
 
-### Kryptographie
+### Cryptography
 
-Alle sensitiven Felder (Passwörter, OAuth-Tokens, API-Keys) werden mit **Fernet** (symmetrische AEAD-Verschlüsselung, `cryptography`-Bibliothek) verschlüsselt. Schlüssel liegt in `backend/data/fernet.key` im Docker-Volume (nie committen), wird beim ersten Start automatisch generiert.
+All sensitive fields (passwords, OAuth tokens, API keys) are encrypted with **Fernet** (symmetric AEAD encryption, `cryptography` library). The key lives in `backend/data/fernet.key` in the Docker volume (never commit it), generated automatically on first startup.
 
-Funktionen in `app/ai/provider.py`: `encrypt_api_key()` / `decrypt_api_key()`.
+Functions in `app/ai/provider.py`: `encrypt_api_key()` / `decrypt_api_key()`.
 
 ---
 
-## 7. Authentifizierung & Mandantentrennung
+## 7. Authentication & Multi-Tenancy
 
-rapport ist ein Multi-Account-System: mehrere Konten können dieselbe Installation nutzen, jedes sieht ausschließlich seine eigenen Daten. Registrierung ist dauerhaft offen (kein Invite-Zwang).
+rapport is a multi-account system: several accounts can use the same installation, each seeing exclusively its own data. Registration remains permanently open (no invite requirement).
 
-### 7.1 Registrierung, Verifizierung, Login
+### 7.1 Registration, Verification, Login
 
 ```mermaid
 sequenceDiagram
@@ -745,64 +745,64 @@ sequenceDiagram
     participant BE as Backend
     participant Mail as SMTP (Resend)
 
-    U->>FE: E-Mail + Passwort
+    U->>FE: email + password
     FE->>BE: POST /api/auth/register
-    BE->>BE: User anlegen (email_verified=false), 6-stelliger Code (15 Min gültig)
-    BE->>Mail: Bestätigungscode senden
+    BE->>BE: create user (email_verified=false), 6-digit code (valid 15 min)
+    BE->>Mail: send confirmation code
     BE-->>FE: 201
-    U->>FE: Code eingeben (oder "Code erneut senden")
+    U->>FE: enter code (or "resend code")
     FE->>BE: POST /api/auth/verify-email
     BE->>BE: email_verified=true
-    alt erstes je bestätigtes Konto
-        BE->>BE: claim_unowned_data() – bisherige user_id=NULL-Zeilen diesem Konto zuordnen
+    alt first account ever confirmed
+        BE->>BE: claim_unowned_data() – assign previous user_id=NULL rows to this account
     end
-    BE-->>FE: JWT (7 Tage gültig)
-    FE->>FE: Token in localStorage, alle weiteren Requests mit Authorization: Bearer
+    BE-->>FE: JWT (valid 7 days)
+    FE->>FE: token in localStorage, all further requests with Authorization: Bearer
 ```
 
-Passwort-Reset läuft analog über denselben Code-Mechanismus (`purpose="reset_password"` statt `"verify_email"`), ausgelöst über `POST /api/auth/forgot-password` (immer 200, keine User-Enumeration) → `POST /api/auth/reset-password`. Passwörter: bcrypt-Hash (`app/auth/security.py`). Codes: `EmailVerificationCode`, `used_at` verhindert Wiederverwendung. SMTP-Konfiguration (aktuell Resend als Provider) über Env-Vars `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`; ohne diese liefert `register`/`forgot-password` `502 EmailNotConfigured` (die DB-Zeile inkl. Code wird trotzdem committet, bevor der Sendeversuch scheitert).
+Password reset works analogously via the same code mechanism (`purpose="reset_password"` instead of `"verify_email"`), triggered via `POST /api/auth/forgot-password` (always 200, no user enumeration) → `POST /api/auth/reset-password`. Passwords: bcrypt hash (`app/auth/security.py`). Codes: `EmailVerificationCode`, `used_at` prevents reuse. SMTP configuration (currently Resend as the provider) via env vars `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`; without these, `register`/`forgot-password` return `502 EmailNotConfigured` (the DB row including the code is still committed before the send attempt fails).
 
-### 7.2 Zentraler Mandanten-Filter
+### 7.2 Central Tenant Filter
 
-Statt jede Query in den ~20 Router-Dateien einzeln um `.filter_by(user_id=...)` zu ergänzen (fehleranfällig — eine vergessene Stelle wäre ein echtes Datenleck zwischen Konten), setzt `get_current_user()` (`app/auth/dependencies.py`) nach erfolgreicher Token-Prüfung einmal pro Request `set_session_user(db, user.id)`. Ein SQLAlchemy-`do_orm_execute`-Event (`app/database.py::_apply_tenant_filter`) hängt daraufhin automatisch `with_loader_criteria(cls, cls.user_id == user_id)` an **jede** SELECT-Query gegen eine der ~19 mandantengebundenen Modellklassen (`_SCOPED_MODEL_NAMES` in `database.py`) — inklusive Relationship-Lazy-Loads und Subqueries, solange sie über die ORM-Query-API laufen.
+Instead of adding `.filter_by(user_id=...)` to every query individually across ~20 router files (error-prone — one forgotten spot would be a real data leak between accounts), `get_current_user()` (`app/auth/dependencies.py`) calls `set_session_user(db, user.id)` once per request after successful token verification. A SQLAlchemy `do_orm_execute` event (`app/database.py::_apply_tenant_filter`) then automatically attaches `with_loader_criteria(cls, cls.user_id == user_id)` to **every** SELECT query against one of the ~19 tenant-scoped model classes (`_SCOPED_MODEL_NAMES` in `database.py`) — including relationship lazy-loads and subqueries, as long as they go through the ORM query API.
 
-**Bekannte Grenze:** rohes `db.execute(text(...))`, `Session.get()` und `db.query(X).get(id)` umgehen den Filter (SQLAlchemy-Verhalten von `with_loader_criteria`). Primary-Key-Lookups auf Anfrage-Pfaden brauchen deshalb zusätzlich eine explizite Eigentums-Prüfung nach dem Laden (`filter_by(id=..., user_id=current_user.id)` statt `.get(id)`) — im Zuge der Mandantentrennung wurden alle bekannten Stellen dieser Art durchgegangen und gefixt, inklusive eines dabei gefundenen echten Cross-Tenant-Lecks (`sync_targeted.py::get_result` prüfte Eigentümerschaft nicht).
+**Known limitation:** raw `db.execute(text(...))`, `Session.get()`, and `db.query(X).get(id)` bypass the filter (this is how `with_loader_criteria` behaves in SQLAlchemy). Primary-key lookups on request paths therefore additionally need an explicit ownership check after loading (`filter_by(id=..., user_id=current_user.id)` instead of `.get(id)`) — as part of introducing multi-tenancy, all known spots of this kind were reviewed and fixed, including a real cross-tenant leak found along the way (`sync_targeted.py::get_result` did not check ownership).
 
-**Hintergrundjobs ohne Request-Kontext** (Sync-Loop in `main.py`, Backup-Scheduler, OAuth-Callbacks von Google/LinkedIn) haben keinen `current_user` — hier übernimmt `get_first_user_id(db)` (`database.py`) pragmatisch das am längsten bestehende Konto. Bewusste Vereinfachung fürs aktuelle Ein-Konto-Regelbetrieb-Szenario, kein Multi-Tenant-fähiger Hintergrundbetrieb.
+**Background jobs without a request context** (sync loop in `main.py`, backup scheduler, OAuth callbacks from Google/LinkedIn) have no `current_user` — here `get_first_user_id(db)` (`database.py`) pragmatically falls back to the longest-existing account. A deliberate simplification for the current single-account-in-practice scenario, not a multi-tenant-capable background setup.
 
-**Bewusst ohne Login:** `GET /api/startup-check` — dient auch als unauthentifizierter Health-Check per curl; nutzt `get_first_user_id`/`set_session_user` intern, falls bereits ein Konto existiert.
+**Deliberately without login:** `GET /api/startup-check` — also serves as an unauthenticated health check via curl; uses `get_first_user_id`/`set_session_user` internally if an account already exists.
 
-### 7.3 Datenmigration bei Erstinbetriebnahme
+### 7.3 Data Migration on First Rollout
 
-Vor Einführung der Konten gehörten alle Zeilen niemandem (`user_id IS NULL`). `claim_unowned_data()` (`database.py`) wird einmalig innerhalb der `verify-email`-Transaktion aufgerufen, wenn dies das erste je bestätigte Konto ist, und ordnet alle `user_id IS NULL`-Zeilen über alle ~20 Tabellen diesem Konto zu.
+Before accounts were introduced, all rows belonged to no one (`user_id IS NULL`). `claim_unowned_data()` (`database.py`) is called once inside the `verify-email` transaction if this is the first account ever confirmed, and assigns all `user_id IS NULL` rows across all ~20 tables to that account.
 
-### 7.4 Bekannte offene Punkte
+### 7.4 Known Open Items
 
-- **CORS ist aktuell noch nicht eingeschränkt** (`main.py`: `CORSMiddleware(allow_origins=["*"])`) — ursprünglich für Phase 1 der Benutzerkonten vorgesehen, aber noch nicht umgesetzt. In Kombination mit Bearer-Token-Auth (kein Cookie-basiertes CSRF-Risiko, aber Token-Diebstahl über beliebige Origin bei XSS) sollte das vor einer Öffnung für nicht-vertrauenswürdige Netzwerke nachgezogen werden.
+- **CORS is currently not restricted** (`main.py`: `CORSMiddleware(allow_origins=["*"])`) — originally planned for Phase 1 of the account system, but not yet implemented. Combined with bearer-token auth (no cookie-based CSRF risk, but token theft from any origin in case of XSS), this should be addressed before opening the app up to untrusted networks.
 
 ---
 
 ## 8. CI/CD
 
-Datei: `.github/workflows/ci.yml` · Self-hosted Runner auf dem Mac.
+File: `.github/workflows/ci.yml` · self-hosted runner on the Mac.
 
 ```mermaid
 flowchart LR
     A[backend<br/>ruff + pyright] --> C[docker<br/>Buildx: playwright-base + backend + frontend]
     B[frontend<br/>tsc + vite build] --> C
-    C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>Health-Poll → macOS-Notification"]
-    D -.->|bei Fehler| E[notify-failure<br/>macOS-Notification + Log]
-    A -.->|bei Fehler| E
-    B -.->|bei Fehler| E
-    C -.->|bei Fehler| E
+    C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>health poll → macOS notification"]
+    D -.->|on failure| E[notify-failure<br/>macOS notification + log]
+    A -.->|on failure| E
+    B -.->|on failure| E
+    C -.->|on failure| E
 ```
 
-| Job | Trigger | Schritte |
+| Job | Trigger | Steps |
 |---|---|---|
-| `backend` | Push/PR auf `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error) |
-| `frontend` | Push/PR auf `main` | `tsc --noEmit`, `vite build` |
-| `docker` | Push auf `main` (nach backend+frontend) | Buildx: `Dockerfile.playwright-base`, Backend-, Frontend-Image (kein Push in Registry) |
-| `deploy` | Push auf `main` (self-hosted, nach docker) | `git pull` → Playwright-Base bei Bedarf neu bauen (Hash-Check) → `docker compose up -d --build` → Health-Poll `/health` (60s) → macOS-Notification + Browser öffnen |
-| `notify-failure` | `always()` bei Fehler in einem der obigen Jobs | macOS-Fehlerbenachrichtigung + Log-Eintrag |
+| `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error) |
+| `frontend` | push/PR to `main` | `tsc --noEmit`, `vite build` |
+| `docker` | push to `main` (after backend+frontend) | Buildx: `Dockerfile.playwright-base`, backend image, frontend image (no push to a registry) |
+| `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → health poll `/health` (60s) → macOS notification + open browser |
+| `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (privat)
+Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
