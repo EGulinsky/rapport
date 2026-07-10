@@ -102,6 +102,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'attachments' | 'contacts'>('overview')
   const [timeFilter, setTimeFilter] = useState<'all' | '1m' | '3m' | '6m' | '1y'>('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set())
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -647,6 +650,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     return () => clearTimeout(timer)
   }, [linkSearch, addMode, app?.contacts])
 
+  useEffect(() => {
+    setSelectedEventIds(new Set())
+    setSelectedContactIds(new Set())
+  }, [activeTab])
+
   async function updateContact(contactId: number) {
     if (!appId) return
     setSavingContact(true)
@@ -663,6 +671,48 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     if (!appId || !confirm(`Kontakt "${name}" löschen?`)) return
     await api.contacts.delete(appId, contactId)
     await refreshContacts()
+  }
+
+  function toggleEventSelect(id: number) {
+    setSelectedEventIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleContactSelect(id: number) {
+    setSelectedContactIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function bulkDeleteSelectedEvents() {
+    if (!appId || selectedEventIds.size === 0) return
+    if (!confirm(`${selectedEventIds.size} ${selectedEventIds.size === 1 ? 'Eintrag' : 'Einträge'} löschen?`)) return
+    setBulkDeleting(true)
+    try {
+      await api.applications.bulkDeleteEvents(appId, [...selectedEventIds])
+      setSelectedEventIds(new Set())
+      await refreshContacts()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  async function bulkDeleteSelectedContacts() {
+    if (!appId || selectedContactIds.size === 0) return
+    if (!confirm(`${selectedContactIds.size} ${selectedContactIds.size === 1 ? 'Kontakt' : 'Kontakte'} löschen?`)) return
+    setBulkDeleting(true)
+    try {
+      await api.applications.bulkDeleteContacts(appId, [...selectedContactIds])
+      setSelectedContactIds(new Set())
+      await refreshContacts()
+    } finally {
+      setBulkDeleting(false)
+    }
   }
 
   const updDot = (fieldKey?: string) =>
@@ -1335,6 +1385,29 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 })}
               </div>
             )}
+            {timelineEvents.length > 0 && (
+              <div className="flex items-center gap-2">
+                <input type="checkbox"
+                  checked={timelineEvents.length > 0 && timelineEvents.every(ev => selectedEventIds.has(ev.id))}
+                  ref={el => { if (el) el.indeterminate = selectedEventIds.size > 0 && !timelineEvents.every(ev => selectedEventIds.has(ev.id)) }}
+                  onChange={() => {
+                    setSelectedEventIds(prev => {
+                      const allSelected = timelineEvents.every(ev => prev.has(ev.id))
+                      if (allSelected) return new Set()
+                      return new Set(timelineEvents.map(ev => ev.id))
+                    })
+                  }}
+                  className="rounded border-gray-300 text-indigo-600 cursor-pointer"
+                />
+                <span className="text-xs text-gray-400">Alle auswählen</span>
+                {selectedEventIds.size > 0 && (
+                  <button onClick={bulkDeleteSelectedEvents} disabled={bulkDeleting}
+                    className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2">
+                    <Trash2 className="h-3 w-3" /> {selectedEventIds.size} {selectedEventIds.size === 1 ? 'Eintrag' : 'Einträge'} löschen
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="overflow-y-auto flex-1 p-6 space-y-3">
@@ -1481,7 +1554,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200" />
                 <div className="space-y-3 pl-7">
                   {[...timelineEvents].sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? '')).map(ev => (
-                    <TimelineEvent key={ev.id} event={ev} appId={appId!} onUpdated={refreshContacts} />
+                    <div key={ev.id} className="flex items-start gap-2">
+                      <input type="checkbox" checked={selectedEventIds.has(ev.id)} onChange={() => toggleEventSelect(ev.id)}
+                        className="mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <TimelineEvent event={ev} appId={appId!} onUpdated={refreshContacts} />
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1507,11 +1586,40 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           {fileEvents.length === 0 ? (
             <p className="text-sm text-gray-400 italic">Keine Anhänge</p>
           ) : (
-            <div className="space-y-1">
-              {fileEvents.map(ev => (
-                <FileRow key={ev.id} event={ev} appId={appId!} onDeleted={refreshContacts} />
-              ))}
-            </div>
+            <>
+              <div className="flex items-center gap-2">
+                <input type="checkbox"
+                  checked={fileEvents.length > 0 && fileEvents.every(ev => selectedEventIds.has(ev.id))}
+                  ref={el => { if (el) el.indeterminate = selectedEventIds.size > 0 && !fileEvents.every(ev => selectedEventIds.has(ev.id)) }}
+                  onChange={() => {
+                    setSelectedEventIds(prev => {
+                      const allSelected = fileEvents.every(ev => prev.has(ev.id))
+                      if (allSelected) return new Set()
+                      return new Set(fileEvents.map(ev => ev.id))
+                    })
+                  }}
+                  className="rounded border-gray-300 text-indigo-600 cursor-pointer"
+                />
+                <span className="text-xs text-gray-400">Alle auswählen</span>
+                {selectedEventIds.size > 0 && (
+                  <button onClick={bulkDeleteSelectedEvents} disabled={bulkDeleting}
+                    className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2">
+                    <Trash2 className="h-3 w-3" /> {selectedEventIds.size} {selectedEventIds.size === 1 ? 'Anhang' : 'Anhänge'} löschen
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1">
+                {fileEvents.map(ev => (
+                  <div key={ev.id} className="flex items-center gap-2">
+                    <input type="checkbox" checked={selectedEventIds.has(ev.id)} onChange={() => toggleEventSelect(ev.id)}
+                      className="rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <FileRow event={ev} appId={appId!} onDeleted={refreshContacts} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
         )}
@@ -1527,6 +1635,30 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               </button>
             )}
           </div>
+
+          {(app?.contacts ?? []).length > 0 && (
+            <div className="flex items-center gap-2">
+              <input type="checkbox"
+                checked={app!.contacts!.length > 0 && app!.contacts!.every(c => selectedContactIds.has(c.id))}
+                ref={el => { if (el) el.indeterminate = selectedContactIds.size > 0 && !app!.contacts!.every(c => selectedContactIds.has(c.id)) }}
+                onChange={() => {
+                  setSelectedContactIds(prev => {
+                    const allSelected = app!.contacts!.every(c => prev.has(c.id))
+                    if (allSelected) return new Set()
+                    return new Set(app!.contacts!.map(c => c.id))
+                  })
+                }}
+                className="rounded border-gray-300 text-indigo-600 cursor-pointer"
+              />
+              <span className="text-xs text-gray-400">Alle auswählen</span>
+              {selectedContactIds.size > 0 && (
+                <button onClick={bulkDeleteSelectedContacts} disabled={bulkDeleting}
+                  className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2">
+                  <Trash2 className="h-3 w-3" /> {selectedContactIds.size} {selectedContactIds.size === 1 ? 'Kontakt' : 'Kontakte'} löschen
+                </button>
+              )}
+            </div>
+          )}
 
           {(app?.contacts ?? []).length > 0 && (
             <div className="space-y-2">
@@ -1603,6 +1735,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     </div>
                   ) : (
                     <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={selectedContactIds.has(c.id)} onChange={() => toggleContactSelect(c.id)}
+                        className="mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 truncate">{c.vorname ? `${c.vorname} ${c.name}` : c.name}</p>
                         <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
