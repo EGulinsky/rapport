@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.0',
+    date: '2026-07-10',
+    changes: [
+      'Neu: In einer Bewerbung können Verlaufseinträge, Anhänge und Kontakte jetzt mehrfach markiert und gemeinsam gelöscht werden (Checkboxen + "Alle auswählen" pro Tab).',
+    ],
+  },
+  {
     version: '3.54.2',
     date: '2026-07-10',
     changes: [

@@ -1,7 +1,10 @@
 """L2 API — FastAPI TestClient gegen echte Router (applications.py)."""
+from datetime import date
+
 import pytest
 
-from tests.factories import application_factory
+from tests.factories import application_factory, contact_factory, event_factory
+from app import models
 
 pytestmark = pytest.mark.api
 
@@ -158,3 +161,113 @@ class TestUpdateApplication:
 
         assert resp.status_code == 200
         assert resp.json()["ort"] == "Berlin, Deutschland"
+
+
+class TestBulkDeleteEvents:
+    def test_positiv_mehrere_events_werden_geloescht(self, client, db_session):
+        app = application_factory(db_session)
+        ev1 = event_factory(db_session, app, typ="notiz", titel="Notiz 1")
+        ev2 = event_factory(db_session, app, typ="notiz", titel="Notiz 2")
+        keep = event_factory(db_session, app, typ="notiz", titel="Bleibt")
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/events/bulk", json={"ids": [ev1.id, ev2.id]})
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 2
+        assert db_session.get(models.Event, ev1.id) is None
+        assert db_session.get(models.Event, ev2.id) is None
+        assert db_session.get(models.Event, keep.id) is not None
+
+    def test_positiv_loeschen_von_bewerbung_event_setzt_datum_bewerbung_neu(self, client, db_session):
+        app = application_factory(db_session, datum_bewerbung=None)
+        older = event_factory(db_session, app, typ="bewerbung", datum=date(2026, 1, 1))
+        newer = event_factory(db_session, app, typ="bewerbung", datum=date(2026, 2, 1))
+        app.datum_bewerbung = older.datum
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/events/bulk", json={"ids": [older.id]})
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.datum_bewerbung == newer.datum
+
+    def test_positiv_ignoriert_ids_aus_anderer_bewerbung(self, client, db_session):
+        app = application_factory(db_session)
+        other_app = application_factory(db_session)
+        foreign_event = event_factory(db_session, other_app, typ="notiz")
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/events/bulk", json={"ids": [foreign_event.id]})
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 0
+        assert db_session.get(models.Event, foreign_event.id) is not None
+
+    def test_positiv_audit_log_wird_pro_event_geschrieben(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", titel="Zu löschen")
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/events/bulk", json={"ids": [ev.id]})
+
+        assert resp.status_code == 200
+        audit = db_session.query(models.AuditLog).filter_by(event_id=ev.id, action="delete").first()
+        assert audit is not None
+        assert audit.old_value == "Zu löschen"
+
+
+class TestBulkDeleteAppContacts:
+    def test_positiv_einziger_link_loescht_kontakt_ganz(self, client, db_session):
+        app = application_factory(db_session)
+        contact = contact_factory(db_session, name="Nur hier verknüpft")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/contacts/bulk", json={"ids": [contact.id]})
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 1
+        assert db_session.get(models.Contact, contact.id) is None
+
+    def test_positiv_kontakt_mit_zweiter_bewerbung_wird_nur_entknuepft(self, client, db_session):
+        app1 = application_factory(db_session)
+        app2 = application_factory(db_session)
+        contact = contact_factory(db_session, name="Zwei Bewerbungen")
+        app1.contacts.append(contact)
+        app2.contacts.append(contact)
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app1.id}/contacts/bulk", json={"ids": [contact.id]})
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 1
+        still_there = db_session.get(models.Contact, contact.id)
+        assert still_there is not None
+        assert app2 in still_there.applications
+
+    def test_positiv_mehrere_kontakte_gemischt(self, client, db_session):
+        app = application_factory(db_session)
+        c1 = contact_factory(db_session, name="Kontakt 1")
+        c2 = contact_factory(db_session, name="Kontakt 2")
+        app.contacts.append(c1)
+        app.contacts.append(c2)
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/contacts/bulk", json={"ids": [c1.id, c2.id]})
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 2
+
+    def test_negativ_unbekannte_bewerbung_liefert_404(self, client):
+        resp = client.request("DELETE", "/api/applications/999999/contacts/bulk", json={"ids": [1]})
+        assert resp.status_code == 404
+
+    def test_corner_case_unbekannte_kontakt_id_wird_uebersprungen(self, client, db_session):
+        app = application_factory(db_session)
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/contacts/bulk", json={"ids": [999999]})
+
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 0

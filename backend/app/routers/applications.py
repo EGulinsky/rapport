@@ -2,6 +2,7 @@ import json
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from typing import List, Optional
@@ -619,6 +620,44 @@ def add_event(
     return event
 
 
+class BulkDeleteEventsBody(BaseModel):
+    ids: List[int]
+
+
+@router.delete("/{app_id}/events/bulk", status_code=200)
+def bulk_delete_events(
+    app_id: int,
+    body: BulkDeleteEventsBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    events = db.query(models.Event).filter(
+        models.Event.application_id == app_id,
+        models.Event.id.in_(body.ids),
+    ).all()
+    was_bewerbung = False
+    for event in events:
+        if event.typ == "bewerbung":
+            was_bewerbung = True
+        add_audit(db, "delete", "user", app_id=app_id, event_id=event.id,
+                  old_value=event.titel, user_id=current_user.id)
+        db.delete(event)
+    # If any deleted event was a bewerbung event, recalculate datum_bewerbung once
+    if was_bewerbung:
+        db.flush()
+        app = db.query(models.Application).filter(models.Application.id == app_id).first()
+        if app:
+            remaining = (
+                db.query(models.Event)
+                .filter(models.Event.application_id == app_id, models.Event.typ == "bewerbung")
+                .order_by(models.Event.datum)
+                .first()
+            )
+            app.datum_bewerbung = remaining.datum if remaining else None
+    db.commit()
+    return {"deleted": len(events)}
+
+
 @router.delete("/{app_id}/events/{event_id}", status_code=204)
 def delete_event(
     app_id: int,
@@ -748,6 +787,37 @@ def link_contact(
         db.commit()
     db.refresh(contact)
     return contact
+
+
+class BulkDeleteAppContactsBody(BaseModel):
+    ids: List[int]
+
+
+@router.delete("/{app_id}/contacts/bulk", status_code=200)
+def bulk_delete_contacts(
+    app_id: int,
+    body: BulkDeleteAppContactsBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    app = db.query(models.Application).filter(models.Application.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+    unlinked = 0
+    for contact_id in body.ids:
+        contact = next((c for c in app.contacts if c.id == contact_id), None)
+        if not contact:
+            continue
+        # Remove link; delete contact entirely if no other application links remain
+        app.contacts.remove(contact)
+        db.flush()
+        if not contact.applications:
+            add_audit(db, "delete", "user", app_id=app_id, contact_id=contact.id,
+                      old_value=contact.name, user_id=current_user.id)
+            db.delete(contact)
+        unlinked += 1
+    db.commit()
+    return {"deleted": unlinked}
 
 
 @router.delete("/{app_id}/contacts/{contact_id}", status_code=204)

@@ -96,6 +96,16 @@ export const api = {
       authFetch(`${BASE}/applications/${appId}/events/${eventId}`, { method: 'DELETE' }).then(r => {
         if (!r.ok) throw new Error(`${r.status}`)
       }),
+    bulkDeleteEvents: (appId: number, ids: number[]) =>
+      request<{ deleted: number }>(`/applications/${appId}/events/bulk`, {
+        method: 'DELETE',
+        body: JSON.stringify({ ids }),
+      }),
+    bulkDeleteContacts: (appId: number, ids: number[]) =>
+      request<{ deleted: number }>(`/applications/${appId}/contacts/bulk`, {
+        method: 'DELETE',
+        body: JSON.stringify({ ids }),
+      }),
     updateEvent: (appId: number, eventId: number, data: { typ?: string; datum?: string; titel?: string; notiz?: string }) =>
       request<Event>(`/applications/${appId}/events/${eventId}`, {
         method: 'PATCH',
