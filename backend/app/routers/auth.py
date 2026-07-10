@@ -13,9 +13,12 @@ POST /api/auth/change-password   — Passwort ändern (erfordert Login)
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -29,9 +32,15 @@ from app.auth.security import (
     verify_password,
     verification_code_expiry,
 )
-from app.database import claim_unowned_data, get_db
+from app.database import DATABASE_URL, claim_unowned_data, get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+MAX_CV_BYTES = 15 * 1024 * 1024  # 15 MB
+ALLOWED_CV_EXTENSIONS = {".pdf", ".doc", ".docx"}
+
+_DB_DIR = os.path.dirname(DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", ""))
+CV_ROOT = os.path.join(_DB_DIR, "user_files")
 
 
 class RegisterPayload(BaseModel):
@@ -77,6 +86,30 @@ class UserResponse(BaseModel):
     id: int
     email: str
     email_verified: bool
+    vorname: Optional[str] = None
+    nachname: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    cv_filename: Optional[str] = None
+    cv_size_bytes: Optional[int] = None
+
+
+class ProfilePayload(BaseModel):
+    vorname: Optional[str] = None
+    nachname: Optional[str] = None
+    linkedin_url: Optional[str] = None
+
+
+def _user_response(user: models.User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        email_verified=user.email_verified,
+        vorname=user.vorname,
+        nachname=user.nachname,
+        linkedin_url=user.linkedin_url,
+        cv_filename=user.cv_filename,
+        cv_size_bytes=user.cv_size_bytes,
+    )
 
 
 def _issue_code(db: Session, user: models.User, purpose: str) -> str:
@@ -199,7 +232,7 @@ def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db))
 
 @router.get("/me", response_model=UserResponse)
 def me(current_user: models.User = Depends(get_current_user)):
-    return UserResponse(id=current_user.id, email=current_user.email, email_verified=current_user.email_verified)
+    return _user_response(current_user)
 
 
 @router.post("/change-password")
@@ -213,3 +246,83 @@ def change_password(
     current_user.password_hash = hash_password(payload.new_password)
     db.commit()
     return {"message": "Passwort wurde geändert."}
+
+
+@router.patch("/profile", response_model=UserResponse)
+def update_profile(
+    payload: ProfilePayload,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.vorname = payload.vorname
+    current_user.nachname = payload.nachname
+    current_user.linkedin_url = payload.linkedin_url
+    db.commit()
+    db.refresh(current_user)
+    return _user_response(current_user)
+
+
+@router.post("/cv", response_model=UserResponse, status_code=201)
+async def upload_cv(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    filename = file.filename or "lebenslauf"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_CV_EXTENSIONS:
+        raise HTTPException(400, "Nur PDF, DOC oder DOCX werden als Lebenslauf akzeptiert.")
+
+    data = await file.read()
+    if len(data) > MAX_CV_BYTES:
+        raise HTTPException(413, "Datei ist größer als 15 MB.")
+
+    if current_user.cv_storage_path:
+        old_path = os.path.join(CV_ROOT, current_user.cv_storage_path)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+    target_dir = os.path.join(CV_ROOT, str(current_user.id))
+    os.makedirs(target_dir, exist_ok=True)
+    safe_name = os.path.basename(filename)
+    target_path = os.path.join(target_dir, safe_name)
+    with open(target_path, "wb") as f:
+        f.write(data)
+
+    current_user.cv_filename = safe_name
+    current_user.cv_content_type = file.content_type
+    current_user.cv_size_bytes = len(data)
+    current_user.cv_storage_path = os.path.join(str(current_user.id), safe_name)
+    db.commit()
+    db.refresh(current_user)
+    return _user_response(current_user)
+
+
+@router.get("/cv")
+def download_cv(current_user: models.User = Depends(get_current_user)):
+    if not current_user.cv_storage_path:
+        raise HTTPException(404, "Kein Lebenslauf hinterlegt.")
+    full_path = os.path.join(CV_ROOT, current_user.cv_storage_path)
+    if not os.path.exists(full_path):
+        raise HTTPException(404, "Datei nicht mehr vorhanden.")
+    return FileResponse(
+        full_path,
+        media_type=current_user.cv_content_type or "application/octet-stream",
+        filename=current_user.cv_filename,
+    )
+
+
+@router.delete("/cv", status_code=204)
+def delete_cv(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.cv_storage_path:
+        full_path = os.path.join(CV_ROOT, current_user.cv_storage_path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+    current_user.cv_filename = None
+    current_user.cv_content_type = None
+    current_user.cv_size_bytes = None
+    current_user.cv_storage_path = None
+    db.commit()

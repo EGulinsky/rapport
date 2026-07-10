@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.53.0',
+    date: '2026-07-10',
+    changes: [
+      'Neu: Konto-Profil um Vorname, Nachname und LinkedIn-Link erweitert sowie CV-Upload (PDF/DOC/DOCX) — Grundlage für spätere KI-Use-Cases wie automatisch generierte Anschreiben.',
+    ],
+  },
+  {
     version: '3.52.0',
     date: '2026-07-10',
     changes: [

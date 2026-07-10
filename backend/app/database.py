@@ -854,6 +854,28 @@ def _migrate_add_user_id_columns():
     conn.close()
 
 
+def _migrate_user_profile():
+    """Profildaten je Konto (Vorname/Nachname, LinkedIn-Link, CV-Upload) —
+    Grundlage für spätere KI-Use-Cases (z.B. Anschreiben-Generierung)."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    for col, coltype in [
+        ("vorname", "TEXT"), ("nachname", "TEXT"), ("linkedin_url", "TEXT"),
+        ("cv_filename", "TEXT"), ("cv_content_type", "TEXT"),
+        ("cv_size_bytes", "INTEGER"), ("cv_storage_path", "TEXT"),
+    ]:
+        if col not in cols:
+            cur.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
+    conn.commit()
+    conn.close()
+
+
 def claim_unowned_data(db, user_id: int) -> None:
     """Weist einem Konto alle Zeilen zu, die noch keinem Nutzer gehören
     (user_id IS NULL) — der einmalige Übergang von der bisherigen Ein-
@@ -905,6 +927,7 @@ def init_db():
     _migrate_application_ort()
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
+    _migrate_user_profile()
     _migrate_company_profiles()
     _backfill_company_profiles()
     _backfill_events()

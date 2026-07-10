@@ -548,6 +548,14 @@ class User(Base):
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
 
+    vorname          = Column(String, nullable=True)
+    nachname         = Column(String, nullable=True)
+    linkedin_url     = Column(String, nullable=True)
+    cv_filename      = Column(String, nullable=True)
+    cv_content_type  = Column(String, nullable=True)
+    cv_size_bytes    = Column(Integer, nullable=True)
+    cv_storage_path  = Column(String, nullable=True)
+
 
 class EmailVerificationCode(Base):
     """6-stelliger Code für E-Mail-Bestätigung und Passwort-Reset — gleicher

@@ -524,6 +524,29 @@ export const api = {
         method: 'POST', body: JSON.stringify({ old_password, new_password }),
         skipAuthHandling: true, // 401 hier heißt "altes Passwort falsch", nicht "Session abgelaufen"
       }),
+    updateProfile: (vorname: string, nachname: string, linkedin_url: string) =>
+      request<AuthUser>('/auth/profile', {
+        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url }),
+      }),
+    uploadCv: async (file: File): Promise<AuthUser> => {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await authFetch(`${BASE}/auth/cv`, { method: 'POST', body: form })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    downloadCv: async (filename: string): Promise<void> => {
+      const res = await authFetch(`${BASE}/auth/cv`)
+      if (!res.ok) throw new Error(await res.text())
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    deleteCv: () => request<void>('/auth/cv', { method: 'DELETE' }),
   },
 }
 
@@ -536,6 +559,11 @@ export interface AuthUser {
   id: number
   email: string
   email_verified: boolean
+  vorname: string | null
+  nachname: string | null
+  linkedin_url: string | null
+  cv_filename: string | null
+  cv_size_bytes: number | null
 }
 
 export interface StartupCheck {

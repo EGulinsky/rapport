@@ -282,3 +282,119 @@ class TestClaimOnFirstVerify:
 
         db_session.refresh(app)
         assert app.user_id == first_user.id  # unverändert, gehört weiterhin dem ersten Konto
+
+
+class TestProfileAndCv:
+    def _token(self, real_auth_client, captured_email, email="test@example.com"):
+        _register(real_auth_client, captured_email, email=email)
+        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
+        return r.json()["access_token"]
+
+    def test_positiv_profil_speichern(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={"vorname": "Ada", "nachname": "Lovelace", "linkedin_url": "https://www.linkedin.com/in/ada-lovelace"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["vorname"] == "Ada"
+        assert body["nachname"] == "Lovelace"
+        assert body["linkedin_url"] == "https://www.linkedin.com/in/ada-lovelace"
+
+    def test_negativ_profil_ohne_token_liefert_401(self, real_auth_client):
+        resp = real_auth_client.patch("/api/auth/profile", json={"vorname": "Ada"})
+        assert resp.status_code == 401
+
+    def test_corner_case_profil_felder_koennen_wieder_geleert_werden(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        real_auth_client.patch(
+            "/api/auth/profile", json={"vorname": "Ada", "nachname": "Lovelace", "linkedin_url": "https://example.com"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = real_auth_client.patch(
+            "/api/auth/profile", json={"vorname": None, "nachname": None, "linkedin_url": None},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["vorname"] is None
+
+    def test_positiv_cv_hochladen(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.post(
+            "/api/auth/cv",
+            files={"file": ("lebenslauf.pdf", b"%PDF-1.4 fake cv content", "application/pdf")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["cv_filename"] == "lebenslauf.pdf"
+        assert body["cv_size_bytes"] == len(b"%PDF-1.4 fake cv content")
+
+    def test_negativ_falsche_dateiendung_wird_abgelehnt(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.post(
+            "/api/auth/cv",
+            files={"file": ("lebenslauf.exe", b"irrelevant", "application/octet-stream")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 400
+
+    def test_negativ_zu_grosse_datei_wird_abgelehnt(self, real_auth_client, captured_email, monkeypatch):
+        monkeypatch.setattr("app.routers.auth.MAX_CV_BYTES", 10)
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.post(
+            "/api/auth/cv",
+            files={"file": ("lebenslauf.pdf", b"eine deutlich laengere Datei als 10 Bytes", "application/pdf")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 413
+
+    def test_positiv_cv_erneut_hochladen_ersetzt_alte_datei(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.post("/api/auth/cv", files={"file": ("alt.pdf", b"alte version", "application/pdf")}, headers=headers)
+
+        resp = real_auth_client.post("/api/auth/cv", files={"file": ("neu.pdf", b"neue version", "application/pdf")}, headers=headers)
+
+        assert resp.status_code == 201
+        assert resp.json()["cv_filename"] == "neu.pdf"
+
+    def test_positiv_cv_herunterladen(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.post("/api/auth/cv", files={"file": ("lebenslauf.pdf", b"cv inhalt", "application/pdf")}, headers=headers)
+
+        resp = real_auth_client.get("/api/auth/cv", headers=headers)
+
+        assert resp.status_code == 200
+        assert resp.content == b"cv inhalt"
+
+    def test_negativ_cv_herunterladen_ohne_upload_liefert_404(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.get("/api/auth/cv", headers={"Authorization": f"Bearer {token}"})
+
+        assert resp.status_code == 404
+
+    def test_positiv_cv_loeschen(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.post("/api/auth/cv", files={"file": ("lebenslauf.pdf", b"cv inhalt", "application/pdf")}, headers=headers)
+
+        resp = real_auth_client.delete("/api/auth/cv", headers=headers)
+        assert resp.status_code == 204
+
+        me_resp = real_auth_client.get("/api/auth/me", headers=headers)
+        assert me_resp.json()["cv_filename"] is None
