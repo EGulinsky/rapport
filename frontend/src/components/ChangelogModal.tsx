@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.5',
+    date: '2026-07-10',
+    changes: [
+      'Tests: sync_google.py von 65% auf 92% Testabdeckung — neue API-Tests für OAuth-Endpunkte (Status, Credentials, Auth-URL, Callback, Trennen) sowie Unit-Tests für _gmail_body() und den erfolgreichen Token-Refresh-Pfad.',
+    ],
+  },
+  {
     version: '3.55.4',
     date: '2026-07-10',
     changes: [
