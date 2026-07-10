@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 from app import models
-from app.routers.sync_common import save_classified_event, mark_synced, is_synced
+from app.routers.sync_common import save_classified_event, is_synced
 from tests.factories import application_factory
 
 pytestmark = pytest.mark.component

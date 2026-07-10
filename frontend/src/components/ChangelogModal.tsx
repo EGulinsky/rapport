@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.3',
+    date: '2026-07-10',
+    changes: [
+      'Tests: database.py (Inline-SQLite-Migrationen) von 12% auf 96% Testabdeckung — 83 neue Tests decken alle 26 Migrationsfunktionen ab (Spalten-/Tabellen-Erstellung, Backfills, Idempotenz).',
+    ],
+  },
+  {
     version: '3.55.2',
     date: '2026-07-10',
     changes: [
