@@ -43,13 +43,28 @@ def _drop_columns(path, table, *columns):
     # the columns these migrations add are exactly that. Rebuilding via
     # CREATE TABLE ... AS SELECT sidesteps it (constraints aren't relevant to
     # these tests, only column presence).
+    #
+    # Triggers on OTHER tables that reference this one (e.g. trg_main_status_change
+    # on applications, which INSERTs into audit_log) aren't dropped by "DROP TABLE"
+    # itself, and some SQLite builds validate them eagerly at DROP time — raising
+    # "no such table" even though the table is about to be recreated under the same
+    # name a statement later. Drop and recreate those triggers around the rebuild.
     conn = sqlite3.connect(path)
     cur = conn.cursor()
+    cur.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND sql LIKE ?",
+        (f"%{table}%",),
+    )
+    dependent_triggers = cur.fetchall()
+    for name, _sql in dependent_triggers:
+        cur.execute(f"DROP TRIGGER {name}")
     cur.execute(f"PRAGMA table_info({table})")
     keep = [row[1] for row in cur.fetchall() if row[1] not in columns]
     cur.execute(f"CREATE TABLE {table}__tmp AS SELECT {', '.join(keep)} FROM {table}")
     cur.execute(f"DROP TABLE {table}")
     cur.execute(f"ALTER TABLE {table}__tmp RENAME TO {table}")
+    for _name, sql in dependent_triggers:
+        cur.execute(sql)
     conn.commit()
     conn.close()
 
