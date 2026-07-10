@@ -20,6 +20,7 @@ from app.ai.provider import decrypt_api_key, encrypt_api_key
 from app.audit import add_audit
 from app.database import get_db
 from app import models
+from app.routers.applications import _ensure_company_profile
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
@@ -1025,6 +1026,10 @@ def _find_or_create_application(
     )
     db.add(li_event)
     db.flush()
+
+    # Ensure a CompanyProfile exists for the new application's firma
+    _ensure_company_profile(db, new_app)
+
     add_audit(db, "create", "linkedin", app_id=new_app.id, event_id=li_event.id,
               new_value=event_titel, user_id=user_id)
     # pending_status (review-queue trigger) nur bei "rejected" — für jeden anderen
@@ -1533,6 +1538,90 @@ def import_people(
         add_audit(db, "create", "user", contact_id=contact.id,
                   app_id=app_obj.id if app_obj else None,
                   new_value=contact.name, reason="Import aus LinkedIn-Personensuche",
+                  user_id=current_user.id)
+        imported += 1
+
+    db.commit()
+    return {"imported": imported, "skipped": skipped}
+
+
+class CompanySearchCandidate(BaseModel):
+    name: str
+    url: str
+    snippet: Optional[str] = None
+
+
+class CompanyImportCandidate(BaseModel):
+    name: str
+    url: str
+
+
+class CompanyImportPayload(BaseModel):
+    candidates: list[CompanyImportCandidate]
+
+
+@router.get("/companies/search")
+async def search_companies(q: str = Query(..., min_length=2), current_user: models.User = Depends(get_current_user)):
+    """LinkedIn-Firmensuche: sucht LinkedIn nach Unternehmen, die `q` im Namen
+    tragen. Liefert eine Liste von Kandidaten (Name, LinkedIn-URL, Snippet)
+    analog zu /people/search."""
+    from app.routers.sync_company import _get_linkedin_context, _linkedin_search_candidates
+
+    li_ctx = None
+    try:
+        li_ctx = await _get_linkedin_context(current_user.id)
+    except Exception as e:
+        log.warning("Firmensuche: LinkedIn-Browser-Start fehlgeschlagen: {}", e)
+    if not li_ctx:
+        raise HTTPException(status_code=400, detail="Keine gültige LinkedIn-Session konfiguriert")
+
+    playwright, browser, context = li_ctx
+    try:
+        candidates = await _linkedin_search_candidates(context, q)
+    finally:
+        await browser.close()
+        await playwright.stop()
+    return candidates
+
+
+@router.post("/companies/import")
+def import_companies(
+    body: CompanyImportPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Importiert vom User ausgewählte LinkedIn-Firmenkandidaten (aus
+    /companies/search) als echte CompanyProfile-Zeilen. Überspringt
+    bereits existierende Profile (matched per normalized name)."""
+    from app.dedup import norm_firma
+
+    imported = 0
+    skipped = 0
+    for cand in body.candidates:
+        name = cand.name.strip()
+        if not name:
+            skipped += 1
+            continue
+        key = norm_firma(name)
+        existing = db.query(models.CompanyProfile).filter(
+            models.CompanyProfile.name_norm == key,
+            models.CompanyProfile.user_id == current_user.id,
+        ).first()
+        if existing:
+            skipped += 1
+            continue
+        profile = models.CompanyProfile(
+            name_norm=key,
+            name_display=name[:200],
+            linkedin_company_url=cand.url,
+            sync_status="pending",
+            user_id=current_user.id,
+        )
+        db.add(profile)
+        db.flush()
+        add_audit(db, "create", "user", company_profile_id=profile.id,
+                  new_value=profile.name_display,
+                  reason="Import aus LinkedIn-Firmensuche",
                   user_id=current_user.id)
         imported += 1
 

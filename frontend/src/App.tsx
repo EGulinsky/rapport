@@ -10,7 +10,9 @@ import { SyncButton } from './components/SyncButton'
 import { ImportExportMenu } from './components/ImportExportMenu'
 import { ContactsView } from './components/ContactsView'
 import { NewContactModal } from './components/NewContactModal'
+import { NewCompanyModal } from './components/NewCompanyModal'
 import { ContactImportModal } from './components/ContactImportModal'
+import { CompanyImportModal } from './components/CompanyImportModal'
 import { CompaniesView } from './components/CompaniesView'
 import { CompanyModal } from './components/CompanyModal'
 import { CalendarView } from './components/CalendarView'
@@ -105,7 +107,9 @@ export default function App() {
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
   const [contactsSearch, setContactsSearch] = useState('')
   const [showNewContact, setShowNewContact] = useState(false)
+  const [showNewCompany, setShowNewCompany] = useState(false)
   const [contactImportSource, setContactImportSource] = useState<'icloud' | 'linkedin' | null>(null)
+  const [showCompanyImport, setShowCompanyImport] = useState(false)
   const [contactsReloadKey, setContactsReloadKey] = useState(0)
 
   const prevAppsRef = useRef<Map<number, Application>>(new Map())
@@ -395,6 +399,23 @@ export default function App() {
                           <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
                         </button>
                       </>
+                    ) : mainView === 'companies' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setShowNewCompany(true) }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewMenu(false); setShowCompanyImport(true) }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button
@@ -671,11 +692,25 @@ export default function App() {
         />
       )}
 
+      {showNewCompany && (
+        <NewCompanyModal
+          onClose={() => setShowNewCompany(false)}
+          onCreated={() => setCompanyReloadKey(k => k + 1)}
+        />
+      )}
+
       {contactImportSource && (
         <ContactImportModal
           source={contactImportSource}
           onClose={() => setContactImportSource(null)}
           onImported={() => setContactsReloadKey(k => k + 1)}
+        />
+      )}
+
+      {showCompanyImport && (
+        <CompanyImportModal
+          onClose={() => setShowCompanyImport(false)}
+          onImported={() => setCompanyReloadKey(k => k + 1)}
         />
       )}
     </div>
