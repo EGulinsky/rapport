@@ -1042,6 +1042,16 @@ def _find_or_create_application(
 _STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
 
 
+def _categories_for_individual_sync(target_app: "models.Application | None") -> list[tuple]:
+    """Welche LinkedIn-Kategorien beim Einzelsync (eine bestimmte Bewerbung) durchsucht
+    werden. ARCHIVED wird übersprungen, außer die Bewerbung ist selbst schon abgesagt —
+    eine gezielt neu gesyncte Bewerbung liegt praktisch nie im Archiv, das Durchblättern
+    (bis zu 99 Seiten) macht den Einzelsync sonst unnötig langsam."""
+    if target_app and target_app.main_status == "rejected":
+        return CATEGORIES
+    return [c for c in CATEGORIES if c[0] != "ARCHIVED"]
+
+
 def _process_linkedin_job(db: Session, job: dict, user_id: Optional[int] = None) -> dict:
     """Match/create an application from one scraped LI job and apply the
     status-progression + PendingMatch-dedup rules.
@@ -1275,9 +1285,11 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 )
                 log.info("[LI] Individueller Sync App #{} — LI-ID: {}", target_app_id, target_li_job_id or "unbekannt")
 
+                search_categories = _categories_for_individual_sync(target_app)
+
                 found_job: dict | None = None
                 cats_searched = 0
-                for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
+                for card_type, label, default_status, max_pages, cat_url in search_categories:
                     _state["step"] = f"{label}: Seite 1 — lade…"
                     cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label)
                     for j in cat_jobs:

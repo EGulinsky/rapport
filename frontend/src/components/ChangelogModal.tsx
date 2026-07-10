@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.51.2',
+    date: '2026-07-10',
+    changes: [
+      'Performance: Der LinkedIn-Sync für eine einzelne Bewerbung durchsucht jetzt nicht mehr das komplette Archiv (bis zu 99 Seiten) — das war der langsamste Teil, obwohl eine gezielt neu gesyncte Bewerbung praktisch nie dort liegt. Nur bei bereits abgesagten Bewerbungen wird weiterhin auch im Archiv gesucht.',
+    ],
+  },
+  {
     version: '3.51.1',
     date: '2026-07-10',
     changes: [
