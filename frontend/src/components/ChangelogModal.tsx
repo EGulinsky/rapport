@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.54.2',
+    date: '2026-07-10',
+    changes: [
+      'Fix (Nachbesserung zu v3.54.1): Der eigentliche Grund für den fehlenden E2E-Testreport war nicht nur das entfernte --rm, sondern dass "docker compose run" den fest konfigurierten container_name ignoriert und stattdessen einen zufälligen Namen vergibt — der docker cp-Schritt suchte also nie den richtigen Container. Der JUnit-Report wird jetzt über ein Bind-Mount direkt auf den Host geschrieben, ganz ohne Container-Namen zu erraten.',
+    ],
+  },
+  {
     version: '3.54.1',
     date: '2026-07-10',
     changes: [
