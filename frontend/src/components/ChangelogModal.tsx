@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.4',
+    date: '2026-07-10',
+    changes: [
+      'Tests: ai/tasks.py von 64% auf 100% Testabdeckung — 34 neue Tests decken alle sieben KI-Funktionen ab (classify_for_app, Batch-Fallback/Rate-Limit-Zweige, test_connection, assess_rejected_application, extract_application_from_text).',
+    ],
+  },
+  {
     version: '3.55.3',
     date: '2026-07-10',
     changes: [
