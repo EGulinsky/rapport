@@ -129,7 +129,7 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner on the Mac.
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 447 tests) → `frontend` (tsc + vite build) → `e2e` (Playwright via docker-compose.test.yml, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 93 L3 integration tests run on push to `main` (`pytest -m integration`).
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 579 tests) → `frontend` (tsc + vite build) → `e2e` (Playwright via docker-compose.test.yml, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 93 L3 integration tests run on push to `main` (`pytest -m integration`).
 Deploy: `git pull` → Docker Buildx builds new images on the runner → `docker compose up -d --build` → health poll → macOS notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (test concept, Phase 1–4 complete, Phase 5 E2E started).
 A push to `main` always triggers test+deploy. Manually (e.g. on a feature branch) via `gh workflow run ci.yml --ref <branch>` to only test, or with `-f deploy=true` to also deploy (this always deploys the `main` head, regardless of the chosen `--ref`).
 
@@ -164,14 +164,54 @@ Test files live in `frontend/e2e/`. The base fixture (`fixtures.ts`) registers a
 via `POST /api/e2e/setup-user` (only active when `E2E_TESTING=true`). The auth token is
 set in `localStorage`, after which the app loads as an authenticated user.
 
+The JUnit report lands directly on the host at `e2e-report/test-results-e2e.xml` (bind-mounted
+in `docker-compose.test.yml`'s `e2e-runner` service, `outputFile` set in `playwright.config.ts`) —
+deliberately not read via `docker cp`, since `docker compose run` ignores the service's static
+`container_name:` and mints a fresh random name every invocation. `e2e-report/` is gitignored.
+
 ## Excel File
 
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`
 Sheet: `Tracking`, 17 columns — mapping in `models.py` under `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
 
-## Work State (Session v3.51.0 – 2026-07-10)
+## Work State (Session v3.55.0 – 2026-07-10)
 
-Current version: **v3.51.0** (build number from `frontend/src/version.ts`).
+Current version: **v3.55.0** (build number from `frontend/src/version.ts`). Picks up right after the v3.51.0 session documented further below (kept as historical reference).
+
+### Completed in This Session
+
+**Documentation → English (v3.52.0):** all Markdown docs (`ARCHITECTURE.md`, `TEST_KONZEPT.md`, `Rapport_Konzept_Architektur.md`, `Rapport_Projektstand.md`, `CLAUDE.md`, `README.md`) plus all 34 closed GitHub issues (titles/bodies/comments) translated to English.
+
+**Git history rewritten to English:** all 474 pre-existing commit messages translated and rewritten via `git-filter-repo --commit-callback` (content/tree hashes unchanged, verified — only commit metadata changed), then force-pushed to `main`. Safety net: backup tag `backup/pre-en-history-rewrite-2026-07-10` still points at the original (pre-rewrite) history. Local clones/forks made before this rewrite are diverged from `origin/main` and need a hard reset to `origin/main` to continue pushing.
+
+**Account profile + CV upload (v3.53.0):** `User` model gained `vorname`, `nachname`, `linkedin_url`, `cv_filename`, `cv_content_type`, `cv_size_bytes`, `cv_storage_path` (migration `_migrate_user_profile()` in `database.py`). New endpoints in `routers/auth.py`: `PATCH /api/auth/profile`, `POST/GET/DELETE /api/auth/cv` (file stored at `{DB_DIR}/user_files/{user_id}/{filename}`, same pattern as `attachments.py`). Frontend: new "Profil"/"Lebenslauf" sections in `SettingsModal.tsx`'s `AccountPanel`. Groundwork for future AI use cases (e.g. auto-generated cover letters).
+
+**Audit-Log — explicit type column + richer reasons (v3.54.0):** `AuditLog` gained an `entity_type` column (`application | contact | company | event`), derived automatically in `add_audit()` (`app/audit.py`) via the same contact > company > event > application precedence the frontend used to infer client-side — FK-based inference alone is unreliable (multiple FKs can be set at once, or none, as a company-merge bug demonstrated: it wrote no FK at all and was unfindable/untypeable, now fixed by setting `company_profile_id`). New filterable "Typ" column + badge in `AuditLogModal.tsx`. The `reason` field is now enriched with concrete context at sync/AI/matching call sites that already computed a "why" but discarded it — e.g. iCloud/targeted contact imports now say *why* a contact was pulled in ("in Bewerbungstext/E-Mail erwähnt"), AI-Bewertung includes the actual reasoning text, LinkedIn/company sync note the matched job-ID/URL/QID, PendingMatch approvals carry over confidence/extract. Manual (`source="user"`) changes are left without a synthesized reason, as before.
+
+**CI: E2E test-report collection actually fixed (v3.54.1 → v3.54.2):** the "kein Testreport gefunden" step-summary warning had two stacked causes. v3.54.1 removed `--rm` from `docker compose run e2e-runner`, addressing a real but secondary issue (container removed before the follow-up `docker cp`) — this alone didn't fix it. The actual root cause: `docker compose run` **ignores** the service's static `container_name:` and mints a random `<project>-<service>-run-<hash>` name every time, so `docker cp rapport-e2e:...` was always targeting a container that never existed. v3.54.2 fixed it properly: Playwright now writes the JUnit report to a bind-mounted host directory (`e2e-report/` at repo root, mounted to `/app/e2e/e2e-report` in `docker-compose.test.yml`'s `e2e-runner` service; `playwright.config.ts`'s `outputFile` points there) — no `docker cp`, no container-name guessing. `--rm` was restored since it's no longer load-bearing. Verified locally end-to-end before pushing (13/13 E2E tests, report correctly written and parsed).
+
+**Bulk-select/delete in the Bewerbung modal (v3.55.0):** Verlauf (timeline events), Anhänge (file-type events — same underlying model, different filter), and Kontakte (contacts linked to the application) can now be multi-selected (checkbox + "Alle auswählen" with indeterminate state) and deleted together. New backend endpoints `DELETE /api/applications/{id}/events/bulk` and `.../contacts/bulk` (both take `{ids: [...]}`, registered *before* their single-item `/{event_id}`/`{contact_id}` siblings in `applications.py` — otherwise Starlette's un-typed path matching would swallow `/bulk` as an `{event_id}` string and 422 instead of falling through). Events bulk-delete replicates the single-delete's `datum_bewerbung` recompute (once at the end, not per row); contacts bulk-delete replicates the single-delete's unlink-vs-hard-delete branching (a contact is only hard-deleted + audited once no other application references it).
+
+**Test additions this session:** `backend/tests/unit/test_audit_entity_type.py` (entity_type inference), `test_audit_log_entities_api.py::TestEntityTypeApi` (API-level type/filter/merge-fix coverage), `test_auth_api.py::TestProfileAndCv` (10 tests), `test_applications_api.py::TestBulkDeleteEvents`/`TestBulkDeleteAppContacts` (9 tests). Backend suite: 682 tests total (579 unit/component/api + 93 integration), all green.
+
+### Open / Next Steps
+- LinkedIn message participant-matching context (point 4 from the audit-log investigation) still isn't surfaced in `reason` — lower priority, descriptive rather than a strong "why"
+- The nested per-attachment pills inside `TimelineEvent.attachments` (real `Attachment` model rows, not the file-type-Event rows the Anhänge tab shows) still have no delete UI, individually or bulk
+- `attachments.py`'s single `delete_attachment` still has no audit logging at all, unlike every other delete path in the codebase
+
+### Commits (this session, newest first)
+```
+0c4c9cb Bewerbung: Verlauf, Anhänge und Kontakte mehrfach markieren und löschen (v3.55.0)
+eff951a CI: E2E-Testreport wirklich reparieren via Bind-Mount statt docker cp (v3.54.2)
+cec726b CI: E2E-Testreport-Sammlung reparieren (v3.54.1)
+68d83d9 Audit-Log: eigene Typ-Spalte + konkreter Grund statt nur Quelle (v3.54.0)
+5ccb784 Account profile: name, LinkedIn link, CV upload (v3.53.0)
+7826de8 docs: translate all documentation to English (v3.52.0) — plus the 474-commit history rewrite force-pushed on top of the prior history
+```
+
+---
+
+## Work State (Session v3.51.0 – 2026-07-10) — historical
 
 ### Completed in This Session
 
