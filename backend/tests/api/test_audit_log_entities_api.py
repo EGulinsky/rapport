@@ -82,6 +82,47 @@ class TestContactAudit:
         assert audit is not None
 
 
+class TestEntityTypeApi:
+    def test_positiv_response_enthaelt_entity_type(self, client, db_session):
+        resp = client.post("/api/contacts/", json={"name": "Max Mustermann"})
+        assert resp.status_code == 201
+
+        list_resp = client.get("/api/audit/", params={"contact_id": resp.json()["id"]})
+
+        assert list_resp.status_code == 200
+        items = list_resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["entity_type"] == "contact"
+
+    def test_positiv_filter_nach_entity_type(self, client, db_session):
+        client.post("/api/contacts/", json={"name": "Kontakt A"})
+        client.post("/api/companies", json={"name": "Contoso AG"})
+
+        resp = client.get("/api/audit/", params={"entity_type": "company"})
+
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 1
+        assert all(i["entity_type"] == "company" for i in items)
+
+    def test_positiv_firmenmerge_setzt_company_profile_id(self, client, db_session):
+        # Regressionstest für einen Bug: der Merge-Audit-Eintrag hatte zuvor
+        # keine einzige FK gesetzt (app_id=None, company_profile_id nie
+        # übergeben) und war dadurch weder auffindbar noch typisierbar.
+        winner = company_profile_factory(db_session, name_display="Contoso AG")
+        loser = company_profile_factory(db_session, name_display="Contoso Old AG")
+        db_session.commit()
+
+        resp = client.post("/api/merge/companies", json={
+            "winner_id": winner.id, "loser_ids": [loser.id], "field_overrides": {},
+        })
+
+        assert resp.status_code == 200
+        audit = db_session.query(models.AuditLog).filter_by(action="merge", company_profile_id=winner.id).first()
+        assert audit is not None
+        assert audit.entity_type == "company"
+
+
 class TestCompanyAudit:
     def test_positiv_create_wird_protokolliert(self, client, db_session):
         resp = client.post("/api/companies", json={"name": "Contoso AG"})

@@ -27,6 +27,20 @@ const ACTION_COLORS: Record<string, string> = {
   import: 'bg-gray-100 text-gray-600',
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  application: 'Bewerbung',
+  contact: 'Kontakt',
+  company: 'Firma',
+  event: 'Termin',
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  application: 'bg-indigo-100 text-indigo-700',
+  contact: 'bg-teal-100 text-teal-700',
+  company: 'bg-amber-100 text-amber-700',
+  event: 'bg-pink-100 text-pink-700',
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   user: 'Manuell',
   gmail: 'Gmail',
@@ -51,14 +65,16 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
   const [filterApp, setFilterApp] = useState<string>(initialAppId ? String(initialAppId) : '')
+  const [filterType, setFilterType] = useState<string>('')
   const [clearing, setClearing] = useState(false)
 
-  const load = useCallback(async (pg = page, appFilter = filterApp) => {
+  const load = useCallback(async (pg = page, appFilter = filterApp, typeFilter = filterType) => {
     setLoading(true)
     try {
       const appId = appFilter ? parseInt(appFilter) : undefined
       const res = await api.audit.list({
         app_id: isNaN(appId!) ? undefined : appId,
+        entity_type: typeFilter || undefined,
         limit: PAGE_SIZE,
         offset: pg * PAGE_SIZE,
       })
@@ -67,19 +83,25 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [page, filterApp])
+  }, [page, filterApp, filterType])
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function changePage(delta: number) {
     const next = page + delta
     setPage(next)
-    load(next, filterApp)
+    load(next, filterApp, filterType)
   }
 
   function applyFilter() {
     setPage(0)
-    load(0, filterApp)
+    load(0, filterApp, filterType)
+  }
+
+  function changeTypeFilter(value: string) {
+    setFilterType(value)
+    setPage(0)
+    load(0, filterApp, value)
   }
 
   async function clearLog() {
@@ -134,6 +156,18 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
           <button onClick={applyFilter} className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
             Filtern
           </button>
+          <label className="text-xs text-gray-500 shrink-0 ml-2">Typ:</label>
+          <select
+            value={filterType}
+            onChange={e => changeTypeFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="">alle</option>
+            <option value="application">Bewerbung</option>
+            <option value="contact">Kontakt</option>
+            <option value="company">Firma</option>
+            <option value="event">Termin</option>
+          </select>
           <span className="ml-auto text-xs text-gray-400">{total} Einträge</span>
         </div>
 
@@ -144,6 +178,7 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
               <tr>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-32">Zeitpunkt</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-24">Aktion</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500 w-20">Typ</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500">Bezug</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500 w-20">Quelle</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-500">Änderung</th>
@@ -152,7 +187,7 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
             </thead>
             <tbody>
               {entries.length === 0 && !loading && (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">Keine Einträge</td></tr>
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">Keine Einträge</td></tr>
               )}
               {entries.map(e => (
                 <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -162,22 +197,28 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
                       {ACTION_LABELS[e.action] ?? e.action}
                     </span>
                   </td>
+                  <td className="px-3 py-2">
+                    {e.entity_type && (
+                      <span className={clsx('inline-block px-1.5 py-0.5 rounded text-[10px] font-medium', TYPE_COLORS[e.entity_type] ?? 'bg-gray-100 text-gray-600')}>
+                        {TYPE_LABELS[e.entity_type] ?? e.entity_type}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-gray-700 max-w-[200px]">
                     {(() => {
                       const primary = e.contact_name
-                        ? { label: e.contact_name, tag: 'Kontakt', id: e.contact_id }
+                        ? { label: e.contact_name, id: e.contact_id }
                         : e.company_name
-                        ? { label: e.company_name, tag: 'Firma', id: e.company_profile_id }
+                        ? { label: e.company_name, id: e.company_profile_id }
                         : e.event_titel
-                        ? { label: e.event_titel, tag: 'Termin', id: e.event_id }
+                        ? { label: e.event_titel, id: e.event_id }
                         : null
                       return (
                         <>
                           {primary && (
                             <span className="truncate block">
                               <span className="font-medium">{primary.label}</span>{' '}
-                              <span className="text-gray-300">#{primary.id}</span>{' '}
-                              <span className="text-[10px] text-gray-400">{primary.tag}</span>
+                              <span className="text-gray-300">#{primary.id}</span>
                             </span>
                           )}
                           {e.app_firma && (

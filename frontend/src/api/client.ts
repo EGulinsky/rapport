@@ -439,7 +439,7 @@ export const api = {
   },
 
   audit: {
-    list: (params?: { app_id?: number; contact_id?: number; company_profile_id?: number; event_id?: number; limit?: number; offset?: number }) => {
+    list: (params?: { app_id?: number; contact_id?: number; company_profile_id?: number; event_id?: number; entity_type?: string; limit?: number; offset?: number }) => {
       const qs = params ? '?' + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
       ).toString() : ''

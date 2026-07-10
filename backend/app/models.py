@@ -489,6 +489,9 @@ class AuditLog(Base):
     company_profile_id = Column(Integer, ForeignKey("company_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     event_id           = Column(Integer, ForeignKey("events.id", ondelete="SET NULL"), nullable=True, index=True)
     timestamp          = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    # application | contact | company | event — explicit, survives even if the
+    # referenced row is later deleted (FK-based inference is unreliable, see add_audit()).
+    entity_type        = Column(String, nullable=True, index=True)
     # create | update | delete | status_change | merge | import
     action             = Column(String, nullable=False)
     field              = Column(String, nullable=True)   # which field changed (verbose mode)

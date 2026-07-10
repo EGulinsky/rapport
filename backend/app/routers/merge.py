@@ -189,7 +189,7 @@ def merge_companies(
                           reason="Firmen zusammengeführt", user_id=current_user.id)
         db.flush()
 
-        add_audit(db, "merge", "user", app_id=None,
+        add_audit(db, "merge", "user", company_profile_id=winner.id,
                   old_value=f"{loser.name_display or loser.name_norm} (#{loser.id})",
                   new_value=f"{winner.name_display or winner.name_norm} (#{winner.id})",
                   reason="Firmen zusammengeführt", user_id=current_user.id)

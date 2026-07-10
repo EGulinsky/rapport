@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.54.0',
+    date: '2026-07-10',
+    changes: [
+      'Neu: Audit-Log zeigt jetzt eine eigene Typ-Spalte (Bewerbung/Kontakt/Firma/Termin) mit Filter, statt den Typ nur indirekt über die Bezug-Spalte erkennbar zu machen.',
+      'Verbessert: Der Grund-Spalte steht bei automatischen Änderungen (Sync, KI, PendingMatch-Freigabe) jetzt der konkrete Auslöser statt nur die Quelle — z.B. "in Bewerbungstext/E-Mail erwähnt" oder die KI-Begründung statt nur "KI-Bewertung".',
+      'Fix: Firmen-Merge-Einträge im Audit-Log hatten bisher keine Firmen-Referenz und waren dadurch weder auffindbar noch typisierbar.',
+    ],
+  },
+  {
     version: '3.53.0',
     date: '2026-07-10',
     changes: [
