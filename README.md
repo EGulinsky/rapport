@@ -4,97 +4,97 @@
 
 # rapport
 
-Self-hosted CRM für deine Bewerbungssuche — Ersatz für die Excel-Bewerbungsliste.  
-Läuft lokal in OrbStack / Docker Compose. Aktueller Stand: siehe In-App-Changelog (Version in `frontend/src/components/ChangelogModal.tsx`).
+Self-hosted CRM for your job search — a replacement for the Excel application list.
+Runs locally in OrbStack / Docker Compose. Current status: see the in-app changelog (version in `frontend/src/components/ChangelogModal.tsx`).
 
-Technische Architektur mit Diagrammen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+Technical architecture with diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-## Voraussetzungen
+## Requirements
 
-- [OrbStack](https://orbstack.dev/) oder Docker Desktop (Mac / Linux / Windows)
+- [OrbStack](https://orbstack.dev/) or Docker Desktop (Mac / Linux / Windows)
 
-## Schnellstart
+## Quick Start
 
 ```bash
-# 1. In den Projektordner wechseln
+# 1. Change into the project folder
 cd /Users/eugengulinsky/code/rapport
 
-# 2. App starten (erstmaliger Build dauert ~2–3 Minuten)
+# 2. Start the app (first build takes ~2–3 minutes)
 docker compose up -d --build
 
-# 3. Browser öffnen
-open http://192.168.117.10        # OrbStack (empfohlen, kein Proxy-Cache)
-# oder: open http://localhost:3000
+# 3. Open the browser
+open http://192.168.117.10        # OrbStack (recommended, no proxy cache)
+# or: open http://localhost:3000
 ```
 
-## Funktionen
+## Features
 
-| Feature | Beschreibung |
+| Feature | Description |
 |---|---|
-| **Dashboard / Tabelle** | Alle Bewerbungen, sortierbar; „Nächster Schritt" intelligent berechnet |
-| **Kanban-Board** | Pipeline-Ansicht mit Drag & Drop nach Status-Spalten |
-| **Kalender-Ansicht** | Outlook-ähnlich: Tag / Arbeitswoche / Woche / Monat |
-| **Filter & Suche** | Nach Status, Freitext, Abgesagte ein-/ausblenden |
-| **Detail-Modal** | Vollständiges Profil, Lifecycle-Bar, Timeline, Gesprächsnotizen |
-| **Kontakte (CRM)** | Kontaktpersonen mit n:m-Verknüpfung zu Bewerbungen |
-| **Excel Import** | `.xlsx` im Originalformat (Sheet „Tracking", 17 Spalten) |
-| **Excel Export** | Rückexport ins gleiche Format |
-| **KPI-Kacheln** | Gesamt / Aktiv / Abgesagt / Interview-Rate |
-| **LinkedIn Sync** | Playwright-Scraper: eigene Bewerbungsaktivität abgleichen, Status-Updates inkl. Absagen |
-| **Gmail Sync** | Google OAuth 2.0, bewerbungsrelevante Mails verknüpfen |
-| **Google Calendar** | Interview-Termine als Events, Kontakte aus Teilnehmerliste |
-| **iCloud Mail** | IMAP-Sync (App-Specific Password) |
-| **iCloud Kalender** | CalDAV-Sync |
-| **iCloud Kontakte** | CardDAV-Import + manuelle Volltextsuche im Adressbuch |
-| **LinkedIn-Kontaktimport** | Personensuche direkt in der Kontakte-Übersicht, Auswahl importieren |
-| **Ortsautocomplete** | Google Places (mit API-Key) oder Nominatim-Fallback |
-| **Lokale Dokumente** | PDF/DOCX/TXT/MD über den Rapport Agent |
-| **Review-Queue** | KI-Vorschläge für Events und Statuswechsel freigeben |
-| **Sync-Steuerung** | Quellen einzeln aktivieren / deaktivieren |
-| **AI-Klassifikation** | Provider-agnostisch via LiteLLM (Groq, Ollama, OpenAI, Anthropic) |
-| **KI-Erfolgsbewertung** | Ampel (grün/gelb/rot) je Bewerbung inkl. Begründung + nächstem Schritt; bei Absagen Absagegrund-Analyse |
-| **LinkedIn-Import** | Stellenanzeigen-Link einfügen → Firma/Rolle/Quelle automatisch per KI extrahiert |
-| **Firmenprofile** | Eigene Firmenansicht mit Logo, Branche, Standort, Mitarbeiterzahl (automatisch angereichert) |
-| **Zusammenführen** | Duplikate bei Bewerbungen, Kontakten und Firmen manuell oder automatisch mergen |
-| **Bereinigen** | Kontextsensitive Dublettenerkennung (Bewerbungen/Kontakte/Firmen/Kalender) |
-| **Dateianhänge** | Anhänge aus Sync-Quellen an Timeline-Events, herunterladbar |
-| **PDF-Export** | Export der Eigenbemühungen als PDF |
-| **Auswertungen** | Pipeline-Funnel und Absage-Statistiken |
-| **Audit-Log** | Nachvollziehbare Änderungshistorie je Bewerbung |
-| **Backup** | Konfigurierbare lokale Datenbank-Backups |
-| **Changelog** | Versionsverlauf im App-Header abrufbar |
+| **Dashboard / Table** | All applications, sortable; "next step" intelligently computed |
+| **Kanban board** | Pipeline view with drag & drop across status columns |
+| **Calendar view** | Outlook-like: day / work week / week / month |
+| **Filter & search** | By status, free text, show/hide rejected |
+| **Detail modal** | Full profile, lifecycle bar, timeline, interview notes |
+| **Contacts (CRM)** | Contact persons with n:m linking to applications |
+| **Excel import** | `.xlsx` in the original format (sheet "Tracking", 17 columns) |
+| **Excel export** | Re-export to the same format |
+| **KPI tiles** | Total / active / rejected / interview rate |
+| **LinkedIn sync** | Playwright scraper: reconcile your own application activity, status updates incl. rejections |
+| **Gmail sync** | Google OAuth 2.0, link application-relevant emails |
+| **Google Calendar** | Interview appointments as events, contacts from the attendee list |
+| **iCloud Mail** | IMAP sync (app-specific password) |
+| **iCloud Calendar** | CalDAV sync |
+| **iCloud Contacts** | CardDAV import + manual full-text search of the address book |
+| **LinkedIn contact import** | People search directly in the contacts overview, import a selection |
+| **Location autocomplete** | Google Places (with API key) or Nominatim fallback |
+| **Local documents** | PDF/DOCX/TXT/MD via the Rapport Agent |
+| **Review queue** | Approve AI suggestions for events and status changes |
+| **Sync control** | Enable/disable sources individually |
+| **AI classification** | Provider-agnostic via LiteLLM (Groq, Ollama, OpenAI, Anthropic) |
+| **AI success assessment** | Traffic light (green/yellow/red) per application incl. reasoning + next step; rejection-reason analysis for rejections |
+| **LinkedIn import** | Paste a job-posting link → company/role/source automatically extracted via AI |
+| **Company profiles** | Dedicated company view with logo, industry, location, employee count (automatically enriched) |
+| **Merge** | Manually or automatically merge duplicates among applications, contacts, and companies |
+| **Cleanup** | Context-sensitive duplicate detection (applications/contacts/companies/calendar) |
+| **File attachments** | Attachments from sync sources on timeline events, downloadable |
+| **PDF export** | Export your own job-search activity as a PDF |
+| **Analytics** | Pipeline funnel and rejection statistics |
+| **Audit log** | Traceable change history per application |
+| **Backup** | Configurable local database backups |
+| **Changelog** | Version history available in the app header |
 
-## Einstellungen
+## Settings
 
 ### LinkedIn
-1. Einstellungen → LinkedIn → E-Mail + Passwort eintragen
-2. „Sync starten" — bei 2FA: Push-Notification bestätigen **oder** Code eingeben
+1. Settings → LinkedIn → enter email + password
+2. "Start sync" — for 2FA: confirm the push notification **or** enter the code
 
 ### Google (Gmail + Calendar)
-1. Google Cloud Console → OAuth 2.0 Client (Web), Redirect URI: `http://localhost:8000/api/sync/google/callback`
-2. Einstellungen → Google: Client ID + Secret eintragen → OAuth-Flow starten
+1. Google Cloud Console → OAuth 2.0 client (web), redirect URI: `http://localhost:8000/api/sync/google/callback`
+2. Settings → Google: enter client ID + secret → start the OAuth flow
 
-### iCloud (Mail + Kalender + Kontakte)
-1. Apple ID → Sicherheit → App-spezifische Passwörter → neues Passwort generieren
-2. Einstellungen → iCloud: Apple-ID + App-Passwort eintragen
+### iCloud (Mail + Calendar + Contacts)
+1. Apple ID → Security → App-Specific Passwords → generate a new password
+2. Settings → iCloud: enter Apple ID + app password
 
-### Lokale Dokumente (+ Notizen, Anrufe, Backup)
-Erfordert den Rapport Agent auf dem Mac (siehe [agent/README.md](agent/README.md) — als `.app`/`.dmg` installierbar, läuft dauerhaft im Hintergrund mit Menüleisten-Icon, keine manuellen Terminal-Fenster mehr). Nach der Installation: Einstellungen → Agent → Token einfügen (wird beim ersten Start des Agenten in der Menüleiste angezeigt). Dann Einstellungen → Dokumente → Ordnerpfad setzen.
+### Local Documents (+ Notes, Calls, Backup)
+Requires the Rapport Agent on the Mac (see [agent/README.md](agent/README.md) — installable as a `.app`/`.dmg`, runs permanently in the background with a menu-bar icon, no more manual terminal windows). After installation: Settings → Agent → paste the token (shown in the menu bar the first time the agent starts). Then Settings → Documents → set the folder path.
 
-### AI-Provider
-- **Groq** (empfohlen, kostenlos): API-Key von [console.groq.com](https://console.groq.com), Modell `groq/llama-3.3-70b-versatile`
-- **Ollama** (lokal, kein API-Key): Base URL `http://host.docker.internal:11434`
+### AI Provider
+- **Groq** (recommended, free): API key from [console.groq.com](https://console.groq.com), model `groq/llama-3.3-70b-versatile`
+- **Ollama** (local, no API key): base URL `http://host.docker.internal:11434`
 
-### Ortsautocomplete (optional)
-Ohne Konfiguration nutzt die "Ort"-Suche automatisch Nominatim (kostenlos, keine POIs). Für Firmenstandorte/POIs: Einstellungen → Karten → Google Places API-Key eintragen.
+### Location Autocomplete (Optional)
+Without configuration, the "location" search automatically uses Nominatim (free, no POIs). For company locations/POIs: Settings → Maps → enter a Google Places API key.
 
-## API-Dokumentation
+## API Documentation
 
 Swagger UI: `http://localhost:8000/docs`
 
-## Isolierte Testumgebung
+## Isolated Test Environment
 
-Für gefahrloses Testen (z.B. Restore aus einem Produktiv-Backup) gibt es eine separate 1:1-Umgebung mit eigener, leerer Datenbank — komplett getrennt von den echten Daten und im Frontend deutlich mit einem roten "TESTUMGEBUNG"-Banner markiert.
+For safe testing (e.g. restoring from a production backup), there is a separate 1:1 environment with its own, empty database — completely isolated from the real data and clearly marked in the frontend with a red "TEST ENVIRONMENT" banner.
 
 ```bash
 docker compose -p rapport-test -f docker-compose.test.yml up -d --build
@@ -103,31 +103,31 @@ docker compose -p rapport-test -f docker-compose.test.yml up -d --build
 - GUI: `http://localhost:3001`
 - API/Swagger: `http://localhost:8001/docs`
 
-Zurücksetzen (löscht auch die Test-Datenbank):
+Reset (also deletes the test database):
 
 ```bash
 docker compose -p rapport-test -f docker-compose.test.yml down -v
 ```
 
-## App stoppen
+## Stopping the App
 
 ```bash
 docker compose down
 ```
 
-Daten bleiben erhalten (Docker Volume `jobtracker-data`).
+Data is preserved (Docker volume `jobtracker-data`).
 
 ## Tests
 
 ```bash
 cd backend
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -m "unit or component or api"    # 357 Tests, gleiches Gate wie in CI
+pytest -m "unit or component or api"    # 357 tests, same gate as in CI
 ```
 
-Details zum Testkonzept: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md)
+Details on the test concept: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md)
 
-## Entwicklungsmodus (ohne Docker)
+## Development Mode (Without Docker)
 
 ```bash
 # Backend
@@ -135,12 +135,12 @@ cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload    # http://localhost:8000
 
-# Frontend (neues Terminal)
+# Frontend (new terminal)
 cd frontend
 npm install
 npm run dev                      # http://localhost:5173
 ```
 
-## Lizenz
+## License
 
-[Business Source License 1.1](LICENSE) — freie Nutzung für private, nicht-kommerzielle Zwecke. Für eine kommerzielle Nutzung ist eine separate Lizenz erforderlich.
+[Business Source License 1.1](LICENSE) — free to use for private, non-commercial purposes. A separate license is required for commercial use.

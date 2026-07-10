@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.52.0',
+    date: '2026-07-10',
+    changes: [
+      'Doku: Alle Markdown-Dokumente (ARCHITECTURE.md, TEST_KONZEPT.md, Rapport_Konzept_Architektur.md, Rapport_Projektstand.md, CLAUDE.md, README.md) ins Englische übersetzt.',
+    ],
+  },
+  {
     version: '3.51.2',
     date: '2026-07-10',
     changes: [
