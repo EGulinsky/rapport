@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.2',
+    date: '2026-07-10',
+    changes: [
+      'Tests: Testabdeckung erhöht — calendar.py, audit_log.py, sync_common.py und backup.py jeweils auf ≥86% (vorher 73–79%), 37 neue Tests.',
+    ],
+  },
+  {
     version: '3.55.1',
     date: '2026-07-10',
     changes: [
