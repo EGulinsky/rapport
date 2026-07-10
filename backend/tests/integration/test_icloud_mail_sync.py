@@ -7,10 +7,12 @@ Logik. Zweiphasige Abholung wie beim globalen Gmail-Sync: erst nur Header
 (RFC822) nur für Treffer.
 """
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app import models
+from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_mail
 from tests.factories import application_factory, contact_factory
 from tests.integration.conftest import icloud_email
@@ -84,6 +86,43 @@ class TestDoIcloudMailNeueNachrichten:
         assert result["created"] == 0
         assert result["skipped"] == 1
 
+    async def test_negativ_bereits_synctes_liefert_skip_ohne_erneute_verarbeitung(
+        self, db_session, icloud_sync, fake_icloud_imap
+    ):
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.add(models.SyncedItem(source="icloud_mail", external_id="4", user_id=1))
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "4", "Recruiterin <recruiterin@contoso.com>", "Interview bei Contoso AG",
+            "Einladung zum Interview.", _now_rfc2822(),
+        )
+        fake_icloud_imap(["4"], {msg_id: msg})
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 0
+        assert result["skipped"] == 1
+
+    async def test_corner_case_kaputtes_date_header_wird_ignoriert_statt_absturz(
+        self, db_session, icloud_sync, fake_icloud_imap
+    ):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "5", "Recruiterin <recruiterin@contoso.com>", "Einladung zum Interview",
+            "Wir würden Sie gerne zu einem Interview einladen.", "kein-gueltiges-datum",
+        )
+        fake_icloud_imap(["5"], {msg_id: msg})
+
+        result = await _do_icloud_mail(1)
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+
 
 class TestDoIcloudMailFehler:
     async def test_negativ_imap_verbindungsfehler_liefert_sauberen_fehler(self, db_session, icloud_sync, monkeypatch):
@@ -123,3 +162,127 @@ class TestDoIcloudMailFehler:
 
         assert result["created"] == 1
         assert any("fail" in e for e in result["errors"])
+
+    async def test_negativ_fehler_beim_vollstaendigen_fetch_stoppt_nicht_den_gesamten_sync(
+        self, db_session, icloud_sync, fake_icloud_imap
+    ):
+        # Der zweiphasige Fetch holt Header + volle Nachricht getrennt — ein
+        # Fehler in der zweiten Phase (RFC822, nicht RFC822.HEADER) muss
+        # ebenso gesammelt werden, ohne den restlichen Sync abzubrechen.
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "6", "Recruiterin <recruiterin@contoso.com>", "Interview bei Contoso AG",
+            "Einladung zum Interview.", _now_rfc2822(),
+        )
+        conn = fake_icloud_imap(["6"], {msg_id: msg})
+
+        real_fetch = conn.fetch
+
+        def _flaky_full_fetch(msg_id_bytes, spec):
+            if spec == "(RFC822)":
+                raise RuntimeError("full-fetch-boom")
+            return real_fetch(msg_id_bytes, spec)
+
+        conn.fetch = _flaky_full_fetch
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 0
+        assert any("full-fetch-boom" in e for e in result["errors"])
+
+    async def test_negativ_ai_not_configured_beendet_sync_sauber(self, db_session, icloud_sync, fake_icloud_imap, monkeypatch):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "7", "Recruiterin <recruiterin@contoso.com>", "Interview bei Contoso AG",
+            "Einladung zum Interview.", _now_rfc2822(),
+        )
+        fake_icloud_imap(["7"], {msg_id: msg})
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=AINotConfigured("kein Provider konfiguriert")),
+        )
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 0
+        assert any("kein Provider konfiguriert" in e for e in result["errors"])
+
+    async def test_negativ_unerwarteter_fehler_bei_process_item_stoppt_nicht_den_gesamten_sync(
+        self, db_session, icloud_sync, fake_icloud_imap, monkeypatch
+    ):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "9", "Recruiterin <recruiterin@contoso.com>", "Interview bei Contoso AG",
+            "Einladung zum Interview.", _now_rfc2822(),
+        )
+        fake_icloud_imap(["9"], {msg_id: msg})
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=RuntimeError("process-item-boom")),
+        )
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 0
+        assert any("process-item-boom" in e for e in result["errors"])
+
+    async def test_negativ_ai_rate_limited_beendet_sync_sauber(self, db_session, icloud_sync, fake_icloud_imap, monkeypatch):
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "8", "Recruiterin <recruiterin@contoso.com>", "Interview bei Contoso AG",
+            "Einladung zum Interview.", _now_rfc2822(),
+        )
+        fake_icloud_imap(["8"], {msg_id: msg})
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=AIRateLimited("Tageslimit erreicht")),
+        )
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 0
+        assert any("AI-Tageslimit" in e for e in result["errors"])
+
+    async def test_negativ_unerwarteter_fehler_ausserhalb_der_nachrichtenschleife_wird_gesammelt(
+        self, db_session, icloud_sync, fake_icloud_imap, monkeypatch
+    ):
+        # build_firm_index() läuft VOR dem inneren IMAP-try/except — ein Fehler
+        # dort landet im äußeren Except-Handler der Funktion (nicht in den
+        # spezifischeren inneren Handlern).
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.build_firm_index",
+            lambda db: (_ for _ in ()).throw(RuntimeError("firm-index-boom")),
+        )
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 0
+        assert any("firm-index-boom" in e for e in result["errors"])
+
+    async def test_corner_case_logout_fehler_am_ende_wird_verschluckt(self, db_session, icloud_sync, fake_icloud_imap):
+        conn = fake_icloud_imap([], {})
+
+        def _raise_logout():
+            raise RuntimeError("logout-boom")
+
+        conn.logout = _raise_logout
+
+        result = await _do_icloud_mail(1)
+
+        assert result["errors"] == []

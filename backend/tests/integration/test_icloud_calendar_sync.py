@@ -11,14 +11,17 @@ Anders als beim Google-Calendar-Sync gibt es hier kein Kontakt-Matching,
 sondern Keyword- (JOB_KEYWORDS) bzw. Firmenname-Textmatching auf Titel+
 Beschreibung.
 """
+import sys
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app import models
+from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_cal
 from tests.factories import application_factory
-from tests.integration.conftest import FakeCaldavCalendar, icloud_calendar_event
+from tests.integration.conftest import FakeCaldavCalendar, FakeCaldavEvent, icloud_calendar_event
 
 pytestmark = pytest.mark.integration
 
@@ -93,6 +96,136 @@ class TestDoIcloudCalNeueTermine:
 
         assert result["created"] == 0
         assert any("CalDAV-Fehler" in e for e in result["errors"])
+
+    async def test_negativ_caldav_bibliothek_fehlt_liefert_klaren_fehler(self, db_session, icloud_sync, monkeypatch):
+        monkeypatch.setitem(sys.modules, "caldav", None)
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 0
+        assert result["errors"] == ["caldav-Bibliothek nicht installiert."]
+
+    async def test_positiv_ganztaegiger_termin_mit_reinem_datumswert_wird_verarbeitet(
+        self, db_session, icloud_sync, fake_caldav
+    ):
+        # DTSTART;VALUE=DATE (ohne Uhrzeit) liefert ein `datetime.date`-Objekt
+        # statt `datetime.datetime` — eigener Zweig in der dtstart-Typprüfung.
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+        allday = date.today()
+        ics = (
+            "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nBEGIN:VEVENT\n"
+            f"UID:evt-allday\nDTSTART;VALUE=DATE:{allday.strftime('%Y%m%d')}\nSUMMARY:Ganztag Interview bei Contoso AG\n"
+            "END:VEVENT\nEND:VCALENDAR\n"
+        )
+        ev = FakeCaldavEvent(ics, "https://caldav.icloud.com/evt-allday.ics")
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+
+        result = await _do_icloud_cal(1)
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-allday").one()
+        assert event.datum == allday
+
+    async def test_negativ_ai_not_configured_beendet_sync_sauber(self, db_session, icloud_sync, fake_caldav, monkeypatch):
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+        ev = icloud_calendar_event("evt-ai-1", "Interview bei Contoso AG", datetime.now(timezone.utc))
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=AINotConfigured("kein Provider konfiguriert")),
+        )
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 0
+        assert any("kein Provider konfiguriert" in e for e in result["errors"])
+
+    async def test_negativ_ai_rate_limited_beendet_sync_sauber(self, db_session, icloud_sync, fake_caldav, monkeypatch):
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+        ev = icloud_calendar_event("evt-ai-2", "Interview bei Contoso AG", datetime.now(timezone.utc))
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=AIRateLimited("Tageslimit erreicht")),
+        )
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 0
+        assert any("AI-Tageslimit" in e for e in result["errors"])
+
+    async def test_negativ_unerwarteter_fehler_ausserhalb_der_termin_schleife_wird_gesammelt(
+        self, db_session, icloud_sync, fake_caldav, monkeypatch
+    ):
+        fake_caldav([FakeCaldavCalendar("Kalender")])
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.build_firm_index",
+            lambda db: (_ for _ in ()).throw(RuntimeError("firm-index-boom")),
+        )
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 0
+        assert any("firm-index-boom" in e for e in result["errors"])
+
+    async def test_negativ_kaputtes_event_ohne_vevent_wird_still_uebersprungen(
+        self, db_session, icloud_sync, fake_caldav
+    ):
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+
+        class _BrokenEvent:
+            url = "https://caldav.icloud.com/broken.ics"
+            vobject_instance = object()  # kein .vevent-Attribut -> AttributeError
+
+        good_ev = icloud_calendar_event("evt-good", "Interview bei Contoso AG", datetime.now(timezone.utc))
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[_BrokenEvent(), good_ev])])
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 1
+        assert result["errors"] == []
+
+    async def test_negativ_event_ohne_dtstart_wird_ohne_datum_verarbeitet(
+        self, db_session, icloud_sync, fake_caldav
+    ):
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+        ics = (
+            "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nBEGIN:VEVENT\n"
+            "UID:evt-no-dtstart\nSUMMARY:Interview bei Contoso AG\n"
+            "END:VEVENT\nEND:VCALENDAR\n"
+        )
+        ev = FakeCaldavEvent(ics, "https://caldav.icloud.com/evt-no-dtstart.ics")
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+
+        result = await _do_icloud_cal(1)
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-no-dtstart").one()
+        assert event.datum is None
+
+    async def test_negativ_unerwarteter_fehler_bei_process_item_stoppt_nicht_den_gesamten_sync(
+        self, db_session, icloud_sync, fake_caldav, monkeypatch
+    ):
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+        ev = icloud_calendar_event("evt-ai-3", "Interview bei Contoso AG", datetime.now(timezone.utc))
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+        monkeypatch.setattr(
+            "app.routers.sync_icloud.process_item",
+            AsyncMock(side_effect=RuntimeError("process-item-boom")),
+        )
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 0
+        assert any("process-item-boom" in e for e in result["errors"])
 
 
 class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
