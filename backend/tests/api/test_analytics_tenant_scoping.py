@@ -8,7 +8,6 @@ ausfällt (auth-Bug, Background-Task), würden ALLE Nutzerdaten einfließen.
 import pytest
 
 from tests.factories import application_factory
-from app import models
 
 pytestmark = pytest.mark.api
 
