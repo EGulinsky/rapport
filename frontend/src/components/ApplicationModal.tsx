@@ -11,6 +11,8 @@ import {
   type Application, type MainStatus, type Contact, type Event, type ManualCandidate, type FileBrowseItem,
 } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate } from '../i18n/formatDate'
 
 function parentPath(p: string): string {
   const parts = p.replace(/\/$/, '').split('/')
@@ -32,6 +34,7 @@ const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
 export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields, onReviewOpen }: Props) {
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
+  const locale = useLocale()
   const [app, setApp] = useState<Application | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Application>>({})
@@ -1206,7 +1209,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               />
               <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-500">
                 <span className="text-xs text-gray-400 mr-1">Bewerbungsdatum:</span>
-                {app?.datum_bewerbung ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE') : <span className="italic">über Timeline "Bewerbung" setzen</span>}
+                {app?.datum_bewerbung ? formatDate(app.datum_bewerbung, locale) : <span className="italic">über Timeline "Bewerbung" setzen</span>}
               </div>
             </div>
           ) : (
@@ -1331,7 +1334,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <p className="text-sm text-gray-700 leading-snug font-medium">{app.ai_next_step}</p>
                   {app.ai_assessed_at && (
                     <p className="text-[10px] text-gray-400 mt-1.5">
-                      Bewertet am {new Date(app.ai_assessed_at).toLocaleDateString('de-DE')}
+                      Bewertet am {formatDate(app.ai_assessed_at, locale)}
                     </p>
                   )}
                 </div>
@@ -2024,7 +2027,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                                 className="flex-1 min-w-0 text-left"
                               >
                                 <p className="text-sm font-medium text-gray-800 truncate">{c.titel || c.event_type || c.source}</p>
-                                {c.datum && <p className="text-xs text-gray-500">{new Date(c.datum).toLocaleDateString('de-DE')}</p>}
+                                {c.datum && <p className="text-xs text-gray-500">{formatDate(c.datum, locale)}</p>}
                                 {c.extract && <p className="text-xs text-gray-400 truncate mt-0.5">{c.extract}</p>}
                                 {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">Vorschlag: {c.suggested_app_firma}</p>}
                               </button>
@@ -2112,7 +2115,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
                     {item.type === 'file' && item.modified > 0 && (
                       <p className="text-[10px] text-gray-400">
-                        {new Date(item.modified * 1000).toLocaleDateString('de-DE')}
+                        {formatDate(new Date(item.modified * 1000), locale)}
                       </p>
                     )}
                   </div>
@@ -2278,13 +2281,14 @@ function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onD
 }
 
 function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: number; onUpdated: () => void }) {
+  const locale = useLocale()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ typ: event.typ, datum: event.datum ?? '', titel: event.titel ?? '', notiz: event.notiz ?? '' })
   const [saving, setSaving] = useState(false)
 
   const style = EVENT_STYLES[event.typ] ?? { dot: 'bg-gray-300', label: event.typ }
   const dateStr = event.datum
-    ? new Date(event.datum).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    ? formatDate(event.datum, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
     : null
   // Extract leading time from notiz, e.g. "10:30–10:50 Uhr (20min)" or "10:31 Uhr"
   const timeStr = (() => {

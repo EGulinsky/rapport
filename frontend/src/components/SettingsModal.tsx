@@ -4,6 +4,8 @@ import { api, authFetch } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
 import { useAuth } from '../context/AuthContext'
 import { SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../i18n'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate, formatDateTime } from '../i18n/formatDate'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
@@ -97,6 +99,7 @@ const POPULAR_OLLAMA_MODELS: OllamaModel[] = [
 
 // ── Google Sync Panel ─────────────────────────────────────────────────────────
 function GoogleSyncPanel() {
+  const locale = useLocale()
   const [status, setStatus] = useState<GoogleSyncStatus | null>(null)
   const [creds, setCreds] = useState({ client_id: '', client_secret: '' })
   const [showSecret, setShowSecret] = useState(false)
@@ -182,7 +185,7 @@ function GoogleSyncPanel() {
   }
 
   const fmtDate = (d?: string) =>
-    d ? new Date(d).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
 
   return (
     <div className="space-y-5">
@@ -671,6 +674,7 @@ function AiPanel() {
 
 // ── iCloud Sync Panel ─────────────────────────────────────────────────────────
 function ICloudSyncPanel() {
+  const locale = useLocale()
   const [status, setStatus] = useState<ICloudSyncStatus | null>(null)
   const [creds, setCreds] = useState({ apple_id: '', app_password: '', icloud_email: '', web_password: '' })
   const [showPw, setShowPw] = useState(false)
@@ -691,7 +695,7 @@ function ICloudSyncPanel() {
   useEffect(() => { api.icloud.status().then(setStatus) }, [])
 
   const fmtDate = (d?: string) =>
-    d ? new Date(d).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
 
   async function saveCreds() {
     if (!creds.apple_id || !creds.app_password) return
@@ -926,6 +930,7 @@ function ICloudSyncPanel() {
 
 // ── Calls / Anrufliste Panel ──────────────────────────────────────────────────
 function CallsPanel() {
+  const locale = useLocale()
   const [status, setStatus] = useState<CallsStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [lastResult, setLastResult] = useState<SyncResult | null>(null)
@@ -934,7 +939,7 @@ function CallsPanel() {
   useEffect(() => { api.icloud.callsStatus().then(setStatus) }, [])
 
   const fmtDate = (d?: string) =>
-    d ? new Date(d).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
 
   async function toggle() {
     if (!status) return
@@ -1058,6 +1063,7 @@ function CallsPanel() {
 
 // ── Files / Dokumente Panel ───────────────────────────────────────────────────
 function FilesPanel() {
+  const locale = useLocale()
   const [cfg, setCfg] = useState<FilesConfig>({ enabled: true, folder_path: '' })
   const [bridgeOk, setBridgeOk] = useState<boolean | null>(null)
   const [path, setPath] = useState('')
@@ -1076,7 +1082,7 @@ function FilesPanel() {
   }, [])
 
   const fmtDate = (d?: string) =>
-    d ? new Date(d).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
 
   async function save() {
     setSaving(true); setSaved(false)
@@ -1357,6 +1363,7 @@ function SyncControlPanel() {
 }
 
 function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
+  const locale = useLocale()
   const [liConfig, setLiConfig] = useState<{ configured: boolean; email?: string; has_session: boolean; last_sync?: string } | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -1452,7 +1459,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
               <p className="text-xs font-medium text-green-800">{liConfig.email}</p>
               <p className="text-[10px] text-green-600">
                 {liConfig.has_session ? 'Session aktiv' : 'Kein gespeichertes Login'}
-                {liConfig.last_sync ? ` · Letzter Sync: ${new Date(liConfig.last_sync).toLocaleDateString('de-DE')}` : ''}
+                {liConfig.last_sync ? ` · Letzter Sync: ${formatDate(liConfig.last_sync, locale)}` : ''}
               </p>
             </div>
             <button onClick={handleDelete} className="p-1 text-green-400 hover:text-red-500">
@@ -1620,6 +1627,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
 }
 
 function BackupPanel() {
+  const locale = useLocale()
   const [status, setStatus] = useState<BackupStatus | null>(null)
   const [folder, setFolder] = useState('')
   const [frequencyHours, setFrequencyHours] = useState(24)
@@ -1730,7 +1738,7 @@ function BackupPanel() {
   const fmtDate = (ts?: string | number) => {
     if (!ts) return 'noch nie'
     const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
-    return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   const fmtSize = (bytes: number) =>

@@ -6,6 +6,8 @@ import { CompanyLogo } from './CompanyLogo'
 import { MAIN_PIPELINE, MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE } from '../types'
 import type { Application, MainStatus } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate, collate } from '../i18n/formatDate'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import { api } from '../api/client'
@@ -25,6 +27,7 @@ type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
 
 export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany, updatedIds }: Props) {
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
+  const locale = useLocale()
   const [sortKey, setSortKey] = useState<SortKey>('datum_bewerbung')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [popoverId, setPopoverId] = useState<number | null>(null)
@@ -59,7 +62,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
       }
       const cmp = typeof av === 'number' && typeof bv === 'number'
         ? av - bv
-        : String(av).localeCompare(String(bv), 'de')
+        : collate(String(av), String(bv), locale)
       return sortDir === 'asc' ? cmp : -cmp
     })
   }, [applications, sortKey, sortDir])
@@ -255,10 +258,10 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                 {app.ghosting && <span className="ml-1 text-xs text-orange-500">👻</span>}
               </td>
               <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                {app.datum_bewerbung ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE') : '—'}
+                {app.datum_bewerbung ? formatDate(app.datum_bewerbung, locale) : '—'}
               </td>
               <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                {app.letztes_update ? new Date(app.letztes_update).toLocaleDateString('de-DE') : '—'}
+                {app.letztes_update ? formatDate(app.letztes_update, locale) : '—'}
               </td>
               <td className="px-4 py-3 text-xs max-w-[240px]">
                 {app.ai_color ? (

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { X, RefreshCw, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '../api/client'
 import type { AuditEntry } from '../types'
+import { useLocale } from '../i18n/useLocale'
+import { formatDateTime } from '../i18n/formatDate'
 import clsx from 'clsx'
 
 interface Props {
@@ -60,6 +62,7 @@ const SOURCE_LABELS: Record<string, string> = {
 const PAGE_SIZE = 50
 
 export default function AuditLogModal({ onClose, initialAppId }: Props) {
+  const locale = useLocale()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -117,8 +120,7 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
   }
 
   function formatTs(ts: string) {
-    const d = new Date(ts)
-    return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return formatDateTime(ts, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE)

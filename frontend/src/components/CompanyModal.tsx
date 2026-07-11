@@ -5,6 +5,8 @@ import type { CompanyProfile, MainStatus, ContactWithApp } from '../types'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate as formatDateI18n } from '../i18n/formatDate'
 import clsx from 'clsx'
 
 interface Props {
@@ -83,6 +85,7 @@ function toEditState(c: CompanyProfile): EditState {
 }
 
 export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onOpenCompany, onMergeRequest, onSaved }: Props) {
+  const locale = useLocale()
   const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -256,7 +259,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
 
   function formatDate(s: string | null | undefined): string {
     if (!s) return '—'
-    return new Date(s).toLocaleDateString('de-DE')
+    return formatDateI18n(s, locale)
   }
 
   const location = [company?.hq_city, company?.hq_country].filter(Boolean).join(', ')
@@ -572,7 +575,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                       <p className="text-sm font-medium text-gray-900 truncate">{app.rolle}</p>
                       {app.datum_bewerbung && (
                         <p className="text-xs text-gray-400">
-                          {new Date(app.datum_bewerbung).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          {formatDateI18n(app.datum_bewerbung, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </p>
                       )}
                     </div>

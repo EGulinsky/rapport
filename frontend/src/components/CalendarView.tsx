@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { MAIN_STATUS_COLORS } from '../types'
 import type { CalendarEvent, MainStatus } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
+import { useLocale } from '../i18n/useLocale'
 import clsx from 'clsx'
 
 type CalView = 'day' | 'workweek' | 'week' | 'month'
@@ -69,8 +70,8 @@ function rangeFor(view: CalView, anchor: Date): { from: Date; to: Date } {
   return { from: days[0], to: days[days.length - 1] }
 }
 
-function navTitle(view: CalView, anchor: Date): string {
-  const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) => d.toLocaleDateString('de-DE', opts)
+function navTitle(view: CalView, anchor: Date, locale: string): string {
+  const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) => d.toLocaleDateString(locale, opts)
   if (view === 'day') return fmt(anchor, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   if (view === 'month') return fmt(anchor, { month: 'long', year: 'numeric' })
   const days = getDays(view, anchor)
@@ -124,6 +125,7 @@ function MonthView({ anchor, today, byDate, onSelect }: {
   byDate: Record<string, CalendarEvent[]>
   onSelect: (e: CalendarEvent) => void
 }) {
+  const locale = useLocale()
   const grid = monthGrid(anchor)
   const curMonth = anchor.getMonth()
 
@@ -179,6 +181,7 @@ function WeekView({ days, today, byDate, onSelect }: {
   byDate: Record<string, CalendarEvent[]>
   onSelect: (e: CalendarEvent) => void
 }) {
+  const locale = useLocale()
   const cols = days.length
   return (
     <div className="flex flex-col">
@@ -196,7 +199,7 @@ function WeekView({ days, today, byDate, onSelect }: {
                 {day.getDate()}
               </p>
               <p className="text-[10px] text-gray-400 mt-0.5">
-                {day.toLocaleDateString('de-DE', { month: 'short' })}
+                {day.toLocaleDateString(locale, { month: 'short' })}
               </p>
             </div>
           )
@@ -289,6 +292,7 @@ interface Props {
 
 export function CalendarView({ onOpenApplication }: Props) {
   const { mainStatusLabel } = useStatusLabels()
+  const locale = useLocale()
   const [view, setView] = useState<CalView>('month')
   const [anchor, setAnchor] = useState<Date>(() => {
     const d = new Date()
@@ -348,7 +352,7 @@ export function CalendarView({ onOpenApplication }: Props) {
             <button onClick={() => setAnchor(nav(view, anchor, 1))} className="p-1 rounded hover:bg-gray-100 text-gray-500">
               <ChevronRight className="h-4 w-4" />
             </button>
-            <span className="text-sm font-semibold text-gray-900 ml-1">{navTitle(view, anchor)}</span>
+            <span className="text-sm font-semibold text-gray-900 ml-1">{navTitle(view, anchor, locale)}</span>
             {loading && <span className="text-xs text-gray-400 ml-2 animate-pulse">Lädt…</span>}
           </div>
 
