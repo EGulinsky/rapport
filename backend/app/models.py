@@ -559,6 +559,11 @@ class User(Base):
     cv_size_bytes    = Column(Integer, nullable=True)
     cv_storage_path  = Column(String, nullable=True)
 
+    # UI-Sprache des Kontos ('de' | 'en', erweiterbar). Default 'de' schützt nur
+    # bestehende Zeilen bei der Migration — neue Registrierungen setzen den Wert
+    # immer explizit über RegisterPayload.ui_language (Default dort: 'en').
+    ui_language      = Column(String, nullable=False, server_default="de")
+
 
 class EmailVerificationCode(Base):
     """6-stelliger Code für E-Mail-Bestätigung und Passwort-Reset — gleicher

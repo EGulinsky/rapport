@@ -10,6 +10,7 @@ schlicht nicht registriert.
 from __future__ import annotations
 
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/api/e2e", tags=["e2e"])
 class SetupUserPayload(BaseModel):
     email: str
     password: str
+    ui_language: Optional[str] = None
 
 
 @router.post("/setup-user")
@@ -37,6 +39,7 @@ def setup_user(payload: SetupUserPayload, db: Session = Depends(get_db)):
             email=payload.email,
             password_hash=hash_password(payload.password),
             email_verified=True,
+            ui_language=payload.ui_language or "de",
         )
         db.add(user)
         db.commit()

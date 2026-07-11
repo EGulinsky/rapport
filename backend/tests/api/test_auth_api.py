@@ -57,6 +57,33 @@ class TestRegister:
         resp = real_auth_client.post("/api/auth/register", json={"email": "keine-email", "password": TESTPW_ORIGINAL})
         assert resp.status_code == 422
 
+    def test_positiv_ui_language_default_ist_englisch(self, real_auth_client, captured_email):
+        _register(real_auth_client, captured_email)
+        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+        token = verify_resp.json()["access_token"]
+
+        resp = real_auth_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert resp.json()["ui_language"] == "en"
+
+    def test_positiv_ui_language_kann_explizit_de_gesetzt_werden(self, real_auth_client, captured_email):
+        resp = real_auth_client.post(
+            "/api/auth/register",
+            json={"email": "test@example.com", "password": TESTPW_ORIGINAL, "ui_language": "de"},
+        )
+        assert resp.status_code == 201
+        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+        token = verify_resp.json()["access_token"]
+
+        me_resp = real_auth_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert me_resp.json()["ui_language"] == "de"
+
+    def test_negativ_ui_language_unbekannter_wert_liefert_422(self, real_auth_client, captured_email):
+        resp = real_auth_client.post(
+            "/api/auth/register",
+            json={"email": "test@example.com", "password": TESTPW_ORIGINAL, "ui_language": "fr"},
+        )
+        assert resp.status_code == 422
+
 
 class TestVerifyEmail:
     def test_positiv_richtiger_code_aktiviert_konto_und_liefert_token(self, real_auth_client, captured_email):
@@ -308,6 +335,36 @@ class TestProfileAndCv:
     def test_negativ_profil_ohne_token_liefert_401(self, real_auth_client):
         resp = real_auth_client.patch("/api/auth/profile", json={"vorname": "Ada"})
         assert resp.status_code == 401
+
+    def test_positiv_ui_language_kann_geaendert_werden(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.patch(
+            "/api/auth/profile", json={"ui_language": "de"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["ui_language"] == "de"
+
+    def test_corner_case_profil_update_ohne_ui_language_aendert_sie_nicht(self, real_auth_client, captured_email):
+        """Ein Profil-Save aus einem anderen Tab (z.B. Vorname) darf die zuvor
+        gesetzte UI-Sprache nicht klammheimlich zurücksetzen, nur weil das Feld
+        im Payload fehlt — anders als vorname/nachname/linkedin_url, die dieser
+        Endpoint bewusst unconditional überschreibt."""
+        token = self._token(real_auth_client, captured_email)
+        real_auth_client.patch(
+            "/api/auth/profile", json={"ui_language": "de"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = real_auth_client.patch(
+            "/api/auth/profile", json={"vorname": "Ada", "nachname": "Lovelace", "linkedin_url": None},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["ui_language"] == "de"
 
     def test_corner_case_profil_felder_koennen_wieder_geleert_werden(self, real_auth_client, captured_email):
         token = self._token(real_auth_client, captured_email)

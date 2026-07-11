@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.56.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 1/13, Grundlagen): Konten haben jetzt eine UI-Sprache (ui_language, Default "de" für Bestandskonten, "en" für neue Registrierungen) — DB-Migration, Register-/Profil-Endpunkte, /api/e2e/setup-user. Frontend: react-i18next-Grundgerüst (i18n/index.ts, useLocale/formatDate/collate-Helfer, erste common.json-Namespace de+en) plus ein Test, der sicherstellt, dass alle Sprachkataloge dieselben Keys haben. Noch keine sichtbare Änderung — die eigentliche Sprachauswahl (Registrierung + Einstellungen) folgt in der nächsten Phase.',
+    ],
+  },
+  {
     version: '3.55.14',
     date: '2026-07-11',
     changes: [
