@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp, CompanyProfile } from '../types'
 import { ContactMergeDialog } from './MergeDialog'
@@ -15,6 +16,7 @@ function CompanyCell({ contact, onOpenCompany, onChanged }: {
   onOpenCompany?: (id: number) => void
   onChanged: () => void
 }) {
+  const { t } = useTranslation('contacts')
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<CompanyProfile[]>([])
@@ -66,11 +68,11 @@ function CompanyCell({ contact, onOpenCompany, onChanged }: {
             <span className="text-sm text-gray-700">{contact.firma}</span>
           )}
           {contact.company_profile_id ? (
-            <button onClick={unlink} className="text-gray-300 hover:text-red-400 transition-colors" title="Verknüpfung lösen">
+            <button onClick={unlink} className="text-gray-300 hover:text-red-400 transition-colors" title={t('view.unlinkCompany')}>
               <X className="h-3 w-3" />
             </button>
           ) : (
-            <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="text-gray-300 hover:text-indigo-500 transition-colors" title="Firma zuordnen">
+            <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="text-gray-300 hover:text-indigo-500 transition-colors" title={t('view.assignCompany')}>
               <Building2 className="h-3 w-3" />
             </button>
           )}
@@ -78,7 +80,7 @@ function CompanyCell({ contact, onOpenCompany, onChanged }: {
       ) : (
         <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="flex items-center gap-1 text-xs text-gray-300 hover:text-indigo-500 transition-colors">
           <Building2 className="h-3 w-3" />
-          <span>Zuordnen</span>
+          <span>{t('view.assign')}</span>
         </button>
       )}
       {open && (
@@ -88,13 +90,13 @@ function CompanyCell({ contact, onOpenCompany, onChanged }: {
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Firma suchen…"
+              placeholder={t('view.searchCompanyPlaceholder')}
               className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </div>
           <div className="max-h-48 overflow-y-auto py-1">
-            {loading && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
-            {!loading && results.length === 0 && <p className="text-xs text-gray-400 px-3 py-2 italic">Keine Treffer</p>}
+            {loading && <p className="text-xs text-gray-400 px-3 py-2">{t('view.searching')}</p>}
+            {!loading && results.length === 0 && <p className="text-xs text-gray-400 px-3 py-2 italic">{t('view.noResults')}</p>}
             {results.slice(0, 12).map(c => (
               <button
                 key={c.id}
@@ -130,6 +132,7 @@ interface Props {
 }
 
 export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearchChange: setSearch, reloadKey }: Props) {
+  const { t } = useTranslation('contacts')
   const locale = useLocale()
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
   const [loading, setLoading] = useState(false)
@@ -206,7 +209,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
   async function deleteSelected() {
     if (selected.size === 0) return
     const isAll = selected.size === contacts.length && search === ''
-    if (!confirm(`${selected.size} Kontakt${selected.size !== 1 ? 'e' : ''} löschen?`)) return
+    if (!confirm(t('view.deleteConfirm', { count: selected.size }))) return
     setDeleting(true)
     try {
       await api.contacts.bulkDelete(isAll ? [] : [...selected], isAll)
@@ -238,16 +241,16 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
         <CompanySearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Name, E-Mail oder Firma…"
+          placeholder={t('view.searchPlaceholder')}
           containerClassName="relative flex-1 max-w-sm"
           inputClassName="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-xs text-gray-400">Bewerbungen:</span>
+          <span className="text-xs text-gray-400">{t('view.applicationsLabel')}</span>
           {(['all', 'yes', 'no'] as const).map(v => (
             <button key={v} onClick={() => setAppsFilter(v)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors ${appsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {v === 'all' ? 'Alle' : v === 'yes' ? 'Ja' : 'Nein'}
+              {v === 'all' ? t('view.filterAll') : v === 'yes' ? t('view.filterYes') : t('view.filterNo')}
             </button>
           ))}
         </div>
@@ -259,7 +262,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
             className="flex items-center gap-1.5 rounded-lg bg-violet-50 border border-violet-200 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
           >
             <GitMerge className="h-3.5 w-3.5" />
-            Mergen ({selected.size})
+            {t('view.merge', { count: selected.size })}
           </button>
         )}
         {selected.size > 0 && (
@@ -269,7 +272,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
             className="flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {deleting ? 'Löschen…' : `${selected.size} löschen`}
+            {deleting ? t('view.deleting') : t('view.deleteCount', { count: selected.size })}
           </button>
         )}
       </div>
@@ -288,24 +291,24 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                   className="rounded border-gray-300 text-indigo-600 cursor-pointer"
                 />
               </th>
-              <Th k="vorname" label="Vorname" />
-              <Th k="name" label="Nachname" />
-              <Th k="firma" label="Firma" />
-              <Th k="typ" label="Typ" className="w-28" />
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Kontakt</th>
-              <Th k="letzter_kontakt" label="Letzter Kontakt" className="w-36" />
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Bewerbung</th>
+              <Th k="vorname" label={t('view.firstName')} />
+              <Th k="name" label={t('view.lastName')} />
+              <Th k="firma" label={t('view.company')} />
+              <Th k="typ" label={t('view.type')} className="w-28" />
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.contact')}</th>
+              <Th k="letzter_kontakt" label={t('view.lastContact')} className="w-36" />
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.application')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">Laden…</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">{t('view.loading')}</td>
               </tr>
             )}
             {!loading && sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 italic">Keine Kontakte gefunden</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 italic">{t('view.noContacts')}</td>
               </tr>
             )}
             {sorted.map(c => (
@@ -358,7 +361,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                     {c.linkedin_url && (
                       <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-500 hover:underline">
                         <Linkedin className="h-3 w-3 shrink-0" />
-                        LinkedIn
+                        {t('view.linkedin')}
                       </a>
                     )}
                     {!c.email && !c.telefon && !c.linkedin_url && (
@@ -386,7 +389,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                       ))}
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-300">Kein Bezug</span>
+                    <span className="text-xs text-gray-300">{t('view.noApplication')}</span>
                   )}
                 </td>
               </tr>
@@ -396,11 +399,11 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
         {!loading && contacts.length > 0 && (
           <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-400 flex items-center justify-between">
             <span>
-              {sorted.length} {sorted.length === 1 ? 'Kontakt' : 'Kontakte'}
-              {sorted.length !== contacts.length && <span className="ml-1 text-gray-300">von {contacts.length}</span>}
+              {t('view.contactCount', { count: sorted.length })}
+              {sorted.length !== contacts.length && <span className="ml-1 text-gray-300">{t('view.ofTotal', { count: contacts.length })}</span>}
             </span>
             {selected.size > 0 && (
-              <span className="text-indigo-600 font-medium">{selected.size} ausgewählt</span>
+              <span className="text-indigo-600 font-medium">{t('view.selectedCount', { count: selected.size })}</span>
             )}
           </div>
         )}

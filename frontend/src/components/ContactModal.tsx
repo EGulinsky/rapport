@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp } from '../types'
 import { CompanyLogo } from './CompanyLogo'
@@ -58,6 +59,8 @@ export function displayName(c: { name: string; vorname?: string | null }): strin
 }
 
 export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, onChanged }: Props) {
+  const { t } = useTranslation('contacts')
+  const { t: tCommon } = useTranslation('common')
   const locale = useLocale()
   const [contact, setContact] = useState<ContactWithApp | null>(null)
   const [loading, setLoading] = useState(true)
@@ -154,7 +157,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                 </div>
               </div>
             ) : (
-              <p className="text-gray-500">Kontakt nicht gefunden</p>
+              <p className="text-gray-500">{t('contactModal.notFound')}</p>
             )}
           </div>
           <div className="flex items-center gap-2 ml-4 shrink-0">
@@ -164,7 +167,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 <Pencil className="h-3.5 w-3.5" />
-                Bearbeiten
+                {t('contactModal.edit')}
               </button>
             )}
             {editing && (
@@ -174,7 +177,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Abbrechen
+                  {tCommon('cancel')}
                 </button>
                 <button
                   onClick={saveEdit}
@@ -182,7 +185,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >
                   <Save className="h-3.5 w-3.5" />
-                  {saving ? 'Speichern…' : 'Speichern'}
+                  {saving ? tCommon('saving') : tCommon('save')}
                 </button>
               </>
             )}
@@ -197,7 +200,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
         )}
 
         {loading && (
-          <div className="px-6 py-8 text-center text-gray-400">Laden…</div>
+          <div className="px-6 py-8 text-center text-gray-400">{t('view.loading')}</div>
         )}
 
         {!loading && contact && !editing && (
@@ -205,18 +208,18 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
             {/* Name fields */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Vorname</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.firstName')}</p>
                 <p className="text-sm text-gray-900">{contact.vorname || <span className="text-gray-300">—</span>}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Nachname</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.lastName')}</p>
                 <p className="text-sm text-gray-900">{contact.name}</p>
               </div>
             </div>
 
             {/* Kontaktdaten */}
             <div className="space-y-2">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Kontakt</p>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t('view.contact')}</p>
               {contact.email && (
                 <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-indigo-600">
                   <Mail className="h-3.5 w-3.5 text-gray-400 shrink-0" />
@@ -232,12 +235,12 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
               {contact.linkedin_url && (
                 <a href={contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-indigo-600 hover:underline">
                   <Linkedin className="h-3.5 w-3.5 shrink-0" />
-                  LinkedIn
+                  {t('view.linkedin')}
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
               {!contact.email && !contact.telefon && !contact.linkedin_url && (
-                <p className="text-sm text-gray-300">Keine Kontaktdaten</p>
+                <p className="text-sm text-gray-300">{t('contactModal.noContactData')}</p>
               )}
             </div>
 
@@ -245,7 +248,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
             <div className="grid grid-cols-2 gap-4">
               {contact.firma && (
                 <div>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Firma</p>
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.company')}</p>
                   <div className="flex items-center gap-2">
                     <CompanyLogo name={contact.firma} website={contact.company_website ?? undefined} size="sm" />
                     {contact.company_profile_id && onOpenCompany ? (
@@ -264,7 +267,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
               )}
               {contact.rolle && (
                 <div>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Rolle</p>
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('contactModal.role')}</p>
                   <p className="text-sm text-gray-900">{contact.rolle}</p>
                 </div>
               )}
@@ -272,7 +275,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
 
             {contact.typ && (
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Typ</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.type')}</p>
                 <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', TYPE_COLORS[contact.typ] ?? 'bg-gray-100 text-gray-600')}>
                   {contact.typ}
                 </span>
@@ -281,14 +284,14 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
 
             {contact.letzter_kontakt && (
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Letzter Kontakt</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.lastContact')}</p>
                 <p className="text-sm text-gray-900">{formatDate(contact.letzter_kontakt, locale)}</p>
               </div>
             )}
 
             {contact.notizen && (
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Notizen</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('contactModal.notes')}</p>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{contact.notizen}</p>
               </div>
             )}
@@ -296,7 +299,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
             {/* Linked applications */}
             {contact.applications && contact.applications.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Bewerbungen</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{t('contactModal.applicationsHeading')}</p>
                 <div className="space-y-1">
                   {contact.applications.map(a => (
                     <button
@@ -319,93 +322,93 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           <div className="px-6 py-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Vorname</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('view.firstName')}</label>
                 <input
                   value={editState.vorname}
                   onChange={e => set('vorname', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Vorname"
+                  placeholder={t('view.firstName')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Nachname *</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('view.lastName')} *</label>
                 <input
                   value={editState.name}
                   onChange={e => set('name', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Nachname"
+                  placeholder={t('view.lastName')}
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">E-Mail *</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.emailRequired')}</label>
               <input
                 type="email"
                 value={editState.email}
                 onChange={e => set('email', e.target.value)}
                 className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="E-Mail"
+                placeholder={t('newContact.emailPlaceholder')}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Telefon</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.phoneLabel')}</label>
                 <input
                   value={editState.telefon}
                   onChange={e => set('telefon', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="+49 ..."
+                  placeholder={t('contactModal.phonePlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">LinkedIn URL</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.linkedinLabel')}</label>
                 <input
                   value={editState.linkedin_url}
                   onChange={e => set('linkedin_url', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="https://linkedin.com/in/..."
+                  placeholder={t('contactModal.linkedinPlaceholder')}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Firma</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('view.company')}</label>
                 <input
                   value={editState.firma}
                   onChange={e => set('firma', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Firma"
+                  placeholder={t('newContact.companyPlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Rolle</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.role')}</label>
                 <input
                   value={editState.rolle}
                   onChange={e => set('rolle', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="z.B. Recruiter"
+                  placeholder={t('contactModal.rolePlaceholder')}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Typ</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('view.type')}</label>
                 <select
                   value={editState.typ}
                   onChange={e => set('typ', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                 >
                   <option value="">—</option>
-                  {TYP_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {TYP_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Letzter Kontakt</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('view.lastContact')}</label>
                 <input
                   type="date"
                   value={editState.letzter_kontakt}
@@ -416,13 +419,13 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Notizen</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.notes')}</label>
               <textarea
                 value={editState.notizen}
                 onChange={e => set('notizen', e.target.value)}
                 rows={3}
                 className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                placeholder="Notizen…"
+                placeholder={t('contactModal.notesPlaceholder')}
               />
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Check, Search, Linkedin as LinkedinIcon, Cloud } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ICloudContactCandidate, LinkedInPeopleCandidate } from '../types'
 import clsx from 'clsx'
@@ -17,20 +18,20 @@ function candidateKey(source: 'icloud' | 'linkedin', c: Candidate): string {
   return (c as LinkedInPeopleCandidate).profile_url
 }
 
-function candidateSubtitle(source: 'icloud' | 'linkedin', c: Candidate): string {
+function candidateSubtitle(source: 'icloud' | 'linkedin', c: Candidate, atWord: string): string {
   if (source === 'icloud') {
     const ic = c as ICloudContactCandidate
-    return [ic.rolle, ic.firma].filter(Boolean).join(' bei ') || ic.email || ''
+    return [ic.rolle, ic.firma].filter(Boolean).join(` ${atWord} `) || ic.email || ''
   }
   return (c as LinkedInPeopleCandidate).headline ?? ''
 }
 
-const META = {
-  icloud: { title: 'Aus iCloud importieren', icon: Cloud, placeholder: 'Name, E-Mail oder Firma…', color: 'sky' },
-  linkedin: { title: 'Aus LinkedIn importieren', icon: LinkedinIcon, placeholder: 'Name suchen…', color: 'blue' },
-} as const
-
 export function ContactImportModal({ source, onClose, onImported }: Props) {
+  const { t } = useTranslation('contacts')
+  const META = {
+    icloud: { title: t('import.titleIcloud'), icon: Cloud, placeholder: t('import.placeholderIcloud'), color: 'sky' },
+    linkedin: { title: t('import.titleLinkedin'), icon: LinkedinIcon, placeholder: t('import.placeholderLinkedin'), color: 'blue' },
+  } as const
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
@@ -126,7 +127,7 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
             disabled={query.trim().length < 2 || loading}
             className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {loading ? 'Suche…' : 'Suchen'}
+            {loading ? t('import.searching') : t('import.search')}
           </button>
         </div>
 
@@ -136,22 +137,20 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
           )}
           {result && (
             <p className="text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
-              {result.imported} importiert{result.skipped > 0 ? `, ${result.skipped} übersprungen (bereits vorhanden)` : ''}
+              {t('import.resultImported', { count: result.imported })}{result.skipped > 0 ? t('import.resultSkipped', { count: result.skipped }) : ''}
             </p>
           )}
           {!loading && searched && candidates.length === 0 && !error && (
-            <p className="text-sm text-gray-400 text-center py-6">Keine Treffer</p>
+            <p className="text-sm text-gray-400 text-center py-6">{t('import.noResults')}</p>
           )}
           {!searched && !loading && (
             <p className="text-sm text-gray-400 text-center py-6">
-              {source === 'icloud'
-                ? 'Durchsucht dein gesamtes iCloud-Adressbuch, nicht nur bereits verknüpfte Kontakte.'
-                : 'Sucht LinkedIn-Personen nach Namen (benötigt eine gültige LinkedIn-Session). Firma wird aus der Kurzbeschreibung erkannt — bei individuell angepassten Beschreibungen ohne Firmenerwähnung bleibt sie leer und muss ggf. nach dem Import ergänzt werden.'}
+              {source === 'icloud' ? t('import.searchHintIcloud') : t('import.searchHintLinkedin')}
             </p>
           )}
           {candidates.map(c => {
             const key = candidateKey(source, c)
-            const subtitle = candidateSubtitle(source, c)
+            const subtitle = candidateSubtitle(source, c, t('import.at'))
             const alreadyImported = source === 'icloud' && (c as ICloudContactCandidate).already_imported
             return (
               <label
@@ -174,7 +173,7 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
                     <p className="text-sm font-medium text-gray-800 truncate">{c.name}</p>
                     {alreadyImported && (
                       <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                        bereits vorhanden
+                        {t('import.alreadyImported')}
                       </span>
                     )}
                   </div>
@@ -186,14 +185,14 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
         </div>
 
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-          <span className="text-xs text-gray-400">{selected.size > 0 ? `${selected.size} ausgewählt` : ''}</span>
+          <span className="text-xs text-gray-400">{selected.size > 0 ? t('import.selectedCount', { count: selected.size }) : ''}</span>
           <button
             onClick={doImport}
             disabled={selected.size === 0 || importing}
             className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
           >
             <Check className="h-3.5 w-3.5" />
-            {importing ? 'Importiere…' : `${selected.size || ''} importieren`.trim()}
+            {importing ? t('import.importing') : selected.size > 0 ? t('import.importButtonCount', { count: selected.size }) : t('import.importButton')}
           </button>
         </div>
       </div>

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.61.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 6a/13, Kontakte + Firmen-Dialoge): Die komplette Kontakte-Ansicht ist jetzt übersetzt — Tabelle, Firma-Zuordnung, Merge/Löschen-Aktionen, "Neuer Kontakt"-Dialog, iCloud-/LinkedIn-Import-Dialog und der Kontakt-Detaildialog samt Bearbeiten-Formular. Außerdem die kleinen Firmen-Dialoge "Neue Firma" und LinkedIn-Firmenimport. Neue contacts.json/companies.json-Namespaces de+en (Firmen-Detail/-Liste folgen in Phase 6b).',
+    ],
+  },
+  {
     version: '3.60.0',
     date: '2026-07-11',
     changes: [

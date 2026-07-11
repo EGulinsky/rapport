@@ -1,0 +1,20 @@
+{
+  "newCompany": {
+    "title": "New company",
+    "namePlaceholder": "Company name *"
+  },
+  "import": {
+    "title": "Import from LinkedIn",
+    "searchPlaceholder": "Search company name…",
+    "search": "Search",
+    "searching": "Searching…",
+    "resultImported": "{{count}} imported",
+    "resultSkipped": ", {{count}} skipped (already exists)",
+    "noResults": "No results",
+    "searchHint": "Searches LinkedIn companies by name (requires a valid LinkedIn session).",
+    "selectedCount": "{{count}} selected",
+    "importing": "Importing…",
+    "importButton": "Import",
+    "importButtonCount": "Import {{count}}"
+  }
+}

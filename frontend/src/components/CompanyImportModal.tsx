@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Search, Linkedin as LinkedinIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { LinkedInCompanyCandidate } from '../types'
 import clsx from 'clsx'
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function CompanyImportModal({ onClose, onImported }: Props) {
+  const { t } = useTranslation('companies')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
@@ -73,7 +75,7 @@ export function CompanyImportModal({ onClose, onImported }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <LinkedinIcon className="h-4 w-4 text-gray-400" />
-            <h2 className="text-base font-semibold text-gray-900">Aus LinkedIn importieren</h2>
+            <h2 className="text-base font-semibold text-gray-900">{t('import.title')}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
             <X className="h-4 w-4" />
@@ -88,7 +90,7 @@ export function CompanyImportModal({ onClose, onImported }: Props) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && runSearch()}
-              placeholder="Firmenname suchen…"
+              placeholder={t('import.searchPlaceholder')}
               className="w-full rounded-lg border border-gray-200 pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -97,7 +99,7 @@ export function CompanyImportModal({ onClose, onImported }: Props) {
             disabled={query.trim().length < 2 || loading}
             className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {loading ? 'Suche…' : 'Suchen'}
+            {loading ? t('import.searching') : t('import.search')}
           </button>
         </div>
 
@@ -107,15 +109,15 @@ export function CompanyImportModal({ onClose, onImported }: Props) {
           )}
           {result && (
             <p className="text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
-              {result.imported} importiert{result.skipped > 0 ? `, ${result.skipped} übersprungen (bereits vorhanden)` : ''}
+              {t('import.resultImported', { count: result.imported })}{result.skipped > 0 ? t('import.resultSkipped', { count: result.skipped }) : ''}
             </p>
           )}
           {!loading && searched && candidates.length === 0 && !error && (
-            <p className="text-sm text-gray-400 text-center py-6">Keine Treffer</p>
+            <p className="text-sm text-gray-400 text-center py-6">{t('import.noResults')}</p>
           )}
           {!searched && !loading && (
             <p className="text-sm text-gray-400 text-center py-6">
-              Sucht LinkedIn-Firmen nach Namen (benötigt eine gültige LinkedIn-Session).
+              {t('import.searchHint')}
             </p>
           )}
           {candidates.map(c => (
@@ -143,13 +145,13 @@ export function CompanyImportModal({ onClose, onImported }: Props) {
         </div>
 
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-          <span className="text-xs text-gray-400">{selected.size > 0 ? `${selected.size} ausgewählt` : ''}</span>
+          <span className="text-xs text-gray-400">{selected.size > 0 ? t('import.selectedCount', { count: selected.size }) : ''}</span>
           <button
             onClick={doImport}
             disabled={selected.size === 0 || importing}
             className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
           >
-            {importing ? 'Importiere…' : `${selected.size || ''} importieren`.trim()}
+            {importing ? t('import.importing') : selected.size > 0 ? t('import.importButtonCount', { count: selected.size }) : t('import.importButton')}
           </button>
         </div>
       </div>
