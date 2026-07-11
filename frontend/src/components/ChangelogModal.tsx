@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.9',
+    date: '2026-07-10',
+    changes: [
+      'Tests: main.py von 33% auf 86% Testabdeckung — _run_source()-Nebenläufigkeitsschutz, _auto_link_contacts(), /health + /api/sync/schedule/status, und der komplette Hintergrund-Sync-Loop (Quellen-Auswahl nach Einstellungen, fällige Backups, Fehler-Resilienz).',
+    ],
+  },
+  {
     version: '3.55.8',
     date: '2026-07-10',
     changes: [
