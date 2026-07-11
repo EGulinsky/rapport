@@ -150,7 +150,9 @@ def _patch_playwright(monkeypatch, page: FakePage):
 # Tests
 # ---------------------------------------------------------------------------
 
-pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
+pytestmark = pytest.mark.unit
+# asyncio_mode=auto (pytest.ini) erkennt async-Tests automatisch — kein
+# pytest.mark.asyncio hier, da TestExtractionJs unten bewusst synchron ist.
 
 class TestLoadJobDescription:
 
