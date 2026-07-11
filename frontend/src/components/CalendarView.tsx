@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { MAIN_STATUS_COLORS } from '../types'
 import type { CalendarEvent, MainStatus } from '../types'
@@ -9,11 +10,8 @@ import clsx from 'clsx'
 
 type CalView = 'day' | 'workweek' | 'week' | 'month'
 
-const VIEW_LABELS: Record<CalView, string> = {
-  day: 'Tag',
-  workweek: 'Arbeitswoche',
-  week: 'Woche',
-  month: 'Monat',
+const VIEW_LABEL_KEYS: Record<CalView, string> = {
+  day: 'viewDay', workweek: 'viewWorkweek', week: 'viewWeek', month: 'viewMonth',
 }
 
 const SOURCE_ICON: Record<string, string> = {
@@ -238,6 +236,7 @@ function DetailModal({ e, onClose, onOpenApp }: {
   onOpenApp: (id: number) => void
 }) {
   const { mainStatusLabel } = useStatusLabels()
+  const { t } = useTranslation('calendar')
   const color = MAIN_STATUS_COLORS[e.main_status as MainStatus] ?? 'bg-gray-100 text-gray-700'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -264,7 +263,7 @@ function DetailModal({ e, onClose, onOpenApp }: {
           <span>📅 {e.datum}</span>
           {e.source && <span className="capitalize">{e.source}</span>}
           {e.typ && e.typ !== 'gcal' && <span>{e.typ}</span>}
-          {e.autor && <span>von {e.autor}</span>}
+          {e.autor && <span>{t('view.by', { name: e.autor })}</span>}
         </div>
 
         {e.notiz && (
@@ -277,7 +276,7 @@ function DetailModal({ e, onClose, onOpenApp }: {
           onClick={() => onOpenApp(e.application_id)}
           className="w-full rounded-lg bg-indigo-600 text-white text-sm font-medium py-2 hover:bg-indigo-700 transition-colors"
         >
-          Bewerbung öffnen →
+          {t('view.openApplication')}
         </button>
       </div>
     </div>
@@ -292,6 +291,7 @@ interface Props {
 
 export function CalendarView({ onOpenApplication }: Props) {
   const { mainStatusLabel } = useStatusLabels()
+  const { t } = useTranslation('calendar')
   const locale = useLocale()
   const [view, setView] = useState<CalView>('month')
   const [anchor, setAnchor] = useState<Date>(() => {
@@ -344,7 +344,7 @@ export function CalendarView({ onOpenApplication }: Props) {
               onClick={() => { const d = new Date(); d.setHours(0,0,0,0); setAnchor(d) }}
               className="px-2.5 py-1 text-xs rounded border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium"
             >
-              Heute
+              {t('view.today')}
             </button>
             <button onClick={() => setAnchor(nav(view, anchor, -1))} className="p-1 rounded hover:bg-gray-100 text-gray-500">
               <ChevronLeft className="h-4 w-4" />
@@ -353,11 +353,11 @@ export function CalendarView({ onOpenApplication }: Props) {
               <ChevronRight className="h-4 w-4" />
             </button>
             <span className="text-sm font-semibold text-gray-900 ml-1">{navTitle(view, anchor, locale)}</span>
-            {loading && <span className="text-xs text-gray-400 ml-2 animate-pulse">Lädt…</span>}
+            {loading && <span className="text-xs text-gray-400 ml-2 animate-pulse">{t('view.loading')}</span>}
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">{events.length} Termine</span>
+            <span className="text-xs text-gray-400">{t('view.eventCount', { count: events.length })}</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {(['day', 'workweek', 'week', 'month'] as CalView[]).map(v => (
                 <button
@@ -368,7 +368,7 @@ export function CalendarView({ onOpenApplication }: Props) {
                     view === v ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50',
                   )}
                 >
-                  {VIEW_LABELS[v]}
+                  {t(`view.${VIEW_LABEL_KEYS[v]}`)}
                 </button>
               ))}
             </div>

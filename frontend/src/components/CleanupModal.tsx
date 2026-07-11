@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronRight, Loader2, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { CleanupPreview, CleanupResult, CleanupScope, AppGroup, ContactGroup, CompanyGroup, EventGroup } from '../types'
 import clsx from 'clsx'
@@ -23,6 +24,8 @@ interface ProgressEntry {
 }
 
 export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
+  const { t } = useTranslation('cleanup')
+  const { t: tCommon } = useTranslation('common')
   const [phase, setPhase] = useState<Phase>('loading')
   const [preview, setPreview] = useState<CleanupPreview | null>(null)
   const [result, setResult] = useState<CleanupResult | null>(null)
@@ -93,7 +96,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-indigo-500" />
-            <h2 className="text-sm font-semibold text-gray-900">Duplikate bereinigen{scopeLabel ? ` — ${scopeLabel}` : ''}</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{scopeLabel ? t('titleScoped', { scope: scopeLabel }) : t('title')}</h2>
           </div>
           {phase !== 'running' && (
             <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
@@ -109,7 +112,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
           {phase === 'loading' && (
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
               <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-              <span className="text-sm">Analyse läuft…</span>
+              <span className="text-sm">{t('analyzing')}</span>
             </div>
           )}
 
@@ -141,7 +144,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
                   <p className="text-[11px] text-gray-400 text-center">{progress.step}</p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">Bereinigung läuft…</p>
+                <p className="text-sm text-gray-400">{t('runningGeneric')}</p>
               )}
             </div>
           )}
@@ -152,8 +155,8 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
               {totalIssues === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
                   <CheckCircle className="h-10 w-10 text-green-400" />
-                  <p className="text-sm font-medium text-gray-600">Keine Duplikate gefunden</p>
-                  <p className="text-xs">{scopeLabel ? `${scopeLabel} ist sauber.` : 'Bewerbungen, Kontakte, Firmen und Timeline sind sauber.'}</p>
+                  <p className="text-sm font-medium text-gray-600">{t('noneFoundTitle')}</p>
+                  <p className="text-xs">{scopeLabel ? t('noneFoundScoped', { scope: scopeLabel }) : t('noneFoundGeneric')}</p>
                 </div>
               ) : (
                 <>
@@ -165,27 +168,27 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
                     totalRemove={totalRemove}
                   />
                   {preview.applications.length > 0 && (
-                    <Section title="Bewerbungen" count={preview.applications.length} color="blue">
+                    <Section title={t('sectionApplications')} count={preview.applications.length} color="blue">
                       {preview.applications.map((g, i) => <AppGroupRow key={i} group={g} />)}
                     </Section>
                   )}
                   {preview.contacts.length > 0 && (
-                    <Section title="Kontakte" count={preview.contacts.length} color="purple">
+                    <Section title={t('sectionContacts')} count={preview.contacts.length} color="purple">
                       {preview.contacts.map((g, i) => <ContactGroupRow key={i} group={g} />)}
                     </Section>
                   )}
                   {preview.companies.length > 0 && (
-                    <Section title="Firmen" count={preview.companies.length} color="green">
+                    <Section title={t('sectionCompanies')} count={preview.companies.length} color="green">
                       {preview.companies.map((g, i) => <CompanyGroupRow key={i} group={g} onAssigned={loadPreview} />)}
                     </Section>
                   )}
                   {preview.events.length > 0 && (
-                    <Section title="Timeline-Einträge" count={preview.events.length} color="amber">
+                    <Section title={t('sectionEvents')} count={preview.events.length} color="amber">
                       {preview.events.map((g, i) => <EventGroupRow key={i} group={g} />)}
                     </Section>
                   )}
                   {preview.cross_app_events.length > 0 && (
-                    <Section title="Bewerbungsübergreifende Einträge" count={preview.cross_app_events.length} color="amber">
+                    <Section title={t('sectionCrossAppEvents')} count={preview.cross_app_events.length} color="amber">
                       {preview.cross_app_events.map((g, i) => <EventGroupRow key={i} group={g} />)}
                     </Section>
                   )}
@@ -199,16 +202,16 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-green-700">
                 <CheckCircle className="h-5 w-5" />
-                <span className="font-semibold text-sm">Bereinigung abgeschlossen</span>
+                <span className="font-semibold text-sm">{t('doneTitle')}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <ResultChip label="Bewerbungen zusammengeführt" value={result.deleted_applications} />
-                <ResultChip label="Kontakte zur Prüfung vorgemerkt" value={result.queued_contacts} />
-                <ResultChip label="Firmen zusammengeführt" value={result.deleted_companies} />
-                <ResultChip label="Einträge gelöscht" value={result.deleted_events} />
+                <ResultChip label={t('doneAppsMerged')} value={result.deleted_applications} />
+                <ResultChip label={t('doneContactsQueued')} value={result.queued_contacts} />
+                <ResultChip label={t('doneCompaniesMerged')} value={result.deleted_companies} />
+                <ResultChip label={t('doneEventsDeleted')} value={result.deleted_events} />
               </div>
               {result.deleted_applications === 0 && result.queued_contacts === 0 && result.deleted_companies === 0 && result.deleted_events === 0 && result.queued_cross_app_events === 0 && (
-                <p className="text-xs text-gray-400 text-center">Nichts zu bereinigen gewesen.</p>
+                <p className="text-xs text-gray-400 text-center">{t('doneNothing')}</p>
               )}
             </div>
           )}
@@ -218,26 +221,26 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-100 shrink-0">
           {phase === 'preview' && totalIssues === 0 && (
             <button onClick={onClose} className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-              Schließen
+              {t('close')}
             </button>
           )}
           {phase === 'preview' && totalIssues > 0 && (
             <>
               <button onClick={onClose} className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-                Abbrechen
+                {tCommon('cancel')}
               </button>
               <button
                 onClick={runCleanup}
                 className="flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                {totalRemove} Duplikat{totalRemove !== 1 ? 'e' : ''} löschen
+                {t('deleteCount', { count: totalRemove })}
               </button>
             </>
           )}
           {(phase === 'done' || phase === 'error') && (
             <button onClick={onClose} className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-              Schließen
+              {t('close')}
             </button>
           )}
         </div>
@@ -251,14 +254,15 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
 function SummaryChips({ apps, contacts, companies, events, totalRemove }: {
   apps: number; contacts: number; companies: number; events: number; totalRemove: number
 }) {
+  const { t } = useTranslation('cleanup')
   return (
     <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl text-xs">
-      <span className="text-gray-500">Gefunden:</span>
-      {apps > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{apps} Bewerbungsgruppe{apps !== 1 ? 'n' : ''}</span>}
-      {contacts > 0 && <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{contacts} Kontaktgruppe{contacts !== 1 ? 'n' : ''}</span>}
-      {companies > 0 && <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">{companies} Firmengruppe{companies !== 1 ? 'n' : ''}</span>}
-      {events > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{events} Eintragsgruppe{events !== 1 ? 'n' : ''}</span>}
-      <span className="ml-auto text-gray-400">{totalRemove} Zeilen werden gelöscht, Daten zusammengeführt</span>
+      <span className="text-gray-500">{t('summaryFound')}</span>
+      {apps > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{t('summaryAppGroups', { count: apps })}</span>}
+      {contacts > 0 && <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{t('summaryContactGroups', { count: contacts })}</span>}
+      {companies > 0 && <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">{t('summaryCompanyGroups', { count: companies })}</span>}
+      {events > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{t('summaryEventGroups', { count: events })}</span>}
+      <span className="ml-auto text-gray-400">{t('summaryWillDelete', { count: totalRemove })}</span>
     </div>
   )
 }
@@ -293,27 +297,28 @@ function Section({ title, count, color, children }: {
 }
 
 function AppGroupRow({ group }: { group: AppGroup }) {
+  const { t } = useTranslation('cleanup')
   return (
     <div className="px-4 py-3 text-xs space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">Behalten</span>
+        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">{t('keep')}</span>
         <span className="font-medium text-gray-800">{group.keep.firma}</span>
         {group.keep.rolle && <span className="text-gray-500">· {group.keep.rolle}</span>}
-        <span className="ml-auto text-gray-400">{group.keep.events} Events · {group.keep.contacts} Kontakte</span>
+        <span className="ml-auto text-gray-400">{t('eventsCount', { count: group.keep.events })} · {t('contactsCount', { count: group.keep.contacts })}</span>
       </div>
       {group.remove.map(r => (
         <div key={r.id} className="flex items-center gap-2 text-gray-400 ml-4">
           <Trash2 className="h-3 w-3 text-red-400 shrink-0" />
           <span className={clsx(r.abgesagt && 'line-through')}>{r.firma}</span>
           {r.rolle && <span>· {r.rolle}</span>}
-          <span className="ml-auto">{r.events_count} Events</span>
+          <span className="ml-auto">{t('eventsCount', { count: r.events_count })}</span>
         </div>
       ))}
       {(group.events_merged > 0 || group.contacts_merged > 0) && (
         <p className="text-[10px] text-gray-400 ml-4">
-          → {group.events_merged > 0 && `${group.events_merged} Events`}
+          {t('transferPrefix')} {group.events_merged > 0 && t('eventsCount', { count: group.events_merged })}
           {group.events_merged > 0 && group.contacts_merged > 0 && ' + '}
-          {group.contacts_merged > 0 && `${group.contacts_merged} Kontakte`} werden übertragen
+          {group.contacts_merged > 0 && t('contactsCount', { count: group.contacts_merged })} {t('transferSuffix')}
         </p>
       )}
     </div>
@@ -321,31 +326,33 @@ function AppGroupRow({ group }: { group: AppGroup }) {
 }
 
 function ContactGroupRow({ group }: { group: ContactGroup }) {
+  const { t } = useTranslation('cleanup')
   return (
     <div className="px-4 py-3 text-xs space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">Behalten</span>
+        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">{t('keep')}</span>
         <span className="font-medium text-gray-800">{group.keep.name}</span>
         {group.keep.email && <span className="text-gray-400">{group.keep.email}</span>}
         {group.keep.firma && <span className="text-gray-500">· {group.keep.firma}</span>}
-        <span className="ml-auto text-gray-400">{group.keep.apps} Bewerbungen</span>
+        <span className="ml-auto text-gray-400">{t('applicationsCount', { count: group.keep.apps })}</span>
       </div>
       {group.remove.map(r => (
         <div key={r.id} className="flex items-center gap-2 text-gray-400 ml-4">
           <Trash2 className="h-3 w-3 text-red-400 shrink-0" />
           <span>{r.name}</span>
           {r.email && <span className="text-gray-300">{r.email}</span>}
-          <span className="ml-auto">{r.apps_count} Verknüpfungen</span>
+          <span className="ml-auto">{t('linksCount', { count: r.apps_count })}</span>
         </div>
       ))}
       {group.apps_merged > 0 && (
-        <p className="text-[10px] text-gray-400 ml-4">→ {group.apps_merged} Bewerbungsverknüpfung{group.apps_merged !== 1 ? 'en' : ''} werden übertragen</p>
+        <p className="text-[10px] text-gray-400 ml-4">{t('transferPrefix')} {t('appLinksTransferred', { count: group.apps_merged })} {t('transferSuffix')}</p>
       )}
     </div>
   )
 }
 
 function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigned: () => void }) {
+  const { t } = useTranslation('cleanup')
   const [assigningId, setAssigningId] = useState<number | null>(null)
   const [assignedIds, setAssignedIds] = useState<Set<number>>(new Set())
 
@@ -363,10 +370,10 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
   return (
     <div className="px-4 py-3 text-xs space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">Behalten</span>
+        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">{t('keep')}</span>
         <span className="font-medium text-gray-800">{group.keep.name}</span>
         {group.keep.website && <span className="text-gray-400 truncate">{group.keep.website}</span>}
-        <span className="ml-auto text-gray-400">{group.keep.apps} Bewerbungen · {group.keep.contacts} Kontakte</span>
+        <span className="ml-auto text-gray-400">{t('applicationsCount', { count: group.keep.apps })} · {t('contactsCount', { count: group.keep.contacts })}</span>
       </div>
       {group.remove.map(r => {
         const isAssigned = assignedIds.has(r.id)
@@ -374,18 +381,18 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
           <div key={r.id} className={clsx('flex items-center gap-2 ml-4', isAssigned ? 'text-emerald-500' : 'text-gray-400')}>
             {isAssigned ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Trash2 className="h-3 w-3 text-red-400 shrink-0" />}
             <span>{r.name}</span>
-            <span className="text-gray-300">{r.apps_count} Bewerbungen · {r.contacts_count} Kontakte</span>
+            <span className="text-gray-300">{t('applicationsCount', { count: r.apps_count })} · {t('contactsCount', { count: r.contacts_count })}</span>
             {isAssigned ? (
-              <span className="ml-auto text-[10px]">Als Tochterfirma zugeordnet</span>
+              <span className="ml-auto text-[10px]">{t('assignedAsSubsidiary')}</span>
             ) : (
               <button
                 type="button"
                 disabled={assigningId === r.id}
                 onClick={() => assignAsSubsidiary(r.id)}
                 className="ml-auto text-[10px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50"
-                title={`${r.name} als Tochterfirma von ${group.keep.name} eintragen, statt zusammenzuführen`}
+                title={t('assignSubsidiaryTitle', { child: r.name, parent: group.keep.name })}
               >
-                {assigningId === r.id ? 'Ordne zu…' : 'Als Tochterfirma zuordnen'}
+                {assigningId === r.id ? t('assigningAsSubsidiary') : t('assignAsSubsidiary')}
               </button>
             )}
           </div>
@@ -393,9 +400,9 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
       })}
       {(group.apps_merged > 0 || group.contacts_merged > 0) && (
         <p className="text-[10px] text-gray-400 ml-4">
-          → {group.apps_merged > 0 && `${group.apps_merged} Bewerbungen`}
+          {t('transferPrefix')} {group.apps_merged > 0 && t('applicationsCount', { count: group.apps_merged })}
           {group.apps_merged > 0 && group.contacts_merged > 0 && ' + '}
-          {group.contacts_merged > 0 && `${group.contacts_merged} Kontakte`} werden übertragen, falls stattdessen zusammengeführt
+          {group.contacts_merged > 0 && t('contactsCount', { count: group.contacts_merged })} {t('transferSuffixIfMerged')}
         </p>
       )}
     </div>
@@ -403,19 +410,20 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
 }
 
 function EventGroupRow({ group }: { group: EventGroup }) {
+  const { t } = useTranslation('cleanup')
   return (
     <div className="px-4 py-3 text-xs space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">Behalten</span>
-        <span className="font-medium text-gray-800">{group.keep.titel || '(kein Titel)'}</span>
+        <span className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">{t('keep')}</span>
+        <span className="font-medium text-gray-800">{group.keep.titel || t('noTitle')}</span>
         {group.keep.typ && <span className="text-gray-400">· {group.keep.typ}</span>}
         {group.keep.datum && <span className="text-gray-400">{group.keep.datum}</span>}
-        {group.keep.has_notiz && <span className="text-indigo-400 text-[10px]">Notiz</span>}
+        {group.keep.has_notiz && <span className="text-indigo-400 text-[10px]">{t('note')}</span>}
       </div>
       {group.remove.map(r => (
         <div key={r.id} className="flex items-center gap-2 text-gray-400 ml-4">
           <Trash2 className="h-3 w-3 text-red-400 shrink-0" />
-          <span>{r.titel || '(kein Titel)'}</span>
+          <span>{r.titel || t('noTitle')}</span>
           {r.datum && <span>{r.datum}</span>}
         </div>
       ))}

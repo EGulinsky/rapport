@@ -17,6 +17,14 @@ import contactsDe from './locales/de/contacts.json'
 import contactsEn from './locales/en/contacts.json'
 import mergeDe from './locales/de/merge.json'
 import mergeEn from './locales/en/merge.json'
+import calendarDe from './locales/de/calendar.json'
+import calendarEn from './locales/en/calendar.json'
+import analyticsDe from './locales/de/analytics.json'
+import analyticsEn from './locales/en/analytics.json'
+import cleanupDe from './locales/de/cleanup.json'
+import cleanupEn from './locales/en/cleanup.json'
+import reviewDe from './locales/de/review.json'
+import reviewEn from './locales/en/review.json'
 
 export const SUPPORTED_LANGUAGES = ['de', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -40,8 +48,8 @@ export function rememberPreLoginLanguage(lang: SupportedLanguage): void {
 
 i18n.use(initReactI18next).init({
   resources: {
-    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe },
-    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn },
+    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe, calendar: calendarDe, analytics: analyticsDe, cleanup: cleanupDe, review: reviewDe },
+    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn, calendar: calendarEn, analytics: analyticsEn, cleanup: cleanupEn, review: reviewEn },
   },
   lng: getPreLoginLanguage(),
   fallbackLng: 'en',

@@ -1,0 +1,78 @@
+{
+  "loadErrorTitle": "Fehler beim Laden der Auswertungen",
+  "retry": "Erneut versuchen",
+  "refresh": "Aktualisieren",
+  "kpi": {
+    "totalApplications": "Bewerbungen gesamt",
+    "totalSub": "{{active}} aktiv · {{rejected}} Absagen",
+    "active": "Aktiv",
+    "activeSubSigned": "{{count}} Unterschrift",
+    "activeSubOpen": "Offen",
+    "interviewRate": "Gespräch-Rate",
+    "interviewRateSub": "Bewerb. → Gespräch",
+    "offerRate": "Angebot-Rate",
+    "offerRateSub": "Bewerb. → Angebot",
+    "avgDaysToInterview": "Ø Tage bis Gespräch",
+    "avgDaysToInterviewSub": "ab Bewerbungsdatum",
+    "ghostingRate": "Ghosting-Quote",
+    "ghostingRateSub": "{{count}} Bewerbungen",
+    "hhShare": "HH-Anteil",
+    "hhShareSub": "{{count}} über Headhunter",
+    "directShare": "Direkt-Anteil",
+    "directShareSub": "{{count}} direkt",
+    "avgDaysToRejection": "Ø Tage bis Absage",
+    "avgDaysToRejectionSub": "ab Bewerbungsdatum",
+    "signed": "Unterschriften",
+    "signedSub": "Angebot angenommen"
+  },
+  "funnel": {
+    "title": "Conversion-Funnel",
+    "tooltipLabel": "Bewerbungen"
+  },
+  "bottleneck": {
+    "title": "Größter Engpass: {{from}} → {{to}}",
+    "description": "Nur {{rate}} kommen weiter — {{dropOff}} Bewerbungen bleiben in dieser Phase hängen. Das ist der größte absolute Verlust in der Pipeline."
+  },
+  "stageConversion": {
+    "title": "Konversion je Übergang",
+    "subtitle": "Anteil, der von einer Stufe zur nächsten kommt (nicht kumulativ) — zeigt, wo genau die Pipeline stockt.",
+    "tooltipLost": "{{count}} verloren",
+    "tooltipLabel": "Konversion"
+  },
+  "pipelineDistribution": "Pipeline-Verteilung",
+  "sources": "Quellen",
+  "hhVsDirect": {
+    "title": "Headhunter vs. Direkt",
+    "subtitle": "HH: {{hhCount}} ({{hhPct}}) · Direkt: {{directCount}} ({{directPct}})",
+    "headhunter": "Headhunter",
+    "direct": "Direkt",
+    "total": "Gesamt",
+    "interview": "Gespräch",
+    "offer": "Angebot"
+  },
+  "overTime": {
+    "title": "Bewerbungen über Zeit (letzte 12 Monate)",
+    "name": "Bewerbungen"
+  },
+  "rejectionByPhase": {
+    "title": "Absagen nach Phase",
+    "name": "Absagen"
+  },
+  "successByCompanyType": {
+    "title": "Erfolg nach Firmentyp",
+    "subtitle": "Gespräch-/Angebotsquote je Firmenart (Startup/Konzern/KMU/…)"
+  },
+  "successByCompanySize": {
+    "title": "Erfolg nach Firmengröße",
+    "subtitle": "Gespräch-/Angebotsquote je Mitarbeiterzahl-Bereich"
+  },
+  "successByRoleCategory": {
+    "title": "Erfolg nach Rollen-Kategorie",
+    "subtitle": "Grobe Einordnung aus dem Stellentitel (Keyword-Heuristik, kein strukturiertes Feld) — \"Führung\": Lead/Head/Director/Manager/Leitung; \"Senior (Fachexperte)\": Senior/Principal/Architekt; sonst \"Sonstige\""
+  },
+  "groupChart": {
+    "minTotalNote": "Gruppen mit weniger als {{count}} Bewerbungen sind ausgeblendet (zu wenig Datenbasis).",
+    "interviewRate": "Gespräch-Rate",
+    "offerRate": "Angebot-Rate"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "view": {
+    "today": "Heute",
+    "loading": "Lädt…",
+    "openApplication": "Bewerbung öffnen →",
+    "by": "von {{name}}",
+    "eventCount_one": "{{count}} Termin",
+    "eventCount_other": "{{count}} Termine",
+    "viewDay": "Tag",
+    "viewWorkweek": "Arbeitswoche",
+    "viewWeek": "Woche",
+    "viewMonth": "Monat"
+  }
+}

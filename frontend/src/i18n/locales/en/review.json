@@ -1,0 +1,50 @@
+{
+  "sourceLabel": {
+    "gmail": "Gmail",
+    "gcal": "Google Calendar",
+    "icloud_cal": "iCloud Calendar",
+    "icloud_notes": "iCloud Notes",
+    "icloud_mail": "iCloud Mail",
+    "linkedin": "LinkedIn"
+  },
+  "title": "Manual review",
+  "subtitleSelected_one": "{{count}} selected",
+  "subtitleSelected_other": "{{count}} selected",
+  "subtitleDefault": "AI matches with <60% confidence, ambiguous company matches",
+  "selectAllTitle": "Select all",
+  "processing": "Processing…",
+  "approveCount_one": "Approve {{count}}",
+  "approveCount_other": "Approve {{count}}",
+  "rejectCount_one": "Reject {{count}}",
+  "rejectCount_other": "Reject {{count}}",
+  "loading": "Loading…",
+  "empty": "No open entries",
+  "statusSuggestion": "Status suggestion",
+  "companyMultipleMatches": "Company: multiple matches",
+  "confidence": "{{confidence}}% confidence",
+  "approve": "Approve",
+  "reject": "Reject",
+  "rejectCompanyCandidate": "None of these",
+  "rejectCompanyCandidateTitle": "None of these — try Wikidata fallback",
+  "linkedinSuggests": "LinkedIn reports a status change:",
+  "aiSuggests": "AI suggests a status change:",
+  "noMatchTitle": "No application detected — please assign manually:",
+  "assignedApplication": "Assigned application:",
+  "editFields": "Edit fields",
+  "changeApplication": "Change application",
+  "fieldTitle": "Title",
+  "fieldDate": "Date",
+  "fieldType": "Type",
+  "selectPlaceholder": "— select —",
+  "companyPicker": {
+    "noCandidates": "No candidates found — only \"None of these\" is possible.",
+    "question": "Which LinkedIn page is the right one?"
+  },
+  "appPicker": {
+    "searchPlaceholder": "Search application…"
+  },
+  "contentPreview": {
+    "showLess": "Show less ▲",
+    "showMore": "… {{count}} more characters ▼"
+  }
+}

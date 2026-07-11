@@ -1,0 +1,78 @@
+{
+  "loadErrorTitle": "Error loading analytics",
+  "retry": "Try again",
+  "refresh": "Refresh",
+  "kpi": {
+    "totalApplications": "Total applications",
+    "totalSub": "{{active}} active · {{rejected}} rejected",
+    "active": "Active",
+    "activeSubSigned": "{{count}} signed",
+    "activeSubOpen": "Open",
+    "interviewRate": "Interview rate",
+    "interviewRateSub": "Applied → Interview",
+    "offerRate": "Offer rate",
+    "offerRateSub": "Applied → Offer",
+    "avgDaysToInterview": "Avg. days to interview",
+    "avgDaysToInterviewSub": "since application date",
+    "ghostingRate": "Ghosting rate",
+    "ghostingRateSub": "{{count}} applications",
+    "hhShare": "Headhunter share",
+    "hhShareSub": "{{count}} via headhunter",
+    "directShare": "Direct share",
+    "directShareSub": "{{count}} direct",
+    "avgDaysToRejection": "Avg. days to rejection",
+    "avgDaysToRejectionSub": "since application date",
+    "signed": "Signed offers",
+    "signedSub": "Offer accepted"
+  },
+  "funnel": {
+    "title": "Conversion funnel",
+    "tooltipLabel": "Applications"
+  },
+  "bottleneck": {
+    "title": "Biggest bottleneck: {{from}} → {{to}}",
+    "description": "Only {{rate}} advance — {{dropOff}} applications get stuck at this stage. This is the largest absolute loss in the pipeline."
+  },
+  "stageConversion": {
+    "title": "Conversion by transition",
+    "subtitle": "Share moving from one stage to the next (not cumulative) — shows exactly where the pipeline stalls.",
+    "tooltipLost": "{{count}} lost",
+    "tooltipLabel": "Conversion"
+  },
+  "pipelineDistribution": "Pipeline distribution",
+  "sources": "Sources",
+  "hhVsDirect": {
+    "title": "Headhunter vs. Direct",
+    "subtitle": "HH: {{hhCount}} ({{hhPct}}) · Direct: {{directCount}} ({{directPct}})",
+    "headhunter": "Headhunter",
+    "direct": "Direct",
+    "total": "Total",
+    "interview": "Interview",
+    "offer": "Offer"
+  },
+  "overTime": {
+    "title": "Applications over time (last 12 months)",
+    "name": "Applications"
+  },
+  "rejectionByPhase": {
+    "title": "Rejections by phase",
+    "name": "Rejections"
+  },
+  "successByCompanyType": {
+    "title": "Success by company type",
+    "subtitle": "Interview/offer rate by company type (startup/corporate/SME/…)"
+  },
+  "successByCompanySize": {
+    "title": "Success by company size",
+    "subtitle": "Interview/offer rate by employee-count range"
+  },
+  "successByRoleCategory": {
+    "title": "Success by role category",
+    "subtitle": "Rough categorization from the job title (keyword heuristic, not a structured field) — \"Leadership\": Lead/Head/Director/Manager; \"Senior (Specialist)\": Senior/Principal/Architect; otherwise \"Other\""
+  },
+  "groupChart": {
+    "minTotalNote": "Groups with fewer than {{count}} applications are hidden (too little data).",
+    "interviewRate": "Interview rate",
+    "offerRate": "Offer rate"
+  }
+}

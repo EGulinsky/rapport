@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { PendingMatch, Application } from '../types'
 import { MAIN_STATUS_COLORS } from '../types'
@@ -6,14 +7,6 @@ import { useStatusLabels } from '../i18n/statusLabels'
 import { Check, X, ChevronDown, Mail, Calendar, FileText, ArrowRight, Linkedin } from 'lucide-react'
 import clsx from 'clsx'
 
-const SOURCE_LABEL: Record<string, string> = {
-  gmail: 'Gmail',
-  gcal: 'Google Calendar',
-  icloud_cal: 'iCloud Kalender',
-  icloud_notes: 'iCloud Notizen',
-  icloud_mail: 'iCloud Mail',
-  linkedin: 'LinkedIn',
-}
 const EVENT_TYPE_OPTIONS = ['bewerbung', 'status', 'gespräch', 'notiz', 'angebot', 'absage']
 
 interface Props {
@@ -22,6 +15,7 @@ interface Props {
 }
 
 export function ReviewModal({ onClose, onApproved }: Props) {
+  const { t } = useTranslation('review')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const [items, setItems] = useState<PendingMatch[]>([])
   const [loading, setLoading] = useState(true)
@@ -207,13 +201,13 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                 checked={selected.size === items.length}
                 ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < items.length }}
                 onChange={toggleAll}
-                title="Alle auswählen"
+                title={t('selectAllTitle')}
               />
             )}
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Manuelle Überprüfung</h2>
+              <h2 className="text-base font-semibold text-gray-900">{t('title')}</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                {selected.size > 0 ? `${selected.size} ausgewählt` : `KI-Treffer mit <60% Konfidenz, mehrdeutige Firmen-Treffer`}
+                {selected.size > 0 ? t('subtitleSelected', { count: selected.size }) : t('subtitleDefault')}
               </p>
             </div>
           </div>
@@ -228,7 +222,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                   {batchBusy
                     ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
                     : <Check className="h-3.5 w-3.5" />}
-                  {batchBusy ? 'Wird verarbeitet…' : `${selected.size} annehmen`}
+                  {batchBusy ? t('processing') : t('approveCount', { count: selected.size })}
                 </button>
                 <button
                   onClick={batchReject}
@@ -238,7 +232,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                   {batchBusy
                     ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-gray-400 rounded-full" />
                     : <X className="h-3.5 w-3.5" />}
-                  {batchBusy ? 'Wird verarbeitet…' : `${selected.size} ablehnen`}
+                  {batchBusy ? t('processing') : t('rejectCount', { count: selected.size })}
                 </button>
               </>
             )}
@@ -251,12 +245,12 @@ export function ReviewModal({ onClose, onApproved }: Props) {
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
           {loading && (
-            <p className="text-sm text-gray-400 text-center py-8">Lade…</p>
+            <p className="text-sm text-gray-400 text-center py-8">{t('loading')}</p>
           )}
           {!loading && items.length === 0 && (
             <div className="text-center py-12 text-gray-400">
               <Check className="h-8 w-8 mx-auto mb-2 text-green-400" />
-              <p className="text-sm">Keine offenen Einträge</p>
+              <p className="text-sm">{t('empty')}</p>
             </div>
           )}
           {items.map(item => {
@@ -286,19 +280,19 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                       onChange={() => toggleSelect(item.id)}
                     />
                     <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                      {SOURCE_LABEL[item.source] ?? item.source}
+                      {t(`sourceLabel.${item.source}`, { defaultValue: item.source })}
                     </span>
                     {isStatusOnly ? (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
-                        Status-Vorschlag
+                        {t('statusSuggestion')}
                       </span>
                     ) : isCompanyCandidate ? (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                        Firma: mehrere Treffer
+                        {t('companyMultipleMatches')}
                       </span>
                     ) : (
                       <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full', confidenceColor(item.confidence))}>
-                        {item.confidence}% Konfidenz
+                        {t('confidence', { confidence: item.confidence })}
                       </span>
                     )}
                     {item.datum && (
@@ -314,18 +308,18 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                       {busy
                         ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
                         : <Check className="h-3.5 w-3.5" />}
-                      {busy ? 'Wird verarbeitet…' : 'Annehmen'}
+                      {busy ? t('processing') : t('approve')}
                     </button>
                     <button
                       onClick={() => reject(item)}
                       disabled={busy}
                       className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                      title={isCompanyCandidate ? 'Keiner davon — Wikidata-Fallback versuchen' : undefined}
+                      title={isCompanyCandidate ? t('rejectCompanyCandidateTitle') : undefined}
                     >
                       {busy
                         ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-gray-400 rounded-full" />
                         : <X className="h-3.5 w-3.5" />}
-                      {busy ? 'Wird verarbeitet…' : (isCompanyCandidate ? 'Keiner davon' : 'Ablehnen')}
+                      {busy ? t('processing') : (isCompanyCandidate ? t('rejectCompanyCandidate') : t('reject'))}
                     </button>
                   </div>
                 </div>
@@ -343,7 +337,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                 {isStatusOnly && item.suggested_main_status && (
                   <div className="rounded-lg border border-violet-200 bg-violet-50 p-3">
                     <p className="text-xs font-medium text-violet-700 mb-2">
-                      {item.source === 'linkedin' ? 'LinkedIn meldet Status-Änderung:' : 'KI schlägt Status-Änderung vor:'}
+                      {item.source === 'linkedin' ? t('linkedinSuggests') : t('aiSuggests')}
                     </p>
                     <div className="flex items-center gap-2">
                       <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', item.current_main_status ? MAIN_STATUS_COLORS[item.current_main_status as keyof typeof MAIN_STATUS_COLORS] ?? 'bg-gray-100 text-gray-600' : 'bg-gray-100 text-gray-600')}>
@@ -364,7 +358,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                 {/* Suggested / selected app (non-status-only, non-company-candidate items) */}
                 {!isStatusOnly && !isCompanyCandidate && noSuggestion && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                    <p className="text-xs font-medium text-amber-700">Keine Stelle erkannt — bitte manuell zuordnen:</p>
+                    <p className="text-xs font-medium text-amber-700">{t('noMatchTitle')}</p>
                     <AppPicker
                       itemId={item.id}
                       selectedId={ov.app_id}
@@ -377,7 +371,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                 )}
                 {!isStatusOnly && !isCompanyCandidate && !noSuggestion && (
                   <div className="text-sm">
-                    <span className="text-gray-500 text-xs">Zugeordnete Stelle: </span>
+                    <span className="text-gray-500 text-xs">{t('assignedApplication')} </span>
                     <span className="font-medium text-gray-800">{appLabel}</span>
                   </div>
                 )}
@@ -390,12 +384,12 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                   <details className="group">
                     <summary className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600 list-none">
                       <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-                      Felder bearbeiten
+                      {t('editFields')}
                     </summary>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {!noSuggestion && (
                         <div className="col-span-2">
-                          <label className="text-xs text-gray-500 mb-1 block">Stelle ändern</label>
+                          <label className="text-xs text-gray-500 mb-1 block">{t('changeApplication')}</label>
                           <AppPicker
                             itemId={item.id}
                             selectedId={ov.app_id ?? item.suggested_app_id ?? undefined}
@@ -407,7 +401,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                         </div>
                       )}
                       <div className="col-span-2">
-                        <label className="text-xs text-gray-500 mb-1 block">Titel</label>
+                        <label className="text-xs text-gray-500 mb-1 block">{t('fieldTitle')}</label>
                         <input
                           className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           value={ov.titel ?? item.titel ?? ''}
@@ -415,7 +409,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Datum</label>
+                        <label className="text-xs text-gray-500 mb-1 block">{t('fieldDate')}</label>
                         <input
                           type="date"
                           className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -424,15 +418,15 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Typ</label>
+                        <label className="text-xs text-gray-500 mb-1 block">{t('fieldType')}</label>
                         <select
                           className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                           value={ov.event_type ?? item.event_type ?? ''}
                           onChange={e => setOverride(item.id, { event_type: e.target.value })}
                         >
-                          <option value="">— auswählen —</option>
-                          {EVENT_TYPE_OPTIONS.map(t => (
-                            <option key={t} value={t}>{t}</option>
+                          <option value="">{t('selectPlaceholder')}</option>
+                          {EVENT_TYPE_OPTIONS.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
                       </div>
@@ -480,6 +474,7 @@ const SOURCE_ICON: Record<string, React.ReactNode> = {
 }
 
 function ContentPreview({ item }: { item: PendingMatch }) {
+  const { t } = useTranslation('review')
   const [expanded, setExpanded] = useState(false)
   const raw = item.raw_content
   const isEmail = item.source === 'gmail' || item.source === 'icloud_mail'
@@ -522,7 +517,7 @@ function ContentPreview({ item }: { item: PendingMatch }) {
               onClick={() => setExpanded(e => !e)}
               className="mt-1.5 text-indigo-500 hover:text-indigo-700 font-medium"
             >
-              {expanded ? 'Weniger anzeigen ▲' : `… ${body.length - 300} weitere Zeichen ▼`}
+              {expanded ? t('contentPreview.showLess') : t('contentPreview.showMore', { count: body.length - 300 })}
             </button>
           )}
         </div>
@@ -550,7 +545,7 @@ function ContentPreview({ item }: { item: PendingMatch }) {
                 onClick={() => setExpanded(e => !e)}
                 className="mt-1.5 text-indigo-500 hover:text-indigo-700 font-medium"
               >
-                {expanded ? 'Weniger anzeigen ▲' : `… ${body.length - 400} weitere Zeichen ▼`}
+                {expanded ? t('contentPreview.showLess') : t('contentPreview.showMore', { count: body.length - 400 })}
               </button>
             )}
           </div>
@@ -589,6 +584,7 @@ interface CompanyCandidate {
 function CompanyCandidatePicker({
   item, selectedUrl, onSelect,
 }: { item: PendingMatch; selectedUrl?: string; onSelect: (url: string) => void }) {
+  const { t } = useTranslation('review')
   let candidates: CompanyCandidate[] = []
   try {
     const payload = JSON.parse(item.raw_content ?? '{}')
@@ -598,12 +594,12 @@ function CompanyCandidatePicker({
   }
 
   if (candidates.length === 0) {
-    return <p className="text-xs text-amber-600">Keine Kandidaten gefunden — nur "Keiner davon" möglich.</p>
+    return <p className="text-xs text-amber-600">{t('companyPicker.noCandidates')}</p>
   }
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-medium text-blue-700">Welche LinkedIn-Seite ist die richtige?</p>
+      <p className="text-xs font-medium text-blue-700">{t('companyPicker.question')}</p>
       <div className="space-y-1">
         {candidates.map(c => (
           <button
@@ -639,6 +635,7 @@ interface AppPickerProps {
 }
 
 function AppPicker({ selectedId, allApps, apps, onSearch, onSelect }: AppPickerProps) {
+  const { t } = useTranslation('review')
   const { mainStatusLabel } = useStatusLabels()
   const [open, setOpen] = useState(false)
   const [inputValue, setInputValue] = useState('')
@@ -676,7 +673,7 @@ function AppPicker({ selectedId, allApps, apps, onSearch, onSelect }: AppPickerP
     <div className="relative">
       <input
         className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        placeholder="Stelle suchen…"
+        placeholder={t('appPicker.searchPlaceholder')}
         value={displayValue}
         onFocus={handleFocus}
         onChange={handleChange}

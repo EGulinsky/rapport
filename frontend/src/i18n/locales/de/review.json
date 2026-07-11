@@ -1,0 +1,50 @@
+{
+  "sourceLabel": {
+    "gmail": "Gmail",
+    "gcal": "Google Calendar",
+    "icloud_cal": "iCloud Kalender",
+    "icloud_notes": "iCloud Notizen",
+    "icloud_mail": "iCloud Mail",
+    "linkedin": "LinkedIn"
+  },
+  "title": "Manuelle Überprüfung",
+  "subtitleSelected_one": "{{count}} ausgewählt",
+  "subtitleSelected_other": "{{count}} ausgewählt",
+  "subtitleDefault": "KI-Treffer mit <60% Konfidenz, mehrdeutige Firmen-Treffer",
+  "selectAllTitle": "Alle auswählen",
+  "processing": "Wird verarbeitet…",
+  "approveCount_one": "{{count}} annehmen",
+  "approveCount_other": "{{count}} annehmen",
+  "rejectCount_one": "{{count}} ablehnen",
+  "rejectCount_other": "{{count}} ablehnen",
+  "loading": "Lade…",
+  "empty": "Keine offenen Einträge",
+  "statusSuggestion": "Status-Vorschlag",
+  "companyMultipleMatches": "Firma: mehrere Treffer",
+  "confidence": "{{confidence}}% Konfidenz",
+  "approve": "Annehmen",
+  "reject": "Ablehnen",
+  "rejectCompanyCandidate": "Keiner davon",
+  "rejectCompanyCandidateTitle": "Keiner davon — Wikidata-Fallback versuchen",
+  "linkedinSuggests": "LinkedIn meldet Status-Änderung:",
+  "aiSuggests": "KI schlägt Status-Änderung vor:",
+  "noMatchTitle": "Keine Stelle erkannt — bitte manuell zuordnen:",
+  "assignedApplication": "Zugeordnete Stelle:",
+  "editFields": "Felder bearbeiten",
+  "changeApplication": "Stelle ändern",
+  "fieldTitle": "Titel",
+  "fieldDate": "Datum",
+  "fieldType": "Typ",
+  "selectPlaceholder": "— auswählen —",
+  "companyPicker": {
+    "noCandidates": "Keine Kandidaten gefunden — nur \"Keiner davon\" möglich.",
+    "question": "Welche LinkedIn-Seite ist die richtige?"
+  },
+  "appPicker": {
+    "searchPlaceholder": "Stelle suchen…"
+  },
+  "contentPreview": {
+    "showLess": "Weniger anzeigen ▲",
+    "showMore": "… {{count}} weitere Zeichen ▼"
+  }
+}

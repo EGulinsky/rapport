@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend,
 } from 'recharts'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { AnalyticsSummary } from '../types'
 
@@ -12,17 +13,6 @@ const VIOLET = '#8b5cf6'
 const ROSE = '#f43f5e'
 const AMBER = '#f59e0b'
 const EMERALD = '#10b981'
-
-const COMPANY_TYPE_LABELS: Record<string, string> = {
-  startup:    'Startup',
-  konzern:    'Konzern',
-  kmu:        'KMU',
-  beratung:   'Beratung',
-  headhunter: 'Headhunter',
-  nonprofit:  'Non-Profit',
-  public:     'Öffentlich',
-  other:      'Sonstiges',
-}
 
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -43,14 +33,15 @@ function SuccessByGroupChart({
   labelFor?: (raw: string) => string
   minTotal?: number
 }) {
+  const { t } = useTranslation('analytics')
   const filtered = groups.filter(g => g.total >= minTotal)
   if (filtered.length === 0) return null
 
   const chartData = filtered.map(g => ({
     name: labelFor ? labelFor(g.label) : g.label,
     n: g.total,
-    'Gespräch-Rate': g.gespräch_rate,
-    'Angebot-Rate': g.offer_rate,
+    interview_rate: g.gespräch_rate,
+    offer_rate: g.offer_rate,
   }))
 
   return (
@@ -72,11 +63,11 @@ function SuccessByGroupChart({
           />
           <Tooltip formatter={(value: number) => pct(value)} />
           <Legend />
-          <Bar dataKey="Gespräch-Rate" fill={VIOLET} radius={[0, 4, 4, 0]} />
-          <Bar dataKey="Angebot-Rate" fill={EMERALD} radius={[0, 4, 4, 0]} />
+          <Bar dataKey="interview_rate" name={t('groupChart.interviewRate')} fill={VIOLET} radius={[0, 4, 4, 0]} />
+          <Bar dataKey="offer_rate" name={t('groupChart.offerRate')} fill={EMERALD} radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
-      <p className="text-[11px] text-gray-400 mt-2">Gruppen mit weniger als {minTotal} Bewerbungen sind ausgeblendet (zu wenig Datenbasis).</p>
+      <p className="text-[11px] text-gray-400 mt-2">{t('groupChart.minTotalNote', { count: minTotal })}</p>
     </div>
   )
 }
@@ -91,6 +82,8 @@ function pct(n: number): string {
 }
 
 export function AnalyticsView() {
+  const { t } = useTranslation('analytics')
+  const { t: tCompanies } = useTranslation('companies')
   const [data, setData] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -102,11 +95,11 @@ export function AnalyticsView() {
       const result = await api.analytics.summary()
       setData(result)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      setError(e instanceof Error ? e.message : t('loadErrorTitle'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => { load() }, [load])
 
@@ -122,10 +115,10 @@ export function AnalyticsView() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center text-red-500">
-          <p className="font-medium">Fehler beim Laden der Auswertungen</p>
+          <p className="font-medium">{t('loadErrorTitle')}</p>
           <p className="text-sm mt-1">{error}</p>
           <button onClick={load} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
-            Erneut versuchen
+            {t('retry')}
           </button>
         </div>
       </div>
@@ -141,8 +134,8 @@ export function AnalyticsView() {
 
   // HH vs Direct chart data
   const hhDirectData = [
-    { name: 'Headhunter', total: hh_vs_direct.hh.total, gespräch: hh_vs_direct.hh.gespräch, offer: hh_vs_direct.hh.offer },
-    { name: 'Direkt', total: hh_vs_direct.direct.total, gespräch: hh_vs_direct.direct.gespräch, offer: hh_vs_direct.direct.offer },
+    { name: t('hhVsDirect.headhunter'), total: hh_vs_direct.hh.total, gespräch: hh_vs_direct.hh.gespräch, offer: hh_vs_direct.hh.offer },
+    { name: t('hhVsDirect.direct'), total: hh_vs_direct.direct.total, gespräch: hh_vs_direct.direct.gespräch, offer: hh_vs_direct.direct.offer },
   ]
 
   // Status donut data (by current active status)
@@ -154,40 +147,40 @@ export function AnalyticsView() {
     <div className="space-y-6">
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard label="Bewerbungen gesamt" value={String(kpis.total)} sub={`${kpis.active} aktiv · ${kpis.rejected} Absagen`} />
-        <KpiCard label="Aktiv" value={String(kpis.active)} sub={`${kpis.signed > 0 ? kpis.signed + ' Unterschrift' : 'Offen'}`} />
+        <KpiCard label={t('kpi.totalApplications')} value={String(kpis.total)} sub={t('kpi.totalSub', { active: kpis.active, rejected: kpis.rejected })} />
+        <KpiCard label={t('kpi.active')} value={String(kpis.active)} sub={kpis.signed > 0 ? t('kpi.activeSubSigned', { count: kpis.signed }) : t('kpi.activeSubOpen')} />
         <KpiCard
-          label="Gespräch-Rate"
+          label={t('kpi.interviewRate')}
           value={pct(kpis.conversion_gespräch)}
-          sub="Bewerb. → Gespräch"
+          sub={t('kpi.interviewRateSub')}
         />
         <KpiCard
-          label="Angebot-Rate"
+          label={t('kpi.offerRate')}
           value={pct(kpis.conversion_offer)}
-          sub="Bewerb. → Angebot"
+          sub={t('kpi.offerRateSub')}
         />
         <KpiCard
-          label="Ø Tage bis Gespräch"
+          label={t('kpi.avgDaysToInterview')}
           value={fmt(kpis.avg_days_to_gespräch, 1)}
-          sub="ab Bewerbungsdatum"
+          sub={t('kpi.avgDaysToInterviewSub')}
         />
         <KpiCard
-          label="Ghosting-Quote"
+          label={t('kpi.ghostingRate')}
           value={pct(kpis.ghosting_rate)}
-          sub={`${kpis.ghosting_count} Bewerbungen`}
+          sub={t('kpi.ghostingRateSub', { count: kpis.ghosting_count })}
         />
       </div>
 
       {/* Conversion Funnel */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Conversion-Funnel</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('funnel.title')}</h2>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={funnel} layout="vertical" margin={{ left: 120, right: 60 }}>
             <XAxis type="number" hide />
             <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 12 }} />
             <Tooltip
               formatter={(value: number, _name: string, props: { payload?: AnalyticsSummary['funnel'][number] }) =>
-                [`${value} (${pct(props.payload?.pct ?? 0)})`, 'Bewerbungen']
+                [`${value} (${pct(props.payload?.pct ?? 0)})`, t('funnel.tooltipLabel')]
               }
             />
             <Bar dataKey="count" fill={INDIGO} radius={[0, 4, 4, 0]}>
@@ -205,10 +198,10 @@ export function AnalyticsView() {
           <span className="text-2xl leading-none">🎯</span>
           <div>
             <p className="text-sm font-semibold text-amber-900">
-              Größter Engpass: {bottleneck.from_label} → {bottleneck.to_label}
+              {t('bottleneck.title', { from: bottleneck.from_label, to: bottleneck.to_label })}
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
-              Nur {pct(bottleneck.rate)} kommen weiter — {bottleneck.drop_off} Bewerbungen bleiben in dieser Phase hängen. Das ist der größte absolute Verlust in der Pipeline.
+              {t('bottleneck.description', { rate: pct(bottleneck.rate), dropOff: bottleneck.drop_off })}
             </p>
           </div>
         </div>
@@ -217,8 +210,8 @@ export function AnalyticsView() {
       {/* Stufe-zu-Stufe-Konversion */}
       {stage_conversions.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-1">Konversion je Übergang</h2>
-          <p className="text-xs text-gray-400 mb-4">Anteil, der von einer Stufe zur nächsten kommt (nicht kumulativ) — zeigt, wo genau die Pipeline stockt.</p>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">{t('stageConversion.title')}</h2>
+          <p className="text-xs text-gray-400 mb-4">{t('stageConversion.subtitle')}</p>
           <ResponsiveContainer width="100%" height={Math.max(160, stage_conversions.length * 40)}>
             <BarChart
               data={stage_conversions.map(s => ({ ...s, label: `${s.from_label} → ${s.to_label}` }))}
@@ -229,7 +222,7 @@ export function AnalyticsView() {
               <YAxis type="category" dataKey="label" width={160} tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number, _name: string, props: { payload?: AnalyticsSummary['stage_conversions'][number] }) =>
-                  [`${pct(value)} (${props.payload?.drop_off ?? 0} verloren)`, 'Konversion']
+                  [`${pct(value)} (${t('stageConversion.tooltipLost', { count: props.payload?.drop_off ?? 0 })})`, t('stageConversion.tooltipLabel')]
                 }
               />
               <Bar dataKey="rate" fill={AMBER} radius={[0, 4, 4, 0]} />
@@ -241,7 +234,7 @@ export function AnalyticsView() {
       {/* Status Donut + Quelle Bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Pipeline-Verteilung</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('pipelineDistribution')}</h2>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie
@@ -265,7 +258,7 @@ export function AnalyticsView() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Quellen</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('sources')}</h2>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={by_source.slice(0, 10)} layout="vertical" margin={{ left: 80, right: 30 }}>
               <XAxis type="number" hide />
@@ -279,9 +272,9 @@ export function AnalyticsView() {
 
       {/* HH vs Direkt */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-1">Headhunter vs. Direkt</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-1">{t('hhVsDirect.title')}</h2>
         <p className="text-xs text-gray-400 mb-4">
-          HH: {kpis.hh_count} ({pct(kpis.hh_pct)}) · Direkt: {kpis.direct_count} ({pct(1 - kpis.hh_pct)})
+          {t('hhVsDirect.subtitle', { hhCount: kpis.hh_count, hhPct: pct(kpis.hh_pct), directCount: kpis.direct_count, directPct: pct(1 - kpis.hh_pct) })}
         </p>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={hhDirectData} margin={{ left: 10, right: 20 }}>
@@ -290,9 +283,9 @@ export function AnalyticsView() {
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip />
             <Legend />
-            <Bar dataKey="total" name="Gesamt" fill={INDIGO} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="gespräch" name="Gespräch" fill={VIOLET} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="offer" name="Angebot" fill={EMERALD} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="total" name={t('hhVsDirect.total')} fill={INDIGO} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="gespräch" name={t('hhVsDirect.interview')} fill={VIOLET} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="offer" name={t('hhVsDirect.offer')} fill={EMERALD} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -300,14 +293,14 @@ export function AnalyticsView() {
       {/* Bewerbungen über Zeit */}
       {by_month.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Bewerbungen über Zeit (letzte 12 Monate)</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('overTime.title')}</h2>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={by_month} margin={{ left: 0, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
               <Tooltip />
-              <Line type="monotone" dataKey="count" name="Bewerbungen" stroke={INDIGO} strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="count" name={t('overTime.name')} stroke={INDIGO} strokeWidth={2} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -316,14 +309,14 @@ export function AnalyticsView() {
       {/* Absagen nach Phase */}
       {rejection_by_status.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Absagen nach Phase</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('rejectionByPhase.title')}</h2>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={rejection_by_status} margin={{ left: 10, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="count" name="Absagen" fill={ROSE} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" name={t('rejectionByPhase.name')} fill={ROSE} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -331,33 +324,33 @@ export function AnalyticsView() {
 
       {/* Erfolg nach Firmentyp / Firmengröße / Rollen-Kategorie */}
       <SuccessByGroupChart
-        title="Erfolg nach Firmentyp"
-        subtitle="Gespräch-/Angebotsquote je Firmenart (Startup/Konzern/KMU/…)"
+        title={t('successByCompanyType.title')}
+        subtitle={t('successByCompanyType.subtitle')}
         groups={by_company_type}
-        labelFor={raw => COMPANY_TYPE_LABELS[raw] ?? raw}
+        labelFor={raw => tCompanies(`companyType.${raw}`, { defaultValue: raw })}
       />
       <SuccessByGroupChart
-        title="Erfolg nach Firmengröße"
-        subtitle="Gespräch-/Angebotsquote je Mitarbeiterzahl-Bereich"
+        title={t('successByCompanySize.title')}
+        subtitle={t('successByCompanySize.subtitle')}
         groups={by_employee_range}
       />
       <SuccessByGroupChart
-        title="Erfolg nach Rollen-Kategorie"
-        subtitle='Grobe Einordnung aus dem Stellentitel (Keyword-Heuristik, kein strukturiertes Feld) — "Führung": Lead/Head/Director/Manager/Leitung; "Senior (Fachexperte)": Senior/Principal/Architekt; sonst "Sonstige"'
+        title={t('successByRoleCategory.title')}
+        subtitle={t('successByRoleCategory.subtitle')}
         groups={by_role_category}
         minTotal={1}
       />
 
       {/* Additional KPIs row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiCard label="HH-Anteil" value={pct(kpis.hh_pct)} sub={`${kpis.hh_count} über Headhunter`} />
-        <KpiCard label="Direkt-Anteil" value={pct(1 - kpis.hh_pct)} sub={`${kpis.direct_count} direkt`} />
+        <KpiCard label={t('kpi.hhShare')} value={pct(kpis.hh_pct)} sub={t('kpi.hhShareSub', { count: kpis.hh_count })} />
+        <KpiCard label={t('kpi.directShare')} value={pct(1 - kpis.hh_pct)} sub={t('kpi.directShareSub', { count: kpis.direct_count })} />
         <KpiCard
-          label="Ø Tage bis Absage"
+          label={t('kpi.avgDaysToRejection')}
           value={fmt(kpis.avg_days_applied_to_rejected, 1)}
-          sub="ab Bewerbungsdatum"
+          sub={t('kpi.avgDaysToRejectionSub')}
         />
-        <KpiCard label="Unterschriften" value={String(kpis.signed)} sub="Angebot angenommen" />
+        <KpiCard label={t('kpi.signed')} value={String(kpis.signed)} sub={t('kpi.signedSub')} />
       </div>
 
       {/* Reload */}
@@ -366,7 +359,7 @@ export function AnalyticsView() {
           onClick={load}
           className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
         >
-          Aktualisieren
+          {t('refresh')}
         </button>
       </div>
     </div>
