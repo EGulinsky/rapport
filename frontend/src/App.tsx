@@ -27,12 +27,13 @@ import { StartupWarningBanner } from './components/StartupWarningBanner'
 import { EnvironmentBanner } from './components/EnvironmentBanner'
 import { BUILD_NUMBER } from './version'
 import {
-  MAIN_PIPELINE, MAIN_STATUS_LABELS,
+  MAIN_PIPELINE,
   type Application, type Stats, type MainStatus, type CompanyProfile, type CleanupScope,
 } from './types'
 import { Calendar } from 'lucide-react'
 import clsx from 'clsx'
 import { LogoProvider } from './context/LogoContext'
+import { useStatusLabels } from './i18n/statusLabels'
 
 type ViewMode = 'table' | 'kanban'
 type MainView = 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
@@ -77,6 +78,7 @@ function BackendGate({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { mainStatusLabel } = useStatusLabels()
   const [apps, setApps] = useState<Application[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [search, setSearch] = useState('')
@@ -524,7 +526,7 @@ export default function App() {
                   filterStatus === s ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                 )}
               >
-                {MAIN_STATUS_LABELS[s]}
+                {mainStatusLabel(s)}
                 {stats?.by_status[s] ? <span className="ml-1 opacity-70">({stats.by_status[s]})</span> : null}
               </button>
             ))}
@@ -799,6 +801,7 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
 
 
 function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewApplicationPrefill | null; onClose: () => void; onSaved: () => void }) {
+  const { mainStatusLabel } = useStatusLabels()
   const [form, setForm] = useState<{
     firma: string; company_profile_id: number | null; rolle: string; quelle: string; is_headhunter: boolean
     main_status: MainStatus; datum_bewerbung: string; zielfirma_bei_hh: string; kommentar: string; stellenanzeige_url: string
@@ -954,7 +957,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
                 onClick={() => setForm(f => ({ ...f, main_status: s }))}
                 className={`text-xs px-3 py-1.5 rounded-full border transition-all ${form.main_status === s ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
               >
-                {MAIN_STATUS_LABELS[s]}
+                {mainStatusLabel(s)}
               </button>
             ))}
           </div>

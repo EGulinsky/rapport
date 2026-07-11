@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, GitMerge } from 'lucide-react'
 import { api } from '../api/client'
 import type { Application, Contact, CompanyProfile } from '../types'
-import { MAIN_STATUS_LABELS } from '../types'
+import { mainStatusLabel } from '../i18n/statusLabels'
 import clsx from 'clsx'
 
 // ── Field definitions ────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ function displayValue(obj: Record<string, unknown>, key: string): string {
   const val = obj[key]
   if (val === null || val === undefined || val === '') return ''
   if (typeof val === 'boolean') return val ? 'Ja' : 'Nein'
-  if (key === 'main_status') return (MAIN_STATUS_LABELS as Record<string, string>)[val as string] ?? String(val)
+  if (key === 'main_status') return mainStatusLabel(String(val))
   return String(val)
 }
 

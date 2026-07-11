@@ -1,0 +1,20 @@
+{
+  "prospecting": "Anbahnung",
+  "applied": "Beworben",
+  "hr": "Gespräch HR/HH",
+  "fb": "Gespräch FB",
+  "waiting": "Warten auf Entscheidung",
+  "negotiating": "Angebotsverhandlung",
+  "signed": "Unterschrift",
+  "rejected": "Absage",
+  "1_scheduled": "1. Gespräch terminiert",
+  "1_done": "1. Gespräch geführt",
+  "2_scheduled": "2. Gespräch terminiert",
+  "2_done": "2. Gespräch geführt",
+  "3_scheduled": "3. Gespräch terminiert",
+  "3_done": "3. Gespräch geführt",
+  "4_scheduled": "4. Gespräch terminiert",
+  "4_done": "4. Gespräch geführt",
+  "5_scheduled": "5. Gespräch terminiert",
+  "5_done": "5. Gespräch geführt"
+}

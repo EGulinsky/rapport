@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import type { PendingMatch, Application } from '../types'
-import { MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS } from '../types'
+import { MAIN_STATUS_COLORS } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
 import { Check, X, ChevronDown, Mail, Calendar, FileText, ArrowRight, Linkedin } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function ReviewModal({ onClose, onApproved }: Props) {
+  const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const [items, setItems] = useState<PendingMatch[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<number | null>(null)
@@ -345,12 +347,12 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                     </p>
                     <div className="flex items-center gap-2">
                       <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', item.current_main_status ? MAIN_STATUS_COLORS[item.current_main_status as keyof typeof MAIN_STATUS_COLORS] ?? 'bg-gray-100 text-gray-600' : 'bg-gray-100 text-gray-600')}>
-                        {item.current_main_status ? MAIN_STATUS_LABELS[item.current_main_status as keyof typeof MAIN_STATUS_LABELS] ?? item.current_main_status : '—'}
+                        {item.current_main_status ? mainStatusLabel(item.current_main_status) : '—'}
                       </span>
                       <ArrowRight className="h-3.5 w-3.5 text-violet-400 shrink-0" />
                       <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', MAIN_STATUS_COLORS[item.suggested_main_status as keyof typeof MAIN_STATUS_COLORS] ?? 'bg-gray-100 text-gray-600')}>
-                        {MAIN_STATUS_LABELS[item.suggested_main_status as keyof typeof MAIN_STATUS_LABELS] ?? item.suggested_main_status}
-                        {item.suggested_sub_status && ` – ${SUB_STATUS_LABELS[item.suggested_sub_status] ?? item.suggested_sub_status}`}
+                        {mainStatusLabel(item.suggested_main_status)}
+                        {item.suggested_sub_status && ` – ${subStatusLabel(item.suggested_sub_status)}`}
                       </span>
                     </div>
                     <p className="text-xs text-violet-600 mt-2">
@@ -637,6 +639,7 @@ interface AppPickerProps {
 }
 
 function AppPicker({ selectedId, allApps, apps, onSearch, onSelect }: AppPickerProps) {
+  const { mainStatusLabel } = useStatusLabels()
   const [open, setOpen] = useState(false)
   const [inputValue, setInputValue] = useState('')
   // Always resolve the selected app from the full list so it's found even after filtering
@@ -696,7 +699,7 @@ function AppPicker({ selectedId, allApps, apps, onSearch, onSelect }: AppPickerP
                   {a.rolle && <span className="text-gray-400 ml-1 text-xs">— {a.rolle}</span>}
                 </div>
                 <span className={clsx('shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full', MAIN_STATUS_COLORS[a.main_status])}>
-                  {MAIN_STATUS_LABELS[a.main_status]}
+                  {mainStatusLabel(a.main_status)}
                 </span>
               </div>
             </li>

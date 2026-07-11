@@ -6,10 +6,11 @@ import { CompanyLogo } from './CompanyLogo'
 import { LocationSearchInput } from './LocationSearchInput'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
-  MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS,
-  SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE,
+  MAIN_PIPELINE, MAIN_STATUS_COLORS,
+  SUB_STATUS_SEQUENCE,
   type Application, type MainStatus, type Contact, type Event, type ManualCandidate, type FileBrowseItem,
 } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
 
 function parentPath(p: string): string {
   const parts = p.replace(/\/$/, '').split('/')
@@ -30,6 +31,7 @@ const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
 export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields, onReviewOpen }: Props) {
+  const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const [app, setApp] = useState<Application | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Application>>({})
@@ -1156,7 +1158,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <button key={s} type="button"
                       onClick={() => setDraft(d => ({ ...d, main_status: s, sub_status: (s === 'hr' || s === 'fb') ? (d.sub_status ?? '1_scheduled') : undefined }))}
                       className={`text-xs px-2.5 py-1 rounded-full border transition-all ${draft.main_status === s ? `${MAIN_STATUS_COLORS[s]} border-transparent ring-2 ring-offset-1 ring-indigo-400` : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-                    >{MAIN_STATUS_LABELS[s]}</button>
+                    >{mainStatusLabel(s)}</button>
                   ))}
                 </div>
                 {(draft.main_status === 'hr' || draft.main_status === 'fb') && (
@@ -1164,7 +1166,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     {SUB_STATUS_SEQUENCE.map(sub => (
                       <button key={sub} type="button" onClick={() => setDraft(d => ({ ...d, sub_status: sub }))}
                         className={`text-xs px-2.5 py-1 rounded-full border transition-all ${draft.sub_status === sub ? 'bg-indigo-100 text-indigo-800 border-indigo-300 font-medium' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                      >{SUB_STATUS_LABELS[sub]}</button>
+                      >{subStatusLabel(sub)}</button>
                     ))}
                   </div>
                 )}

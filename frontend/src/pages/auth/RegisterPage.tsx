@@ -3,10 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../context/AuthContext'
 import { errorMessage } from '../../i18n/errorMessage'
-import { getPreLoginLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../../i18n'
+import { getPreLoginLanguage, SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../../i18n'
 import { AuthLayout, authInputClass, authButtonClass, AuthError } from './AuthLayout'
-
-const LANGUAGE_NAMES: Record<SupportedLanguage, string> = { de: 'Deutsch', en: 'English' }
 
 export function RegisterPage() {
   const { t } = useTranslation('auth')

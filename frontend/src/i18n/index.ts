@@ -7,9 +7,14 @@ import errorsDe from './locales/de/errors.json'
 import errorsEn from './locales/en/errors.json'
 import authDe from './locales/de/auth.json'
 import authEn from './locales/en/auth.json'
+import statusDe from './locales/de/status.json'
+import statusEn from './locales/en/status.json'
 
 export const SUPPORTED_LANGUAGES = ['de', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
+
+/** Native-script display names for the language picker (register form, Settings). */
+export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = { de: 'Deutsch', en: 'English' }
 
 const LANGUAGE_PREF_KEY = 'rapport_ui_language_pref'
 
@@ -27,8 +32,8 @@ export function rememberPreLoginLanguage(lang: SupportedLanguage): void {
 
 i18n.use(initReactI18next).init({
   resources: {
-    de: { common: commonDe, errors: errorsDe, auth: authDe },
-    en: { common: commonEn, errors: errorsEn, auth: authEn },
+    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe },
+    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn },
   },
   lng: getPreLoginLanguage(),
   fallbackLng: 'en',

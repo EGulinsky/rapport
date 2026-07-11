@@ -3,6 +3,7 @@ import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, 
 import { api, authFetch } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
 import { useAuth } from '../context/AuthContext'
+import { SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../i18n'
 import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
@@ -1967,10 +1968,16 @@ function AccountPanel() {
   const [cvUploading, setCvUploading] = useState(false)
   const [cvError, setCvError] = useState<string | null>(null)
 
+  const [uiLanguage, setUiLanguage] = useState<SupportedLanguage>('en')
+  const [languageError, setLanguageError] = useState<string | null>(null)
+  const [languageSaving, setLanguageSaving] = useState(false)
+  const [languageSaved, setLanguageSaved] = useState(false)
+
   useEffect(() => {
     setVorname(user?.vorname ?? '')
     setNachname(user?.nachname ?? '')
     setLinkedinUrl(user?.linkedin_url ?? '')
+    if (user?.ui_language === 'de' || user?.ui_language === 'en') setUiLanguage(user.ui_language)
   }, [user])
 
   async function saveProfile() {
@@ -1985,6 +1992,24 @@ function AccountPanel() {
       setProfileError(e instanceof Error ? e.message : String(e))
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  async function saveLanguage() {
+    setLanguageError(null)
+    setLanguageSaving(true)
+    try {
+      // Sends the current profile fields alongside the language so this save
+      // doesn't rely on the backend's "only overwrite if provided" behavior
+      // for ui_language while still reflecting the profile section's own state.
+      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage)
+      await refreshUser()
+      setLanguageSaved(true)
+      setTimeout(() => setLanguageSaved(false), 2000)
+    } catch (e: unknown) {
+      setLanguageError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLanguageSaving(false)
     }
   }
 
@@ -2083,6 +2108,36 @@ function AccountPanel() {
         >
           {profileSaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : profileSaved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
           {profileSaved ? 'Gespeichert' : 'Profil speichern'}
+        </button>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-4">
+        <h4 className="text-xs font-semibold text-gray-700">Sprache</h4>
+        {languageError && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {languageError}
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">UI-Sprache</label>
+          <select
+            value={uiLanguage}
+            onChange={e => setUiLanguage(e.target.value as SupportedLanguage)}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {SUPPORTED_LANGUAGES.map(lang => (
+              <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={saveLanguage}
+          disabled={languageSaving}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {languageSaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : languageSaved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+          {languageSaved ? 'Gespeichert' : 'Sprache speichern'}
         </button>
       </div>
 
