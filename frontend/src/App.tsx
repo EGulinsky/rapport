@@ -34,18 +34,20 @@ import { Calendar } from 'lucide-react'
 import clsx from 'clsx'
 import { LogoProvider } from './context/LogoContext'
 import { useStatusLabels } from './i18n/statusLabels'
+import { useTranslation } from 'react-i18next'
 
 type ViewMode = 'table' | 'kanban'
 type MainView = 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
 
-const CLEANUP_SCOPE_BY_VIEW: Partial<Record<MainView, { scope: CleanupScope; label: string }>> = {
-  applications: { scope: 'applications', label: 'Bewerbungen' },
-  contacts:     { scope: 'contacts',     label: 'Kontakte' },
-  companies:    { scope: 'companies',    label: 'Firmen' },
-  calendar:     { scope: 'events',       label: 'Kalender' },
+const CLEANUP_SCOPE_BY_VIEW: Partial<Record<MainView, CleanupScope>> = {
+  applications: 'applications',
+  contacts:     'contacts',
+  companies:    'companies',
+  calendar:     'events',
 }
 
 function BackendGate({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation('app')
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -70,7 +72,7 @@ function BackendGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gray-50 text-gray-500">
         <div className="h-8 w-8 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
-        <p className="text-sm font-medium">Backend startet…</p>
+        <p className="text-sm font-medium">{t('backendStarting')}</p>
       </div>
     )
   }
@@ -78,6 +80,8 @@ function BackendGate({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { t } = useTranslation('app')
+  const { t: tCommon } = useTranslation('common')
   const { mainStatusLabel } = useStatusLabels()
   const [apps, setApps] = useState<Application[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -234,6 +238,9 @@ export default function App() {
 
   const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
 
+  const cleanupScope = CLEANUP_SCOPE_BY_VIEW[mainView]
+  const cleanupScopeLabel = cleanupScope ? t(`cleanupScope.${mainView}`) : undefined
+
   // Rejected apps appear in their last-active column, not a separate "Abgesagt" column
   const kanbanColumns: MainStatus[] = MAIN_PIPELINE
   function kanbanColumnForApp(a: Application): MainStatus {
@@ -284,31 +291,31 @@ export default function App() {
                   onClick={() => setMainView('applications')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'applications' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Briefcase className="h-3.5 w-3.5" /> Bewerbungen
+                  <Briefcase className="h-3.5 w-3.5" /> {t('nav.applications')}
                 </button>
                 <button
                   onClick={() => setMainView('contacts')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'contacts' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Users className="h-3.5 w-3.5" /> Kontakte
+                  <Users className="h-3.5 w-3.5" /> {t('nav.contacts')}
                 </button>
                 <button
                   onClick={() => setMainView('companies')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'companies' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Building2 className="h-3.5 w-3.5" /> Firmen
+                  <Building2 className="h-3.5 w-3.5" /> {t('nav.companies')}
                 </button>
                 <button
                   onClick={() => setMainView('calendar')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'calendar' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Calendar className="h-3.5 w-3.5" /> Kalender
+                  <Calendar className="h-3.5 w-3.5" /> {t('nav.calendar')}
                 </button>
                 <button
                   onClick={() => setMainView('analytics')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'analytics' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <BarChart2 className="h-3.5 w-3.5" /> Auswertungen
+                  <BarChart2 className="h-3.5 w-3.5" /> {t('nav.analytics')}
                 </button>
               </div>
             </div>
@@ -350,21 +357,21 @@ export default function App() {
                   finally { setAiAssessingAll(false); setAiAssessProgress(null) }
                 }}
                 disabled={aiAssessingAll}
-                title="KI-Einschätzung für alle aktiven Bewerbungen aktualisieren"
+                title={t('aiAssessAll.title')}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
               >
                 <Sparkles className={`h-3.5 w-3.5 ${aiAssessingAll ? 'animate-pulse' : ''}`} />
                 {aiAssessingAll
-                  ? (aiAssessProgress ? `KI: ${aiAssessProgress.done}/${aiAssessProgress.total}` : 'KI läuft…')
-                  : 'KI bewerten'}
+                  ? (aiAssessProgress ? t('aiAssessAll.runningProgress', aiAssessProgress) : t('aiAssessAll.running'))
+                  : t('aiAssessAll.button')}
               </button>
               <button
                 onClick={() => setShowCleanup(true)}
-                title={CLEANUP_SCOPE_BY_VIEW[mainView] ? `Duplikate in ${CLEANUP_SCOPE_BY_VIEW[mainView]!.label} bereinigen` : 'Duplikate bereinigen'}
+                title={cleanupScope ? t('cleanup.titleScoped', { scope: cleanupScopeLabel }) : t('cleanup.titleUnscoped')}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                Bereinigen{CLEANUP_SCOPE_BY_VIEW[mainView] ? ` (${CLEANUP_SCOPE_BY_VIEW[mainView]!.label})` : ''}
+                {cleanupScope ? t('cleanup.buttonScoped', { scope: cleanupScopeLabel }) : t('cleanup.button')}
               </button>
               <div className="relative" ref={newMenuRef}>
                 <button
@@ -372,7 +379,7 @@ export default function App() {
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
-                  Neu
+                  {t('newMenu.button')}
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
                 {showNewMenu && (
@@ -384,21 +391,21 @@ export default function App() {
                           onClick={() => { setShowNewMenu(false); setShowNewContact(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                          <Plus className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.createManually')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setShowNewMenu(false); setContactImportSource('icloud') }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Cloud className="h-3.5 w-3.5 shrink-0" /> Aus iCloud importieren
+                          <Cloud className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.importFromIcloud')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setShowNewMenu(false); setContactImportSource('linkedin') }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.importFromLinkedin')}
                         </button>
                       </>
                     ) : mainView === 'companies' ? (
@@ -408,14 +415,14 @@ export default function App() {
                           onClick={() => { setShowNewMenu(false); setShowNewCompany(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                          <Plus className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.createManually')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setShowNewMenu(false); setShowCompanyImport(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.importFromLinkedin')}
                         </button>
                       </>
                     ) : (
@@ -425,14 +432,14 @@ export default function App() {
                           onClick={() => { setShowNewMenu(false); setNewApplicationPrefill(null); setSelectedId(-1) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Plus className="h-3.5 w-3.5 shrink-0" /> Manuell anlegen
+                          <Plus className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.createManually')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setShowNewMenu(false); setShowLinkedInImport(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
-                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> Aus LinkedIn importieren
+                          <Linkedin className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.importFromLinkedin')}
                         </button>
                       </>
                     )}
@@ -442,7 +449,7 @@ export default function App() {
               <button
                 onClick={() => setShowReview(true)}
                 className="relative p-1.5 rounded-lg hover:bg-gray-100 text-amber-500"
-                title="Manuelle Überprüfung"
+                title={t('review')}
               >
                 <RefreshCw className="h-4 w-4" />
                 {reviewCount > 0 && (
@@ -454,14 +461,14 @@ export default function App() {
               <button
                 onClick={() => setShowAuditLog(true)}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
-                title="Audit-Log"
+                title={t('auditLog')}
               >
                 <ClipboardList className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setShowAiSettings(true)}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
-                title="KI-Einstellungen"
+                title={t('aiSettings')}
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -502,7 +509,7 @@ export default function App() {
         {stats && <StatsBar stats={stats} />}
 
         {/* Search bar (mit Firmen-Autocomplete) */}
-        <CompanySearchInput value={search} onChange={setSearch} placeholder="Firma oder Rolle suchen…" />
+        <CompanySearchInput value={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
 
         {/* Controls row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -515,7 +522,7 @@ export default function App() {
                 filterStatus === 'all' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               )}
             >
-              Alle
+              {t('filters.all')}
             </button>
             {MAIN_PIPELINE.map(s => (
               <button
@@ -539,7 +546,7 @@ export default function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors"
               >
                 <GitMerge className="h-3.5 w-3.5" />
-                Mergen ({selectedAppIds.size})
+                {t('filters.merge', { count: selectedAppIds.size })}
               </button>
             )}
             {selectedAppIds.size > 0 && viewMode === 'table' && (
@@ -547,7 +554,7 @@ export default function App() {
                 onClick={() => setSelectedAppIds(new Set())}
                 className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
               >
-                Auswahl aufheben
+                {t('filters.clearSelection')}
               </button>
             )}
             <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
@@ -557,7 +564,7 @@ export default function App() {
                 onChange={e => setShowGhostingOnly(e.target.checked)}
                 className="rounded border-gray-300 text-orange-500"
               />
-              👻 Nur Ghosting
+              {t('filters.ghostingOnly')}
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
               <input
@@ -566,7 +573,7 @@ export default function App() {
                 onChange={e => setShowRejected(e.target.checked)}
                 className="rounded border-gray-300 text-indigo-600"
               />
-              Abgesagte anzeigen
+              {t('filters.showRejected')}
             </label>
 
             {/* View toggle */}
@@ -580,7 +587,7 @@ export default function App() {
                     viewMode === mode ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50'
                   )}
                 >
-                  {mode === 'table' ? '☰ Tabelle' : '▦ Kanban'}
+                  {mode === 'table' ? t('filters.viewTable') : t('filters.viewKanban')}
                 </button>
               ))}
             </div>
@@ -649,8 +656,8 @@ export default function App() {
         <CleanupModal
           onClose={() => setShowCleanup(false)}
           onDone={() => { load(); setCompanyReloadKey(k => k + 1); setShowCleanup(false) }}
-          scope={CLEANUP_SCOPE_BY_VIEW[mainView]?.scope}
-          scopeLabel={CLEANUP_SCOPE_BY_VIEW[mainView]?.label}
+          scope={cleanupScope}
+          scopeLabel={cleanupScopeLabel}
         />
       )}
       {showReview && (
@@ -733,6 +740,8 @@ interface NewApplicationPrefill {
 }
 
 function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; onExtracted: (prefill: NewApplicationPrefill) => void }) {
+  const { t } = useTranslation('app')
+  const { t: tCommon } = useTranslation('common')
   const [url, setUrl] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -748,12 +757,12 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
       const msg = e instanceof Error ? e.message : String(e)
       setError(
         msg.includes('429') || msg.toLowerCase().includes('rate')
-          ? 'Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.'
+          ? t('linkedInImport.errorRateLimit')
           : msg.toLowerCase().includes('linkedin nicht konfiguriert')
-            ? 'LinkedIn ist nicht verbunden — bitte zuerst in den Einstellungen unter "LinkedIn" anmelden.'
+            ? t('linkedInImport.errorNotConnected')
             : msg.includes('400')
-              ? 'Stellenanzeige konnte nicht geladen werden — bitte Link prüfen oder Felder manuell ausfüllen.'
-              : 'Import fehlgeschlagen.'
+              ? t('linkedInImport.errorLoadFailed')
+              : t('linkedInImport.errorGeneric')
       )
     } finally {
       setExtracting(false)
@@ -765,16 +774,16 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Linkedin className="h-5 w-5 text-[#0A66C2]" />
-          <h2 className="text-lg font-semibold text-gray-900">Aus LinkedIn importieren</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t('linkedInImport.title')}</h2>
         </div>
         <p className="text-sm text-gray-500">
-          Link zur LinkedIn-Stellenanzeige einfügen. Die Seite wird automatisch geladen und Firma, Rolle und weitere Felder per KI ausgefüllt.
+          {t('linkedInImport.description')}
         </p>
         <input
           autoFocus
           type="url"
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="https://www.linkedin.com/jobs/view/…"
+          placeholder={t('linkedInImport.urlPlaceholder')}
           value={url}
           onChange={e => setUrl(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !extracting && url.trim()) extract() }}
@@ -782,7 +791,7 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-            Abbrechen
+            {tCommon('cancel')}
           </button>
           <button
             type="button"
@@ -791,7 +800,7 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             <Sparkles className={`h-3.5 w-3.5 ${extracting ? 'animate-pulse' : ''}`} />
-            {extracting ? 'Lade & extrahiere…' : 'Importieren'}
+            {extracting ? t('linkedInImport.extracting') : t('linkedInImport.submit')}
           </button>
         </div>
       </div>
@@ -801,6 +810,8 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
 
 
 function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewApplicationPrefill | null; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation('app')
+  const { t: tCommon } = useTranslation('common')
   const { mainStatusLabel } = useStatusLabels()
   const [form, setForm] = useState<{
     firma: string; company_profile_id: number | null; rolle: string; quelle: string; is_headhunter: boolean
@@ -884,13 +895,13 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Neue Bewerbung</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{t('newApplication.title')}</h2>
         <div className="relative" ref={firmaPickerRef}>
           <div
             className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-sm cursor-pointer ${form.firma ? 'border-gray-200 text-gray-900' : 'border-gray-200 text-gray-400'} hover:border-indigo-300`}
             onClick={() => setFirmaPicker(o => !o)}
           >
-            <span className="truncate">{form.firma || 'Firma wählen… *'}</span>
+            <span className="truncate">{form.firma || t('newApplication.chooseCompany')}</span>
             <Building2 className="h-4 w-4 text-gray-400 shrink-0 ml-2" />
           </div>
           {firmaPicker && (
@@ -900,14 +911,14 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
                   autoFocus
                   value={firmaQuery}
                   onChange={e => setFirmaQuery(e.target.value)}
-                  placeholder="Firma suchen…"
+                  placeholder={t('newApplication.searchCompanyPlaceholder')}
                   className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
               <div className="max-h-52 overflow-y-auto py-1">
-                {firmaLoading && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+                {firmaLoading && <p className="text-xs text-gray-400 px-3 py-2">{t('newApplication.searching')}</p>}
                 {!firmaLoading && firmaResults.length === 0 && !firmaQuery && (
-                  <p className="text-xs text-gray-400 px-3 py-2 italic">Suchbegriff eingeben…</p>
+                  <p className="text-xs text-gray-400 px-3 py-2 italic">{t('newApplication.enterSearchTerm')}</p>
                 )}
                 {firmaResults.slice(0, 12).map(c => (
                   <button key={c.id} type="button" onClick={() => pickCompany(c)}
@@ -919,7 +930,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
                   <button type="button" disabled={firmaCreating} onClick={() => createAndPickCompany(firmaQuery.trim())}
                     className="w-full text-left px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center gap-2 border-t border-gray-100 mt-1">
                     <Plus className="h-3.5 w-3.5 shrink-0" />
-                    {firmaCreating ? 'Anlegen…' : `"${firmaQuery.trim()}" neu anlegen`}
+                    {firmaCreating ? t('newApplication.creating') : t('newApplication.createNew', { name: firmaQuery.trim() })}
                   </button>
                 )}
               </div>
@@ -929,14 +940,14 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
         <input
           required
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="Rolle *"
+          placeholder={t('newApplication.rolePlaceholder')}
           value={form.rolle}
           onChange={e => setForm(f => ({ ...f, rolle: e.target.value }))}
         />
         <div className="grid grid-cols-2 gap-3">
           <input
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Quelle (LinkedIn, XING, …)"
+            placeholder={t('newApplication.sourcePlaceholder')}
             value={form.quelle}
             onChange={e => setForm(f => ({ ...f, quelle: e.target.value }))}
           />
@@ -948,7 +959,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
           />
         </div>
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-2">Status</p>
+          <p className="text-xs font-medium text-gray-500 mb-2">{t('newApplication.statusLabel')}</p>
           <div className="flex gap-2 flex-wrap">
             {(['prospecting', 'applied'] as MainStatus[]).map(s => (
               <button
@@ -969,12 +980,12 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
             onChange={e => setForm(f => ({ ...f, is_headhunter: e.target.checked }))}
             className="rounded border-gray-300 text-indigo-600"
           />
-          Über Headhunter
+          {t('newApplication.viaHeadhunter')}
         </label>
         {form.is_headhunter && (
           <input
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Zielfirma (für wen wird besetzt)"
+            placeholder={t('newApplication.targetCompanyPlaceholder')}
             value={form.zielfirma_bei_hh}
             onChange={e => setForm(f => ({ ...f, zielfirma_bei_hh: e.target.value }))}
           />
@@ -982,16 +993,16 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
         <textarea
           rows={2}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="Kommentar (optional)"
+          placeholder={t('newApplication.commentPlaceholder')}
           value={form.kommentar}
           onChange={e => setForm(f => ({ ...f, kommentar: e.target.value }))}
         />
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-            Abbrechen
+            {tCommon('cancel')}
           </button>
           <button type="submit" disabled={saving || !form.firma || !form.rolle} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
-            {saving ? 'Speichern…' : 'Anlegen'}
+            {saving ? tCommon('saving') : tCommon('create')}
           </button>
         </div>
       </form>

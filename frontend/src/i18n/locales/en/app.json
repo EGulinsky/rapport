@@ -1,0 +1,73 @@
+{
+  "backendStarting": "Backend starting…",
+  "nav": {
+    "applications": "Applications",
+    "contacts": "Contacts",
+    "companies": "Companies",
+    "calendar": "Calendar",
+    "analytics": "Analytics"
+  },
+  "aiAssessAll": {
+    "title": "Refresh AI assessment for all active applications",
+    "running": "AI running…",
+    "runningProgress": "AI: {{done}}/{{total}}",
+    "button": "Assess with AI"
+  },
+  "cleanup": {
+    "titleScoped": "Clean up duplicates in {{scope}}",
+    "titleUnscoped": "Clean up duplicates",
+    "button": "Clean up",
+    "buttonScoped": "Clean up ({{scope}})"
+  },
+  "newMenu": {
+    "button": "New",
+    "createManually": "Create manually",
+    "importFromIcloud": "Import from iCloud",
+    "importFromLinkedin": "Import from LinkedIn"
+  },
+  "review": "Manual review",
+  "auditLog": "Audit log",
+  "aiSettings": "AI settings",
+  "searchPlaceholder": "Search company or role…",
+  "filters": {
+    "all": "All",
+    "clearSelection": "Clear selection",
+    "merge": "Merge ({{count}})",
+    "ghostingOnly": "👻 Ghosting only",
+    "showRejected": "Show rejected",
+    "viewTable": "☰ Table",
+    "viewKanban": "▦ Kanban"
+  },
+  "cleanupScope": {
+    "applications": "applications",
+    "contacts": "contacts",
+    "companies": "companies",
+    "calendar": "calendar"
+  },
+  "linkedInImport": {
+    "title": "Import from LinkedIn",
+    "description": "Paste a link to the LinkedIn job posting. The page loads automatically and company, role, and other fields are filled in by AI.",
+    "urlPlaceholder": "https://www.linkedin.com/jobs/view/…",
+    "extracting": "Loading & extracting…",
+    "submit": "Import",
+    "errorRateLimit": "Rate limit reached — please wait 30–60 seconds and try again.",
+    "errorNotConnected": "LinkedIn isn't connected — please sign in under \"LinkedIn\" in Settings first.",
+    "errorLoadFailed": "The job posting couldn't be loaded — please check the link or fill in the fields manually.",
+    "errorGeneric": "Import failed."
+  },
+  "newApplication": {
+    "title": "New application",
+    "chooseCompany": "Choose company… *",
+    "searchCompanyPlaceholder": "Search company…",
+    "searching": "Searching…",
+    "enterSearchTerm": "Enter a search term…",
+    "creating": "Creating…",
+    "createNew": "Create \"{{name}}\"",
+    "rolePlaceholder": "Role *",
+    "sourcePlaceholder": "Source (LinkedIn, XING, …)",
+    "statusLabel": "Status",
+    "viaHeadhunter": "Via headhunter",
+    "targetCompanyPlaceholder": "Target company (who's hiring for)",
+    "commentPlaceholder": "Comment (optional)"
+  }
+}
