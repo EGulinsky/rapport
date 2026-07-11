@@ -23,11 +23,15 @@ from app.routers.sync_company import (
     _apply_wikidata_fields,
     _classify_company_type,
     _clean_query,
+    _clearbit_logo,
     _domain_from_url,
     _employee_range,
+    _fetch_logo,
+    _fetch_logo_with_clearbit_fallback,
     _linkedin_scrape_about,
     _linkedin_search_candidates,
     _parse_year,
+    _throttled_get,
     _wikidata_search_one,
     _wikidata_sparql_batch,
 )
@@ -92,6 +96,9 @@ class TestDomainFromUrl:
     def test_negativ_ungueltige_url_liefert_none(self):
         assert _domain_from_url("::not a url::") is None
 
+    def test_corner_case_exception_beim_parsen_liefert_none(self):
+        assert _domain_from_url(None) is None
+
 
 class TestClassifyCompanyType:
     def test_negativ_ohne_mitarbeiterzahl_kein_typ(self):
@@ -108,6 +115,11 @@ class TestClassifyCompanyType:
 
     def test_corner_case_mittelgrosse_firma_ist_kmu(self):
         assert _classify_company_type(400, 2000) == "kmu"
+
+    def test_positiv_grosse_alte_firma_ist_konzern(self):
+        # >500 Mitarbeiter, aber nicht jung genug für Startup und unter der
+        # 5000er-Konzern-Schwelle — fällt auf den generischen "konzern"-Zweig.
+        assert _classify_company_type(1500, 1990) == "konzern"
 
 
 class TestApplyLinkedinFields:
@@ -159,6 +171,19 @@ class TestApplyWikidataFields:
         _apply_wikidata_fields(p, "", {})
         assert p.industry == "Bestand"
         assert p.company_type is None
+
+    def test_positiv_setzt_website_und_linkedin_url_wenn_noch_leer(self):
+        p = _fake_profile()
+        _apply_wikidata_fields(p, "", {
+            "website": "https://contoso.example", "linkedin_company_url": "https://www.linkedin.com/company/contoso",
+        })
+        assert p.website == "https://contoso.example"
+        assert p.linkedin_company_url == "https://www.linkedin.com/company/contoso"
+
+    def test_positiv_setzt_beschreibung_wenn_noch_leer(self):
+        p = _fake_profile()
+        _apply_wikidata_fields(p, "Ein deutsches Unternehmen", {})
+        assert p.description == "Ein deutsches Unternehmen"
 
 
 class TestWikidataSearchOne:
@@ -452,3 +477,134 @@ class TestLinkedinScrapeAbout:
         result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/zeiss")
 
         assert "hq_city" not in result
+
+
+class TestThrottledGet:
+    async def test_positiv_erfolgreiche_antwort_ohne_retry(self):
+        resp_ok = _mock_response({"ok": True})
+
+        async def fake_get(self, url, params=None, **kw):
+            return resp_ok
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            async with httpx.AsyncClient() as client:
+                result = await _throttled_get(client, "https://example.com", {})
+
+        assert result is resp_ok
+
+    async def test_positiv_429_wird_mit_retry_after_wiederholt(self, monkeypatch):
+        sleeps = []
+
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+
+        monkeypatch.setattr("app.routers.sync_company.asyncio.sleep", fake_sleep)
+
+        resp_429 = _mock_response({}, status=429)
+        resp_429.headers = {"Retry-After": "2"}
+        resp_ok = _mock_response({"ok": True})
+        responses = [resp_429, resp_ok]
+
+        async def fake_get(self, url, params=None, **kw):
+            return responses.pop(0)
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            async with httpx.AsyncClient() as client:
+                result = await _throttled_get(client, "https://example.com", {})
+
+        assert result is resp_ok
+        assert sleeps == [2.0]
+
+    async def test_negativ_dauerhaftes_rate_limit_wirft_nach_max_retries(self, monkeypatch):
+        async def fake_sleep(seconds):
+            return None
+
+        monkeypatch.setattr("app.routers.sync_company.asyncio.sleep", fake_sleep)
+
+        resp_503 = _mock_response({}, status=503)
+        resp_503.headers = {}
+
+        async def fake_get(self, url, params=None, **kw):
+            return resp_503
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            async with httpx.AsyncClient() as client:
+                with pytest.raises(RuntimeError, match="Max retries"):
+                    await _throttled_get(client, "https://example.com", {}, max_retries=2, base_delay=0.01)
+
+
+class TestLogoHelpers:
+    async def test_positiv_clearbit_logo_liefert_data_uri(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"\x89PNG"
+        resp.headers = {"content-type": "image/png"}
+
+        async def fake_get(self, url, **kw):
+            return resp
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            result = await _clearbit_logo("contoso.example")
+
+        assert result.startswith("data:image/png;base64,")
+
+    async def test_negativ_clearbit_logo_fehler_liefert_none(self):
+        async def fake_get(self, url, **kw):
+            raise RuntimeError("boom")
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            result = await _clearbit_logo("contoso.example")
+
+        assert result is None
+
+    async def test_positiv_fetch_logo_liefert_data_uri(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"\xff\xd8\xff"
+        resp.headers = {"content-type": "image/jpeg"}
+        resp.raise_for_status = MagicMock()
+
+        async def fake_get(self, url, **kw):
+            return resp
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            result = await _fetch_logo("https://example.com/logo.jpg")
+
+        assert result.startswith("data:image/jpeg;base64,")
+
+    async def test_negativ_fetch_logo_fehler_liefert_none(self):
+        async def fake_get(self, url, **kw):
+            raise RuntimeError("boom")
+
+        with patch.object(httpx.AsyncClient, "get", new=fake_get):
+            result = await _fetch_logo("https://example.com/logo.jpg")
+
+        assert result is None
+
+    async def test_positiv_fallback_nutzt_logo_url_zuerst(self, monkeypatch):
+        async def fake_fetch_logo(url):
+            return "data:image/png;base64,LOGOURL"
+
+        monkeypatch.setattr("app.routers.sync_company._fetch_logo", fake_fetch_logo)
+
+        result = await _fetch_logo_with_clearbit_fallback("https://example.com/logo.png", "https://contoso.example")
+
+        assert result == "data:image/png;base64,LOGOURL"
+
+    async def test_positiv_fallback_nutzt_clearbit_wenn_logo_url_fehlschlaegt(self, monkeypatch):
+        async def fake_fetch_logo(url):
+            return None
+
+        async def fake_clearbit(domain):
+            return "data:image/png;base64,CLEARBIT"
+
+        monkeypatch.setattr("app.routers.sync_company._fetch_logo", fake_fetch_logo)
+        monkeypatch.setattr("app.routers.sync_company._clearbit_logo", fake_clearbit)
+
+        result = await _fetch_logo_with_clearbit_fallback("https://example.com/logo.png", "https://contoso.example")
+
+        assert result == "data:image/png;base64,CLEARBIT"
+
+    async def test_negativ_fallback_ohne_website_und_ohne_logo_url_liefert_none(self):
+        result = await _fetch_logo_with_clearbit_fallback(None, None)
+        assert result is None

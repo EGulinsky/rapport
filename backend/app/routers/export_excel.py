@@ -36,7 +36,7 @@ def export_excel(
 ):
     q = db.query(models.Application)
     if not show_rejected:
-        q = q.filter(models.Application.abgesagt.is_(False))
+        q = q.filter(models.Application.main_status != "rejected")
     apps = q.order_by(models.Application.datum_bewerbung.desc()).all()
 
     wb = openpyxl.Workbook()

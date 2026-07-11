@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.7',
+    date: '2026-07-10',
+    changes: [
+      'Tests: applications.py, companies.py, settings.py, sync_files.py, export_pdf.py, import/export_excel.py, attachments.py, auth/email.py und sync_company.py jeweils auf 83–100% Testabdeckung angehoben.',
+      'Fix: export_pdf.py — Content-Disposition-Header mit Umlaut im Dateinamen war nicht RFC-6266-konform und brach unter strikten HTTP-Clients; jetzt RFC-5987-kodiert.',
+      'Fix: export_excel.py — show_rejected=false löste einen 500er aus (Filter auf eine reine Python-Property statt eine Datenbankspalte).',
+    ],
+  },
+  {
     version: '3.55.6',
     date: '2026-07-10',
     changes: [
