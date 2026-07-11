@@ -5,6 +5,15 @@ Runs locally in OrbStack (Docker Compose). Current status: see `CURRENT_VERSION`
 
 Full, continuously maintained technical documentation incl. Mermaid diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Two Checkouts — Which One To Work In
+
+There are two independent clones of this repo on this Mac:
+
+- **`/Users/eugengulinsky/code/rapport`** — the production/deploy checkout. The CI `deploy` job (self-hosted, triggers on every push to `main`) runs `git -C /Users/eugengulinsky/code/rapport reset --hard origin/main` here, then rebuilds the live Docker stack (OrbStack routing at `rapport.orb.local` is tied to this directory). **Never leave uncommitted edits here** — the reset silently discards anything not committed+pushed, and has done so twice (2026-07-11). Only touch this directory to run `docker compose up -d --build` manually, or let the deploy job manage it.
+- **`/Users/eugengulinsky/code/rapport-dev`** — a second clone (same GitHub remote, `origin` set to `ssh://git@github.com/EGulinsky/rapport.git` — the explicit `ssh://` form is required; the shorthand `git@github.com:` gets silently rewritten to a read-only HTTPS credential by a global `insteadOf` git-config rule) for all interactive editing/testing/committing/pushing. Backend venv (`backend/.venv_py311`) and frontend `node_modules` are already set up there. **Never run `docker compose` in this directory** — its different directory name means a different Compose project, which would collide with the production stack's ports/network.
+
+**New Claude Code sessions for code work should be started with `/Users/eugengulinsky/code/rapport-dev` as the project root**, not `rapport`. Both clones stay in sync via normal `git pull`/`push` against the shared GitHub remote.
+
 ## Starting the Project
 
 ```bash
