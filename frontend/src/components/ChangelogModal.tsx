@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.10',
+    date: '2026-07-10',
+    changes: [
+      'Tests: sync_linkedin.py von 43% auf 52% Testabdeckung — Config-/Status-/Run-/2FA-Endpunkte sowie Personen-/Firmensuche-Import vollständig getestet. Der verbleibende Rest (Login-Flow, 2FA-Checkpoint, Scraping) braucht dedizierte Playwright-Fixture-Infrastruktur (siehe offener Punkt).',
+    ],
+  },
+  {
     version: '3.55.9',
     date: '2026-07-10',
     changes: [
