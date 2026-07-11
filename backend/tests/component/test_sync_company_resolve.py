@@ -72,6 +72,42 @@ class TestResolveCompanyCandidateWithUrl:
         assert p.sync_source == "linkedin"
         assert "fehlgeschlagen" in (p.sync_error or "")
 
+    async def test_negativ_browser_start_fehlschlag_wird_abgefangen(self, db_session):
+        # _get_linkedin_context() kann selbst werfen (z.B. Playwright-Crash) —
+        # das darf die manuelle Auflösung nicht abbrechen, sondern fällt auf
+        # denselben "Scrape fehlgeschlagen"-Pfad zurück wie ein leeres Ergebnis.
+        p = company_profile_factory(db_session, sync_status="needs_review")
+        db_session.commit()
+
+        async def fake_get_context(user_id=None):
+            raise RuntimeError("Browser-Crash")
+
+        with patch("app.routers.sync_company._get_linkedin_context", new=fake_get_context), \
+             patch("app.routers.sync_company._fetch_logo_with_clearbit_fallback", new=AsyncMock(return_value=None)):
+            await resolve_company_candidate(db_session, p.id, "https://www.linkedin.com/company/contoso")
+
+        db_session.commit()
+        db_session.expire_all()
+        assert p.sync_status == "done"
+        assert p.sync_source == "linkedin"
+        assert "fehlgeschlagen" in (p.sync_error or "")
+
+    async def test_positiv_logo_wird_ueber_clearbit_fallback_gesetzt(self, db_session):
+        p = company_profile_factory(db_session, sync_status="needs_review", logo_data=None)
+        db_session.commit()
+
+        async def fake_get_context(user_id=None):
+            return None
+
+        with patch("app.routers.sync_company._get_linkedin_context", new=fake_get_context), \
+             patch("app.routers.sync_company._fetch_logo_with_clearbit_fallback",
+                   new=AsyncMock(return_value="data:image/png;base64,LOGO")):
+            await resolve_company_candidate(db_session, p.id, "https://www.linkedin.com/company/contoso")
+
+        db_session.commit()
+        db_session.expire_all()
+        assert p.logo_data == "data:image/png;base64,LOGO"
+
 
 class TestResolveCompanyCandidateNone:
     async def test_positiv_keiner_davon_faellt_auf_wikidata_zurueck(self, db_session):
@@ -121,3 +157,65 @@ class TestResolveCompanyCandidateNone:
     async def test_negativ_unbekannte_profile_id_tut_nichts(self, db_session):
         # Sollte nicht crashen, wenn das Profil zwischenzeitlich gelöscht wurde.
         await resolve_company_candidate(db_session, 999999, None)
+
+    async def test_negativ_sparql_fehler_setzt_failed(self, db_session):
+        p = company_profile_factory(db_session, sync_status="needs_review")
+        db_session.commit()
+
+        async def fake_get(self, url, params=None, **kw):
+            return _mock_response({"search": [{"id": "Q999", "description": "Testfirma"}]})
+
+        with patch("httpx.AsyncClient.get", new=fake_get), \
+             patch("app.routers.sync_company._wikidata_sparql_batch",
+                   new=AsyncMock(side_effect=RuntimeError("SPARQL down"))):
+            await resolve_company_candidate(db_session, p.id, None)
+
+        db_session.commit()
+        db_session.expire_all()
+        assert p.sync_status == "failed"
+        assert "SPARQL" in p.sync_error
+
+    async def test_positiv_logo_wird_direkt_aus_sparql_logo_url_geladen(self, db_session):
+        p = company_profile_factory(db_session, sync_status="needs_review", logo_data=None)
+        db_session.commit()
+
+        search_data = {"search": [{"id": "Q999", "description": "Testfirma"}]}
+        sparql_bindings = [{
+            "company": {"value": "http://www.wikidata.org/entity/Q999"},
+            "logo": {"value": "http://commons.wikimedia.org/logo.svg"},
+        }]
+
+        async def fake_get(self, url, params=None, **kw):
+            if "wbsearchentities" in str(params):
+                return _mock_response(search_data)
+            return _mock_response({"results": {"bindings": sparql_bindings}})
+
+        with patch("httpx.AsyncClient.get", new=fake_get), \
+             patch("app.routers.sync_company._fetch_logo", new=AsyncMock(return_value="data:image/svg+xml;base64,LOGO")):
+            await resolve_company_candidate(db_session, p.id, None)
+
+        db_session.commit()
+        db_session.expire_all()
+        assert p.logo_data == "data:image/svg+xml;base64,LOGO"
+
+    async def test_positiv_logo_fallback_wenn_sparql_ohne_logo_url(self, db_session):
+        p = company_profile_factory(db_session, sync_status="needs_review", logo_data=None,
+                                     website="https://contoso.example")
+        db_session.commit()
+
+        search_data = {"search": [{"id": "Q999", "description": "Testfirma"}]}
+        sparql_bindings = [{"company": {"value": "http://www.wikidata.org/entity/Q999"}}]
+
+        async def fake_get(self, url, params=None, **kw):
+            if "wbsearchentities" in str(params):
+                return _mock_response(search_data)
+            return _mock_response({"results": {"bindings": sparql_bindings}})
+
+        with patch("httpx.AsyncClient.get", new=fake_get), \
+             patch("app.routers.sync_company._fetch_logo_with_clearbit_fallback",
+                   new=AsyncMock(return_value="data:image/png;base64,CLEARBIT")):
+            await resolve_company_candidate(db_session, p.id, None)
+
+        db_session.commit()
+        db_session.expire_all()
+        assert p.logo_data == "data:image/png;base64,CLEARBIT"

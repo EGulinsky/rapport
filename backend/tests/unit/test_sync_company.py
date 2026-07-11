@@ -99,6 +99,12 @@ class TestDomainFromUrl:
     def test_corner_case_exception_beim_parsen_liefert_none(self):
         assert _domain_from_url(None) is None
 
+    def test_corner_case_ungueltige_ipv6_url_wirft_und_wird_abgefangen(self):
+        # urlparse() selbst wirft ValueError bei kaputten IPv6-Klammern — das
+        # ist der einzige reale Weg in den except-Zweig (None/leerer String
+        # laufen beide klaglos durch urlparse()).
+        assert _domain_from_url("http://[::1") is None
+
 
 class TestClassifyCompanyType:
     def test_negativ_ohne_mitarbeiterzahl_kein_typ(self):
@@ -264,6 +270,35 @@ class TestWikidataSparqlBatch:
 
         assert result == {}
 
+    async def test_positiv_logo_url_wird_uebernommen(self):
+        bindings = [{
+            "company": {"value": "http://www.wikidata.org/entity/Q1"},
+            "logo": {"value": "http://commons.wikimedia.org/logo.svg"},
+        }]
+        async def fake_get(self, url, params=None, **kw):
+            return _mock_response({"results": {"bindings": bindings}})
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await _wikidata_sparql_batch(["Q1"])
+
+        assert result["Q1"]["logo_url"] == "http://commons.wikimedia.org/logo.svg"
+
+    async def test_corner_case_unparsebare_mitarbeiterzahl_wird_ignoriert(self):
+        # Wikidata liefert für P1128 gelegentlich keine reine Zahl (z.B. eine
+        # Einheit/Bereichsangabe) — int(float(...)) schlägt fehl und das Feld
+        # wird stillschweigend weggelassen statt den ganzen Batch abzubrechen.
+        bindings = [{
+            "company": {"value": "http://www.wikidata.org/entity/Q1"},
+            "employees": {"value": "unbekannt"},
+        }]
+        async def fake_get(self, url, params=None, **kw):
+            return _mock_response({"results": {"bindings": bindings}})
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await _wikidata_sparql_batch(["Q1"])
+
+        assert "employee_count" not in result["Q1"]
+
 
 def _fake_search_page(anchor_specs: list[tuple[str, str]]):
     """anchor_specs: Liste von (href, sichtbarer Name)."""
@@ -393,6 +428,18 @@ class TestLinkedinSearchCandidates:
         result = await _linkedin_search_candidates(context, "Contoso")
 
         assert result[0]["snippet"] is None
+
+    async def test_corner_case_anker_ohne_href_wird_uebersprungen(self):
+        page = _fake_search_page([
+            (None, "Ohne Link"),
+            ("https://www.linkedin.com/company/contoso/", "Contoso"),
+        ])
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_search_candidates(context, "Contoso")
+
+        assert [c["name"] for c in result] == ["Contoso"]
 
 
 def _fake_about_page(main_text: str):

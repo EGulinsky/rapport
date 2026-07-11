@@ -150,7 +150,7 @@ def _patch_playwright(monkeypatch, page: FakePage):
 # Tests
 # ---------------------------------------------------------------------------
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 class TestLoadJobDescription:
 

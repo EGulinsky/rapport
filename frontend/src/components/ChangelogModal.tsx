@@ -9,6 +9,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.11',
+    date: '2026-07-11',
+    changes: [
+      'Fix: test_linkedin_job_description.py lief seit seiner Einführung nie in CI — es fehlte die pytest.mark.unit-Markierung, die der Marker-Filter (`-m "unit or component or api"`) für die Ausführung braucht. linkedin_job_description.py stand dadurch in echten CI-Läufen bei 11% statt der angenommenen 82%.',
+      'Tests: contacts.py von 80% auf 100% Testabdeckung — GET /api/contacts/ (Suche, Mandanten-Scoping, Firmen-Anreicherung aus verlinkten CompanyProfiles) und DELETE /api/contacts/bulk (gezielt und all=true) waren komplett ungetestet.',
+      'Tests: sync_company.py von 83% auf 99% Testabdeckung — _get_linkedin_context() (echter Playwright-Start, kaputtes Cookie-JSON), resolve_company_candidate()-Fehlerzweige (SPARQL-Fehler, Logo-Fallbacks) und der vollständige _run_sync_batch()-Erfolgspfad über Wikidata inkl. Logo-Download, der bisher nur in den Cancel-Tests vor der SPARQL-Antwort abbrach.',
+    ],
+  },
+  {
     version: '3.55.10',
     date: '2026-07-10',
     changes: [
