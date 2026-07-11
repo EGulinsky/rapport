@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.58.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 3/13): Einstellungen → Konto hat jetzt eine Sprachauswahl (Deutsch/Englisch), die sofort app-weit wirkt. Die Status-Labels (Anbahnung, Beworben, Gespräch HR/HH, …) sind aus einer statischen deutschen Liste in types.ts in die neuen Sprachkataloge gewandert und werden jetzt an allen 9 Stellen, die sie anzeigen (Tabelle, Kanban, Kalender, Änderungsvorschläge, Zusammenführen-Dialog, Bewerbungs-Detail), sprachabhängig übersetzt.',
+    ],
+  },
+  {
     version: '3.57.0',
     date: '2026-07-11',
     changes: [

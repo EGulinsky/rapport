@@ -1,4 +1,5 @@
-import { MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS, type MainStatus } from '../types'
+import { MAIN_STATUS_COLORS, type MainStatus } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
 import clsx from 'clsx'
 
 interface Props {
@@ -8,9 +9,8 @@ interface Props {
 }
 
 export function StatusBadge({ status, subStatus, size = 'md' }: Props) {
-  const label = subStatus
-    ? SUB_STATUS_LABELS[subStatus] ?? subStatus
-    : MAIN_STATUS_LABELS[status]
+  const { mainStatusLabel, subStatusLabel } = useStatusLabels()
+  const label = subStatus ? subStatusLabel(subStatus) : mainStatusLabel(status)
 
   return (
     <span

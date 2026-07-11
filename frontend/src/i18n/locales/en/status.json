@@ -1,0 +1,20 @@
+{
+  "prospecting": "Prospecting",
+  "applied": "Applied",
+  "hr": "Interview (HR)",
+  "fb": "Interview (Team)",
+  "waiting": "Awaiting decision",
+  "negotiating": "Offer negotiation",
+  "signed": "Signed",
+  "rejected": "Rejected",
+  "1_scheduled": "1st interview scheduled",
+  "1_done": "1st interview completed",
+  "2_scheduled": "2nd interview scheduled",
+  "2_done": "2nd interview completed",
+  "3_scheduled": "3rd interview scheduled",
+  "3_done": "3rd interview completed",
+  "4_scheduled": "4th interview scheduled",
+  "4_done": "4th interview completed",
+  "5_scheduled": "5th interview scheduled",
+  "5_done": "5th interview completed"
+}

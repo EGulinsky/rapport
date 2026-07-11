@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '../api/client'
-import { MAIN_STATUS_COLORS, MAIN_STATUS_LABELS } from '../types'
+import { MAIN_STATUS_COLORS } from '../types'
 import type { CalendarEvent, MainStatus } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
 import clsx from 'clsx'
 
 type CalView = 'day' | 'workweek' | 'week' | 'month'
@@ -95,12 +96,13 @@ function EventChip({ e, compact, onClick }: {
   compact?: boolean
   onClick: (ev: CalendarEvent) => void
 }) {
+  const { mainStatusLabel } = useStatusLabels()
   const color = MAIN_STATUS_COLORS[e.main_status as MainStatus] ?? 'bg-gray-100 text-gray-700'
   const label = e.titel ?? `${e.firma} – ${e.rolle}`
   return (
     <button
       onClick={() => onClick(e)}
-      title={`${e.firma} · ${e.rolle}\n${MAIN_STATUS_LABELS[e.main_status as MainStatus] ?? e.main_status}${e.notiz ? '\n' + e.notiz : ''}`}
+      title={`${e.firma} · ${e.rolle}\n${mainStatusLabel(e.main_status)}${e.notiz ? '\n' + e.notiz : ''}`}
       className={clsx(
         'w-full text-left rounded px-1.5 leading-tight font-medium truncate transition-opacity hover:opacity-80',
         compact ? 'py-px text-[10px]' : 'py-0.5 text-[11px]',
@@ -232,6 +234,7 @@ function DetailModal({ e, onClose, onOpenApp }: {
   onClose: () => void
   onOpenApp: (id: number) => void
 }) {
+  const { mainStatusLabel } = useStatusLabels()
   const color = MAIN_STATUS_COLORS[e.main_status as MainStatus] ?? 'bg-gray-100 text-gray-700'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -246,7 +249,7 @@ function DetailModal({ e, onClose, onOpenApp }: {
             <p className="text-sm text-gray-500">{e.rolle}</p>
           </div>
           <span className={clsx('text-xs font-medium rounded px-2 py-0.5 shrink-0', color)}>
-            {MAIN_STATUS_LABELS[e.main_status as MainStatus] ?? e.main_status}
+            {mainStatusLabel(e.main_status)}
           </span>
         </div>
 
@@ -285,6 +288,7 @@ interface Props {
 }
 
 export function CalendarView({ onOpenApplication }: Props) {
+  const { mainStatusLabel } = useStatusLabels()
   const [view, setView] = useState<CalView>('month')
   const [anchor, setAnchor] = useState<Date>(() => {
     const d = new Date()
@@ -380,7 +384,7 @@ export function CalendarView({ onOpenApplication }: Props) {
         <div className="flex flex-wrap gap-2 px-1">
           {(['applied', 'hr', 'fb', 'waiting', 'negotiating', 'signed', 'rejected'] as MainStatus[]).map(s => (
             <span key={s} className={clsx('text-[10px] rounded-full px-2 py-0.5 font-medium', MAIN_STATUS_COLORS[s])}>
-              {MAIN_STATUS_LABELS[s]}
+              {mainStatusLabel(s)}
             </span>
           ))}
         </div>

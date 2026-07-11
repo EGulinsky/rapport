@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { MAIN_PIPELINE, MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
+import { MAIN_PIPELINE, MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
 import clsx from 'clsx'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 export function StatusPopover({ currentMain, currentSub, onSelect, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const { mainStatusLabel, subStatusLabel } = useStatusLabels()
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -48,7 +50,7 @@ export function StatusPopover({ currentMain, currentSub, onSelect, onClose }: Pr
                 : 'border-gray-200 text-gray-600 hover:border-gray-300'
             )}
           >
-            {MAIN_STATUS_LABELS[s]}
+            {mainStatusLabel(s)}
           </button>
         ))}
       </div>
@@ -66,7 +68,7 @@ export function StatusPopover({ currentMain, currentSub, onSelect, onClose }: Pr
                   : 'border-gray-200 text-gray-500 hover:border-gray-300'
               )}
             >
-              {SUB_STATUS_LABELS[sub]}
+              {subStatusLabel(sub)}
             </button>
           ))}
         </div>

@@ -8,16 +8,9 @@ export type MainStatus =
   | 'signed'
   | 'rejected'
 
-export const MAIN_STATUS_LABELS: Record<MainStatus, string> = {
-  prospecting:  'Anbahnung',
-  applied:      'Beworben',
-  hr:           'Gespräch HR/HH',
-  fb:           'Gespräch FB',
-  waiting:      'Warten auf Entscheidung',
-  negotiating:  'Angebotsverhandlung',
-  signed:       'Unterschrift',
-  rejected:     'Absage',
-}
+// Display labels moved to i18n/locales/{de,en}/status.json — use
+// useStatusLabels() (components) or mainStatusLabel()/subStatusLabel()
+// (standalone helpers) from i18n/statusLabels.ts instead of a static map.
 
 export const MAIN_STATUS_COLORS: Record<MainStatus, string> = {
   prospecting:  'bg-gray-100 text-gray-700',
@@ -33,19 +26,6 @@ export const MAIN_STATUS_COLORS: Record<MainStatus, string> = {
 export const MAIN_PIPELINE: MainStatus[] = [
   'prospecting', 'applied', 'hr', 'fb', 'waiting', 'negotiating', 'signed',
 ]
-
-export const SUB_STATUS_LABELS: Record<string, string> = {
-  '1_scheduled': '1. Gespräch terminiert',
-  '1_done':      '1. Gespräch geführt',
-  '2_scheduled': '2. Gespräch terminiert',
-  '2_done':      '2. Gespräch geführt',
-  '3_scheduled': '3. Gespräch terminiert',
-  '3_done':      '3. Gespräch geführt',
-  '4_scheduled': '4. Gespräch terminiert',
-  '4_done':      '4. Gespräch geführt',
-  '5_scheduled': '5. Gespräch terminiert',
-  '5_done':      '5. Gespräch geführt',
-}
 
 // Sub-status options for HR/FB stages (terminiert → geführt → nächste Runde)
 export const SUB_STATUS_SEQUENCE = [

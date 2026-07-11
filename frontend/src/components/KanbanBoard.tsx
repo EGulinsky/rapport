@@ -8,7 +8,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { MapPin } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
-import { MAIN_STATUS_LABELS, MAIN_STATUS_COLORS, SUB_STATUS_LABELS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
+import { MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import type { Application } from '../types'
@@ -24,6 +25,7 @@ interface Props {
 }
 
 function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Application; isDragging?: boolean; onOpenCompany?: (id: number) => void; isUpdated?: boolean }) {
+  const { subStatusLabel } = useStatusLabels()
   return (
     <div className={clsx(
       'relative w-full text-left rounded-xl border bg-white p-3 shadow-sm',
@@ -92,7 +94,7 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
       </div>
       <p className="text-[10px] text-gray-300 font-mono mt-0.5 select-all leading-tight">{app.id}</p>
       {app.sub_status && (
-        <p className="text-xs text-gray-400 mt-1">{SUB_STATUS_LABELS[app.sub_status] ?? app.sub_status}</p>
+        <p className="text-xs text-gray-400 mt-1">{subStatusLabel(app.sub_status)}</p>
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
       {!app.abgesagt && app.ai_color && (
@@ -174,6 +176,7 @@ function DroppableColumn({ status, items, onSelect, onOpenCompany, updatedIds }:
   updatedIds?: Set<number>
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
+  const { subStatusLabel } = useStatusLabels()
 
   // Group items by sub_status, ordered by SUB_ORDER; items without sub_status first
   const groups: { sub: string | undefined; apps: Application[] }[] = []
@@ -208,7 +211,7 @@ function DroppableColumn({ status, items, onSelect, onOpenCompany, updatedIds }:
           <div key={sub ?? '__none__'} className="mb-3 last:mb-0">
             {sub && (
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 px-0.5">
-                {SUB_STATUS_LABELS[sub] ?? sub}
+                {subStatusLabel(sub)}
               </p>
             )}
             <div className="space-y-2">
