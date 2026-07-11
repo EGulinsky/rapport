@@ -1,0 +1,73 @@
+{
+  "backendStarting": "Backend startet…",
+  "nav": {
+    "applications": "Bewerbungen",
+    "contacts": "Kontakte",
+    "companies": "Firmen",
+    "calendar": "Kalender",
+    "analytics": "Auswertungen"
+  },
+  "aiAssessAll": {
+    "title": "KI-Einschätzung für alle aktiven Bewerbungen aktualisieren",
+    "running": "KI läuft…",
+    "runningProgress": "KI: {{done}}/{{total}}",
+    "button": "KI bewerten"
+  },
+  "cleanup": {
+    "titleScoped": "Duplikate in {{scope}} bereinigen",
+    "titleUnscoped": "Duplikate bereinigen",
+    "button": "Bereinigen",
+    "buttonScoped": "Bereinigen ({{scope}})"
+  },
+  "newMenu": {
+    "button": "Neu",
+    "createManually": "Manuell anlegen",
+    "importFromIcloud": "Aus iCloud importieren",
+    "importFromLinkedin": "Aus LinkedIn importieren"
+  },
+  "review": "Manuelle Überprüfung",
+  "auditLog": "Audit-Log",
+  "aiSettings": "KI-Einstellungen",
+  "searchPlaceholder": "Firma oder Rolle suchen…",
+  "filters": {
+    "all": "Alle",
+    "clearSelection": "Auswahl aufheben",
+    "merge": "Mergen ({{count}})",
+    "ghostingOnly": "👻 Nur Ghosting",
+    "showRejected": "Abgesagte anzeigen",
+    "viewTable": "☰ Tabelle",
+    "viewKanban": "▦ Kanban"
+  },
+  "cleanupScope": {
+    "applications": "Bewerbungen",
+    "contacts": "Kontakte",
+    "companies": "Firmen",
+    "calendar": "Kalender"
+  },
+  "linkedInImport": {
+    "title": "Aus LinkedIn importieren",
+    "description": "Link zur LinkedIn-Stellenanzeige einfügen. Die Seite wird automatisch geladen und Firma, Rolle und weitere Felder per KI ausgefüllt.",
+    "urlPlaceholder": "https://www.linkedin.com/jobs/view/…",
+    "extracting": "Lade & extrahiere…",
+    "submit": "Importieren",
+    "errorRateLimit": "Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.",
+    "errorNotConnected": "LinkedIn ist nicht verbunden — bitte zuerst in den Einstellungen unter \"LinkedIn\" anmelden.",
+    "errorLoadFailed": "Stellenanzeige konnte nicht geladen werden — bitte Link prüfen oder Felder manuell ausfüllen.",
+    "errorGeneric": "Import fehlgeschlagen."
+  },
+  "newApplication": {
+    "title": "Neue Bewerbung",
+    "chooseCompany": "Firma wählen… *",
+    "searchCompanyPlaceholder": "Firma suchen…",
+    "searching": "Suche…",
+    "enterSearchTerm": "Suchbegriff eingeben…",
+    "creating": "Anlegen…",
+    "createNew": "\"{{name}}\" neu anlegen",
+    "rolePlaceholder": "Rolle *",
+    "sourcePlaceholder": "Quelle (LinkedIn, XING, …)",
+    "statusLabel": "Status",
+    "viaHeadhunter": "Über Headhunter",
+    "targetCompanyPlaceholder": "Zielfirma (für wen wird besetzt)",
+    "commentPlaceholder": "Kommentar (optional)"
+  }
+}

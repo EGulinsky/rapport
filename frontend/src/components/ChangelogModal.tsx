@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.59.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 4/13): Die komplette App-Hülle in App.tsx ist jetzt übersetzt — Navigation, Suchleiste, Status-Filter, "KI bewerten"/"Bereinigen"/"Neu"-Buttons samt Dropdown-Menü, LinkedIn-Import-Dialog und der Formular für neue Bewerbungen. Sprachwechsel (Registrierung oder Einstellungen → Konto) wirkt jetzt auf die gesamte sichtbare App-Oberfläche sofort — nur die einzelnen Ansichten (Kontakte, Firmen, Kalender, Auswertungen, Einstellungen selbst) bleiben vorerst Deutsch, das folgt in den nächsten Phasen.',
+    ],
+  },
+  {
     version: '3.58.0',
     date: '2026-07-11',
     changes: [
