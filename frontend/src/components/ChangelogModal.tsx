@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.8',
+    date: '2026-07-10',
+    changes: [
+      'Tests: sync_targeted.py von 58% auf 77% Testabdeckung — neue Tests für den kompletten _do_sync()-Ablauf (KI-Bewertung, Fehlersammlung pro Quelle) und die fünf Live-Kandidatensuchen (Gmail/GCal/iCloud Mail/Kalender/Notizen).',
+    ],
+  },
+  {
     version: '3.55.7',
     date: '2026-07-10',
     changes: [
