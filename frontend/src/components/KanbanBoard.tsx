@@ -10,6 +10,8 @@ import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate } from '../i18n/formatDate'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import type { Application } from '../types'
@@ -26,6 +28,7 @@ interface Props {
 
 function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Application; isDragging?: boolean; onOpenCompany?: (id: number) => void; isUpdated?: boolean }) {
   const { subStatusLabel } = useStatusLabels()
+  const locale = useLocale()
   return (
     <div className={clsx(
       'relative w-full text-left rounded-xl border bg-white p-3 shadow-sm',
@@ -132,8 +135,8 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
         <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
           <p className="text-[10px] text-gray-400 shrink-0">
             {app.letztes_update
-              ? new Date(app.letztes_update).toLocaleDateString('de-DE')
-              : app.datum_bewerbung ? new Date(app.datum_bewerbung).toLocaleDateString('de-DE') : ''}
+              ? formatDate(app.letztes_update, locale)
+              : app.datum_bewerbung ? formatDate(app.datum_bewerbung, locale) : ''}
           </p>
           {app.ort && (
             <a

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.60.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 5/13, Datumsformate): Alle bislang hart auf "de-DE" verdrahteten Datums-/Zeit-Formatierungen und eine Sortier-Kollation (localeCompare) sind jetzt sprachabhängig — 23 Stellen über 9 Dateien (Firmen-Detail, Kontakte, Kontakt-Detail, Audit-Log, Kanban, Kalender, Bewerbungstabelle, Bewerbungs-Detail, Einstellungen). Neue Helfer formatDate()/formatDateTime()/collate() in i18n/formatDate.ts kapseln das für Komponenten wie für eigenständige Hilfsfunktionen einheitlich, jetzt mit eigenen Tests abgesichert.',
+    ],
+  },
+  {
     version: '3.59.0',
     date: '2026-07-11',
     changes: [

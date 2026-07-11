@@ -3,6 +3,8 @@ import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalL
 import { api } from '../api/client'
 import type { ContactWithApp } from '../types'
 import { CompanyLogo } from './CompanyLogo'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate } from '../i18n/formatDate'
 import clsx from 'clsx'
 
 interface Props {
@@ -56,6 +58,7 @@ export function displayName(c: { name: string; vorname?: string | null }): strin
 }
 
 export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, onChanged }: Props) {
+  const locale = useLocale()
   const [contact, setContact] = useState<ContactWithApp | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -279,7 +282,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
             {contact.letzter_kontakt && (
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Letzter Kontakt</p>
-                <p className="text-sm text-gray-900">{new Date(contact.letzter_kontakt).toLocaleDateString('de-DE')}</p>
+                <p className="text-sm text-gray-900">{formatDate(contact.letzter_kontakt, locale)}</p>
               </div>
             )}
 

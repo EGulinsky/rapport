@@ -6,6 +6,8 @@ import { ContactMergeDialog } from './MergeDialog'
 import { ContactModal } from './ContactModal'
 import { CompanyLogo } from './CompanyLogo'
 import { CompanySearchInput } from './CompanySearchInput'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate, collate } from '../i18n/formatDate'
 import clsx from 'clsx'
 
 function CompanyCell({ contact, onOpenCompany, onChanged }: {
@@ -128,6 +130,7 @@ interface Props {
 }
 
 export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearchChange: setSearch, reloadKey }: Props) {
+  const locale = useLocale()
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -181,7 +184,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
         av = (a[sortKey] ?? '').toLowerCase()
         bv = (b[sortKey] ?? '').toLowerCase()
       }
-      const cmp = av.localeCompare(bv, 'de')
+      const cmp = collate(av, bv, locale)
       return sortDir === 'asc' ? cmp : -cmp
     })
   }, [contacts, sortKey, sortDir, appsFilter])
@@ -365,7 +368,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                   {c.letzter_kontakt
-                    ? new Date(c.letzter_kontakt).toLocaleDateString('de-DE')
+                    ? formatDate(c.letzter_kontakt, locale)
                     : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
