@@ -69,5 +69,20 @@
     "viaHeadhunter": "Über Headhunter",
     "targetCompanyPlaceholder": "Zielfirma (für wen wird besetzt)",
     "commentPlaceholder": "Kommentar (optional)"
+  },
+  "stats": {
+    "total": "Gesamt",
+    "active": "Aktiv",
+    "rejected": "Abgesagt"
+  },
+  "startupWarning": {
+    "servicesUnreachable_one": "{{count}} Dienst nicht erreichbar",
+    "servicesUnreachable_other": "{{count}} Dienste nicht erreichbar",
+    "recheck": "Erneut prüfen",
+    "collapse": "Einklappen",
+    "details": "Details",
+    "close": "Schließen",
+    "localBridges": "Lokale Bridges",
+    "connections": "Verbindungen"
   }
 }

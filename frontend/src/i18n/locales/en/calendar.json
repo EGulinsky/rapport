@@ -1,0 +1,14 @@
+{
+  "view": {
+    "today": "Today",
+    "loading": "Loading…",
+    "openApplication": "Open application →",
+    "by": "by {{name}}",
+    "eventCount_one": "{{count}} event",
+    "eventCount_other": "{{count}} events",
+    "viewDay": "Day",
+    "viewWorkweek": "Workweek",
+    "viewWeek": "Week",
+    "viewMonth": "Month"
+  }
+}

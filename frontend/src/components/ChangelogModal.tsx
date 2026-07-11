@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.63.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 7/13, Kalender + Auswertungen + Kleindialoge): Kalender-Ansicht (Monats-/Wochenansicht, Ansichtsumschalter, Detail-Popup), die komplette Auswertungen-Seite (KPI-Kacheln, Trichter, Engpass-Analyse, Stufen-Konversion, Headhunter-vs-Direkt, alle Diagrammtitel/-legenden/-tooltips) sowie StatsBar, die Startup-Warnbanner-Meldungen, der Duplikate-bereinigen-Dialog und der Manuelle-Überprüfung-Dialog sind jetzt vollständig übersetzt. Neue Namespaces calendar.json/analytics.json/cleanup.json/review.json (de+en); app.json um stats/startupWarning erweitert.',
+    ],
+  },
+  {
     version: '3.62.0',
     date: '2026-07-11',
     changes: [

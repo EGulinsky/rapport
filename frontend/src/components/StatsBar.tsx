@@ -1,15 +1,17 @@
 import type { Stats } from '../types'
 import { Briefcase, XCircle, TrendingUp } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
   stats: Stats
 }
 
 export function StatsBar({ stats }: Props) {
+  const { t } = useTranslation('app')
   const tiles = [
-    { label: 'Gesamt',   value: stats.total,    icon: Briefcase,  color: 'text-gray-700 bg-white' },
-    { label: 'Aktiv',    value: stats.active,   icon: TrendingUp, color: 'text-indigo-700 bg-indigo-50' },
-    { label: 'Abgesagt', value: stats.rejected, icon: XCircle,    color: 'text-red-700 bg-red-50' },
+    { label: t('stats.total'),    value: stats.total,    icon: Briefcase,  color: 'text-gray-700 bg-white' },
+    { label: t('stats.active'),   value: stats.active,   icon: TrendingUp, color: 'text-indigo-700 bg-indigo-50' },
+    { label: t('stats.rejected'), value: stats.rejected, icon: XCircle,    color: 'text-red-700 bg-red-50' },
   ]
 
   return (

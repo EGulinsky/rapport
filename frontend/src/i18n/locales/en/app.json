@@ -69,5 +69,20 @@
     "viaHeadhunter": "Via headhunter",
     "targetCompanyPlaceholder": "Target company (who's hiring for)",
     "commentPlaceholder": "Comment (optional)"
+  },
+  "stats": {
+    "total": "Total",
+    "active": "Active",
+    "rejected": "Rejected"
+  },
+  "startupWarning": {
+    "servicesUnreachable_one": "{{count}} service unreachable",
+    "servicesUnreachable_other": "{{count}} services unreachable",
+    "recheck": "Check again",
+    "collapse": "Collapse",
+    "details": "Details",
+    "close": "Close",
+    "localBridges": "Local bridges",
+    "connections": "Connections"
   }
 }
