@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "email_already_registered": "This email address is already registered.",
+    "code_invalid": "Invalid code.",
+    "code_expired": "Code has expired.",
+    "account_not_found": "Account not found.",
+    "already_verified": "Email address is already verified.",
+    "login_failed": "Email or password is incorrect.",
+    "email_not_verified": "Email address is not yet verified.",
+    "current_password_wrong": "Current password is incorrect.",
+    "cv_type_invalid": "Only PDF, DOC, or DOCX are accepted as a resume.",
+    "cv_too_large": "File is larger than 15 MB.",
+    "no_cv": "No resume on file.",
+    "cv_file_missing": "File no longer available.",
+    "email_send_failed": "Email could not be sent."
+  }
+}

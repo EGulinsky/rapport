@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
@@ -33,6 +33,7 @@ from app.auth.security import (
     verification_code_expiry,
 )
 from app.database import DATABASE_URL, claim_unowned_data, get_db
+from app.error_keys import ErrorKey, api_error
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -137,9 +138,9 @@ def _consume_code(db: Session, user: models.User, code: str, purpose: str) -> mo
         .first()
     )
     if not entry:
-        raise HTTPException(400, "Code ungültig.")
+        raise api_error(400, ErrorKey.AUTH_CODE_INVALID, "Code ungültig.")
     if entry.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(400, "Code ist abgelaufen.")
+        raise api_error(400, ErrorKey.AUTH_CODE_EXPIRED, "Code ist abgelaufen.")
     entry.used_at = datetime.now(timezone.utc)
     return entry
 
@@ -148,7 +149,7 @@ def _consume_code(db: Session, user: models.User, code: str, purpose: str) -> mo
 def register(payload: RegisterPayload, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter_by(email=payload.email).first()
     if existing:
-        raise HTTPException(409, "Diese E-Mail-Adresse ist bereits registriert.")
+        raise api_error(409, ErrorKey.AUTH_EMAIL_ALREADY_REGISTERED, "Diese E-Mail-Adresse ist bereits registriert.")
 
     user = models.User(
         email=payload.email,
@@ -161,9 +162,9 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
 
     code = _issue_code(db, user, "verify_email")
     try:
-        send_verification_code(user.email, code, "verify_email")
+        send_verification_code(user.email, code, "verify_email", user.ui_language)
     except EmailNotConfigured as e:
-        raise HTTPException(502, str(e))
+        raise api_error(502, ErrorKey.AUTH_EMAIL_SEND_FAILED, str(e))
 
     return {"message": "Konto angelegt. Bitte den Bestätigungscode aus der E-Mail eingeben."}
 
@@ -172,9 +173,9 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
 def verify_email(payload: VerifyEmailPayload, db: Session = Depends(get_db)):
     user = db.query(models.User).filter_by(email=payload.email).first()
     if not user:
-        raise HTTPException(404, "Konto nicht gefunden.")
+        raise api_error(404, ErrorKey.AUTH_ACCOUNT_NOT_FOUND, "Konto nicht gefunden.")
     if user.email_verified:
-        raise HTTPException(400, "E-Mail-Adresse ist bereits bestätigt.")
+        raise api_error(400, ErrorKey.AUTH_ALREADY_VERIFIED, "E-Mail-Adresse ist bereits bestätigt.")
 
     # Vor dem Markieren prüfen: ist dies das allererste je bestätigte Konto?
     # Falls ja, gehört diesem Konto der komplette bisherige (kontolose)
@@ -197,9 +198,9 @@ def resend_code(payload: ResendCodePayload, db: Session = Depends(get_db)):
     if user and not user.email_verified:
         code = _issue_code(db, user, "verify_email")
         try:
-            send_verification_code(user.email, code, "verify_email")
+            send_verification_code(user.email, code, "verify_email", user.ui_language)
         except EmailNotConfigured as e:
-            raise HTTPException(502, str(e))
+            raise api_error(502, ErrorKey.AUTH_EMAIL_SEND_FAILED, str(e))
     # Immer dieselbe Antwort — verhindert Rückschlüsse auf registrierte/verifizierte
     # Adressen (User-Enumeration), analog zu forgot-password.
     return {"message": "Falls ein unbestätigtes Konto mit dieser E-Mail-Adresse existiert, wurde ein neuer Code gesendet."}
@@ -209,9 +210,9 @@ def resend_code(payload: ResendCodePayload, db: Session = Depends(get_db)):
 def login(payload: LoginPayload, db: Session = Depends(get_db)):
     user = db.query(models.User).filter_by(email=payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(401, "E-Mail oder Passwort ist falsch.")
+        raise api_error(401, ErrorKey.AUTH_LOGIN_FAILED, "E-Mail oder Passwort ist falsch.")
     if not user.email_verified:
-        raise HTTPException(403, "E-Mail-Adresse ist noch nicht bestätigt.")
+        raise api_error(403, ErrorKey.AUTH_EMAIL_NOT_VERIFIED, "E-Mail-Adresse ist noch nicht bestätigt.")
 
     return AuthTokenResponse(access_token=create_access_token(user.id))
 
@@ -222,9 +223,9 @@ def forgot_password(payload: ForgotPasswordPayload, db: Session = Depends(get_db
     if user:
         code = _issue_code(db, user, "reset_password")
         try:
-            send_verification_code(user.email, code, "reset_password")
+            send_verification_code(user.email, code, "reset_password", user.ui_language)
         except EmailNotConfigured as e:
-            raise HTTPException(502, str(e))
+            raise api_error(502, ErrorKey.AUTH_EMAIL_SEND_FAILED, str(e))
     # Immer dieselbe Antwort, unabhängig davon ob die E-Mail existiert — verhindert
     # Rückschlüsse auf registrierte Adressen (User-Enumeration).
     return {"message": "Falls ein Konto mit dieser E-Mail-Adresse existiert, wurde ein Code gesendet."}
@@ -234,7 +235,7 @@ def forgot_password(payload: ForgotPasswordPayload, db: Session = Depends(get_db
 def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db)):
     user = db.query(models.User).filter_by(email=payload.email).first()
     if not user:
-        raise HTTPException(400, "Code ungültig.")
+        raise api_error(400, ErrorKey.AUTH_CODE_INVALID, "Code ungültig.")
 
     _consume_code(db, user, payload.code, "reset_password")
     user.password_hash = hash_password(payload.new_password)
@@ -255,7 +256,7 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     if not verify_password(payload.old_password, current_user.password_hash):
-        raise HTTPException(401, "Aktuelles Passwort ist falsch.")
+        raise api_error(401, ErrorKey.AUTH_CURRENT_PASSWORD_WRONG, "Aktuelles Passwort ist falsch.")
     current_user.password_hash = hash_password(payload.new_password)
     db.commit()
     return {"message": "Passwort wurde geändert."}
@@ -286,11 +287,11 @@ async def upload_cv(
     filename = file.filename or "lebenslauf"
     ext = os.path.splitext(filename)[1].lower()
     if ext not in ALLOWED_CV_EXTENSIONS:
-        raise HTTPException(400, "Nur PDF, DOC oder DOCX werden als Lebenslauf akzeptiert.")
+        raise api_error(400, ErrorKey.AUTH_CV_TYPE_INVALID, "Nur PDF, DOC oder DOCX werden als Lebenslauf akzeptiert.")
 
     data = await file.read()
     if len(data) > MAX_CV_BYTES:
-        raise HTTPException(413, "Datei ist größer als 15 MB.")
+        raise api_error(413, ErrorKey.AUTH_CV_TOO_LARGE, "Datei ist größer als 15 MB.")
 
     if current_user.cv_storage_path:
         old_path = os.path.join(CV_ROOT, current_user.cv_storage_path)
@@ -316,10 +317,10 @@ async def upload_cv(
 @router.get("/cv")
 def download_cv(current_user: models.User = Depends(get_current_user)):
     if not current_user.cv_storage_path:
-        raise HTTPException(404, "Kein Lebenslauf hinterlegt.")
+        raise api_error(404, ErrorKey.AUTH_NO_CV, "Kein Lebenslauf hinterlegt.")
     full_path = os.path.join(CV_ROOT, current_user.cv_storage_path)
     if not os.path.exists(full_path):
-        raise HTTPException(404, "Datei nicht mehr vorhanden.")
+        raise api_error(404, ErrorKey.AUTH_CV_FILE_MISSING, "Datei nicht mehr vorhanden.")
     return FileResponse(
         full_path,
         media_type=current_user.cv_content_type or "application/octet-stream",

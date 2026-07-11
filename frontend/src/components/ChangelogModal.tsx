@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.57.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 2/13, Login/Registrierung): Der Registrierungs-Dialog hat jetzt eine Sprachauswahl (Deutsch/Englisch, Default Englisch) — alle 6 Auth-Seiten (Login, Registrierung, Passwort vergessen/zurücksetzen, E-Mail bestätigen) sind vollständig übersetzt und schalten live um. Backend: Auth-Fehlermeldungen (falsches Passwort, Code ungültig/abgelaufen, E-Mail nicht bestätigt, CV-Validierung, …) liefern jetzt einen stabilen error_key statt nur deutschem Text — das Frontend übersetzt ihn, mit dem bisherigen deutschen Text als Fallback für alles Ungekeyte. Bestätigungs-/Reset-Mails werden serverseitig in der gewählten Kontosprache verschickt.',
+    ],
+  },
+  {
     version: '3.56.0',
     date: '2026-07-11',
     changes: [

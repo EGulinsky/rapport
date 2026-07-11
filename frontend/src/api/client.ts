@@ -37,6 +37,19 @@ export async function authFetch(url: string, options?: AuthFetchOptions): Promis
   return res
 }
 
+/** Thrown by request() on a non-ok response. `errorKey` is set when the backend
+ * sent a stable `detail.error_key` (see backend/app/error_keys.py) — callers can
+ * look it up in the `errors` i18n namespace (`t(\`errors:${errorKey}\`)`) instead
+ * of displaying `message` (the German fallback prose) directly. */
+export class ApiError extends Error {
+  errorKey: string | null
+  constructor(message: string, errorKey: string | null = null) {
+    super(message)
+    this.name = 'ApiError'
+    this.errorKey = errorKey
+  }
+}
+
 async function request<T>(path: string, options?: AuthFetchOptions): Promise<T> {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (options?.headers) new Headers(options.headers).forEach((v, k) => headers.set(k, v))
@@ -44,11 +57,16 @@ async function request<T>(path: string, options?: AuthFetchOptions): Promise<T> 
   if (!res.ok) {
     const raw = await res.text()
     let message = raw
+    let errorKey: string | null = null
     try {
       const parsed = JSON.parse(raw)
       if (typeof parsed?.detail === 'string') message = parsed.detail
+      else if (parsed?.detail && typeof parsed.detail === 'object') {
+        if (typeof parsed.detail.message === 'string') message = parsed.detail.message
+        if (typeof parsed.detail.error_key === 'string') errorKey = parsed.detail.error_key
+      }
     } catch { /* not JSON — keep raw text */ }
-    throw new Error(message || `${res.status}`)
+    throw new ApiError(message || `${res.status}`, errorKey)
   }
   return res.json()
 }

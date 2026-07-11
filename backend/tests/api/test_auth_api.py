@@ -21,10 +21,11 @@ def captured_email(monkeypatch):
     """Fängt jeden 'gesendeten' Bestätigungscode ab, statt echtes SMTP zu nutzen."""
     box: dict = {}
 
-    def fake_send(to_email, code, purpose):
+    def fake_send(to_email, code, purpose, ui_language="de"):
         box["to"] = to_email
         box["code"] = code
         box["purpose"] = purpose
+        box["ui_language"] = ui_language
 
     monkeypatch.setattr("app.routers.auth.send_verification_code", fake_send)
     return box
@@ -48,6 +49,7 @@ class TestRegister:
         _register(real_auth_client, captured_email)
         resp = _register(real_auth_client, captured_email)
         assert resp.status_code == 409
+        assert resp.json()["detail"]["error_key"] == "auth.email_already_registered"
 
     def test_negativ_zu_kurzes_passwort_liefert_422(self, real_auth_client, captured_email):
         resp = real_auth_client.post("/api/auth/register", json={"email": "kurz@example.com", "password": TESTPW_TOO_SHORT})
@@ -84,6 +86,13 @@ class TestRegister:
         )
         assert resp.status_code == 422
 
+    def test_positiv_bestaetigungsmail_wird_in_gewaehlter_sprache_verschickt(self, real_auth_client, captured_email):
+        real_auth_client.post(
+            "/api/auth/register",
+            json={"email": "test@example.com", "password": TESTPW_ORIGINAL, "ui_language": "en"},
+        )
+        assert captured_email["ui_language"] == "en"
+
 
 class TestVerifyEmail:
     def test_positiv_richtiger_code_aktiviert_konto_und_liefert_token(self, real_auth_client, captured_email):
@@ -100,6 +109,7 @@ class TestVerifyEmail:
         resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": "000000"})
 
         assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "auth.code_invalid"
 
     def test_negativ_bereits_bestaetigtes_konto_kann_nicht_erneut_bestaetigt_werden(self, real_auth_client, captured_email):
         _register(real_auth_client, captured_email)
@@ -109,6 +119,7 @@ class TestVerifyEmail:
         resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": code})
 
         assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "auth.already_verified"
 
     def test_negativ_unbekannte_email_liefert_404(self, real_auth_client):
         resp = real_auth_client.post("/api/auth/verify-email", json={"email": "nichtregistriert@example.com", "code": "123456"})
@@ -160,6 +171,7 @@ class TestLogin:
         resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_ORIGINAL})
 
         assert resp.status_code == 403
+        assert resp.json()["detail"]["error_key"] == "auth.email_not_verified"
 
     def test_negativ_falsches_passwort(self, real_auth_client, captured_email):
         _register(real_auth_client, captured_email)
@@ -168,6 +180,7 @@ class TestLogin:
         resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_WRONG})
 
         assert resp.status_code == 401
+        assert resp.json()["detail"]["error_key"] == "auth.login_failed"
 
     def test_negativ_unbekannte_email(self, real_auth_client):
         resp = real_auth_client.post("/api/auth/login", json={"email": "niemand@example.com", "password": TESTPW_NEW})
@@ -405,6 +418,7 @@ class TestProfileAndCv:
         )
 
         assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "auth.cv_type_invalid"
 
     def test_negativ_zu_grosse_datei_wird_abgelehnt(self, real_auth_client, captured_email, monkeypatch):
         monkeypatch.setattr("app.routers.auth.MAX_CV_BYTES", 10)
@@ -417,6 +431,7 @@ class TestProfileAndCv:
         )
 
         assert resp.status_code == 413
+        assert resp.json()["detail"]["error_key"] == "auth.cv_too_large"
 
     def test_positiv_cv_erneut_hochladen_ersetzt_alte_datei(self, real_auth_client, captured_email):
         token = self._token(real_auth_client, captured_email)

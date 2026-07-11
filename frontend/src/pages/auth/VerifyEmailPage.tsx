@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../context/AuthContext'
+import { errorMessage } from '../../i18n/errorMessage'
 import { AuthLayout, authInputClass, authButtonClass, AuthError } from './AuthLayout'
 
 export function VerifyEmailPage() {
+  const { t } = useTranslation('auth')
   const { verifyEmail, resendCode } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -22,7 +25,7 @@ export function VerifyEmailPage() {
       await verifyEmail(email, code.trim())
       navigate('/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errorMessage(err, t))
     } finally {
       setSubmitting(false)
     }
@@ -36,26 +39,23 @@ export function VerifyEmailPage() {
       await resendCode(email)
       setResent(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errorMessage(err, t))
     } finally {
       setResending(false)
     }
   }
 
   return (
-    <AuthLayout
-      title="E-Mail bestätigen"
-      subtitle="Wir haben einen 6-stelligen Code an deine E-Mail-Adresse geschickt."
-    >
+    <AuthLayout title={t('verifyEmail.title')} subtitle={t('verifyEmail.subtitle')}>
       {error && <AuthError message={error} />}
       {resent && !error && (
         <div className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
-          Falls ein unbestätigtes Konto mit dieser E-Mail-Adresse existiert, wurde ein neuer Code gesendet.
+          {t('verifyEmail.resentMessage')}
         </div>
       )}
       <form onSubmit={onSubmit} className="space-y-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">E-Mail</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('emailLabel')}</label>
           <input
             type="email" required value={email}
             onChange={e => setEmail(e.target.value)}
@@ -63,7 +63,7 @@ export function VerifyEmailPage() {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Bestätigungscode</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('verifyEmail.codeLabel')}</label>
           <input
             type="text" required autoFocus value={code}
             onChange={e => setCode(e.target.value)}
@@ -72,17 +72,17 @@ export function VerifyEmailPage() {
           />
         </div>
         <button type="submit" disabled={submitting} className={authButtonClass}>
-          {submitting ? 'Bestätige…' : 'Bestätigen'}
+          {submitting ? t('verifyEmail.submitting') : t('verifyEmail.submit')}
         </button>
       </form>
       <button
         type="button" onClick={onResend} disabled={resending || !email}
         className="mt-3 w-full text-center text-xs text-indigo-600 hover:underline font-medium disabled:opacity-50 disabled:no-underline"
       >
-        {resending ? 'Sende…' : 'Code erneut senden'}
+        {resending ? t('verifyEmail.resending') : t('verifyEmail.resend')}
       </button>
       <p className="mt-4 text-center text-xs text-gray-500">
-        Zurück zur <Link to="/login" className="text-indigo-600 hover:underline font-medium">Anmeldung</Link>
+        {t('backToLogin')} <Link to="/login" className="text-indigo-600 hover:underline font-medium">{t('loginLink')}</Link>
       </p>
     </AuthLayout>
   )
