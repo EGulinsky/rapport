@@ -129,8 +129,8 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner on the Mac.
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 579 tests) → `frontend` (tsc + vite build) → `e2e` (Playwright via docker-compose.test.yml, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 93 L3 integration tests run on push to `main` (`pytest -m integration`).
-Deploy: `git pull` → Docker Buildx builds new images on the runner → `docker compose up -d --build` → health poll → macOS notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (test concept, Phase 1–4 complete, Phase 5 E2E started).
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 1122 tests) → `frontend` (tsc + vite build) → `e2e` (Playwright via docker-compose.test.yml, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 184 L3 integration tests run on push to `main` (`pytest -m integration`).
+Deploy: `git pull` → Docker Buildx builds new images on the runner → `docker compose up -d --build` → health poll → macOS notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (test concept, all phases 1–6 complete).
 A push to `main` always triggers test+deploy. Manually (e.g. on a feature branch) via `gh workflow run ci.yml --ref <branch>` to only test, or with `-f deploy=true` to also deploy (this always deploys the `main` head, regardless of the chosen `--ref`).
 
 ## Important Constants
@@ -174,7 +174,34 @@ deliberately not read via `docker cp`, since `docker compose run` ignores the se
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`
 Sheet: `Tracking`, 17 columns — mapping in `models.py` under `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
 
-## Work State (Session v3.55.0 – 2026-07-10)
+## Work State (Session v3.55.12 – 2026-07-11)
+
+Picks up right after the v3.55.0 session documented below (kept as historical reference).
+
+### Completed in This Session
+
+**Coverage: contacts.py + sync_company.py (v3.55.11):** `contacts.py` 80%→100% (`GET /` search/tenant-scoping/company-profile enrichment, `DELETE /bulk` gezielt + `all=true` — beide waren komplett ungetestet). `sync_company.py` 83%→99% (`_get_linkedin_context()` echter Playwright-Start + kaputtes Cookie-JSON, `resolve_company_candidate()`-Fehlerzweige, vollständiger `_run_sync_batch()`-Erfolgspfad über Wikidata inkl. Logo-Download — bisher liefen die Cancel-Tests nie bis zur SPARQL-Antwort durch).
+
+**CI-Marker-Bug gefunden und gefixt (v3.55.11 + v3.55.12):** `tests/unit/test_linkedin_job_description.py` hatte seit Einführung keine `unit`/`component`/`api`/`integration`-Markierung (nur `pytest.mark.asyncio`) und lief dadurch nie unter dem CI-Marker-Filter (`-m "unit or component or api"`) — real 11% statt der zuvor angenommenen >90% (die alte Zahl kam aus einem isolierten Testlauf, der den Marker-Filter umgeht). Fix: `pytest.mark.unit` ergänzt. Zusätzlich ein zweites, unabhängiges Problem in derselben Datei gefunden: ein überflüssiges `pytest.mark.asyncio` auf Modulebene löste für drei synchrone Tests in `TestExtractionJs` bei jedem Lauf eine `PytestWarning` aus (`pytest.ini` setzt bereits `asyncio_mode = auto`). Systematisch geprüft: kein anderes Testfile hat eines der beiden Probleme.
+
+**Testkonzept-Audit + Doku-Nachzug:** `docs/TEST_KONZEPT.md` und die CI/CD-Sektion in diesem Dokument enthielten veraltete Zahlen (602 statt 1306 Tests, 93 statt 184 Integrationstests, "Phase 1–4 complete, Phase 5 started" statt tatsächlich abgeschlossener Phasen 1–6). Beide korrigiert, inkl. einer neuen Coverage-Tabelle in Abschnitt 10 mit getrennten PR-Gate- vs. Integration-Zahlen (74% vs. 87% Gesamt-Coverage) — die alte Tabelle vermischte teils beide Messungen ohne das zu kennzeichnen.
+
+**Nebenbefund zur Arbeitsweise:** Der `deploy`-Job aus `ci.yml` läuft auf demselben, nicht isolierten Arbeitsverzeichnis wie diese Session und führt nach grünem CI automatisch `git reset --hard origin/main` aus — ein währenddessen noch uncommitteter lokaler Edit wurde dadurch zweimal kommentarlos verworfen (über `git reflog` verifiziert). Lektion für künftige Sessions: nach jedem Push den CI-Status beobachten und vor Abschluss des laufenden `Deploy`-Jobs keine uncommitteten Änderungen offen liegen lassen (in Session-Memory dokumentiert).
+
+### Open / Next Steps
+- `sync_linkedin.py` bleibt bei 52% (PR-Gate wie kombiniert) — offener Rest ist der Playwright-Login/2FA/Scraping-Flow, der dedizierte Fixture-Infrastruktur über die bestehenden Mocks hinaus bräuchte
+- `sync_targeted.py` PR-Gate-Coverage (28%) bleibt weit unter der kombinierten Zahl (77%) — rein strukturell durch die L3-lastige Testarchitektur der Datei, keine akute Lücke
+- `respx`/`polyfactory` stehen weiterhin ungenutzt in `requirements-dev.txt` (Tests mocken `httpx` direkt per `unittest.mock.patch`, Factories sind bewusst einfache Funktionen) — Aufräumen oder tatsächlich einsetzen ist eine offene Entscheidung, keine akute Aufgabe
+
+### Commits (this session, newest first)
+```
+5f4986c Fix: überflüssiges pytest.mark.asyncio in test_linkedin_job_description.py entfernt (v3.55.12)
+93d45ae Tests: contacts.py + sync_company.py Testabdeckung angehoben, CI-Marker-Bug gefixt (v3.55.11)
+```
+
+---
+
+## Work State (Session v3.55.0 – 2026-07-10) — historical
 
 Current version: **v3.55.0** (build number from `frontend/src/version.ts`). Picks up right after the v3.51.0 session documented further below (kept as historical reference).
 

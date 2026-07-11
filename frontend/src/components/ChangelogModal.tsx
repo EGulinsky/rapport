@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.13',
+    date: '2026-07-11',
+    changes: [
+      'Docs: docs/TEST_KONZEPT.md und die CI/CD-Sektion in CLAUDE.md hatten veraltete Zahlen (602 statt 1306 Tests, 93 statt 184 Integrationstests, "Phase 5 gestartet" statt tatsächlich abgeschlossener Phasen 1–6) — beide aktualisiert, inkl. einer neuen Coverage-Tabelle mit getrennten PR-Gate- vs. Integration-Werten (74% vs. 87%).',
+      'Docs: agent/README.md und backend/tests/integration/README.md waren komplett auf Deutsch geblieben (bei der Doku-Übersetzung v3.52.0 übersehen bzw. danach neu angelegt) — ins Englische übersetzt, letzteres zusätzlich inhaltlich aktualisiert (iCloud Mail/Calendar/Reminders/Contacts/Notes/Calls sind längst umgesetzt, nicht mehr "noch offen").',
+    ],
+  },
+  {
     version: '3.55.12',
     date: '2026-07-11',
     changes: [
