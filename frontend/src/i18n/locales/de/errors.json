@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "email_already_registered": "Diese E-Mail-Adresse ist bereits registriert.",
+    "code_invalid": "Code ungültig.",
+    "code_expired": "Code ist abgelaufen.",
+    "account_not_found": "Konto nicht gefunden.",
+    "already_verified": "E-Mail-Adresse ist bereits bestätigt.",
+    "login_failed": "E-Mail oder Passwort ist falsch.",
+    "email_not_verified": "E-Mail-Adresse ist noch nicht bestätigt.",
+    "current_password_wrong": "Aktuelles Passwort ist falsch.",
+    "cv_type_invalid": "Nur PDF, DOC oder DOCX werden als Lebenslauf akzeptiert.",
+    "cv_too_large": "Datei ist größer als 15 MB.",
+    "no_cv": "Kein Lebenslauf hinterlegt.",
+    "cv_file_missing": "Datei nicht mehr vorhanden.",
+    "email_send_failed": "E-Mail konnte nicht gesendet werden."
+  }
+}

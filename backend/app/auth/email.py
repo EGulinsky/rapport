@@ -24,19 +24,45 @@ class EmailNotConfigured(Exception):
     pass
 
 
-def send_verification_code(to_email: str, code: str, purpose: str) -> None:
+# Kleines eingebettetes Wörterbuch statt gettext/babel — nur 2 Betreffzeilen ×
+# 2 Sprachen, passt zur "keine Übertechnisierung"-Linie für so wenige Strings
+# (siehe auch agent/strings.py für dasselbe Muster im nativen Agenten).
+_STRINGS = {
+    "de": {
+        "subject_verify": "E-Mail bestätigen",
+        "subject_reset": "Passwort zurücksetzen",
+        "body": (
+            "Dein Bestätigungscode: {code}\n\n"
+            "Der Code ist 15 Minuten gültig. Wenn du das nicht angefordert hast, "
+            "kannst du diese E-Mail ignorieren."
+        ),
+    },
+    "en": {
+        "subject_verify": "Verify your email",
+        "subject_reset": "Reset your password",
+        "body": (
+            "Your verification code: {code}\n\n"
+            "The code is valid for 15 minutes. If you didn't request this, "
+            "you can ignore this email."
+        ),
+    },
+}
+
+
+def _strings(ui_language: str) -> dict:
+    return _STRINGS.get(ui_language, _STRINGS["de"])  # 'de' Fallback = Default für Bestandskonten
+
+
+def send_verification_code(to_email: str, code: str, purpose: str, ui_language: str = "de") -> None:
     """purpose: "verify_email" | "reset_password" """
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
         raise EmailNotConfigured(
             "SMTP ist nicht konfiguriert (SMTP_HOST/SMTP_USER/SMTP_PASSWORD fehlen)."
         )
 
-    subject = "Passwort zurücksetzen" if purpose == "reset_password" else "E-Mail bestätigen"
-    body = (
-        f"Dein Bestätigungscode: {code}\n\n"
-        "Der Code ist 15 Minuten gültig. Wenn du das nicht angefordert hast, "
-        "kannst du diese E-Mail ignorieren."
-    )
+    strings = _strings(ui_language)
+    subject = strings["subject_reset"] if purpose == "reset_password" else strings["subject_verify"]
+    body = strings["body"].format(code=code)
 
     msg = EmailMessage()
     msg["Subject"] = f"rapport – {subject}"

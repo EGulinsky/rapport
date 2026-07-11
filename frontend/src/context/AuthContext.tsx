@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, getToken, setToken, AUTH_UNAUTHORIZED_EVENT, type AuthUser } from '../api/client'
-import { getPreLoginLanguage } from '../i18n'
+import { getPreLoginLanguage, rememberPreLoginLanguage } from '../i18n'
 
 interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string, uiLanguage: string) => Promise<void>
   verifyEmail: (email: string, code: string) => Promise<void>
   resendCode: (email: string) => Promise<void>
   forgotPassword: (email: string) => Promise<void>
@@ -58,8 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshUser()
   }
 
-  async function register(email: string, password: string) {
-    await api.auth.register(email, password)
+  async function register(email: string, password: string, uiLanguage: string) {
+    await api.auth.register(email, password, uiLanguage)
+    // Applies immediately so VerifyEmailPage renders in the chosen language
+    // without waiting for a /me round-trip (no token/user yet at this point).
+    rememberPreLoginLanguage(uiLanguage as 'de' | 'en')
+    await i18n.changeLanguage(uiLanguage)
   }
 
   async function verifyEmail(email: string, code: string) {

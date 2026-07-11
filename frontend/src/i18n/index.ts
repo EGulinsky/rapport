@@ -3,6 +3,10 @@ import { initReactI18next } from 'react-i18next'
 
 import commonDe from './locales/de/common.json'
 import commonEn from './locales/en/common.json'
+import errorsDe from './locales/de/errors.json'
+import errorsEn from './locales/en/errors.json'
+import authDe from './locales/de/auth.json'
+import authEn from './locales/en/auth.json'
 
 export const SUPPORTED_LANGUAGES = ['de', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -23,8 +27,8 @@ export function rememberPreLoginLanguage(lang: SupportedLanguage): void {
 
 i18n.use(initReactI18next).init({
   resources: {
-    de: { common: commonDe },
-    en: { common: commonEn },
+    de: { common: commonDe, errors: errorsDe, auth: authDe },
+    en: { common: commonEn, errors: errorsEn, auth: authEn },
   },
   lng: getPreLoginLanguage(),
   fallbackLng: 'en',
