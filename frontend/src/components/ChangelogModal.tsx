@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.12',
+    date: '2026-07-11',
+    changes: [
+      'Fix: test_linkedin_job_description.py hatte zusätzlich ein überflüssiges pytest.mark.asyncio auf Modulebene, das für die drei synchronen Tests in TestExtractionJs bei jedem Lauf eine PytestWarning auslöste (pytest.ini setzt asyncio_mode=auto, die explizite Markierung war nie nötig).',
+    ],
+  },
+  {
     version: '3.55.11',
     date: '2026-07-11',
     changes: [
