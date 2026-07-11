@@ -4,6 +4,7 @@ import io
 import os
 from datetime import date, timedelta
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -269,9 +270,14 @@ def export_pdf(
     today = date.today().strftime("%Y-%m-%d")
     since_str = since.strftime("%Y-%m-%d") + "_" if since else ""
     filename = f"Eigenbemühungen_{since_str}{today}.pdf"
+    # Content-Disposition header values must be ASCII/latin-1 (RFC 6266) — a raw
+    # umlaut breaks strict clients (incl. Starlette's own TestClient). ASCII
+    # fallback for old clients, RFC 5987 filename* for the real UTF-8 name.
+    ascii_fallback = filename.encode("ascii", "replace").decode("ascii")
+    encoded = quote(filename)
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"},
     )
