@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, getToken, setToken, AUTH_UNAUTHORIZED_EVENT, type AuthUser } from '../api/client'
+import { getPreLoginLanguage } from '../i18n'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -19,6 +21,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const { i18n } = useTranslation()
 
   const refreshUser = useCallback(async () => {
     if (!getToken()) {
@@ -41,6 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized)
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized)
   }, [])
+
+  // Propagates the logged-in user's server-stored ui_language to the UI, and
+  // falls back to the pre-login default (remembered choice or 'en') on logout —
+  // AuthContext is the single place server state -> UI language flows through.
+  useEffect(() => {
+    i18n.changeLanguage(user ? user.ui_language : getPreLoginLanguage())
+  }, [user, i18n])
 
   async function login(email: string, password: string) {
     const res = await api.auth.login(email, password)

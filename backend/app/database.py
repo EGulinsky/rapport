@@ -876,6 +876,25 @@ def _migrate_user_profile():
     conn.close()
 
 
+def _migrate_ui_language():
+    """UI-Sprache je Konto — Default 'de' für bestehende Nutzer (aktuell alle
+    deutschsprachig); 'en' ist der Default nur für NEUE Registrierungen (siehe
+    RegisterPayload.ui_language in routers/auth.py, das den Wert explizit
+    mitschickt statt sich auf die Spalten-Default zu verlassen)."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "ui_language" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN ui_language TEXT NOT NULL DEFAULT 'de'")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_audit_log_entity_type():
     """Add an explicit entity_type column to audit_log (application/contact/
     company/event) — inferring the type from which FK column is set is
@@ -971,6 +990,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
     _migrate_user_profile()
+    _migrate_ui_language()
     _migrate_company_profiles()
     _backfill_company_profiles()
     _backfill_events()

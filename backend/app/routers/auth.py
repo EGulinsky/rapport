@@ -46,6 +46,7 @@ CV_ROOT = os.path.join(_DB_DIR, "user_files")
 class RegisterPayload(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+    ui_language: str = Field(default="en", pattern="^(de|en)$")
 
 
 class VerifyEmailPayload(BaseModel):
@@ -91,12 +92,18 @@ class UserResponse(BaseModel):
     linkedin_url: Optional[str] = None
     cv_filename: Optional[str] = None
     cv_size_bytes: Optional[int] = None
+    ui_language: str = "de"
 
 
 class ProfilePayload(BaseModel):
     vorname: Optional[str] = None
     nachname: Optional[str] = None
     linkedin_url: Optional[str] = None
+    # Optional und nur bei Angabe übernommen (siehe update_profile) — anders als
+    # vorname/nachname/linkedin_url, die dieser Endpoint unconditional überschreibt.
+    # Ein Profil-Save aus einem anderen Tab (z.B. CV-Upload) darf die Sprache nicht
+    # unbeabsichtigt zurücksetzen, nur weil das Feld im Payload fehlt.
+    ui_language: Optional[str] = None
 
 
 def _user_response(user: models.User) -> UserResponse:
@@ -109,6 +116,7 @@ def _user_response(user: models.User) -> UserResponse:
         linkedin_url=user.linkedin_url,
         cv_filename=user.cv_filename,
         cv_size_bytes=user.cv_size_bytes,
+        ui_language=user.ui_language,
     )
 
 
@@ -142,7 +150,12 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(409, "Diese E-Mail-Adresse ist bereits registriert.")
 
-    user = models.User(email=payload.email, password_hash=hash_password(payload.password), email_verified=False)
+    user = models.User(
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        email_verified=False,
+        ui_language=payload.ui_language,
+    )
     db.add(user)
     db.flush()
 
@@ -257,6 +270,8 @@ def update_profile(
     current_user.vorname = payload.vorname
     current_user.nachname = payload.nachname
     current_user.linkedin_url = payload.linkedin_url
+    if payload.ui_language is not None:
+        current_user.ui_language = payload.ui_language
     db.commit()
     db.refresh(current_user)
     return _user_response(current_user)

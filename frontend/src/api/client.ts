@@ -504,9 +504,9 @@ export const api = {
   },
 
   auth: {
-    register: (email: string, password: string) =>
+    register: (email: string, password: string, ui_language: string = 'en') =>
       request<{ message: string }>('/auth/register', {
-        method: 'POST', body: JSON.stringify({ email, password }),
+        method: 'POST', body: JSON.stringify({ email, password, ui_language }),
       }),
     verifyEmail: (email: string, code: string) =>
       request<AuthTokenResponse>('/auth/verify-email', {
@@ -534,9 +534,9 @@ export const api = {
         method: 'POST', body: JSON.stringify({ old_password, new_password }),
         skipAuthHandling: true, // 401 hier heißt "altes Passwort falsch", nicht "Session abgelaufen"
       }),
-    updateProfile: (vorname: string, nachname: string, linkedin_url: string) =>
+    updateProfile: (vorname: string, nachname: string, linkedin_url: string, ui_language?: string) =>
       request<AuthUser>('/auth/profile', {
-        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url }),
+        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url, ui_language }),
       }),
     uploadCv: async (file: File): Promise<AuthUser> => {
       const form = new FormData()
@@ -574,6 +574,7 @@ export interface AuthUser {
   linkedin_url: string | null
   cv_filename: string | null
   cv_size_bytes: number | null
+  ui_language: string
 }
 
 export interface StartupCheck {
