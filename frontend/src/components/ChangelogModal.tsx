@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.55.14',
+    date: '2026-07-11',
+    changes: [
+      'Docs: CLAUDE.md dokumentiert jetzt den zweiten Arbeits-Checkout /Users/eugengulinsky/code/rapport-dev — Claude-Code-Sessions arbeiten dort, damit der automatische deploy-Job (git reset --hard in /rapport) nie wieder uncommittete Edits verwirft (ist zweimal passiert, siehe Session-Historie).',
+    ],
+  },
+  {
     version: '3.55.13',
     date: '2026-07-11',
     changes: [
