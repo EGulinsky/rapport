@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Search, ArrowUpDown, Clock, CheckCircle, XCircle, RefreshCw, GitMerge, Briefcase, Users, ChevronsUp, Network, ChevronDown, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
@@ -28,18 +29,9 @@ const COMPANY_TYPE_COLORS: Record<string, string> = {
   other:       'bg-gray-100 text-gray-600',
 }
 
-const COMPANY_TYPE_LABELS: Record<string, string> = {
-  startup:     'Startup',
-  konzern:     'Konzern',
-  kmu:         'KMU',
-  beratung:    'Beratung',
-  headhunter:  'Headhunter',
-  nonprofit:   'Non-Profit',
-  public:      'Öffentlich',
-  other:       'Sonstiges',
-}
-
 export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey, onReviewOpen }: Props) {
+  const { t } = useTranslation('companies')
+  const { t: tCommon } = useTranslation('common')
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -144,7 +136,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           } else {
             stopPolling()
             setSyncing(false)
-            setSyncMsg(syncCancelledRef.current ? 'Abgebrochen.' : null)
+            setSyncMsg(syncCancelledRef.current ? t('view.syncCancelled') : null)
             syncCancelledRef.current = false
             syncScopedIdsRef.current = undefined
             load()
@@ -182,14 +174,14 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
       await api.companySync.resetLock()
       const r = await api.companySync.run(force, scopedIds)
       if (r.started) {
-        setSyncMsg(`${r.count} Firmenprofil(e)${scopedIds ? ' (Auswahl)' : ''} werden synchronisiert…`)
+        setSyncMsg(scopedIds ? t('view.syncingCountSelection', { count: r.count }) : t('view.syncingCount', { count: r.count }))
         startPolling()
       } else {
-        setSyncMsg(r.message || 'Kein Sync nötig.')
+        setSyncMsg(r.message || t('view.noSyncNeeded'))
         setSyncing(false)
       }
     } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : 'Fehler')
+      setSyncMsg(e instanceof Error ? e.message : t('view.genericError'))
       setSyncing(false)
     }
   }
@@ -206,7 +198,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     try {
       const r = await api.companies.linkContacts(scopedIds)
       if (!r.started) {
-        setLinkMsg(r.message || 'Bereits läuft')
+        setLinkMsg(r.message || t('view.alreadyRunning'))
         setLinking(false)
         return
       }
@@ -220,9 +212,9 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             setLinking(false)
             setLinkProgress(null)
             if (s.cancelled) {
-              setLinkMsg(`Abgebrochen — ${s.linked} verknüpft, ${s.created} neue Profile`)
+              setLinkMsg(t('view.linkCancelledResult', { linked: s.linked, created: s.created }))
             } else {
-              setLinkMsg(`${s.linked} verknüpft, ${s.created} neue Profile`)
+              setLinkMsg(t('view.linkResult', { linked: s.linked, created: s.created }))
             }
             await load()
           }
@@ -232,7 +224,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         }
       }, 800)
     } catch (e) {
-      setLinkMsg(e instanceof Error ? e.message : 'Fehler')
+      setLinkMsg(e instanceof Error ? e.message : t('view.genericError'))
       setLinking(false)
     }
   }
@@ -250,9 +242,9 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
     try {
       await api.companySync.resetFailed()
       await load()
-      setSyncMsg('Fehlgeschlagene Profile zurückgesetzt.')
+      setSyncMsg(t('view.resetFailedSuccess'))
     } catch {
-      setSyncMsg('Fehler beim Zurücksetzen.')
+      setSyncMsg(t('view.resetFailedError'))
     }
   }
 
@@ -302,7 +294,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
   async function deleteSelected() {
     if (selectedIds.size === 0) return
-    if (!confirm(`${selectedIds.size} ${selectedIds.size === 1 ? 'Firma' : 'Firmen'} löschen?`)) return
+    if (!confirm(t('view.deleteConfirm', { count: selectedIds.size }))) return
     setDeleting(true)
     try {
       await api.companies.bulkDelete([...selectedIds])
@@ -337,26 +329,26 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Firma, Branche oder Ort…"
+            placeholder={t('view.searchPlaceholder')}
             className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        {loading && <span className="text-xs text-gray-400">Laden…</span>}
+        {loading && <span className="text-xs text-gray-400">{t('view.loading')}</span>}
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-xs text-gray-400">Bewerb.:</span>
+          <span className="text-xs text-gray-400">{t('view.applicationsLabel')}</span>
           {(['all', 'yes', 'no'] as const).map(v => (
             <button key={v} onClick={() => setAppsFilter(v)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors ${appsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {v === 'all' ? 'Alle' : v === 'yes' ? 'Ja' : 'Nein'}
+              {v === 'all' ? t('view.filterAll') : v === 'yes' ? t('view.filterYes') : t('view.filterNo')}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-xs text-gray-400">Kontakte:</span>
+          <span className="text-xs text-gray-400">{t('view.contactsLabel')}</span>
           {(['all', 'yes', 'no'] as const).map(v => (
             <button key={v} onClick={() => setContactsFilter(v)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors ${contactsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {v === 'all' ? 'Alle' : v === 'yes' ? 'Ja' : 'Nein'}
+              {v === 'all' ? t('view.filterAll') : v === 'yes' ? t('view.filterYes') : t('view.filterNo')}
             </button>
           ))}
         </div>
@@ -370,16 +362,16 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             {syncing
               ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
               : <RefreshCw className="h-3.5 w-3.5" />}
-            Sync{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+            {selectedIds.size > 0 ? t('view.syncCount', { count: selectedIds.size }) : t('view.sync')}
             {!syncing && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
           </button>
           {syncing && (
             <button
               onClick={cancelSync}
               className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
-              title="Sync abbrechen"
+              title={t('view.cancelSync')}
             >
-              Abbrechen
+              {tCommon('cancel')}
             </button>
           )}
           {syncMenuOpen && (
@@ -388,15 +380,15 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                 onClick={() => startSync(false)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
-                <div className="font-medium">Sync{selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}</div>
-                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? 'Nur ausgewählte Firmen' : 'Nur neue, noch nie synchronisierte Firmen'}</div>
+                <div className="font-medium">{selectedIds.size > 0 ? t('view.syncMenuTitleCount', { count: selectedIds.size }) : t('view.syncMenuTitle')}</div>
+                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? t('view.syncMenuSubtitleSelected') : t('view.syncMenuSubtitleAll')}</div>
               </button>
               <button
                 onClick={() => startSync(true)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
-                <div className="font-medium">Re-Sync{selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}</div>
-                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? 'Nur ausgewählte Firmen neu synchronisieren' : 'Alle Firmen neu synchronisieren'}</div>
+                <div className="font-medium">{selectedIds.size > 0 ? t('view.resyncMenuTitleCount', { count: selectedIds.size }) : t('view.resyncMenuTitle')}</div>
+                <div className="text-xs text-gray-400">{selectedIds.size > 0 ? t('view.resyncMenuSubtitleSelected') : t('view.resyncMenuSubtitleAll')}</div>
               </button>
               {failed > 0 && (
                 <>
@@ -405,8 +397,8 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                     onClick={() => { setSyncMenuOpen(false); resetFailed() }}
                     className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    <div className="font-medium">{failed} fehlgeschlagen zurücksetzen</div>
-                    <div className="text-xs text-red-400">Status auf ausstehend zurücksetzen</div>
+                    <div className="font-medium">{t('view.resetFailed', { count: failed })}</div>
+                    <div className="text-xs text-red-400">{t('view.resetFailedSubtitle')}</div>
                   </button>
                 </>
               )}
@@ -423,16 +415,16 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             {linking
               ? linkProgress
                 ? `${linkProgress.linked + linkProgress.created}/${linkProgress.total}`
-                : 'Verknüpfe…'
-              : `Kontakte verknüpfen${selectedIds.size > 0 ? ` (${selectedIds.size} markiert)` : ''}`}
+                : t('view.linking')
+              : (selectedIds.size > 0 ? t('view.linkContactsCount', { count: selectedIds.size }) : t('view.linkContacts'))}
           </button>
           {linking && (
             <button
               onClick={cancelLinkContacts}
               className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
-              title="Verknüpfung abbrechen"
+              title={t('view.cancelLinking')}
             >
-              Abbrechen
+              {tCommon('cancel')}
             </button>
           )}
         </div>
@@ -445,7 +437,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
               className="flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 transition-colors shrink-0"
             >
               <Network className="h-3.5 w-3.5" />
-              {assigningParent ? 'Wird zugeordnet…' : `${selectedIds.size} → Muttergesellschaft`}
+              {assigningParent ? t('view.assigningParent') : t('view.assignParentCount', { count: selectedIds.size })}
             </button>
             {parentPickerOpen && (
               <div className="absolute z-50 top-full right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg">
@@ -454,12 +446,12 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                     autoFocus
                     value={parentQuery}
                     onChange={e => setParentQuery(e.target.value)}
-                    placeholder="Muttergesellschaft suchen…"
+                    placeholder={t('view.searchParentPlaceholder')}
                     className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div className="max-h-56 overflow-y-auto py-1">
-                  {parentResults.length === 0 && <p className="text-xs text-gray-400 px-3 py-2 italic">Keine Treffer</p>}
+                  {parentResults.length === 0 && <p className="text-xs text-gray-400 px-3 py-2 italic">{t('view.noResults')}</p>}
                   {parentResults
                     .filter(c => !selectedIds.has(c.id))
                     .slice(0, 15)
@@ -484,7 +476,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors shrink-0"
           >
             <GitMerge className="h-3.5 w-3.5" />
-            {selectedIds.size} zusammenführen
+            {t('view.mergeCount', { count: selectedIds.size })}
           </button>
         )}
         {selectedIds.size > 0 && (
@@ -494,7 +486,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             className="flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 transition-colors shrink-0"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {deleting ? 'Löschen…' : `${selectedIds.size} löschen`}
+            {deleting ? t('view.deleting') : t('view.deleteCount', { count: selectedIds.size })}
           </button>
         )}
       </div>
@@ -504,7 +496,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500">
             <span>
-              {done} synchronisiert · {pending} ausstehend · {failed} fehlgeschlagen
+              {t('view.syncSummary', { done, pending, failed })}
             </span>
             {syncing && syncLive?.current_company && (
               <span className="flex items-center gap-1.5 text-indigo-500 truncate max-w-xs">
@@ -539,19 +531,19 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                   className="rounded border-gray-300 text-violet-600 cursor-pointer"
                 />
               </th>
-              <Th k="name" label="Name" />
-              <Th k="industry" label="Branche" />
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Typ</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Größe</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Standort</th>
-              <Th k="sync_status" label="Status" />
+              <Th k="name" label={t('view.colName')} />
+              <Th k="industry" label={t('view.colIndustry')} />
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colType')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colSize')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colLocation')}</th>
+              <Th k="sync_status" label={t('view.colStatus')} />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 && !loading && (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
-                  Keine Firmen gefunden
+                  {t('view.noCompanies')}
                 </td>
               </tr>
             )}
@@ -617,7 +609,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                         COMPANY_TYPE_COLORS[company.company_type] ?? 'bg-gray-100 text-gray-600'
                       )}>
-                        {COMPANY_TYPE_LABELS[company.company_type] ?? company.company_type}
+                        {t(`companyType.${company.company_type}`, { defaultValue: company.company_type })}
                       </span>
                     ) : <span className="text-gray-400">—</span>}
                   </td>
@@ -630,12 +622,12 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                   <td className="px-4 py-3">
                     {company.sync_status === 'pending' && (
                       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700">
-                        <Clock className="h-3 w-3" /> Ausstehend
+                        <Clock className="h-3 w-3" /> {t('view.syncPending')}
                       </span>
                     )}
                     {company.sync_status === 'done' && (
                       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700">
-                        <CheckCircle className="h-3 w-3" /> Sync
+                        <CheckCircle className="h-3 w-3" /> {t('view.syncDone')}
                       </span>
                     )}
                     {company.sync_status === 'failed' && (
@@ -643,7 +635,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                         className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700"
                         title={company.sync_error ?? undefined}
                       >
-                        <XCircle className="h-3 w-3" /> Fehler
+                        <XCircle className="h-3 w-3" /> {t('view.syncError')}
                       </span>
                     )}
                   </td>
@@ -656,11 +648,11 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
       <div className="flex items-center justify-between text-xs text-gray-400">
         <span>
-          {sorted.length} {sorted.length === 1 ? 'Firma' : 'Firmen'}
-          {sorted.length !== companies.length && <span className="ml-1 text-gray-300">von {companies.length}</span>}
+          {t('view.companyCount', { count: sorted.length })}
+          {sorted.length !== companies.length && <span className="ml-1 text-gray-300">{t('view.ofTotal', { count: companies.length })}</span>}
         </span>
         {selectedIds.size > 0 && (
-          <span className="text-violet-600 font-medium">{selectedIds.size} ausgewählt</span>
+          <span className="text-violet-600 font-medium">{t('view.selectedCount', { count: selectedIds.size })}</span>
         )}
       </div>
     </div>

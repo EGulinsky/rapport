@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, ExternalLink, Clock, CheckCircle, XCircle, Pencil, GitMerge, Save, RotateCcw, Linkedin, Mail, Phone, Upload, Trash2, UserPlus, UserMinus, ChevronsUp, ChevronsDown, Check } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus, ContactWithApp } from '../types'
 import { StatusBadge } from './StatusBadge'
@@ -28,21 +29,6 @@ const COMPANY_TYPE_COLORS: Record<string, string> = {
   nonprofit:   'bg-green-100 text-green-700',
   public:      'bg-gray-100 text-gray-700',
   other:       'bg-gray-100 text-gray-600',
-}
-
-const COMPANY_TYPE_LABELS: Record<string, string> = {
-  startup:     'Startup',
-  konzern:     'Konzern',
-  kmu:         'KMU',
-  beratung:    'Beratung',
-  headhunter:  'Headhunter',
-  nonprofit:   'Non-Profit',
-  public:      'Öffentlich',
-  other:       'Sonstiges',
-}
-
-const SYNC_SOURCE_LABELS: Record<string, string> = {
-  ai: 'KI', linkedin: 'LinkedIn', manual: 'Manuell',
 }
 
 const COMPANY_TYPES = ['startup', 'konzern', 'kmu', 'beratung', 'headhunter', 'nonprofit', 'public', 'other']
@@ -85,6 +71,9 @@ function toEditState(c: CompanyProfile): EditState {
 }
 
 export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, onOpenCompany, onMergeRequest, onSaved }: Props) {
+  const { t } = useTranslation('companies')
+  const { t: tContacts } = useTranslation('contacts')
+  const { t: tCommon } = useTranslation('common')
   const locale = useLocale()
   const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -265,9 +254,9 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
   const location = [company?.hq_city, company?.hq_country].filter(Boolean).join(', ')
 
   const tabs: [Tab, string, number | undefined][] = [
-    ['info', 'Profil', undefined],
-    ['apps', 'Bewerbungen', company?.app_count],
-    ['contacts', 'Kontakte', company?.contact_count],
+    ['info', t('modal.tabProfile'), undefined],
+    ['apps', t('modal.tabApplications'), company?.app_count],
+    ['contacts', t('modal.tabContacts'), company?.contact_count],
   ]
 
   return (
@@ -294,7 +283,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {company?.sync_source && (
                     <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">
-                      {SYNC_SOURCE_LABELS[company.sync_source] ?? company.sync_source}
+                      {t(`syncSource.${company.sync_source}`, { defaultValue: company.sync_source })}
                     </span>
                   )}
                   {company?.last_synced_at && (
@@ -312,7 +301,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                 {onMergeRequest && (
                   <button
                     onClick={() => onMergeRequest([id])}
-                    title="Mit anderer Firma zusammenführen"
+                    title={t('modal.mergeTitle')}
                     className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
                   >
                     <GitMerge className="h-4 w-4" />
@@ -320,7 +309,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                 )}
                 <button
                   onClick={startEdit}
-                  title="Bearbeiten"
+                  title={tContacts('contactModal.edit')}
                   className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
                 >
                   <Pencil className="h-4 w-4" />
@@ -329,7 +318,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
             )}
             {editing && (
               <>
-                <button onClick={cancelEdit} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" title="Abbrechen">
+                <button onClick={cancelEdit} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" title={tCommon('cancel')}>
                   <RotateCcw className="h-4 w-4" />
                 </button>
                 <button
@@ -338,7 +327,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
-                  {saving ? 'Speichern…' : 'Speichern'}
+                  {saving ? tCommon('saving') : tCommon('save')}
                 </button>
               </>
             )}
@@ -389,17 +378,17 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
               <div className="flex items-center gap-2">
                 {company.sync_status === 'pending' && (
                   <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-yellow-100 text-yellow-700">
-                    <Clock className="h-3 w-3" /> Ausstehend
+                    <Clock className="h-3 w-3" /> {t('modal.syncPending')}
                   </span>
                 )}
                 {company.sync_status === 'done' && (
                   <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700">
-                    <CheckCircle className="h-3 w-3" /> Synchronisiert
+                    <CheckCircle className="h-3 w-3" /> {t('modal.syncDone')}
                   </span>
                 )}
                 {company.sync_status === 'failed' && (
                   <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700" title={company.sync_error ?? undefined}>
-                    <XCircle className="h-3 w-3" /> Fehler
+                    <XCircle className="h-3 w-3" /> {t('modal.syncError')}
                   </span>
                 )}
               </div>
@@ -413,20 +402,20 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
               {/* Fields — view or edit */}
               {!editing ? (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                  <Field label="Anzeigename">{company.name_display || <Dash />}</Field>
-                  <Field label="Branche">{company.industry || <Dash />}</Field>
-                  <Field label="Typ">
+                  <Field label={t('modal.fieldDisplayName')}>{company.name_display || <Dash />}</Field>
+                  <Field label={t('modal.fieldIndustry')}>{company.industry || <Dash />}</Field>
+                  <Field label={t('modal.fieldType')}>
                     {company.company_type ? (
                       <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', COMPANY_TYPE_COLORS[company.company_type] ?? 'bg-gray-100 text-gray-600')}>
-                        {COMPANY_TYPE_LABELS[company.company_type] ?? company.company_type}
+                        {t(`companyType.${company.company_type}`, { defaultValue: company.company_type })}
                       </span>
                     ) : <Dash />}
                   </Field>
-                  <Field label="Mitarbeiter">{company.employee_range || (company.employee_count != null ? String(company.employee_count) : <Dash />)}</Field>
-                  <Field label="Gegründet">{company.founded_year ?? <Dash />}</Field>
-                  <Field label="Standort">{location || <Dash />}</Field>
+                  <Field label={t('modal.fieldEmployees')}>{company.employee_range || (company.employee_count != null ? String(company.employee_count) : <Dash />)}</Field>
+                  <Field label={t('modal.fieldFounded')}>{company.founded_year ?? <Dash />}</Field>
+                  <Field label={t('modal.fieldLocation')}>{location || <Dash />}</Field>
                   {company.website && (
-                    <Field label="Website">
+                    <Field label={t('modal.fieldWebsite')}>
                       <a href={company.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs">
                         <ExternalLink className="h-3 w-3" />
                         {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
@@ -434,14 +423,14 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                     </Field>
                   )}
                   {company.linkedin_company_url && (
-                    <Field label="LinkedIn">
+                    <Field label={t('modal.fieldLinkedin')}>
                       <a href={company.linkedin_company_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs">
                         <ExternalLink className="h-3 w-3" /> LinkedIn
                       </a>
                     </Field>
                   )}
                   {company.parent_company_id && (
-                    <Field label="Muttergesellschaft">
+                    <Field label={t('modal.fieldParentCompany')}>
                       <button
                         onClick={() => onOpenCompany?.(company.parent_company_id!)}
                         className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs font-medium hover:underline"
@@ -452,7 +441,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                     </Field>
                   )}
                   {company.subsidiaries && company.subsidiaries.length > 0 && (
-                    <Field label="Tochterunternehmen">
+                    <Field label={t('modal.fieldSubsidiaries')}>
                       <div className="flex flex-wrap gap-1">
                         {company.subsidiaries.map(s => (
                           <button
@@ -493,7 +482,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                       className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                     >
                       <Upload className="h-3.5 w-3.5" />
-                      Logo hochladen
+                      {t('modal.uploadLogo')}
                     </button>
                     {(logoPreview ?? company.logo_data) && (
                       <button
@@ -503,37 +492,37 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                         className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        Logo entfernen
+                        {t('modal.removeLogo')}
                       </button>
                     )}
-                    {logoUploading && <span className="text-xs text-gray-400">Wird hochgeladen…</span>}
-                    <span className="text-xs text-gray-400">oder Bild einfügen (Strg+V)</span>
+                    {logoUploading && <span className="text-xs text-gray-400">{t('modal.uploading')}</span>}
+                    <span className="text-xs text-gray-400">{t('modal.orPasteImage')}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <EditField label="Anzeigename" value={editState.name_display} onChange={ef('name_display')} />
-                  <EditField label="Branche" value={editState.industry} onChange={ef('industry')} />
+                  <EditField label={t('modal.fieldDisplayName')} value={editState.name_display} onChange={ef('name_display')} />
+                  <EditField label={t('modal.fieldIndustry')} value={editState.industry} onChange={ef('industry')} />
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Typ</label>
+                    <label className="block text-xs text-gray-400 mb-1">{t('modal.fieldType')}</label>
                     <select value={editState.company_type} onChange={ef('company_type')}
                       className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                       <option value="">—</option>
-                      {COMPANY_TYPES.map(t => <option key={t} value={t}>{COMPANY_TYPE_LABELS[t]}</option>)}
+                      {COMPANY_TYPES.map(ct => <option key={ct} value={ct}>{t(`companyType.${ct}`)}</option>)}
                     </select>
                   </div>
-                  <EditField label="Mitarbeiter (Range)" value={editState.employee_range} onChange={ef('employee_range')} placeholder="z.B. 50-200" />
-                  <EditField label="Mitarbeiteranzahl" value={editState.employee_count} onChange={ef('employee_count')} type="number" />
-                  <EditField label="Gegründet" value={editState.founded_year} onChange={ef('founded_year')} type="number" />
-                  <EditField label="Stadt" value={editState.hq_city} onChange={ef('hq_city')} />
-                  <EditField label="Land" value={editState.hq_country} onChange={ef('hq_country')} />
+                  <EditField label={t('modal.employeeRangeLabel')} value={editState.employee_range} onChange={ef('employee_range')} placeholder={t('modal.employeeRangePlaceholder')} />
+                  <EditField label={t('modal.employeeCountLabel')} value={editState.employee_count} onChange={ef('employee_count')} type="number" />
+                  <EditField label={t('modal.fieldFounded')} value={editState.founded_year} onChange={ef('founded_year')} type="number" />
+                  <EditField label={t('modal.cityLabel')} value={editState.hq_city} onChange={ef('hq_city')} />
+                  <EditField label={t('modal.countryLabel')} value={editState.hq_country} onChange={ef('hq_country')} />
                   <div className="col-span-2">
-                    <EditField label="Website" value={editState.website} onChange={ef('website')} placeholder="https://…" />
+                    <EditField label={t('modal.fieldWebsite')} value={editState.website} onChange={ef('website')} placeholder="https://…" />
                   </div>
                   <div className="col-span-2">
-                    <EditField label="LinkedIn URL" value={editState.linkedin_company_url} onChange={ef('linkedin_company_url')} placeholder="https://linkedin.com/company/…" />
+                    <EditField label={t('modal.linkedinUrlLabel')} value={editState.linkedin_company_url} onChange={ef('linkedin_company_url')} placeholder={t('modal.linkedinUrlPlaceholder')} />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs text-gray-400 mb-1">Beschreibung</label>
+                    <label className="block text-xs text-gray-400 mb-1">{t('modal.descriptionLabel')}</label>
                     <textarea
                       value={editState.description}
                       onChange={ef('description')}
@@ -542,11 +531,11 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs text-gray-400 mb-1">Muttergesellschaft</label>
+                    <label className="block text-xs text-gray-400 mb-1">{t('modal.fieldParentCompany')}</label>
                     <CompanyFilterPicker
                       value={editState.parent_company_id ? { id: editState.parent_company_id, name: editState.parent_name || String(editState.parent_company_id) } : null}
                       onChange={v => setEditState(s => s ? { ...s, parent_company_id: v?.id ?? null, parent_name: v?.name ?? '' } : s)}
-                      placeholder="Muttergesellschaft zuordnen…"
+                      placeholder={t('modal.parentCompanyPlaceholder')}
                     />
                   </div>
                 </div>
@@ -584,7 +573,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-400 text-center py-8">Keine verknüpften Bewerbungen</p>
+              <p className="text-sm text-gray-400 text-center py-8">{t('modal.noApplications')}</p>
             )
           )}
 
@@ -592,14 +581,14 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
           {tab === 'contacts' && !loading && company && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400">{company.contacts?.length ?? 0} Kontakte</span>
+                <span className="text-xs text-gray-400">{t('modal.contactCount', { count: company.contacts?.length ?? 0 })}</span>
                 {!addingContact && (
                   <button
                     onClick={() => { setAddingContact(true); setAddContactMode('new') }}
                     className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
                   >
                     <UserPlus className="h-3.5 w-3.5" />
-                    Kontakt hinzufügen
+                    {t('modal.addContact')}
                   </button>
                 )}
               </div>
@@ -610,12 +599,12 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                     <button type="button"
                       onClick={() => { setAddContactMode('new'); setContactQuery(''); setContactResults([]) }}
                       className={`flex-1 px-2 py-1.5 ${addContactMode === 'new' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
-                      Neu erstellen
+                      {t('modal.createNew')}
                     </button>
                     <button type="button"
                       onClick={() => setAddContactMode('link')}
                       className={`flex-1 px-2 py-1.5 ${addContactMode === 'link' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
-                      Vorhandenen zuordnen
+                      {t('modal.linkExisting')}
                     </button>
                   </div>
 
@@ -624,44 +613,44 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                       <div className="grid grid-cols-2 gap-2">
                         <input autoFocus
                           className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="Vorname" value={newContactDraft.vorname}
+                          placeholder={tContacts('newContact.firstNamePlaceholder')} value={newContactDraft.vorname}
                           onChange={e => setNewContactDraft(d => ({ ...d, vorname: e.target.value }))} />
                         <input
                           className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="Nachname *" value={newContactDraft.name}
+                          placeholder={tContacts('newContact.lastNamePlaceholder')} value={newContactDraft.name}
                           onChange={e => setNewContactDraft(d => ({ ...d, name: e.target.value }))} />
                         <input
                           className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="E-Mail" value={newContactDraft.email}
+                          placeholder={tContacts('newContact.emailPlaceholder')} value={newContactDraft.email}
                           onChange={e => setNewContactDraft(d => ({ ...d, email: e.target.value }))} />
                         <input
                           className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="Telefon" value={newContactDraft.telefon}
+                          placeholder={tContacts('newContact.phonePlaceholder')} value={newContactDraft.telefon}
                           onChange={e => setNewContactDraft(d => ({ ...d, telefon: e.target.value }))} />
                         <input
                           className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="Rolle" value={newContactDraft.rolle}
+                          placeholder={tContacts('newContact.rolePlaceholder')} value={newContactDraft.rolle}
                           onChange={e => setNewContactDraft(d => ({ ...d, rolle: e.target.value }))} />
                         <select
                           className="rounded-md border border-gray-200 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           value={newContactDraft.typ}
                           onChange={e => setNewContactDraft(d => ({ ...d, typ: e.target.value }))}>
-                          <option value="">Typ wählen…</option>
-                          {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          <option value="">{t('modal.typePlaceholder')}</option>
+                          {CONTACT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
                         </select>
                       </div>
                       <input
                         className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="LinkedIn URL" value={newContactDraft.linkedin_url}
+                        placeholder={tContacts('newContact.linkedinPlaceholder')} value={newContactDraft.linkedin_url}
                         onChange={e => setNewContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
                       <div className="flex justify-end gap-2 pt-1">
                         <button type="button" onClick={closeAddContact} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-                          <Trash2 className="h-3 w-3" /> Abbrechen
+                          <Trash2 className="h-3 w-3" /> {tCommon('cancel')}
                         </button>
                         <button type="button" disabled={!newContactDraft.name || savingNewContact} onClick={createContact}
                           className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                           <Check className="h-3 w-3" />
-                          {savingNewContact ? 'Speichern…' : 'Speichern'}
+                          {savingNewContact ? tCommon('saving') : tCommon('save')}
                         </button>
                       </div>
                     </>
@@ -671,13 +660,13 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                         autoFocus
                         value={contactQuery}
                         onChange={e => setContactQuery(e.target.value)}
-                        placeholder="Name oder Firma suchen…"
+                        placeholder={t('modal.searchContactPlaceholder')}
                         className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                       <div className="max-h-40 overflow-y-auto">
-                        {contactSearching && <p className="text-xs text-gray-400 px-1 py-1.5">Suche…</p>}
+                        {contactSearching && <p className="text-xs text-gray-400 px-1 py-1.5">{t('modal.searching')}</p>}
                         {!contactSearching && contactResults.length === 0 && (
-                          <p className="text-xs text-gray-400 px-1 py-1.5 italic">Keine Treffer</p>
+                          <p className="text-xs text-gray-400 px-1 py-1.5 italic">{t('modal.noResults')}</p>
                         )}
                         {contactResults.slice(0, 15).map(c => (
                           <button key={c.id} onClick={() => assignContact(c.id)}
@@ -690,7 +679,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                         ))}
                       </div>
                       <div className="flex justify-end">
-                        <button type="button" onClick={closeAddContact} className="text-xs text-gray-500 hover:text-gray-700">Abbrechen</button>
+                        <button type="button" onClick={closeAddContact} className="text-xs text-gray-500 hover:text-gray-700">{tCommon('cancel')}</button>
                       </div>
                     </>
                   )}
@@ -736,7 +725,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                         <button
                           onClick={() => unassignContact(contact.id)}
                           className="text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                          title="Verknüpfung lösen"
+                          title={t('modal.unlinkContact')}
                         >
                           <UserMinus className="h-3.5 w-3.5" />
                         </button>
@@ -745,7 +734,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400 text-center py-6">Keine verknüpften Kontakte</p>
+                <p className="text-sm text-gray-400 text-center py-6">{t('modal.noContacts')}</p>
               )}
             </div>
           )}

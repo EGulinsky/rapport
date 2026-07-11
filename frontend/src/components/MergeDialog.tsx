@@ -1,50 +1,53 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { X, GitMerge } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { Application, Contact, CompanyProfile } from '../types'
 import { mainStatusLabel } from '../i18n/statusLabels'
+import i18n from '../i18n'
 import clsx from 'clsx'
 
 // ── Field definitions ────────────────────────────────────────────────────────
 
 interface FieldDef { key: string; label: string }
 
-const APP_FIELDS: FieldDef[] = [
-  { key: 'firma', label: 'Firma' },
-  { key: 'rolle', label: 'Stelle' },
-  { key: 'main_status', label: 'Status' },
-  { key: 'sub_status', label: 'Unterstatus' },
-  { key: 'is_headhunter', label: 'Headhunter' },
-  { key: 'zielfirma_bei_hh', label: 'Zielfirma (HH)' },
-  { key: 'quelle', label: 'Quelle' },
-  { key: 'wurde_besetzt_von', label: 'Besetzt von' },
-  { key: 'datum_bewerbung', label: 'Beworben am' },
-  { key: 'letztes_update', label: 'Letztes Update' },
-  { key: 'stellenanzeige_url', label: 'Stellenanzeige' },
-  { key: 'kommentar', label: 'Kommentar' },
-  { key: 'gespraech_1', label: 'Gespräch 1' },
-  { key: 'gespraech_2', label: 'Gespräch 2' },
-  { key: 'gespraech_3', label: 'Gespräch 3' },
-  { key: 'gespraech_4', label: 'Gespräch 4' },
-  { key: 'gespraech_5', label: 'Gespräch 5' },
-]
+const APP_FIELD_KEYS = [
+  'firma', 'rolle', 'main_status', 'sub_status', 'is_headhunter', 'zielfirma_bei_hh',
+  'quelle', 'wurde_besetzt_von', 'datum_bewerbung', 'letztes_update', 'stellenanzeige_url',
+  'kommentar', 'gespraech_1', 'gespraech_2', 'gespraech_3', 'gespraech_4', 'gespraech_5',
+] as const
 
-const CONTACT_FIELDS: FieldDef[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'email', label: 'E-Mail' },
-  { key: 'telefon', label: 'Telefon' },
-  { key: 'linkedin_url', label: 'LinkedIn' },
-  { key: 'firma', label: 'Firma' },
-  { key: 'rolle', label: 'Rolle' },
-  { key: 'typ', label: 'Typ' },
-  { key: 'notizen', label: 'Notizen' },
-  { key: 'letzter_kontakt', label: 'Letzter Kontakt' },
-]
+const CONTACT_FIELD_KEYS = [
+  'name', 'email', 'telefon', 'linkedin_url', 'firma', 'rolle', 'typ', 'notizen', 'letzter_kontakt',
+] as const
 
+const COMPANY_FIELD_KEYS = [
+  'name_display', 'industry', 'company_type', 'employee_range', 'employee_count',
+  'founded_year', 'hq_city', 'hq_country', 'website', 'linkedin_company_url', 'description',
+] as const
+
+function useAppFields(): FieldDef[] {
+  const { t } = useTranslation('merge')
+  return useMemo(() => APP_FIELD_KEYS.map(key => ({ key, label: t(`appFields.${key}`) })), [t])
+}
+
+function useContactFields(): FieldDef[] {
+  const { t } = useTranslation('merge')
+  return useMemo(() => CONTACT_FIELD_KEYS.map(key => ({ key, label: t(`contactFields.${key}`) })), [t])
+}
+
+function useCompanyFields(): FieldDef[] {
+  const { t } = useTranslation('merge')
+  return useMemo(() => COMPANY_FIELD_KEYS.map(key => ({ key, label: t(`companyFields.${key}`) })), [t])
+}
+
+/** Non-hook variant — displayValue is called from plain filter/map callbacks,
+ * not component bodies, so it reads the current language via the i18n
+ * singleton directly (same pattern as i18n/statusLabels.ts). */
 function displayValue(obj: Record<string, unknown>, key: string): string {
   const val = obj[key]
   if (val === null || val === undefined || val === '') return ''
-  if (typeof val === 'boolean') return val ? 'Ja' : 'Nein'
+  if (typeof val === 'boolean') return val ? i18n.t('yes', { ns: 'merge' }) : i18n.t('no', { ns: 'merge' })
   if (key === 'main_status') return mainStatusLabel(String(val))
   return String(val)
 }
@@ -65,6 +68,8 @@ interface AppMergeProps {
 }
 
 export function AppMergeDialog({ appIds, onMerged, onClose }: AppMergeProps) {
+  const { t } = useTranslation('merge')
+  const APP_FIELDS = useAppFields()
   const [apps, setApps] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [winnerId, setWinnerId] = useState(appIds[0])
@@ -105,7 +110,7 @@ export function AppMergeDialog({ appIds, onMerged, onClose }: AppMergeProps) {
       })
       onMerged(res.winner_id)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+      setError(e instanceof Error ? e.message : t('unknownError'))
     } finally {
       setMerging(false)
     }
@@ -115,13 +120,13 @@ export function AppMergeDialog({ appIds, onMerged, onClose }: AppMergeProps) {
   const visibleFields = APP_FIELDS.filter(f =>
     records.some(r => {
       const v = displayValue(r, f.key)
-      return v !== '' && v !== 'Nein'
+      return v !== '' && v !== t('no')
     })
   )
 
   return (
     <MergeShell
-      title={`${apps.length} Bewerbungen zusammenführen`}
+      title={t('mergeAppsTitle', { count: apps.length })}
       loading={loading}
       merging={merging}
       error={error}
@@ -136,8 +141,7 @@ export function AppMergeDialog({ appIds, onMerged, onClose }: AppMergeProps) {
         onSelect={(key, id) => setFieldSources(p => ({ ...p, [key]: id }))}
       />
       <p className="text-xs text-gray-500">
-        Ereignisse und Kontakte aller Einträge werden zusammengeführt. Nicht-Basis-Einträge werden danach gelöscht.
-        Zukünftige Syncs erkennen die alten Bezeichnungen und legen keine Duplikate mehr an.
+        {t('mergeAppsFooter')}
       </p>
     </MergeShell>
   )
@@ -153,6 +157,8 @@ interface ContactMergeProps {
 }
 
 export function ContactMergeDialog({ contactIds, contacts, onMerged, onClose }: ContactMergeProps) {
+  const { t } = useTranslation('merge')
+  const CONTACT_FIELDS = useContactFields()
   const [winnerId, setWinnerId] = useState(contactIds[0])
   const [fieldSources, setFieldSources] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {}
@@ -180,7 +186,7 @@ export function ContactMergeDialog({ contactIds, contacts, onMerged, onClose }: 
       })
       onMerged(res.winner_id)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+      setError(e instanceof Error ? e.message : t('unknownError'))
     } finally {
       setMerging(false)
     }
@@ -193,7 +199,7 @@ export function ContactMergeDialog({ contactIds, contacts, onMerged, onClose }: 
 
   return (
     <MergeShell
-      title={`${contacts.length} Kontakte zusammenführen`}
+      title={t('mergeContactsTitle', { count: contacts.length })}
       loading={false}
       merging={merging}
       error={error}
@@ -208,7 +214,7 @@ export function ContactMergeDialog({ contactIds, contacts, onMerged, onClose }: 
         onSelect={(key, id) => setFieldSources(p => ({ ...p, [key]: id }))}
       />
       <p className="text-xs text-gray-500">
-        Verknüpfte Bewerbungen werden auf den Basis-Kontakt übertragen. Nicht-Basis-Einträge werden danach gelöscht.
+        {t('mergeContactsFooter')}
       </p>
     </MergeShell>
   )
@@ -227,6 +233,8 @@ function MergeShell({
   onMerge: () => void
   children: React.ReactNode
 }) {
+  const { t } = useTranslation('merge')
+  const { t: tCommon } = useTranslation('common')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -244,7 +252,7 @@ function MergeShell({
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
           {loading ? (
-            <p className="text-sm text-gray-500">Lade Daten…</p>
+            <p className="text-sm text-gray-500">{t('loading')}</p>
           ) : (
             children
           )}
@@ -257,7 +265,7 @@ function MergeShell({
             onClick={onClose}
             className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
           >
-            Abbrechen
+            {tCommon('cancel')}
           </button>
           <button
             onClick={onMerge}
@@ -265,7 +273,7 @@ function MergeShell({
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             <GitMerge className="h-3.5 w-3.5" />
-            {merging ? 'Zusammenführen…' : 'Zusammenführen'}
+            {merging ? t('merging') : t('merge')}
           </button>
         </div>
       </div>
@@ -280,10 +288,11 @@ function WinnerPicker({
   winnerId: number
   onChange: (id: number) => void
 }) {
+  const { t } = useTranslation('merge')
   return (
     <div>
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        Basis-Eintrag (ID und Ereignisse bleiben erhalten)
+        {t('winnerPickerLabel')}
       </p>
       <div className="flex gap-2 flex-wrap">
         {entities.map(e => {
@@ -322,12 +331,13 @@ function FieldTable({
   fieldSources: Record<string, number>
   onSelect: (key: string, id: number) => void
 }) {
+  const { t } = useTranslation('merge')
   return (
     <div className="rounded-lg border border-gray-200 overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 border-b">
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase w-28 shrink-0">Feld</th>
+            <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase w-28 shrink-0">{t('fieldColumn')}</th>
             {entities.map(e => (
               <th key={e['id'] as number} className="text-left px-4 py-2.5 text-xs font-medium text-gray-600">
                 {entityLabel(e)}
@@ -345,7 +355,7 @@ function FieldTable({
                 <td className="px-4 py-2 text-xs text-gray-400 font-medium align-middle">{field.label}</td>
                 {allSame ? (
                   <td colSpan={entities.length} className="px-4 py-2 text-xs text-gray-400 italic">
-                    Identisch: {values[0] || '(leer)'}
+                    {t('identical', { value: values[0] || t('empty') })}
                   </td>
                 ) : (
                   entities.map((e, idx) => {
@@ -368,7 +378,7 @@ function FieldTable({
                             className="mt-0.5 text-indigo-600 shrink-0"
                           />
                           <span className={clsx('text-xs break-words max-w-[200px]', val ? 'text-gray-800' : 'text-gray-300 italic')}>
-                            {val || '(leer)'}
+                            {val || t('empty')}
                           </span>
                         </label>
                       </td>
@@ -386,20 +396,6 @@ function FieldTable({
 
 // ── Company merge dialog ──────────────────────────────────────────────────────
 
-const COMPANY_FIELDS: FieldDef[] = [
-  { key: 'name_display', label: 'Anzeigename' },
-  { key: 'industry', label: 'Branche' },
-  { key: 'company_type', label: 'Typ' },
-  { key: 'employee_range', label: 'Mitarbeiter (Range)' },
-  { key: 'employee_count', label: 'Mitarbeiteranzahl' },
-  { key: 'founded_year', label: 'Gegründet' },
-  { key: 'hq_city', label: 'Stadt' },
-  { key: 'hq_country', label: 'Land' },
-  { key: 'website', label: 'Website' },
-  { key: 'linkedin_company_url', label: 'LinkedIn' },
-  { key: 'description', label: 'Beschreibung' },
-]
-
 interface CompanyMergeProps {
   companyIds: number[]
   onMerged: (winnerId: number) => void
@@ -407,6 +403,8 @@ interface CompanyMergeProps {
 }
 
 export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMergeProps) {
+  const { t } = useTranslation('merge')
+  const COMPANY_FIELDS = useCompanyFields()
   const [allCompanyIds, setAllCompanyIds] = useState(companyIds)
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -457,21 +455,21 @@ export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMer
           <div className="flex items-center justify-between px-5 py-4 border-b">
             <div className="flex items-center gap-2">
               <GitMerge className="h-4 w-4 text-indigo-600" />
-              <h2 className="text-base font-semibold text-gray-900">Firma zum Zusammenführen wählen</h2>
+              <h2 className="text-base font-semibold text-gray-900">{t('pickCompanyTitle')}</h2>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
           </div>
           <div className="p-5 space-y-3">
-            <p className="text-xs text-gray-500">Mit welcher Firma soll zusammengeführt werden?</p>
+            <p className="text-xs text-gray-500">{t('pickCompanyPrompt')}</p>
             <input
               autoFocus
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Firmenname suchen…"
+              placeholder={t('searchCompanyPlaceholder')}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-            {searching && <p className="text-xs text-gray-400">Suche…</p>}
+            {searching && <p className="text-xs text-gray-400">{t('searching')}</p>}
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {searchResults.map(c => (
                 <button
@@ -508,7 +506,7 @@ export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMer
       })
       onMerged(res.winner_id)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+      setError(e instanceof Error ? e.message : t('unknownError'))
     } finally {
       setMerging(false)
     }
@@ -528,7 +526,7 @@ export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMer
 
   return (
     <MergeShell
-      title={`${companies.length} Firmen zusammenführen`}
+      title={t('mergeCompaniesTitle', { count: companies.length })}
       loading={loading}
       merging={merging}
       error={error}
@@ -537,7 +535,7 @@ export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMer
     >
       <div>
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-          Basis-Eintrag (ID und Bewerbungen bleiben erhalten)
+          {t('mergeCompaniesWinnerLabel')}
         </p>
         <div className="flex gap-2 flex-wrap">
           {records.map(e => {
@@ -565,7 +563,7 @@ export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMer
         onSelect={(key, id) => setFieldSources(p => ({ ...p, [key]: id }))}
       />
       <p className="text-xs text-gray-500">
-        Alle Bewerbungen der nicht-Basis-Firmen werden auf die Basis-Firma übertragen. Die nicht-Basis-Einträge werden danach gelöscht.
+        {t('mergeCompaniesFooter')}
       </p>
     </MergeShell>
   )

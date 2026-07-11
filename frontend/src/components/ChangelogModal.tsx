@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.62.0',
+    date: '2026-07-11',
+    changes: [
+      'i18n (Phase 6b/13, Firmen-Detail + Zusammenführen): Firma-Detaildialog (Profil/Bewerbungen/Kontakte-Tabs, Bearbeiten-Formular, Logo-Upload, Kontakt-Zuordnung), Firmen-Übersichtstabelle (Sync-Menü, Kontakte verknüpfen, Muttergesellschaft zuordnen) und alle drei Zusammenführen-Dialoge (Bewerbungen/Kontakte/Firmen) sind jetzt vollständig übersetzt. Neuer merge.json-Namespace; companies.json um companyType/syncSource-Labels und die Firma-Detailansicht erweitert.',
+    ],
+  },
+  {
     version: '3.61.0',
     date: '2026-07-11',
     changes: [

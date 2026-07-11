@@ -15,6 +15,8 @@ import companiesDe from './locales/de/companies.json'
 import companiesEn from './locales/en/companies.json'
 import contactsDe from './locales/de/contacts.json'
 import contactsEn from './locales/en/contacts.json'
+import mergeDe from './locales/de/merge.json'
+import mergeEn from './locales/en/merge.json'
 
 export const SUPPORTED_LANGUAGES = ['de', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -38,8 +40,8 @@ export function rememberPreLoginLanguage(lang: SupportedLanguage): void {
 
 i18n.use(initReactI18next).init({
   resources: {
-    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe },
-    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn },
+    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe },
+    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn },
   },
   lng: getPreLoginLanguage(),
   fallbackLng: 'en',
