@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import AuditLogModal from './AuditLogModal'
 import { api } from '../api/client'
 import i18n from '../i18n'
@@ -54,10 +54,11 @@ describe('AuditLogModal', () => {
     render(<AuditLogModal onClose={vi.fn()} />)
 
     expect(screen.getByText('Audit-Log')).toBeInTheDocument()
-    await waitFor(() => expect(api.audit.list).toHaveBeenCalled())
     expect(screen.getByText('Zeitpunkt')).toBeInTheDocument()
     expect(screen.getByText('Quelle')).toBeInTheDocument()
-    expect(screen.getByText('Geändert')).toBeInTheDocument()
+    // Action label only appears once the mocked entry has actually loaded and
+    // re-rendered — findByText (not getByText) avoids a race against that.
+    expect(await screen.findByText('Geändert')).toBeInTheDocument()
   })
 
   it('positiv: leere Liste zeigt den deutschen Leer-Hinweis', async () => {
@@ -76,10 +77,11 @@ describe('AuditLogModal', () => {
       render(<AuditLogModal onClose={vi.fn()} />)
 
       expect(screen.getByText('Audit log')).toBeInTheDocument()
-      await waitFor(() => expect(api.audit.list).toHaveBeenCalled())
       expect(screen.getByText('Timestamp')).toBeInTheDocument()
       expect(screen.getByText('Source')).toBeInTheDocument()
-      expect(screen.getByText('Updated')).toBeInTheDocument()
+      // Action label only appears once the mocked entry has actually loaded and
+      // re-rendered — findByText (not getByText) avoids a race against that.
+      expect(await screen.findByText('Updated')).toBeInTheDocument()
     })
   })
 })
