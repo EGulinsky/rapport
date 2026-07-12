@@ -1763,7 +1763,7 @@ function BackupPanel() {
   return (
     <div className="space-y-5">
       <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-1.5 text-xs text-gray-600">
-        <div className="flex items-center gap-2 font-semibold text-gray-800">
+        <div className="flex items-center gap-2 font-semibold text-gray-800" data-testid="backup-panel-title">
           <Database className="h-4 w-4 text-indigo-500" />
           {t('backup.title')}
         </div>
@@ -1790,6 +1790,7 @@ function BackupPanel() {
             value={folder}
             onChange={e => setFolder(e.target.value)}
             placeholder={t('backup.backupFolderPlaceholder')}
+            data-testid="backup-folder-input"
             className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
           <button
@@ -1830,12 +1831,12 @@ function BackupPanel() {
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button onClick={() => save()} disabled={saving}
+        <button onClick={() => save()} disabled={saving} data-testid="backup-save-button"
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           {saved ? t('common:saved') : t('common:save')}
         </button>
-        <button onClick={runNow} disabled={running || !folder.trim()}
+        <button onClick={runNow} disabled={running || !folder.trim()} data-testid="backup-now-button"
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">
           {running ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
           {t('backup.backupNow')}
@@ -1849,14 +1850,14 @@ function BackupPanel() {
         </div>
       )}
       {runResult && (
-        <div className="flex items-center gap-2 text-xs text-green-700">
+        <div className="flex items-center gap-2 text-xs text-green-700" data-testid="backup-run-result">
           <CheckCircle className="h-3.5 w-3.5" />
           {t('backup.backupCreated', { filename: runResult })}
         </div>
       )}
 
       {restoreResult && (
-        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800" data-testid="backup-restore-result">
           <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
           <span>{t('backup.restoredFromPrefix')} <strong>{restoreResult}</strong> {t('backup.restoredFromSuffix')}</span>
         </div>
@@ -1864,10 +1865,10 @@ function BackupPanel() {
 
       {restoreConfirm && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
-          <p className="text-xs font-semibold text-red-800">{t('backup.confirmRestoreTitle')}</p>
+          <p className="text-xs font-semibold text-red-800" data-testid="backup-restore-confirm-title">{t('backup.confirmRestoreTitle')}</p>
           <p className="text-xs text-red-700">{t('backup.confirmRestoreTextPrefix')} <strong>{restoreConfirm}</strong> {t('backup.confirmRestoreTextSuffix')}</p>
           <div className="flex gap-2">
-            <button onClick={() => doRestore(restoreConfirm)}
+            <button onClick={() => doRestore(restoreConfirm)} data-testid="backup-restore-confirm-yes"
               className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
               {t('backup.yesRestore')}
             </button>
@@ -1935,7 +1936,7 @@ function BackupPanel() {
       {/* Existing backups */}
       {status && status.backups.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-xs font-medium text-gray-700">{t('backup.existingBackups', { count: status.backups.length })}</div>
+          <div className="text-xs font-medium text-gray-700" data-testid="backup-existing-title">{t('backup.existingBackups', { count: status.backups.length })}</div>
           <div className="rounded-lg border border-gray-100 divide-y divide-gray-50 max-h-56 overflow-y-auto">
             {status.backups.map(b => (
               <div key={b.name} className="flex items-center justify-between px-3 py-2 text-xs gap-2">
@@ -1946,6 +1947,7 @@ function BackupPanel() {
                 <button
                   onClick={() => setRestoreConfirm(b.name)}
                   disabled={restoring === b.name}
+                  data-testid="backup-restore-button"
                   className="shrink-0 flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:border-red-200 hover:text-red-700 disabled:opacity-50"
                 >
                   {restoring === b.name
@@ -2591,6 +2593,7 @@ export function SettingsModal({ onClose, onReviewOpen }: Props) {
           <nav className="w-36 shrink-0 border-r border-gray-100 py-2 flex flex-col gap-0.5 overflow-y-auto">
             {TABS.map(tb => (
               <button key={tb} onClick={() => setTab(tb)}
+                data-testid={`settings-tab-${tb}`}
                 className={clsx(
                   'w-full text-left px-4 py-2 text-xs font-medium transition-colors rounded-none',
                   tab === tb

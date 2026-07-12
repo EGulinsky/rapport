@@ -49,14 +49,14 @@ test.describe('Manual Candidate Assignment (Journey 7)', () => {
     })
 
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
     await page.getByText(ROLE).first().click()
-    await page.waitForSelector('text=Verlauf', { timeout: 5_000 })
+    await page.waitForSelector('[data-testid="modal-tab-timeline"]', { timeout: 5_000 })
     console.log('Modal open')
 
-    await page.locator('button[title="Gezielter Sync für diese Bewerbung (KI)"] + button').click()
+    await page.getByTestId('sync-menu-toggle').click()
     await page.waitForTimeout(200)
-    await page.getByText('Manuell zuordnen').first().click()
+    await page.getByTestId('sync-menu-manual-assign').click()
     console.log('Manual dialog opened')
 
     await expect(page.getByText('Mail von HR')).toBeVisible({ timeout: 5_000 })
@@ -73,7 +73,7 @@ test.describe('Manual Candidate Assignment (Journey 7)', () => {
     })
     console.log('Both selected')
 
-    await page.getByRole('button', { name: /2 importieren/ }).click()
+    await page.getByTestId('manual-assign-import-button').click()
     console.log('Import triggered')
 
     await expect(page.getByText('Mail von HR')).not.toBeVisible({ timeout: 10_000 })

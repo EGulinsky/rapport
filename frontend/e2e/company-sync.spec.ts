@@ -42,11 +42,10 @@ test.describe('Company Sync Selection (Journey 10)', () => {
     })
 
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
 
     // Navigate to Companies tab
-    const companyTab = page.locator('button', { hasText: 'Firmen' })
-    await companyTab.first().click()
+    await page.getByTestId('nav-companies').click()
 
     // Wait for company table to render with data
     await page.waitForSelector('tbody tr', { timeout: 5_000 })
@@ -57,17 +56,15 @@ test.describe('Company Sync Selection (Journey 10)', () => {
     await rowChecks.nth(1).click({ force: true })
 
     // Verify Sync button shows selection count
-    await expect(page.getByText(/Sync \(2\)/).first()).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('sync-companies-button')).toContainText('2', { timeout: 5_000 })
 
-    // Open dropdown and click Sync option (first match, not Re-Sync)
-    await page.getByText(/Sync \(2\)/).first().click()
-    await page.getByText('Sync (2 markiert)').first().click()
+    // Open dropdown and click the (non-reset) Sync option
+    await page.getByTestId('sync-companies-button').click()
+    await page.getByTestId('sync-menu-sync-option').click()
 
-    // Verify progress message
-    await expect(page.getByText(/werden synchronisiert/)).toBeVisible({ timeout: 5_000 })
-
-    // Wait for sync to finish — bar shows final counts
-    await expect(page.getByText('2 synchronisiert')).toBeVisible({ timeout: 15_000 })
+    // Verify progress message, then wait for sync to finish (bar shows final counts)
+    await expect(page.getByTestId('company-sync-status-bar')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('company-sync-status-bar')).toContainText('2', { timeout: 15_000 })
 
     // Verify only initial run call — no auto-continue
     expect(runCalls).toBe(1)

@@ -75,6 +75,23 @@
     "active": "Active",
     "rejected": "Rejected"
   },
+  "importExport": {
+    "button": "Import/Export",
+    "exportExcel": "Export Excel",
+    "exportFailed": "Export failed: {{error}}",
+    "exportPdf": "Export PDF",
+    "exportPdfHint": "Job-search proof from Feb '26",
+    "exportPdfTitle": "Proof of job-search effort (from 2026-02-01)",
+    "exportPdfFailed": "PDF export failed: {{error}}",
+    "importExcel": "Import Excel",
+    "importFailed": "Import failed",
+    "importDoneTitle": "Excel import complete",
+    "imported": "Imported",
+    "skipped": "Skipped",
+    "errors": "Errors",
+    "showErrors": "Show errors",
+    "close": "Close"
+  },
   "startupWarning": {
     "servicesUnreachable_one": "{{count}} service unreachable",
     "servicesUnreachable_other": "{{count}} services unreachable",

@@ -242,7 +242,7 @@ function MergeShell({
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-2">
             <GitMerge className="h-4 w-4 text-indigo-600" />
-            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+            <h2 className="text-base font-semibold text-gray-900" data-testid="merge-dialog-title">{title}</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-5 w-5" />
@@ -270,6 +270,7 @@ function MergeShell({
           <button
             onClick={onMerge}
             disabled={merging || loading}
+            data-testid="merge-confirm-button"
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             <GitMerge className="h-3.5 w-3.5" />

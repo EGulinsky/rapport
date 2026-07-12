@@ -919,6 +919,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 onClick={() => runSync(false)}
                 disabled={syncing}
                 title={t('sync.targetedTitle')}
+                data-testid="sync-button"
                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors rounded-l-lg"
               >
                 <Crosshair className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
@@ -927,6 +928,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <button
                 onClick={() => setSyncMenuOpen(o => !o)}
                 disabled={syncing}
+                data-testid="sync-menu-toggle"
                 className="px-1.5 border-l border-indigo-200 text-indigo-400 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors rounded-r-lg"
               >
                 <ChevronDown className={`h-3 w-3 transition-transform ${syncMenuOpen ? 'rotate-180' : ''}`} />
@@ -963,6 +965,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <hr className="my-1 border-gray-100" />
                   <button
                     onClick={openManual}
+                    data-testid="sync-menu-manual-assign"
                     className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
                     <Search className="h-3.5 w-3.5 text-green-500" />
@@ -1111,7 +1114,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
         {/* Sync result banner */}
         {syncResult && (
-          <div className={`px-5 py-2 text-xs flex items-center justify-between border-b ${syncResult.errors.length > 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-green-50 border-green-100 text-green-700'}`}>
+          <div data-testid="sync-result-banner" className={`px-5 py-2 text-xs flex items-center justify-between border-b ${syncResult.errors.length > 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-green-50 border-green-100 text-green-700'}`}>
             <span>
               {syncResult.errors.length > 0
                 ? t('sync.resultError', { message: syncResult.errors[0] })
@@ -1133,6 +1136,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           ] as const).map(tab => (
             <button
               key={tab.id}
+              data-testid={`modal-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
                 activeTab === tab.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -1160,6 +1164,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <div className="flex flex-wrap gap-1.5">
                   {([...MAIN_PIPELINE, 'rejected'] as MainStatus[]).map(s => (
                     <button key={s} type="button"
+                      data-testid={`status-btn-${s}`}
                       onClick={() => setDraft(d => ({ ...d, main_status: s, sub_status: (s === 'hr' || s === 'fb') ? (d.sub_status ?? '1_scheduled') : undefined }))}
                       className={`text-xs px-2.5 py-1 rounded-full border transition-all ${draft.main_status === s ? `${MAIN_STATUS_COLORS[s]} border-transparent ring-2 ring-offset-1 ring-indigo-400` : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
                     >{mainStatusLabel(s)}</button>
@@ -1303,6 +1308,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <button
                   onClick={runAiAssess}
                   disabled={aiAssessing}
+                  data-testid="ai-reassess-button"
                   className="flex items-center gap-1 text-[10px] text-purple-600 hover:text-purple-800 disabled:opacity-50"
                 >
                   <Sparkles className={`h-3 w-3 ${aiAssessing ? 'animate-pulse' : ''}`} />
@@ -1345,6 +1351,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <button
                     onClick={runAiAssess}
                     disabled={aiAssessing}
+                    data-testid="ai-assess-now-button"
                     className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50"
                   >
                     <Sparkles className="h-3 w-3" />
@@ -1896,6 +1903,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
           <button
             onClick={deleteApp}
+            data-testid="delete-application-button"
             className="text-sm text-red-600 hover:text-red-700 hover:underline"
           >
             {t('footer.delete')}
@@ -1903,15 +1911,15 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           <div className="flex gap-3">
             {editing ? (
               <>
-                <button onClick={() => { setEditing(false); setDraft(app ?? {}) }} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">
+                <button onClick={() => { setEditing(false); setDraft(app ?? {}) }} data-testid="cancel-edit-button" className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">
                   {t('footer.cancel')}
                 </button>
-                <button onClick={save} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+                <button onClick={save} disabled={saving} data-testid="save-application-button" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
                   {saving ? t('footer.saving') : t('footer.save')}
                 </button>
               </>
             ) : (
-              <button onClick={() => setEditing(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+              <button onClick={() => setEditing(true)} data-testid="edit-application-button" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
                 {t('footer.edit')}
               </button>
             )}
@@ -1965,6 +1973,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <button
                       onClick={assignSelectedCandidates}
                       disabled={manualBulkBusy}
+                      data-testid="manual-assign-import-button"
                       className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
                     >
                       {manualBulkBusy ? t('manualAssign.importing') : t('manualAssign.import', { count: manualSelected.size })}

@@ -75,6 +75,23 @@
     "active": "Aktiv",
     "rejected": "Abgesagt"
   },
+  "importExport": {
+    "button": "Im/Export",
+    "exportExcel": "Excel exportieren",
+    "exportFailed": "Export fehlgeschlagen: {{error}}",
+    "exportPdf": "PDF exportieren",
+    "exportPdfHint": "Eigenbemühungen ab 02.26",
+    "exportPdfTitle": "Nachweis der Eigenbemühungen (ab 01.02.2026)",
+    "exportPdfFailed": "PDF-Export fehlgeschlagen: {{error}}",
+    "importExcel": "Excel importieren",
+    "importFailed": "Import fehlgeschlagen",
+    "importDoneTitle": "Excel-Import abgeschlossen",
+    "imported": "Importiert",
+    "skipped": "Übersprungen",
+    "errors": "Fehler",
+    "showErrors": "Fehler anzeigen",
+    "close": "Schließen"
+  },
   "startupWarning": {
     "servicesUnreachable_one": "{{count}} Dienst nicht erreichbar",
     "servicesUnreachable_other": "{{count}} Dienste nicht erreichbar",

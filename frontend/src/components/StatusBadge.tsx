@@ -14,6 +14,7 @@ export function StatusBadge({ status, subStatus, size = 'md' }: Props) {
 
   return (
     <span
+      data-testid={`status-badge-${status}`}
       className={clsx(
         'inline-flex items-center rounded-full font-medium',
         MAIN_STATUS_COLORS[status],

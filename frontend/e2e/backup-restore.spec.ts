@@ -49,42 +49,41 @@ test.describe('Backup & Restore (Journey 11)', () => {
     })
 
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
 
     // Open Settings modal
-    await page.locator('button[title="KI-Einstellungen"]').click()
-    await expect(page.getByText('Einstellungen')).toBeVisible()
+    await page.getByTestId('settings-button').click()
+    await expect(page.getByTestId('settings-tab-backup')).toBeVisible()
 
     // Navigate to Backup tab in sidebar
-    await page.locator('nav button', { hasText: 'Backup' }).click()
+    await page.getByTestId('settings-tab-backup').click()
     await page.waitForTimeout(300)
 
     // Verify Backup panel is visible
-    await expect(page.getByText('Datenbank-Backup')).toBeVisible()
+    await expect(page.getByTestId('backup-panel-title')).toBeVisible()
 
     // Set backup folder
-    const folderInput = page.locator('input[placeholder*="/Users/…/Backups/Rapport"]')
-    await folderInput.fill('/Users/test/Backups')
+    await page.getByTestId('backup-folder-input').fill('/Users/test/Backups')
 
     // Save settings
-    await page.locator('button', { hasText: 'Speichern' }).first().click()
-    await expect(page.getByText('Gespeichert')).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('backup-save-button').click()
+    await expect(page.getByTestId('backup-save-button')).toContainText(/gespeichert|saved/i, { timeout: 5_000 })
 
     // Run manual backup
-    await page.locator('button', { hasText: 'Jetzt sichern' }).click()
-    await expect(page.getByText(/Backup erstellt/)).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('backup-now-button').click()
+    await expect(page.getByTestId('backup-run-result')).toBeVisible({ timeout: 5_000 })
 
     // Verify backup appears in existing backups list
-    await expect(page.getByText('Vorhandene Backups')).toBeVisible()
+    await expect(page.getByTestId('backup-existing-title')).toBeVisible()
     await expect(page.getByText('rapport_backup_2026-07-09T12-00-00.zip')).toBeVisible()
 
     // Test restore flow: click Restore → confirmation dialog appears
-    await page.locator('button', { hasText: 'Restore' }).first().click()
-    await expect(page.getByText('Backup wirklich wiederherstellen?')).toBeVisible()
-    await expect(page.getByText('Ja, wiederherstellen')).toBeVisible()
+    await page.getByTestId('backup-restore-button').first().click()
+    await expect(page.getByTestId('backup-restore-confirm-title')).toBeVisible()
+    await expect(page.getByTestId('backup-restore-confirm-yes')).toBeVisible()
 
     // Click restore confirmation
-    await page.getByText('Ja, wiederherstellen').click()
-    await expect(page.getByText(/Wiederhergestellt aus/)).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('backup-restore-confirm-yes').click()
+    await expect(page.getByTestId('backup-restore-result')).toBeVisible({ timeout: 5_000 })
   })
 })

@@ -200,7 +200,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
           {/* Done */}
           {phase === 'done' && result && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-green-700">
+              <div className="flex items-center gap-2 text-green-700" data-testid="cleanup-done-title">
                 <CheckCircle className="h-5 w-5" />
                 <span className="font-semibold text-sm">{t('doneTitle')}</span>
               </div>
@@ -220,7 +220,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
         {/* Footer */}
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-100 shrink-0">
           {phase === 'preview' && totalIssues === 0 && (
-            <button onClick={onClose} className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+            <button onClick={onClose} data-testid="cleanup-close-button" className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
               {t('close')}
             </button>
           )}
@@ -231,6 +231,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
               </button>
               <button
                 onClick={runCleanup}
+                data-testid="cleanup-execute-button"
                 className="flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -239,7 +240,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
             </>
           )}
           {(phase === 'done' || phase === 'error') && (
-            <button onClick={onClose} className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+            <button onClick={onClose} data-testid="cleanup-close-button" className="text-xs font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
               {t('close')}
             </button>
           )}

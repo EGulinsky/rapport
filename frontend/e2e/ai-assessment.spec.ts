@@ -43,14 +43,14 @@ test.describe('AI Assessment (Journey 8)', () => {
     })
 
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
 
     // Open modal
     await page.getByText(ROLLE).first().click()
-    await page.waitForSelector('text=Verlauf', { timeout: 5_000 })
+    await page.waitForSelector('[data-testid="modal-tab-timeline"]', { timeout: 5_000 })
 
     // First assessment: click "Jetzt bewerten"
-    await page.getByText('Jetzt bewerten').click()
+    await page.getByTestId('ai-assess-now-button').click()
 
     // Wait for yellow result
     await expect(page.getByText('Mittlere Erfolgschance (30–60 %)')).toBeVisible({ timeout: 15_000 })
@@ -59,7 +59,7 @@ test.describe('AI Assessment (Journey 8)', () => {
     await expect(page.getByText('Bewertet am')).toBeVisible()
 
     // Re-evaluate: click "Neu bewerten"
-    await page.getByText('Neu bewerten').click()
+    await page.getByTestId('ai-reassess-button').click()
 
     // Wait for green result
     await expect(page.getByText('Hohe Erfolgschance (>60 %)')).toBeVisible({ timeout: 15_000 })

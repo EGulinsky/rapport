@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.68.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n (Phase 12/13, E2E-Selektoren): Alle 12 Playwright-Spezifikationen sind von deutschen Text-Selektoren auf stabile data-testid-Attribute umgestellt — betrifft App.tsx, ApplicationModal.tsx, CleanupModal.tsx, MergeDialog.tsx, CompaniesView.tsx, StatusBadge.tsx und das Backup-Panel. Dabei eine bislang komplett unübersetzte Komponente entdeckt und nachgezogen: ImportExportMenu.tsx (Excel-/PDF-Export, Excel-Import). Neue authToken-Fixture-Option `uiLanguage` (Default weiterhin "de") legt die Grundlage für künftige Testläufe in anderen Sprachen. Das eigentliche CI-Setup für einen zusätzlichen Englisch-Testlauf (siehe Plan) ist noch offen.',
+    ],
+  },
+  {
     version: '3.67.0',
     date: '2026-07-12',
     changes: [
