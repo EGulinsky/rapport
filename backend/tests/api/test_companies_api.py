@@ -105,6 +105,7 @@ class TestGetCompany:
     def test_negativ_nicht_gefunden_liefert_404(self, client):
         resp = client.get("/api/companies/999")
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "company.not_found"
 
     def test_positiv_liefert_details_mit_apps_und_kontakten(self, client, db_session):
         profile = company_profile_factory(db_session, name_display="Contoso AG")
@@ -137,6 +138,7 @@ class TestUpdateCompany:
     def test_negativ_nicht_gefunden_liefert_404(self, client):
         resp = client.patch("/api/companies/999", json={"industry": "Software"})
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "company.not_found"
 
     def test_positiv_aktualisiert_felder_und_schreibt_audit(self, client, db_session):
         profile = company_profile_factory(db_session, name_display="Contoso AG", industry=None)
@@ -168,7 +170,7 @@ class TestUpdateCompany:
         resp = client.patch(f"/api/companies/{a.id}", json={"parent_company_id": b.id})
 
         assert resp.status_code == 400
-        assert "Zyklische" in resp.json()["detail"]
+        assert resp.json()["detail"]["error_key"] == "company.cyclic_hierarchy"
 
 
 class TestLinkContacts:
@@ -259,6 +261,7 @@ class TestAssignContact:
 
         resp = client.post(f"/api/companies/999/contacts/{contact.id}")
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "company.not_found"
 
     def test_negativ_kontakt_nicht_gefunden(self, client, db_session):
         profile = company_profile_factory(db_session)
@@ -266,6 +269,7 @@ class TestAssignContact:
 
         resp = client.post(f"/api/companies/{profile.id}/contacts/999")
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "contact.not_found"
 
     def test_positiv_unassign_entfernt_zuordnung(self, client, db_session):
         profile = company_profile_factory(db_session)

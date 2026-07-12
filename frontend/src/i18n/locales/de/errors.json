@@ -13,5 +13,34 @@
     "no_cv": "Kein Lebenslauf hinterlegt.",
     "cv_file_missing": "Datei nicht mehr vorhanden.",
     "email_send_failed": "E-Mail konnte nicht gesendet werden."
+  },
+  "application": {
+    "not_found": "Bewerbung nicht gefunden.",
+    "linkedin_url_required": "Bitte einen LinkedIn-Job-Link angeben."
+  },
+  "ai": {
+    "rate_limit": "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen."
+  },
+  "event": {
+    "not_found": "Eintrag nicht gefunden."
+  },
+  "contact": {
+    "not_found": "Kontakt nicht gefunden."
+  },
+  "company": {
+    "name_required": "Name darf nicht leer sein.",
+    "not_found": "Firma nicht gefunden.",
+    "cyclic_hierarchy": "Zyklische Hierarchie nicht erlaubt."
+  },
+  "attachment": {
+    "not_found": "Anhang nicht gefunden.",
+    "file_missing": "Datei nicht mehr vorhanden."
+  },
+  "merge": {
+    "min_loser_required": "Mindestens ein weiterer Eintrag erforderlich.",
+    "winner_equals_loser": "Der Gewinner kann nicht gleichzeitig Verlierer sein.",
+    "applications_not_found": "Eine oder mehrere Bewerbungen nicht gefunden.",
+    "companies_not_found": "Eine oder mehrere Firmen nicht gefunden.",
+    "contacts_not_found": "Eine oder mehrere Kontakte nicht gefunden."
   }
 }

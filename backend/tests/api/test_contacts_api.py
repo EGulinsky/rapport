@@ -95,6 +95,14 @@ class TestCreateContact:
         assert resp.status_code == 422
 
 
+class TestUpdateContact:
+    def test_negativ_nicht_gefunden_liefert_404(self, client):
+        resp = client.patch("/api/contacts/999999", json={"rolle": "CTO"})
+
+        assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "contact.not_found"
+
+
 class TestBulkDeleteContacts:
     def test_positiv_loescht_gezielt_ausgewaehlte(self, client, db_session):
         c1 = contact_factory(db_session, name="Löschen 1")

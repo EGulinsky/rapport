@@ -124,6 +124,7 @@ class TestGetApplication:
     def test_negativ_nicht_existierende_id(self, client):
         resp = client.get("/api/applications/999999")
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "application.not_found"
 
     def test_fehleingabe_ungueltige_id(self, client):
         resp = client.get("/api/applications/not-a-number")
@@ -152,6 +153,7 @@ class TestUpdateApplication:
     def test_negativ_update_nicht_existierender_bewerbung(self, client):
         resp = client.patch("/api/applications/999999", json={"main_status": "applied"})
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "application.not_found"
 
     def test_positiv_ort_kann_nachtraeglich_gesetzt_werden(self, client, db_session):
         app = application_factory(db_session, ort=None)
@@ -262,6 +264,7 @@ class TestBulkDeleteAppContacts:
     def test_negativ_unbekannte_bewerbung_liefert_404(self, client):
         resp = client.request("DELETE", "/api/applications/999999/contacts/bulk", json={"ids": [1]})
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "application.not_found"
 
     def test_corner_case_unbekannte_kontakt_id_wird_uebersprungen(self, client, db_session):
         app = application_factory(db_session)

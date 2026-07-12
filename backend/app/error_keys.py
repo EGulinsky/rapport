@@ -32,6 +32,29 @@ class ErrorKey(str, Enum):
     AUTH_CV_FILE_MISSING = "auth.cv_file_missing"
     AUTH_EMAIL_SEND_FAILED = "auth.email_send_failed"
 
+    # applications
+    APPLICATION_NOT_FOUND = "application.not_found"
+    APPLICATION_LINKEDIN_URL_REQUIRED = "application.linkedin_url_required"
+    AI_RATE_LIMIT = "ai.rate_limit"
+    EVENT_NOT_FOUND = "event.not_found"
+    CONTACT_NOT_FOUND = "contact.not_found"
+
+    # companies
+    COMPANY_NAME_REQUIRED = "company.name_required"
+    COMPANY_NOT_FOUND = "company.not_found"
+    COMPANY_CYCLIC_HIERARCHY = "company.cyclic_hierarchy"
+
+    # attachments
+    ATTACHMENT_NOT_FOUND = "attachment.not_found"
+    ATTACHMENT_FILE_MISSING = "attachment.file_missing"
+
+    # merge
+    MERGE_MIN_LOSER_REQUIRED = "merge.min_loser_required"
+    MERGE_WINNER_EQUALS_LOSER = "merge.winner_equals_loser"
+    MERGE_APPLICATIONS_NOT_FOUND = "merge.applications_not_found"
+    MERGE_COMPANIES_NOT_FOUND = "merge.companies_not_found"
+    MERGE_CONTACTS_NOT_FOUND = "merge.contacts_not_found"
+
 
 def api_error(status_code: int, key: ErrorKey, message: str) -> HTTPException:
     return HTTPException(status_code, detail={"error_key": key.value, "message": message})

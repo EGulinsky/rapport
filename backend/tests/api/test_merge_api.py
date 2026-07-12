@@ -99,6 +99,7 @@ class TestMergeApplications:
         })
 
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "merge.applications_not_found"
 
     def test_corner_case_status_wechsel_beim_merge_wird_auditiert(self, client, db_session):
         winner = application_factory(db_session, main_status="applied")
@@ -171,6 +172,7 @@ class TestMergeCompanies:
         })
 
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "merge.companies_not_found"
 
 
 class TestMergeContacts:
@@ -227,3 +229,4 @@ class TestMergeContacts:
         })
 
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "merge.contacts_not_found"

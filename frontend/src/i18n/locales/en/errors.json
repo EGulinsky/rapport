@@ -13,5 +13,34 @@
     "no_cv": "No resume on file.",
     "cv_file_missing": "File no longer available.",
     "email_send_failed": "Email could not be sent."
+  },
+  "application": {
+    "not_found": "Application not found.",
+    "linkedin_url_required": "Please provide a LinkedIn job link."
+  },
+  "ai": {
+    "rate_limit": "AI provider rate limit reached — please wait 30–60 seconds and try again."
+  },
+  "event": {
+    "not_found": "Entry not found."
+  },
+  "contact": {
+    "not_found": "Contact not found."
+  },
+  "company": {
+    "name_required": "Name must not be empty.",
+    "not_found": "Company not found.",
+    "cyclic_hierarchy": "Cyclic hierarchy not allowed."
+  },
+  "attachment": {
+    "not_found": "Attachment not found.",
+    "file_missing": "File no longer available."
+  },
+  "merge": {
+    "min_loser_required": "At least one more entry is required.",
+    "winner_equals_loser": "The winner cannot also be a loser.",
+    "applications_not_found": "One or more applications not found.",
+    "companies_not_found": "One or more companies not found.",
+    "contacts_not_found": "One or more contacts not found."
   }
 }
