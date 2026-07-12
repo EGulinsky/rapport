@@ -1,0 +1,55 @@
+{
+  "title": "Audit log",
+  "refresh": "Refresh",
+  "clear": "Clear",
+  "clearConfirm": "Delete the entire audit log?",
+  "filters": {
+    "appIdLabel": "App ID:",
+    "appIdPlaceholder": "all",
+    "filterButton": "Filter",
+    "typeLabel": "Type:",
+    "typeAll": "all",
+    "entryCount_one": "{{count}} entry",
+    "entryCount_other": "{{count}} entries"
+  },
+  "table": {
+    "timestamp": "Timestamp",
+    "action": "Action",
+    "type": "Type",
+    "reference": "Reference",
+    "source": "Source",
+    "change": "Change",
+    "reason": "Reason",
+    "noEntries": "No entries"
+  },
+  "pagination": "Page {{page}} / {{total}}",
+  "action": {
+    "create": "Created",
+    "update": "Updated",
+    "delete": "Deleted",
+    "status_change": "Status",
+    "merge": "Merged",
+    "import": "Imported"
+  },
+  "entityType": {
+    "application": "Application",
+    "contact": "Contact",
+    "company": "Company",
+    "event": "Event"
+  },
+  "source": {
+    "user": "Manual",
+    "gmail": "Gmail",
+    "icloud_mail": "iCloud Mail",
+    "linkedin": "LinkedIn",
+    "import": "Excel import",
+    "merge": "Merge",
+    "gcal": "Google Calendar",
+    "icloud_cal": "iCloud Calendar",
+    "icloud_calls": "iCloud Calls",
+    "local_files": "Local files",
+    "sync": "Sync",
+    "system": "Automatic",
+    "db_trigger": "Automatic (DB)"
+  }
+}

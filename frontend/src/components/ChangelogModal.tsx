@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.74.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n gap fix: AuditLogModal.tsx had been completely missed by the original 13-phase i18n sweep — title, buttons, filters, table headers, and the action/type/source label maps were all hardcoded German. Translated via a new auditLog namespace, with a component test proving the language switch (matching the pattern already used for StatusBadge and StatsBar). The free-text "reason" column stays untranslated, same as other dynamic backend-generated content.',
+    ],
+  },
+  {
     version: '3.73.0',
     date: '2026-07-12',
     changes: [

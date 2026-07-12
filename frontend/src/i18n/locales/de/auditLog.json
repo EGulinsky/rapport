@@ -1,0 +1,55 @@
+{
+  "title": "Audit-Log",
+  "refresh": "Aktualisieren",
+  "clear": "Löschen",
+  "clearConfirm": "Audit-Log vollständig löschen?",
+  "filters": {
+    "appIdLabel": "App-ID:",
+    "appIdPlaceholder": "alle",
+    "filterButton": "Filtern",
+    "typeLabel": "Typ:",
+    "typeAll": "alle",
+    "entryCount_one": "{{count}} Eintrag",
+    "entryCount_other": "{{count}} Einträge"
+  },
+  "table": {
+    "timestamp": "Zeitpunkt",
+    "action": "Aktion",
+    "type": "Typ",
+    "reference": "Bezug",
+    "source": "Quelle",
+    "change": "Änderung",
+    "reason": "Grund",
+    "noEntries": "Keine Einträge"
+  },
+  "pagination": "Seite {{page}} / {{total}}",
+  "action": {
+    "create": "Erstellt",
+    "update": "Geändert",
+    "delete": "Gelöscht",
+    "status_change": "Status",
+    "merge": "Zusammengeführt",
+    "import": "Importiert"
+  },
+  "entityType": {
+    "application": "Bewerbung",
+    "contact": "Kontakt",
+    "company": "Firma",
+    "event": "Termin"
+  },
+  "source": {
+    "user": "Manuell",
+    "gmail": "Gmail",
+    "icloud_mail": "iCloud Mail",
+    "linkedin": "LinkedIn",
+    "import": "Excel-Import",
+    "merge": "Merge",
+    "gcal": "Google Kalender",
+    "icloud_cal": "iCloud Kalender",
+    "icloud_calls": "iCloud Anrufe",
+    "local_files": "Lokale Dateien",
+    "sync": "Sync",
+    "system": "Automatisch",
+    "db_trigger": "Automatisch (DB)"
+  }
+}
