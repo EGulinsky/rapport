@@ -37,20 +37,27 @@ def app_data_dir() -> Path:
 class AgentConfig:
     token: str
     port: int = DEFAULT_PORT
+    ui_language: str = "de"
 
     @property
     def path(self) -> Path:
         return app_data_dir() / CONFIG_FILENAME
 
     def save(self) -> None:
-        self.path.write_text(json.dumps({"token": self.token, "port": self.port}, indent=2))
+        self.path.write_text(json.dumps(
+            {"token": self.token, "port": self.port, "ui_language": self.ui_language}, indent=2,
+        ))
 
     @classmethod
     def load_or_create(cls) -> "AgentConfig":
         path = app_data_dir() / CONFIG_FILENAME
         if path.exists():
             data = json.loads(path.read_text())
-            return cls(token=data["token"], port=data.get("port", DEFAULT_PORT))
+            return cls(
+                token=data["token"],
+                port=data.get("port", DEFAULT_PORT),
+                ui_language=data.get("ui_language", "de"),
+            )
         cfg = cls(token=secrets.token_urlsafe(32))
         cfg.save()
         return cfg

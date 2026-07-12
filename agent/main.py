@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI
 from agent.auth import require_token
 from agent.config import AgentConfig, platform_name
 from agent.providers.base import CallsProvider, FilesProvider, NotesProvider
-from agent.routers import backup, calls, files, notes
+from agent.routers import backup, calls, config as config_router, files, notes
 
 __version__ = "0.1.0"
 
@@ -31,10 +31,12 @@ def create_app(
     app.include_router(backup.router, dependencies=[Depends(auth)])
     app.include_router(notes.router, dependencies=[Depends(auth)])
     app.include_router(calls.router, dependencies=[Depends(auth)])
+    app.include_router(config_router.router, dependencies=[Depends(auth)])
 
     app.dependency_overrides[files.get_files_provider] = lambda: files_provider
     app.dependency_overrides[notes.get_notes_provider] = lambda: notes_provider
     app.dependency_overrides[calls.get_calls_provider] = lambda: calls_provider
+    app.dependency_overrides[config_router.get_agent_config] = lambda: config
 
     @app.get("/health")
     def health():
