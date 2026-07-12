@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.66.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n (Phase 10/13, Backend-Fehlerschlüssel): "Nicht gefunden"-Fehler in applications.py, contacts.py, companies.py, attachments.py und merge.py liefern jetzt stabile error_key-Werte statt nur deutschem Text — 38 Stellen umgestellt, dabei zwei bestehende Inkonsistenzen mitkorrigiert (companies.py verwendete an zwei Stellen englischen Text, merge.py bei Kontakten einen Grammatikfehler). Reine Backend-Änderung, noch ohne sichtbaren Effekt — die betroffenen Frontend-Dialoge übersetzen Fehlermeldungen bislang nur teilweise über den error_key-Mechanismus.',
+    ],
+  },
+  {
     version: '3.65.0',
     date: '2026-07-12',
     changes: [

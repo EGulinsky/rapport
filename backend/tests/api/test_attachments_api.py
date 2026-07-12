@@ -64,6 +64,7 @@ class TestDownloadAttachment:
     def test_negativ_nicht_gefunden_liefert_404(self, client):
         resp = client.get("/api/attachments/999/download")
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "attachment.not_found"
 
     def test_positiv_laedt_datei_herunter(self, client, db_session):
         app = application_factory(db_session)
@@ -90,12 +91,14 @@ class TestDownloadAttachment:
         resp = client.get(f"/api/attachments/{att.id}/download")
 
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "attachment.file_missing"
 
 
 class TestUploadAttachment:
     def test_negativ_event_nicht_gefunden(self, client):
         resp = client.post("/api/attachments/999/upload", files={"file": ("upload-missing-event.pdf", b"Inhalt", "application/pdf")})
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "event.not_found"
 
     def test_positiv_datei_wird_hochgeladen(self, client, db_session):
         app = application_factory(db_session)
@@ -126,6 +129,7 @@ class TestDeleteAttachment:
     def test_negativ_nicht_gefunden(self, client):
         resp = client.delete("/api/attachments/999")
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "attachment.not_found"
 
     def test_positiv_loescht_datei_und_datensatz(self, client, db_session):
         import os

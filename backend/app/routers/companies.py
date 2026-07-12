@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from app.database import get_db, SessionLocal, set_session_user
 from app.models import CompanyProfile, User
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
+from app.error_keys import ErrorKey, api_error
 
 log = get_logger("sync", source="company")
 
@@ -150,7 +151,7 @@ def create_company(
     from app.dedup import norm_firma
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Name darf nicht leer sein")
+        raise api_error(400, ErrorKey.COMPANY_NAME_REQUIRED, "Name darf nicht leer sein")
     key = norm_firma(name)
     existing = db.query(CompanyProfile).filter(CompanyProfile.name_norm == key).first()
     if existing:
@@ -263,7 +264,7 @@ def get_company(
 ):
     profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
 
     seen = set()
     apps = []
@@ -336,7 +337,7 @@ def update_company(
 ):
     profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
 
     for field, value in body.model_dump(exclude_unset=True).items():
         if field == "parent_company_id":
@@ -346,7 +347,7 @@ def update_company(
                 visited: set[int] = set()
                 while ancestor:
                     if ancestor.id == profile.id:
-                        raise HTTPException(400, "Zyklische Hierarchie nicht erlaubt")
+                        raise api_error(400, ErrorKey.COMPANY_CYCLIC_HIERARCHY, "Zyklische Hierarchie nicht erlaubt")
                     if ancestor.id in visited:
                         break
                     visited.add(ancestor.id)
@@ -482,7 +483,7 @@ async def upload_company_logo(
 ):
     profile = db.query(CompanyProfile).filter_by(id=company_id, user_id=current_user.id).first()
     if not profile:
-        raise HTTPException(404)
+        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
     data = await file.read()
     mime = file.content_type or "image/png"
     b64 = base64.b64encode(data).decode()
@@ -501,7 +502,7 @@ def delete_company_logo(
 ):
     profile = db.query(CompanyProfile).filter_by(id=company_id, user_id=current_user.id).first()
     if not profile:
-        raise HTTPException(404)
+        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
     profile.logo_data = None
     add_audit(db, "update", "user", company_profile_id=profile.id,
               field="logo_data", new_value=None, reason="Logo entfernt", user_id=current_user.id)
@@ -519,10 +520,10 @@ def assign_contact_to_company(
     from app import models as m
     profile = db.query(CompanyProfile).filter_by(id=company_id, user_id=current_user.id).first()
     if not profile:
-        raise HTTPException(404)
+        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
     contact = db.query(m.Contact).filter_by(id=contact_id, user_id=current_user.id).first()
     if not contact:
-        raise HTTPException(404)
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
     old_cp = contact.company_profile_id
     contact.company_profile_id = company_id
     add_audit(db, "update", "user", contact_id=contact.id,
@@ -541,7 +542,7 @@ def unassign_contact_from_company(
     from app import models as m
     contact = db.query(m.Contact).filter_by(id=contact_id, user_id=current_user.id).first()
     if not contact:
-        raise HTTPException(404)
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
     if contact.company_profile_id == company_id:
         contact.company_profile_id = None
         add_audit(db, "update", "user", contact_id=contact.id,

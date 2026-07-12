@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db, DATABASE_URL
 from app import models
 from app.auth.dependencies import get_current_user
+from app.error_keys import ErrorKey, api_error
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 
@@ -104,10 +105,10 @@ def download_attachment(
 ):
     att = db.query(models.Attachment).filter_by(id=attachment_id, user_id=current_user.id).first()
     if not att:
-        raise HTTPException(404, "Anhang nicht gefunden.")
+        raise api_error(404, ErrorKey.ATTACHMENT_NOT_FOUND, "Anhang nicht gefunden.")
     full_path = os.path.join(ATTACHMENTS_ROOT, att.storage_path)
     if not os.path.exists(full_path):
-        raise HTTPException(404, "Datei nicht mehr vorhanden.")
+        raise api_error(404, ErrorKey.ATTACHMENT_FILE_MISSING, "Datei nicht mehr vorhanden.")
     return FileResponse(
         full_path,
         media_type=att.content_type or "application/octet-stream",
@@ -124,7 +125,7 @@ async def upload_attachment(
 ):
     ev = db.query(models.Event).filter_by(id=event_id, user_id=current_user.id).first()
     if not ev:
-        raise HTTPException(404, "Timeline-Eintrag nicht gefunden.")
+        raise api_error(404, ErrorKey.EVENT_NOT_FOUND, "Timeline-Eintrag nicht gefunden.")
 
     data = await file.read()
     filename = file.filename or "attachment"
@@ -155,7 +156,7 @@ def delete_attachment(
 ):
     att = db.query(models.Attachment).filter_by(id=attachment_id, user_id=current_user.id).first()
     if not att:
-        raise HTTPException(404, "Anhang nicht gefunden.")
+        raise api_error(404, ErrorKey.ATTACHMENT_NOT_FOUND, "Anhang nicht gefunden.")
     full_path = os.path.join(ATTACHMENTS_ROOT, att.storage_path)
     if os.path.exists(full_path):
         os.remove(full_path)

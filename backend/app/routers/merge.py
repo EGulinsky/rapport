@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -6,6 +6,7 @@ from app.database import get_db
 from app import models
 from app.audit import add_audit
 from app.auth.dependencies import get_current_user
+from app.error_keys import ErrorKey, api_error
 
 router = APIRouter(prefix="/api/merge", tags=["merge"])
 
@@ -35,13 +36,13 @@ def merge_applications(
     current_user: models.User = Depends(get_current_user),
 ):
     if not req.loser_ids:
-        raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+        raise api_error(400, ErrorKey.MERGE_MIN_LOSER_REQUIRED, "Mindestens ein weiterer Eintrag erforderlich")
     if req.winner_id in req.loser_ids:
-        raise HTTPException(400, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
+        raise api_error(400, ErrorKey.MERGE_WINNER_EQUALS_LOSER, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
     all_ids = [req.winner_id] + req.loser_ids
     apps = {a.id: a for a in db.query(models.Application).filter(models.Application.id.in_(all_ids)).all()}
     if len(apps) != len(all_ids):
-        raise HTTPException(404, "Eine oder mehrere Bewerbungen nicht gefunden")
+        raise api_error(404, ErrorKey.MERGE_APPLICATIONS_NOT_FOUND, "Eine oder mehrere Bewerbungen nicht gefunden")
 
     winner = apps[req.winner_id]
     losers = [apps[i] for i in req.loser_ids if i in apps]
@@ -127,13 +128,13 @@ def merge_companies(
     current_user: models.User = Depends(get_current_user),
 ):
     if not req.loser_ids:
-        raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+        raise api_error(400, ErrorKey.MERGE_MIN_LOSER_REQUIRED, "Mindestens ein weiterer Eintrag erforderlich")
     if req.winner_id in req.loser_ids:
-        raise HTTPException(400, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
+        raise api_error(400, ErrorKey.MERGE_WINNER_EQUALS_LOSER, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
     all_ids = [req.winner_id] + req.loser_ids
     companies = {c.id: c for c in db.query(models.CompanyProfile).filter(models.CompanyProfile.id.in_(all_ids)).all()}
     if len(companies) != len(all_ids):
-        raise HTTPException(404, "Eine oder mehrere Firmen nicht gefunden")
+        raise api_error(404, ErrorKey.MERGE_COMPANIES_NOT_FOUND, "Eine oder mehrere Firmen nicht gefunden")
 
     winner = companies[req.winner_id]
     losers = [companies[i] for i in req.loser_ids if i in companies]
@@ -206,13 +207,13 @@ def merge_contacts(
     current_user: models.User = Depends(get_current_user),
 ):
     if not req.loser_ids:
-        raise HTTPException(400, "Mindestens ein weiterer Eintrag erforderlich")
+        raise api_error(400, ErrorKey.MERGE_MIN_LOSER_REQUIRED, "Mindestens ein weiterer Eintrag erforderlich")
     if req.winner_id in req.loser_ids:
-        raise HTTPException(400, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
+        raise api_error(400, ErrorKey.MERGE_WINNER_EQUALS_LOSER, "Der Gewinner kann nicht gleichzeitig Verlierer sein")
     all_ids = [req.winner_id] + req.loser_ids
     contacts_map = {c.id: c for c in db.query(models.Contact).filter(models.Contact.id.in_(all_ids)).all()}
     if len(contacts_map) != len(all_ids):
-        raise HTTPException(404, "Einen oder mehrere Kontakte nicht gefunden")
+        raise api_error(404, ErrorKey.MERGE_CONTACTS_NOT_FOUND, "Eine oder mehrere Kontakte nicht gefunden")
 
     winner = contacts_map[req.winner_id]
     losers = [contacts_map[i] for i in req.loser_ids if i in contacts_map]

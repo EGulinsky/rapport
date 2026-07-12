@@ -14,6 +14,7 @@ from app.auth.dependencies import get_current_user
 from app.models import MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.audit import add_audit
 from app.dedup import norm_firma
+from app.error_keys import ErrorKey, api_error
 
 
 def _status_label(main: str, sub: str | None) -> str:
@@ -337,7 +338,7 @@ async def extract_from_linkedin_url(
     current_user: models.User = Depends(get_current_user),
 ):
     if "linkedin.com" not in payload.url:
-        raise HTTPException(400, "Bitte einen LinkedIn-Job-Link angeben.")
+        raise api_error(400, ErrorKey.APPLICATION_LINKEDIN_URL_REQUIRED, "Bitte einen LinkedIn-Job-Link angeben.")
 
     from app.linkedin_job_description import load_job_description
     from app.ai.tasks import extract_application_from_text
@@ -354,7 +355,7 @@ async def extract_from_linkedin_url(
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     except AIRateLimited:
-        raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
+        raise api_error(429, ErrorKey.AI_RATE_LIMIT, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
     except AIBadRequest as e:
         raise HTTPException(400, str(e))
 
@@ -382,7 +383,7 @@ async def extract_from_linkedin_url(
 def get_application(app_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     for cp_id, attr_name, attr_target in [
         (app.company_profile_id, "company_name_display", "company_website"),
         (app.target_company_profile_id, "target_company_name_display", "target_company_website"),
@@ -434,7 +435,7 @@ def update_application(
 ):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
 
     update_data = payload.model_dump(exclude_unset=True)
 
@@ -534,7 +535,7 @@ def delete_application(
 ):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     add_audit(db, "delete", "user", app_id=app_id,
               old_value=f"{app.firma} – {app.rolle}", user_id=current_user.id)
     db.delete(app)
@@ -555,7 +556,7 @@ async def ai_assess_single(
         .first()
     )
     if not app:
-        raise HTTPException(404, "Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     from app.ai.tasks import assess_application, assess_rejected_application
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
     try:
@@ -566,7 +567,7 @@ async def ai_assess_single(
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     except AIRateLimited:
-        raise HTTPException(429, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
+        raise api_error(429, ErrorKey.AI_RATE_LIMIT, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
     except AIBadRequest as e:
         raise HTTPException(400, str(e))
     old_color = app.ai_color
@@ -595,7 +596,7 @@ def _get_owned_application(db: Session, app_id: int, current_user: models.User) 
     app_id, da der automatische Mandanten-Filter nur Lesezugriffe absichert."""
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     return app
 
 
@@ -670,7 +671,7 @@ def delete_event(
         models.Event.application_id == app_id,
     ).first()
     if not event:
-        raise HTTPException(status_code=404, detail="Event nicht gefunden")
+        raise api_error(404, ErrorKey.EVENT_NOT_FOUND, "Event nicht gefunden")
     was_bewerbung = event.typ == "bewerbung"
     add_audit(db, "delete", "user", app_id=app_id, event_id=event.id,
               old_value=event.titel, user_id=current_user.id)
@@ -702,7 +703,7 @@ def update_event(
         models.Event.application_id == app_id,
     ).first()
     if not event:
-        raise HTTPException(status_code=404, detail="Event nicht gefunden")
+        raise api_error(404, ErrorKey.EVENT_NOT_FOUND, "Event nicht gefunden")
     for field, value in payload.model_dump(exclude_unset=True).items():
         old_v = getattr(event, field, None)
         if str(old_v or "") != str(value or ""):
@@ -756,7 +757,7 @@ def update_contact(
     app = _get_owned_application(db, app_id, current_user)
     contact = next((c for c in app.contacts if c.id == contact_id), None)
     if not contact:
-        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
     for field, value in payload.model_dump(exclude_unset=True).items():
         old_v = getattr(contact, field, None)
         if str(old_v or "") != str(value or ""):
@@ -778,10 +779,10 @@ def link_contact(
     """Link an existing contact to an application (no-op if already linked)."""
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     contact = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
     if not contact:
-        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
     if contact not in app.contacts:
         app.contacts.append(contact)
         db.commit()
@@ -802,7 +803,7 @@ def bulk_delete_contacts(
 ):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     unlinked = 0
     for contact_id in body.ids:
         contact = next((c for c in app.contacts if c.id == contact_id), None)
@@ -829,10 +830,10 @@ def delete_contact(
 ):
     app = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app:
-        raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     contact = next((c for c in app.contacts if c.id == contact_id), None)
     if not contact:
-        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
     # Remove link; delete contact entirely if no other application links remain
     app.contacts.remove(contact)
     db.flush()

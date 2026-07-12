@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import List, Optional
@@ -9,6 +9,7 @@ from app.audit import add_audit
 from app.database import get_db
 from app import models, schemas
 from app.auth.dependencies import get_current_user
+from app.error_keys import ErrorKey, api_error
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -104,7 +105,7 @@ def patch_contact(
 ):
     contact = db.query(models.Contact).filter_by(id=contact_id).first()
     if not contact:
-        raise HTTPException(404)
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
     for field, value in body.model_dump(exclude_unset=True).items():
         old_v = getattr(contact, field, None)
         if str(old_v or "") != str(value or ""):

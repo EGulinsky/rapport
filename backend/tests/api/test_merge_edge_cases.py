@@ -29,6 +29,7 @@ class TestMergeApplicationsEdgeCases:
         })
 
         assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "merge.winner_equals_loser"
         assert db_session.get(models.Application, a1.id) is not None
         assert db_session.get(models.Application, a2.id) is not None
 
@@ -41,6 +42,7 @@ class TestMergeApplicationsEdgeCases:
         })
 
         assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "merge.min_loser_required"
 
     def test_negativ_nur_winner_in_loser_ids_gibt_400(self, client, db_session):
         a1 = application_factory(db_session)
@@ -60,6 +62,7 @@ class TestMergeApplicationsEdgeCases:
             "winner_id": 99999, "loser_ids": [99998], "field_overrides": {},
         })
         assert resp.status_code == 404
+        assert resp.json()["detail"]["error_key"] == "merge.applications_not_found"
 
 
 class TestMergeContactsEdgeCases:
