@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ArrowUpDown, ExternalLink } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { StatusPopover } from './StatusPopover'
@@ -26,6 +27,7 @@ interface Props {
 type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
 
 export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany, updatedIds }: Props) {
+  const { t } = useTranslation('common')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const locale = useLocale()
   const [sortKey, setSortKey] = useState<SortKey>('datum_bewerbung')
@@ -229,7 +231,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                     type="button"
                     onClick={e => { e.stopPropagation(); setPopoverId(popoverId === app.id ? null : app.id) }}
                     className="rounded focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    title="Status ändern"
+                    title={t('changeStatus')}
                   >
                     {app.abgesagt && app.pre_rejection_status ? (
                       <span className={clsx(

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.69.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n (Phase 13/13, Abschluss): Finaler Vollständigkeits-Sweep über die gesamte Komponenten-Baumstruktur — zwei bislang übersehene Stellen gefunden und behoben: den "Status ändern"-Tooltip in der Bewerbungstabelle (neuer common.json-Schlüssel changeStatus) und PdfExportButton.tsx, eine komplett unübersetzte, seit dem Umbau auf ImportExportMenu.tsx nirgends mehr verwendete Altkomponente — entfernt statt übersetzt. Neuer StatsBar-Test ergänzt den bereits bestehenden StatusBadge-Test um einen zweiten Sprachwechsel-Nachweis auf Komponentenebene (anderer Namespace: app statt status). Damit sind alle 13 geplanten Phasen der Internationalisierung abgeschlossen — Web-App, Backend-Fehlermeldungen, nativer Mac-Agent und E2E-Tests unterstützen jetzt durchgängig Deutsch/Englisch, per Konto umschaltbar.',
+    ],
+  },
+  {
     version: '3.68.0',
     date: '2026-07-12',
     changes: [

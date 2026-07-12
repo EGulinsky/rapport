@@ -9,5 +9,6 @@
   "create": "Create",
   "back": "Back",
   "loading": "Loading…",
-  "saved": "Saved"
+  "saved": "Saved",
+  "changeStatus": "Change status"
 }

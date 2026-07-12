@@ -9,5 +9,6 @@
   "create": "Anlegen",
   "back": "Zurück",
   "loading": "Lädt…",
-  "saved": "Gespeichert"
+  "saved": "Gespeichert",
+  "changeStatus": "Status ändern"
 }
