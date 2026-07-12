@@ -8,6 +8,7 @@ import { CompanyLogo } from './CompanyLogo'
 import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate as formatDateI18n } from '../i18n/formatDate'
+import { errorMessage } from '../i18n/errorMessage'
 import clsx from 'clsx'
 
 interface Props {
@@ -101,7 +102,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       const data = await api.companies.get(id)
       setCompany(data)
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, t))
     } finally {
       setLoading(false)
     }
@@ -194,7 +195,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       setEditState(null)
       onSaved?.()
     } catch (e) {
-      setSaveError(String(e))
+      setSaveError(errorMessage(e, t))
     } finally {
       setSaving(false)
     }
@@ -212,7 +213,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       await load()
       onSaved?.()
     } catch (e) {
-      setSaveError(String(e))
+      setSaveError(errorMessage(e, t))
     } finally {
       setLogoUploading(false)
     }
@@ -227,7 +228,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
       await load()
       onSaved?.()
     } catch (e) {
-      setSaveError(String(e))
+      setSaveError(errorMessage(e, t))
     } finally {
       setLogoUploading(false)
     }

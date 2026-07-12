@@ -18,10 +18,13 @@ async function setupUser(page: Page, uiLanguage: 'de' | 'en') {
   return body.access_token as string
 }
 
+// Default 'de' matches the app's existing-user default (see i18n/index.ts) — override
+// per-spec or per-test with test.use({ uiLanguage: 'en' }), or set E2E_UI_LANGUAGE=en
+// for the whole run (used by CI's curated English subset, see docker-compose.test.yml).
+const DEFAULT_UI_LANGUAGE: 'de' | 'en' = process.env.E2E_UI_LANGUAGE === 'en' ? 'en' : 'de'
+
 export const test = base.extend<{ uiLanguage: 'de' | 'en'; authToken: string }>({
-  // Default 'de' matches the app's existing-user default (see i18n/index.ts) — override
-  // per-spec or per-test with test.use({ uiLanguage: 'en' }) for the curated English subset.
-  uiLanguage: ['de', { option: true }],
+  uiLanguage: [DEFAULT_UI_LANGUAGE, { option: true }],
   authToken: async ({ page, uiLanguage }, use) => {
     const token = await setupUser(page, uiLanguage)
     await page.goto('/')

@@ -53,6 +53,29 @@ services:
       - backend-test
       - frontend-test
 
+  # Curated English-language subset (see CLAUDE.md / i18n plan "CI budget"): runs a small
+  # representative slice in 'en' instead of duplicating all 12 specs per language. Started
+  # separately from e2e-runner via `docker compose run --rm e2e-runner-en` in CI.
+  e2e-runner-en:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    container_name: rapport-e2e-en
+    environment:
+      - E2E_BASE_URL=http://frontend-test:80
+      - E2E_API_URL=http://backend-test:8000
+      - E2E_UI_LANGUAGE=en
+      - PLAYWRIGHT_JUNIT_OUTPUT_NAME=e2e-report/test-results-e2e-en.xml
+    command: ["npx", "playwright", "test", "--config", "e2e/playwright.config.ts", "application-lifecycle", "company-sync", "backup-restore"]
+    volumes:
+      - ./e2e-report:/app/e2e/e2e-report
+    networks:
+      default:
+        ipv4_address: 192.168.118.13
+    depends_on:
+      - backend-test
+      - frontend-test
+
   frontend-test:
     build:
       context: ./frontend

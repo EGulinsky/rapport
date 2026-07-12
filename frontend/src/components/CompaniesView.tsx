@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
 import { CompanyLogo } from './CompanyLogo'
+import { errorMessage } from '../i18n/errorMessage'
 
 type SortKey = 'name' | 'industry' | 'apps' | 'sync_status'
 
@@ -224,7 +225,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
         }
       }, 800)
     } catch (e) {
-      setLinkMsg(e instanceof Error ? e.message : t('view.genericError'))
+      setLinkMsg(e instanceof Error ? errorMessage(e, t) : t('view.genericError'))
       setLinking(false)
     }
   }

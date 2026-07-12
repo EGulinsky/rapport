@@ -134,6 +134,18 @@ jobs:
         run: |
           python3 .github/scripts/junit_summary.py e2e-report/test-results-e2e.xml "E2E" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
+      # Curated English-language subset (see i18n plan "CI budget"): every push runs all 12
+      # specs in 'de' above; on push to main only, additionally run a representative slice
+      # in 'en' rather than duplicating all 12 specs per language.
+      - name: Run E2E subset (English)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker compose -p rapport-test -f docker-compose.test.yml run --rm e2e-runner-en
+
+      - name: Test summary (English subset)
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          python3 .github/scripts/junit_summary.py e2e-report/test-results-e2e-en.xml "E2E (English subset)" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
       - name: Teardown
         if: always()
         run: docker compose -p rapport-test -f docker-compose.test.yml down -v

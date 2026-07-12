@@ -6,6 +6,7 @@ import type { ContactWithApp } from '../types'
 import { CompanyLogo } from './CompanyLogo'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
+import { errorMessage } from '../i18n/errorMessage'
 import clsx from 'clsx'
 
 interface Props {
@@ -129,7 +130,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
       setEditState(null)
       onChanged?.()
     } catch (e) {
-      setSaveError(String(e))
+      setSaveError(errorMessage(e, t))
     } finally {
       setSaving(false)
     }

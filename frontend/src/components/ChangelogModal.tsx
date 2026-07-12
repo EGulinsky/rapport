@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.70.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n follow-up: translated backend error keys (from Phase 10) are now actually shown to users. ApplicationModal, CompanyModal, ContactModal, MergeDialog, CleanupModal, NewCompanyModal, NewContactModal, and the company-contact-linking flow all displayed the raw caught-error message instead of translating it via the `errorKey`/`errors` namespace — fixed by routing every catch block for applications/contacts/companies/attachments/merge endpoints through the existing errorMessage() helper (already used on the 6 auth pages).',
+      'CI now runs a curated English-language E2E subset (application lifecycle, company sync, backup/restore) on every push to main, alongside the existing full German-language run — closing a gap left open in Phase 12\'s test-selector refactor.',
+    ],
+  },
+  {
     version: '3.69.0',
     date: '2026-07-12',
     changes: [

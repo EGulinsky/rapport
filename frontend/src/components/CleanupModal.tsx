@@ -3,6 +3,7 @@ import { X, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronRight, Loader2
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { CleanupPreview, CleanupResult, CleanupScope, AppGroup, ContactGroup, CompanyGroup, EventGroup } from '../types'
+import { errorMessage } from '../i18n/errorMessage'
 import clsx from 'clsx'
 
 interface Props {
@@ -40,7 +41,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
   const loadPreview = useCallback(() => {
     return api.cleanup.preview(scope)
       .then(p => { setPreview(p); setPhase('preview') })
-      .catch(e => { setError(String(e)); setPhase('error') })
+      .catch(e => { setError(errorMessage(e, t)); setPhase('error') })
   }, [scope])
 
   useEffect(() => { loadPreview() }, [loadPreview])
@@ -68,7 +69,7 @@ export function CleanupModal({ onClose, onDone, scope, scopeLabel }: Props) {
       setTimeout(() => onDone(), 200)
     } catch (e) {
       stopPolling()
-      setError(String(e))
+      setError(errorMessage(e, t))
       setPhase('error')
     }
   }

@@ -14,6 +14,7 @@ import {
 import { useStatusLabels } from '../i18n/statusLabels'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
+import { errorMessage } from '../i18n/errorMessage'
 
 function parentPath(p: string): string {
   const parts = p.replace(/\/$/, '').split('/')
@@ -149,7 +150,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setSyncResult({ created: -(result.deleted_events ?? 0), errors: [] })
       onSaved()
     } catch (e: unknown) {
-      setSyncResult({ created: 0, errors: [e instanceof Error ? e.message : String(e)] })
+      setSyncResult({ created: 0, errors: [errorMessage(e, t)] })
     }
   }
 
@@ -236,7 +237,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         }
       }
     } catch (e: unknown) {
-      setSyncResult({ created: 0, errors: [e instanceof Error ? e.message : String(e)] })
+      setSyncResult({ created: 0, errors: [errorMessage(e, t)] })
     } finally {
       stopPolling()
       setSyncing(false)
@@ -397,7 +398,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           }
           assignedKeys.add(candidateKey(candidate))
         } catch (e: unknown) {
-          errors.push(`"${candidate.titel || candidate.source}": ${e instanceof Error ? e.message : String(e)}`)
+          errors.push(`"${candidate.titel || candidate.source}": ${errorMessage(e, t)}`)
         }
       }
       setManualCandidates(prev => prev.filter(c => !assignedKeys.has(candidateKey(c))))
@@ -421,7 +422,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setDocBrowseRoot(result.default_root)
       setDocBrowseItems(result.items)
     } catch (e: unknown) {
-      setDocBrowseError(e instanceof Error ? e.message : t('docBrowser.loadError'))
+      setDocBrowseError(errorMessage(e, t))
     } finally {
       setDocBrowseLoading(false)
     }
@@ -435,7 +436,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setDocBrowsePath(result.path)
       setDocBrowseItems(result.items)
     } catch (e: unknown) {
-      setDocBrowseError(e instanceof Error ? e.message : t('docBrowser.loadError'))
+      setDocBrowseError(errorMessage(e, t))
     } finally {
       setDocBrowseLoading(false)
     }
@@ -449,7 +450,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setDocBrowseOpen(false)
       await refreshContacts()
     } catch (e: unknown) {
-      setDocBrowseError(e instanceof Error ? e.message : t('docBrowser.attachError'))
+      setDocBrowseError(errorMessage(e, t))
     } finally {
       setDocAttaching(null)
     }

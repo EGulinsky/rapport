@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { errorMessage } from '../i18n/errorMessage'
 
 const EMPTY_NEW_CONTACT = { name: '', vorname: '', email: '', telefon: '', firma: '', rolle: '', linkedin_url: '' }
 
@@ -29,7 +30,7 @@ export function NewContactModal({ onClose, onCreated }: { onClose: () => void; o
       onCreated()
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^\d+:\s*/, '') : String(e))
+      setError(errorMessage(e, t))
     } finally {
       setSaving(false)
     }

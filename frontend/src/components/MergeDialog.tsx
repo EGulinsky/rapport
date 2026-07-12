@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { Application, Contact, CompanyProfile } from '../types'
 import { mainStatusLabel } from '../i18n/statusLabels'
+import { errorMessage } from '../i18n/errorMessage'
 import i18n from '../i18n'
 import clsx from 'clsx'
 
@@ -110,7 +111,7 @@ export function AppMergeDialog({ appIds, onMerged, onClose }: AppMergeProps) {
       })
       onMerged(res.winner_id)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('unknownError'))
+      setError(e instanceof Error ? errorMessage(e, t) : t('unknownError'))
     } finally {
       setMerging(false)
     }
@@ -186,7 +187,7 @@ export function ContactMergeDialog({ contactIds, contacts, onMerged, onClose }: 
       })
       onMerged(res.winner_id)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('unknownError'))
+      setError(e instanceof Error ? errorMessage(e, t) : t('unknownError'))
     } finally {
       setMerging(false)
     }
@@ -507,7 +508,7 @@ export function CompanyMergeDialog({ companyIds, onMerged, onClose }: CompanyMer
       })
       onMerged(res.winner_id)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('unknownError'))
+      setError(e instanceof Error ? errorMessage(e, t) : t('unknownError'))
     } finally {
       setMerging(false)
     }
