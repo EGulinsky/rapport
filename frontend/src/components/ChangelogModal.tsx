@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.71.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n bugfix: changing your language in Settings → Account now actually reaches an already-paired agent. Previously only re-saving the Agent token in Settings → Agent pushed `ui_language` to the agent\'s `/config` endpoint — a plain language switch in Account settings updated the database but never notified the agent, so its menu bar silently kept showing the old language until the token was re-saved for an unrelated reason.',
+    ],
+  },
+  {
     version: '3.70.0',
     date: '2026-07-12',
     changes: [

@@ -263,7 +263,7 @@ def change_password(
 
 
 @router.patch("/profile", response_model=UserResponse)
-def update_profile(
+async def update_profile(
     payload: ProfilePayload,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -271,10 +271,20 @@ def update_profile(
     current_user.vorname = payload.vorname
     current_user.nachname = payload.nachname
     current_user.linkedin_url = payload.linkedin_url
+    language_changed = payload.ui_language is not None and payload.ui_language != current_user.ui_language
     if payload.ui_language is not None:
         current_user.ui_language = payload.ui_language
     db.commit()
     db.refresh(current_user)
+
+    if language_changed:
+        from app.agent_client import agent_post, get_agent_token
+        if get_agent_token(db):
+            try:
+                await agent_post(db, "/config", json={"ui_language": current_user.ui_language}, timeout=5)
+            except Exception:
+                pass  # agent may be offline — profile save must not fail because of this
+
     return _user_response(current_user)
 
 

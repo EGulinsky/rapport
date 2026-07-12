@@ -379,6 +379,83 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert resp.json()["ui_language"] == "de"
 
+    def test_positiv_sprachwechsel_pusht_an_gepaarten_agent(self, real_auth_client, captured_email, db_session):
+        """Ein Sprachwechsel im Account-Panel muss auch den bereits gepaarten
+        Agent aktualisieren — nicht nur beim (Wieder-)Speichern des Agent-Tokens
+        in Settings → Agent (siehe test_settings_agent_api.py::TestAgentUiLanguagePush)."""
+        from unittest.mock import MagicMock, patch
+        from app import models
+        from app.ai.provider import encrypt_api_key
+
+        token = self._token(real_auth_client, captured_email)
+        db_session.add(models.AgentSettings(user_id=1, token_enc=encrypt_api_key("AgentToken123")))
+        db_session.commit()
+
+        calls = []
+
+        async def fake_post(self, url, **kw):
+            calls.append((url, kw.get("json")))
+            return MagicMock(status_code=200)
+
+        # Registrierung setzt bereits ui_language="en" per Default — auf "de"
+        # wechseln ist damit eine echte Änderung und muss den Push auslösen.
+        with patch("httpx.AsyncClient.post", new=fake_post):
+            resp = real_auth_client.patch(
+                "/api/auth/profile", json={"ui_language": "de"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 200
+        assert len(calls) == 1
+        url, payload = calls[0]
+        assert url.endswith("/config")
+        assert payload == {"ui_language": "de"}
+
+    def test_negativ_kein_push_ohne_gepaarten_agent(self, real_auth_client, captured_email):
+        from unittest.mock import MagicMock, patch
+
+        token = self._token(real_auth_client, captured_email)
+        calls = []
+
+        async def fake_post(self, url, **kw):
+            calls.append((url, kw.get("json")))
+            return MagicMock(status_code=200)
+
+        with patch("httpx.AsyncClient.post", new=fake_post):
+            resp = real_auth_client.patch(
+                "/api/auth/profile", json={"ui_language": "de"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 200
+        assert len(calls) == 0
+
+    def test_negativ_kein_push_wenn_sprache_unveraendert(self, real_auth_client, captured_email, db_session):
+        from unittest.mock import MagicMock, patch
+        from app import models
+        from app.ai.provider import encrypt_api_key
+
+        token = self._token(real_auth_client, captured_email)
+        db_session.add(models.AgentSettings(user_id=1, token_enc=encrypt_api_key("AgentToken123")))
+        db_session.commit()
+
+        calls = []
+
+        async def fake_post(self, url, **kw):
+            calls.append((url, kw.get("json")))
+            return MagicMock(status_code=200)
+
+        # Registrierung setzt bereits ui_language="en" per Default — derselbe Wert
+        # nochmal zu senden, darf keinen (unnötigen) Push auslösen.
+        with patch("httpx.AsyncClient.post", new=fake_post):
+            resp = real_auth_client.patch(
+                "/api/auth/profile", json={"ui_language": "en"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 200
+        assert len(calls) == 0
+
     def test_corner_case_profil_felder_koennen_wieder_geleert_werden(self, real_auth_client, captured_email):
         token = self._token(real_auth_client, captured_email)
         real_auth_client.patch(
