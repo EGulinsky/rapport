@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.72.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n bugfix: the v3.71.0 fix itself was silently broken — the backend pushed the agent\'s language via HTTP POST, but the agent\'s `/config` endpoint only accepts PATCH, so every push (both from Settings → Agent and Settings → Account) failed with a 405 that was swallowed by design (an unreachable agent must not block a profile save). Added a dedicated `agent_patch()` helper and switched both call sites to it — language changes now actually reach the agent.',
+    ],
+  },
+  {
     version: '3.71.0',
     date: '2026-07-12',
     changes: [

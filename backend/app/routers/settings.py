@@ -138,9 +138,9 @@ async def save_agent_settings(
     db.refresh(cfg)
 
     if cfg.token_enc:
-        from app.agent_client import agent_post
+        from app.agent_client import agent_patch
         try:
-            await agent_post(db, "/config", json={"ui_language": current_user.ui_language}, timeout=5)
+            await agent_patch(db, "/config", json={"ui_language": current_user.ui_language}, timeout=5)
         except Exception:
             pass  # agent may not be reachable yet — pairing itself must not fail because of this
 

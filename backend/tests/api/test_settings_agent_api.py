@@ -15,10 +15,10 @@ class TestAgentSettings:
         assert resp.json() == {"url": None, "has_token": False}
 
     def test_positiv_token_speichern_setzt_has_token(self, client):
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             return MagicMock(status_code=200)
 
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = client.post("/api/settings/agent", json={"token": "AgentToken123"})
 
         assert resp.status_code == 200
@@ -28,10 +28,10 @@ class TestAgentSettings:
         assert "AgentToken123" not in get_resp.text
 
     def test_positiv_url_und_token_zusammen_speichern(self, client):
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             return MagicMock(status_code=200)
 
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = client.post("/api/settings/agent", json={"url": "http://192.168.1.5:9996", "token": "xyz"})
 
         assert resp.status_code == 200
@@ -76,11 +76,11 @@ class TestAgentUiLanguagePush:
 
         calls = []
 
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             calls.append((url, kw.get("json")))
             return MagicMock(status_code=200)
 
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = client.post("/api/settings/agent", json={"token": "AgentToken123"})
 
         assert resp.status_code == 200
@@ -92,11 +92,11 @@ class TestAgentUiLanguagePush:
     def test_negativ_ohne_token_wird_nicht_gepusht(self, client):
         calls = []
 
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             calls.append(url)
             return MagicMock(status_code=200)
 
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = client.post("/api/settings/agent", json={"token": "  "})
 
         assert resp.status_code == 200
@@ -106,7 +106,7 @@ class TestAgentUiLanguagePush:
         async def raise_conn_error(self, url, **kw):
             raise ConnectionError("kein Agent")
 
-        with patch("httpx.AsyncClient.post", new=raise_conn_error):
+        with patch("httpx.AsyncClient.patch", new=raise_conn_error):
             resp = client.post("/api/settings/agent", json={"token": "AgentToken123"})
 
         assert resp.status_code == 200

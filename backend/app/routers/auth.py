@@ -278,10 +278,10 @@ async def update_profile(
     db.refresh(current_user)
 
     if language_changed:
-        from app.agent_client import agent_post, get_agent_token
+        from app.agent_client import agent_patch, get_agent_token
         if get_agent_token(db):
             try:
-                await agent_post(db, "/config", json={"ui_language": current_user.ui_language}, timeout=5)
+                await agent_patch(db, "/config", json={"ui_language": current_user.ui_language}, timeout=5)
             except Exception:
                 pass  # agent may be offline — profile save must not fail because of this
 

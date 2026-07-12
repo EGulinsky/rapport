@@ -55,6 +55,12 @@ async def agent_post(db: Session, path: str, json: dict[str, Any] | None = None,
         return await client.post(url, json=json, headers=_auth_headers(db))
 
 
+async def agent_patch(db: Session, path: str, json: dict[str, Any] | None = None, timeout: float = 30) -> httpx.Response:
+    url = f"{get_agent_url(db)}{path}"
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.patch(url, json=json, headers=_auth_headers(db))
+
+
 async def agent_health(db: Session) -> dict[str, Any]:
     """Unauthenticated by design (mirrors agent's own /health) — must work
     even before a token is configured, so the user can see the agent exists

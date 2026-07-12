@@ -393,13 +393,13 @@ class TestProfileAndCv:
 
         calls = []
 
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             calls.append((url, kw.get("json")))
             return MagicMock(status_code=200)
 
         # Registrierung setzt bereits ui_language="en" per Default — auf "de"
         # wechseln ist damit eine echte Änderung und muss den Push auslösen.
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = real_auth_client.patch(
                 "/api/auth/profile", json={"ui_language": "de"},
                 headers={"Authorization": f"Bearer {token}"},
@@ -417,11 +417,11 @@ class TestProfileAndCv:
         token = self._token(real_auth_client, captured_email)
         calls = []
 
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             calls.append((url, kw.get("json")))
             return MagicMock(status_code=200)
 
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = real_auth_client.patch(
                 "/api/auth/profile", json={"ui_language": "de"},
                 headers={"Authorization": f"Bearer {token}"},
@@ -441,13 +441,13 @@ class TestProfileAndCv:
 
         calls = []
 
-        async def fake_post(self, url, **kw):
+        async def fake_patch(self, url, **kw):
             calls.append((url, kw.get("json")))
             return MagicMock(status_code=200)
 
         # Registrierung setzt bereits ui_language="en" per Default — derselbe Wert
         # nochmal zu senden, darf keinen (unnötigen) Push auslösen.
-        with patch("httpx.AsyncClient.post", new=fake_post):
+        with patch("httpx.AsyncClient.patch", new=fake_patch):
             resp = real_auth_client.patch(
                 "/api/auth/profile", json={"ui_language": "en"},
                 headers={"Authorization": f"Bearer {token}"},
