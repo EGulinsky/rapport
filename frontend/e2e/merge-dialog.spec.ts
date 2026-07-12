@@ -42,8 +42,8 @@ test.describe('Merge Dialog (Journey 5)', () => {
 
     // ── 2. Navigate and switch to table view ───────────────────────
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
-    await page.getByRole('button', { name: '☰ Tabelle' }).click()
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
+    await page.getByTestId('view-mode-table').click()
     await page.waitForTimeout(300)
 
     // ── 3. Find our specific rows and check their checkboxes ──────
@@ -53,14 +53,14 @@ test.describe('Merge Dialog (Journey 5)', () => {
     await ourRows.nth(1).locator('input[type="checkbox"]').check()
 
     // ── 4. Click "Mergen (2)" ──────────────────────────────────────
-    await page.getByRole('button', { name: /Mergen/ }).click()
-    await page.waitForSelector('text=Bewerbungen zusammenführen', { timeout: 5_000 })
+    await page.getByTestId('merge-applications-button').click()
+    await page.waitForSelector('[data-testid="merge-dialog-title"]', { timeout: 5_000 })
 
     // ── 5. Click "Zusammenführen" ──────────────────────────────────
-    await page.getByRole('button', { name: 'Zusammenführen' }).click()
+    await page.getByTestId('merge-confirm-button').click()
 
     // ── 6. Wait for modal to close (merge completed) ───────────────
-    await expect(page.getByText('Bewerbungen zusammenführen')).not.toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('merge-dialog-title')).not.toBeVisible({ timeout: 10_000 })
 
     // ── 7. Verify via API: only 1 app remains with our firma+rolle ─
     const apps = await fetchApps(page, authToken)

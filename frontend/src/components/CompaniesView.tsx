@@ -357,6 +357,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
           <button
             onClick={() => !syncing && setSyncMenuOpen(o => !o)}
             disabled={syncing}
+            data-testid="sync-companies-button"
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {syncing
@@ -378,6 +379,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
             <div className="absolute z-50 top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
               <button
                 onClick={() => startSync(false)}
+                data-testid="sync-menu-sync-option"
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
                 <div className="font-medium">{selectedIds.size > 0 ? t('view.syncMenuTitleCount', { count: selectedIds.size }) : t('view.syncMenuTitle')}</div>
@@ -493,7 +495,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
 
       {/* Sync status bar */}
       {(syncing || total > 0) && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2" data-testid="company-sync-status-bar">
           <div className="flex items-center justify-between text-xs text-gray-500">
             <span>
               {t('view.syncSummary', { done, pending, failed })}

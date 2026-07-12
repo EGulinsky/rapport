@@ -15,7 +15,7 @@ export function StatsBar({ stats }: Props) {
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-3" data-testid="stats-bar">
       {tiles.map(({ label, value, icon: Icon, color }) => (
         <div key={label} className={`rounded-xl px-4 py-3 flex items-center gap-3 border border-gray-100 shadow-sm ${color}`}>
           <Icon className="h-5 w-5 shrink-0 opacity-80" />

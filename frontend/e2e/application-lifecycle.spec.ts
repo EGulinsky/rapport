@@ -25,7 +25,7 @@ test.describe('Application Lifecycle (Journey 1)', () => {
     const company = await createCompany(page, authToken)
     await createApplication(page, authToken, company.id)
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
   })
 
   test('creates an application, changes status, rejects, and shows reasoning', async ({ page }) => {
@@ -35,23 +35,23 @@ test.describe('Application Lifecycle (Journey 1)', () => {
 
     // ── 2. Open the app and change status ──────────────────────────────
     await page.getByText(ROLE).first().click()
-    await page.waitForSelector('text=Verlauf', { timeout: 5_000 })
+    await page.waitForSelector('[data-testid="modal-tab-timeline"]', { timeout: 5_000 })
 
-    await page.getByRole('button', { name: 'Bearbeiten' }).click()
-    await page.getByRole('button', { name: 'Beworben', exact: true }).click()
-    await page.getByRole('button', { name: 'Speichern' }).click()
+    await page.getByTestId('edit-application-button').click()
+    await page.getByTestId('status-btn-applied').click()
+    await page.getByTestId('save-application-button').click()
 
     // ── 3. Re-open and change to HR ────────────────────────────────────
-    await page.getByRole('button', { name: 'Bearbeiten' }).click()
-    await page.getByRole('button', { name: 'Gespräch HR/HH' }).last().click()
-    await page.getByRole('button', { name: 'Speichern' }).click()
+    await page.getByTestId('edit-application-button').click()
+    await page.getByTestId('status-btn-hr').click()
+    await page.getByTestId('save-application-button').click()
 
     // ── 4. Re-open and reject ──────────────────────────────────────────
-    await page.getByRole('button', { name: 'Bearbeiten' }).click()
-    await page.getByRole('button', { name: 'Absage', exact: true }).click()
-    await page.getByRole('button', { name: 'Speichern' }).click()
+    await page.getByTestId('edit-application-button').click()
+    await page.getByTestId('status-btn-rejected').click()
+    await page.getByTestId('save-application-button').click()
 
     // ── 5. Verify rejection ────────────────────────────────────────────
-    await expect(page.getByText('Abgesagt').first()).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('status-badge-rejected').first()).toBeVisible({ timeout: 5_000 })
   })
 })

@@ -33,24 +33,24 @@ test.describe('Cleanup (Journey 4)', () => {
 
     // ── 2. Navigate to main view ──────────────────────────────────────
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
 
     // ── 3. Click "Bereinigen" ──────────────────────────────────────────
-    await page.getByRole('button', { name: /Bereinigen/ }).click()
+    await page.getByTestId('cleanup-button').click()
 
-    // Wait for the modal preview to load → "löschen" button
-    await page.waitForSelector('button:has-text("löschen")', { timeout: 15_000 })
+    // Wait for the modal preview to load → execute-cleanup button
+    await page.waitForSelector('[data-testid="cleanup-execute-button"]', { timeout: 15_000 })
 
-    // ── 4. Click "löschen" to execute cleanup ───────────────────────────
-    await page.locator('button:has-text("löschen")').last().click()
+    // ── 4. Click it to execute cleanup ──────────────────────────────────
+    await page.getByTestId('cleanup-execute-button').click()
 
-    // Wait for cleanup result ("Bereinigung abgeschlossen")
+    // Wait for cleanup result
     await expect(
-      page.getByText('Bereinigung abgeschlossen')
+      page.getByTestId('cleanup-done-title')
     ).toBeVisible({ timeout: 25_000 })
 
     // ── 5. Close modal ─────────────────────────────────────────────────
-    await page.getByRole('button', { name: 'Schließen' }).last().click()
+    await page.getByTestId('cleanup-close-button').click()
     await page.waitForTimeout(500)
 
     // ── 6. Verify at least one app remains ─────────────────────────────

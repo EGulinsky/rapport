@@ -52,19 +52,17 @@ test.describe('Targeted Sync (Journey 6)', () => {
 
     // ── 3. Open modal ──────────────────────────────────────────────
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
     await page.getByText(ROLE).first().click()
-    await page.waitForSelector('text=Verlauf', { timeout: 5_000 })
+    await page.waitForSelector('[data-testid="modal-tab-timeline"]', { timeout: 5_000 })
 
-    // ── 4. Click the modal's Sync button (via title) ────────────────
+    // ── 4. Click the modal's Sync button ────────────────────────────
     const syncPromise = page.waitForRequest(req => req.url().includes('/api/sync/targeted/') && req.method() === 'POST' && !req.url().endsWith('/reset'), { timeout: 5_000 })
-    await page.locator('button[title="Gezielter Sync für diese Bewerbung (KI)"]').click()
+    await page.getByTestId('sync-button').click()
     await syncPromise
     console.log('Sync POST request fired')
 
     // ── 5. Wait for result banner ──────────────────────────────────
-    await expect(
-      page.getByText('Sync abgeschlossen — 3 neue Einträge')
-    ).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('sync-result-banner')).toContainText('3', { timeout: 15_000 })
   })
 })

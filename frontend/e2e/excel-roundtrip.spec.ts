@@ -50,20 +50,20 @@ test.describe('Excel Round-Trip (Journey 12)', () => {
     })
 
     await page.goto('/')
-    await expect(page.getByText('Anbahnung')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('stats-bar')).toBeVisible({ timeout: 15_000 })
 
     // ---------- Export ----------
-    await page.getByText('Im/Export').click()
-    await expect(page.getByText('Excel exportieren')).toBeVisible()
-    await page.getByText('Excel exportieren').click()
+    await page.getByTestId('import-export-menu-button').click()
+    await expect(page.getByTestId('export-excel-button')).toBeVisible()
+    await page.getByTestId('export-excel-button').click()
     await page.waitForTimeout(300)
     expect(exportCalled).toBe(true)
 
     // ---------- Import ----------
     // Re-open dropdown
-    await page.getByText('Im/Export').click()
-    await expect(page.getByText('Excel importieren')).toBeVisible()
-    await page.getByText('Excel importieren').click()
+    await page.getByTestId('import-export-menu-button').click()
+    await expect(page.getByTestId('import-excel-button')).toBeVisible()
+    await page.getByTestId('import-excel-button').click()
 
     // Set file on the hidden input
     const fileInput = page.locator('input[type="file"]')
@@ -76,8 +76,8 @@ test.describe('Excel Round-Trip (Journey 12)', () => {
     // Wait for import result modal
     await expect(page.getByText('Excel-Import abgeschlossen')).toBeVisible({ timeout: 5_000 })
     await expect(page.getByText('Import erfolgreich: 3 Einträge importiert.')).toBeVisible()
-    // Verify the imported count badge is shown (text "Importiert" next to the number)
-    await expect(page.getByText('Importiert', { exact: true })).toBeVisible()
+    // Verify the imported count badge is shown
+    await expect(page.getByTestId('import-result-imported')).toBeVisible()
     expect(importCalled).toBe(true)
   })
 })

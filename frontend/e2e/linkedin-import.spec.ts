@@ -21,7 +21,7 @@ test.describe('LinkedIn Import (Journey 3)', () => {
 
   test.beforeEach(async ({ page, authToken }) => {
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
   })
 
   test('imports a LinkedIn link, prefills form, and saves application', async ({ page }) => {
@@ -35,29 +35,29 @@ test.describe('LinkedIn Import (Journey 3)', () => {
     })
 
     // ── 2. "Neu" → "Aus LinkedIn importieren" ──────────────────────────
-    await page.getByRole('button', { name: /Neu/ }).click()
-    await page.getByText('Aus LinkedIn importieren').click()
-    await expect(page.getByText('Aus LinkedIn importieren').first()).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('new-menu-button').click()
+    await page.getByTestId('new-menu-import-linkedin').click()
+    await expect(page.getByTestId('linkedin-import-title')).toBeVisible({ timeout: 5_000 })
 
     // ── 3. Paste a LinkedIn job URL ─────────────────────────────────────
     await page.locator('input[type="url"]').fill(LI_URL)
 
     // ── 4. Click "Importieren" ──────────────────────────────────────────
-    await page.getByRole('button', { name: 'Importieren' }).click()
+    await page.getByTestId('linkedin-import-submit-button').click()
 
     // ── 5. Verify NewApplicationModal opens with pre-filled data ────────
-    await expect(page.getByText('Neue Bewerbung').first()).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('new-application-title')).toBeVisible({ timeout: 8_000 })
 
     // Company picker should show the pre-filled company name
     await expect(page.getByText(COMPANY).first()).toBeVisible()
 
     // Role, source, and comment should be pre-filled
-    await expect(page.locator('input[placeholder="Rolle *"]')).toHaveValue(ROLE)
-    await expect(page.locator('input[placeholder="Quelle (LinkedIn, XING, …)"]')).toHaveValue(SOURCE)
-    await expect(page.locator('textarea[placeholder="Kommentar (optional)"]')).toHaveValue(COMMENT)
+    await expect(page.getByPlaceholder('Rolle *')).toHaveValue(ROLE)
+    await expect(page.getByPlaceholder('Quelle (LinkedIn, XING, …)')).toHaveValue(SOURCE)
+    await expect(page.getByPlaceholder('Kommentar (optional)')).toHaveValue(COMMENT)
 
     // ── 6. Submit the form ──────────────────────────────────────────────
-    await page.getByRole('button', { name: 'Anlegen', exact: true }).click()
+    await page.getByTestId('new-application-submit-button').click()
 
     // ── 7. Verify the application appears in the kanban board ───────────
     await expect(page.getByText(COMPANY).first()).toBeVisible({ timeout: 5_000 })

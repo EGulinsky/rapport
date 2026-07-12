@@ -37,13 +37,12 @@ test.describe('Batch AI Assessment (Journey 9)', () => {
     })
 
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
 
-    await page.getByRole('button', { name: 'KI bewerten' }).click()
+    await page.getByTestId('ai-assess-all-button').click()
 
-    const btn = page.getByRole('button', { name: /KI l\u00e4uft/ })
-    await expect(btn).toBeVisible({ timeout: 3_000 })
-    await expect(page.getByRole('button', { name: 'KI bewerten' })).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('ai-assess-all-button')).toContainText(/l\u00e4uft|running/i, { timeout: 3_000 })
+    await expect(page.getByTestId('ai-assess-all-button')).not.toContainText(/l\u00e4uft|running/i, { timeout: 10_000 })
 
     expect(batchCalled).toBe(true)
   })
@@ -65,12 +64,11 @@ test.describe('Batch AI Assessment (Journey 9)', () => {
     })
 
     await page.goto('/')
-    await page.waitForSelector('text=Anbahnung', { timeout: 15_000 })
+    await page.waitForSelector('[data-testid="stats-bar"]', { timeout: 15_000 })
 
-    await page.getByRole('button', { name: 'KI bewerten' }).click()
+    await page.getByTestId('ai-assess-all-button').click()
 
-    const btn = page.getByRole('button', { name: /KI l\u00e4uft/ })
-    await expect(btn).toBeVisible({ timeout: 3_000 })
-    await expect(page.getByRole('button', { name: 'KI bewerten' })).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('ai-assess-all-button')).toContainText(/l\u00e4uft|running/i, { timeout: 3_000 })
+    await expect(page.getByTestId('ai-assess-all-button')).not.toContainText(/l\u00e4uft|running/i, { timeout: 10_000 })
   })
 })

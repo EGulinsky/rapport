@@ -288,30 +288,35 @@ export default function App() {
               </div>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden bg-white">
                 <button
+                  data-testid="nav-applications"
                   onClick={() => setMainView('applications')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'applications' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
                   <Briefcase className="h-3.5 w-3.5" /> {t('nav.applications')}
                 </button>
                 <button
+                  data-testid="nav-contacts"
                   onClick={() => setMainView('contacts')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'contacts' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
                   <Users className="h-3.5 w-3.5" /> {t('nav.contacts')}
                 </button>
                 <button
+                  data-testid="nav-companies"
                   onClick={() => setMainView('companies')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'companies' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
                   <Building2 className="h-3.5 w-3.5" /> {t('nav.companies')}
                 </button>
                 <button
+                  data-testid="nav-calendar"
                   onClick={() => setMainView('calendar')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'calendar' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
                   <Calendar className="h-3.5 w-3.5" /> {t('nav.calendar')}
                 </button>
                 <button
+                  data-testid="nav-analytics"
                   onClick={() => setMainView('analytics')}
                   className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'analytics' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
@@ -358,6 +363,7 @@ export default function App() {
                 }}
                 disabled={aiAssessingAll}
                 title={t('aiAssessAll.title')}
+                data-testid="ai-assess-all-button"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
               >
                 <Sparkles className={`h-3.5 w-3.5 ${aiAssessingAll ? 'animate-pulse' : ''}`} />
@@ -368,6 +374,7 @@ export default function App() {
               <button
                 onClick={() => setShowCleanup(true)}
                 title={cleanupScope ? t('cleanup.titleScoped', { scope: cleanupScopeLabel }) : t('cleanup.titleUnscoped')}
+                data-testid="cleanup-button"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
@@ -375,6 +382,7 @@ export default function App() {
               </button>
               <div className="relative" ref={newMenuRef}>
                 <button
+                  data-testid="new-menu-button"
                   onClick={() => setShowNewMenu(o => !o)}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
                 >
@@ -388,6 +396,7 @@ export default function App() {
                       <>
                         <button
                           type="button"
+                          data-testid="new-menu-create-manually"
                           onClick={() => { setShowNewMenu(false); setShowNewContact(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -395,6 +404,7 @@ export default function App() {
                         </button>
                         <button
                           type="button"
+                          data-testid="new-menu-import-icloud"
                           onClick={() => { setShowNewMenu(false); setContactImportSource('icloud') }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -402,6 +412,7 @@ export default function App() {
                         </button>
                         <button
                           type="button"
+                          data-testid="new-menu-import-linkedin"
                           onClick={() => { setShowNewMenu(false); setContactImportSource('linkedin') }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -412,6 +423,7 @@ export default function App() {
                       <>
                         <button
                           type="button"
+                          data-testid="new-menu-create-manually"
                           onClick={() => { setShowNewMenu(false); setShowNewCompany(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -419,6 +431,7 @@ export default function App() {
                         </button>
                         <button
                           type="button"
+                          data-testid="new-menu-import-linkedin"
                           onClick={() => { setShowNewMenu(false); setShowCompanyImport(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -429,6 +442,7 @@ export default function App() {
                       <>
                         <button
                           type="button"
+                          data-testid="new-menu-create-manually"
                           onClick={() => { setShowNewMenu(false); setNewApplicationPrefill(null); setSelectedId(-1) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -436,6 +450,7 @@ export default function App() {
                         </button>
                         <button
                           type="button"
+                          data-testid="new-menu-import-linkedin"
                           onClick={() => { setShowNewMenu(false); setShowLinkedInImport(true) }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
@@ -469,6 +484,7 @@ export default function App() {
                 onClick={() => setShowAiSettings(true)}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
                 title={t('aiSettings')}
+                data-testid="settings-button"
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -543,6 +559,7 @@ export default function App() {
             {selectedAppIds.size >= 2 && viewMode === 'table' && (
               <button
                 onClick={() => setShowMerge(true)}
+                data-testid="merge-applications-button"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors"
               >
                 <GitMerge className="h-3.5 w-3.5" />
@@ -581,6 +598,7 @@ export default function App() {
               {(['table', 'kanban'] as ViewMode[]).map(mode => (
                 <button
                   key={mode}
+                  data-testid={`view-mode-${mode}`}
                   onClick={() => setViewMode(mode)}
                   className={clsx(
                     'px-3 py-1.5 text-xs font-medium transition-colors',
@@ -774,7 +792,7 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Linkedin className="h-5 w-5 text-[#0A66C2]" />
-          <h2 className="text-lg font-semibold text-gray-900">{t('linkedInImport.title')}</h2>
+          <h2 className="text-lg font-semibold text-gray-900" data-testid="linkedin-import-title">{t('linkedInImport.title')}</h2>
         </div>
         <p className="text-sm text-gray-500">
           {t('linkedInImport.description')}
@@ -797,6 +815,7 @@ function LinkedInImportModal({ onClose, onExtracted }: { onClose: () => void; on
             type="button"
             disabled={extracting || !url.trim()}
             onClick={extract}
+            data-testid="linkedin-import-submit-button"
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             <Sparkles className={`h-3.5 w-3.5 ${extracting ? 'animate-pulse' : ''}`} />
@@ -895,7 +914,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">{t('newApplication.title')}</h2>
+        <h2 className="text-lg font-semibold text-gray-900" data-testid="new-application-title">{t('newApplication.title')}</h2>
         <div className="relative" ref={firmaPickerRef}>
           <div
             className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-sm cursor-pointer ${form.firma ? 'border-gray-200 text-gray-900' : 'border-gray-200 text-gray-400'} hover:border-indigo-300`}
@@ -1001,7 +1020,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
             {tCommon('cancel')}
           </button>
-          <button type="submit" disabled={saving || !form.firma || !form.rolle} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+          <button type="submit" disabled={saving || !form.firma || !form.rolle} data-testid="new-application-submit-button" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
             {saving ? tCommon('saving') : tCommon('create')}
           </button>
         </div>
