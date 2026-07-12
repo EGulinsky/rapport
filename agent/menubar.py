@@ -39,6 +39,7 @@ def bootstrap_or_run() -> bool:
 def _start_server_thread(config: AgentConfig) -> None:
     import uvicorn
 
+    from agent.config import restart_process
     from agent.main import create_app
     from agent.providers import factory
 
@@ -47,6 +48,7 @@ def _start_server_thread(config: AgentConfig) -> None:
         files_provider=factory.make_files_provider(),
         notes_provider=factory.make_notes_provider(),
         calls_provider=factory.make_calls_provider(),
+        restart_agent=restart_process,
     )
     thread = threading.Thread(
         target=lambda: uvicorn.run(app, host="0.0.0.0", port=config.port, log_level="info"),

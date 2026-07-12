@@ -5,6 +5,8 @@ Run directly:  python3 -m agent.main
 """
 from __future__ import annotations
 
+from typing import Callable
+
 from fastapi import Depends, FastAPI
 
 from agent.auth import require_token
@@ -20,10 +22,14 @@ def create_app(
     files_provider: FilesProvider,
     notes_provider: NotesProvider,
     calls_provider: CallsProvider,
+    restart_agent: Callable[[], None] | None = None,
 ) -> FastAPI:
     """Builds the FastAPI app from already-constructed dependencies — kept
     free of module-level side effects (no config file I/O, no subprocess
-    calls at import time) so tests can inject fakes cheaply."""
+    calls at import time) so tests can inject fakes cheaply. `restart_agent`
+    defaults to a no-op (safe for tests); production entry points
+    (menubar.py, run() below) pass agent.config.restart_process so a
+    ui_language push actually takes visible effect."""
     app = FastAPI(title="Rapport Agent", version=__version__)
 
     auth = require_token(config)
@@ -37,6 +43,7 @@ def create_app(
     app.dependency_overrides[notes.get_notes_provider] = lambda: notes_provider
     app.dependency_overrides[calls.get_calls_provider] = lambda: calls_provider
     app.dependency_overrides[config_router.get_agent_config] = lambda: config
+    app.dependency_overrides[config_router.get_restart_trigger] = lambda: (restart_agent or (lambda: None))
 
     @app.get("/health")
     def health():
@@ -64,6 +71,7 @@ def create_app(
 def run():
     import uvicorn
 
+    from agent.config import restart_process
     from agent.providers import factory
 
     config = AgentConfig.load_or_create()
@@ -72,6 +80,7 @@ def run():
         files_provider=factory.make_files_provider(),
         notes_provider=factory.make_notes_provider(),
         calls_provider=factory.make_calls_provider(),
+        restart_agent=restart_process,
     )
     uvicorn.run(app, host="0.0.0.0", port=config.port)
 

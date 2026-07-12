@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.73.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n bugfix: even with v3.72.0\'s fix, a language push still had no visible effect — the agent\'s menu bar is built once by rumps at process startup, so writing the new language to disk alone never changed what was on screen. The agent now restarts itself automatically whenever a push actually changes the language (launchd immediately relaunches it with the new language already active), instead of requiring a manual quit-and-reopen.',
+    ],
+  },
+  {
     version: '3.72.0',
     date: '2026-07-12',
     changes: [

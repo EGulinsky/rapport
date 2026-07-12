@@ -65,3 +65,19 @@ class AgentConfig:
 
 def platform_name() -> str:
     return platform.system()  # "Darwin" | "Windows" | "Linux"
+
+
+def restart_process() -> None:
+    """Exits this process so a freshly-launched one picks up config changes
+    at startup — needed because rumps builds the menu bar once when the app
+    starts (see menubar.py), so a config push alone never becomes visible.
+    Called (as a FastAPI background task, after the response is sent) from
+    routers/config.py whenever ui_language actually changes. Under packaging
+    launchd's KeepAlive relaunches within ~1s with the new language already
+    on disk; a bare `python -m agent.main` dev run has no such supervisor
+    and just exits."""
+    import os
+    import time
+
+    time.sleep(0.3)
+    os._exit(0)

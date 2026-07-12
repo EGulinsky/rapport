@@ -65,8 +65,8 @@ app = BUNDLE(
     bundle_identifier="com.rapport.agent",
     info_plist={
         "LSUIElement": True,
-        "CFBundleShortVersionString": "0.2.0",
-        "CFBundleVersion": "0.2.0",
+        "CFBundleShortVersionString": "0.3.0",
+        "CFBundleVersion": "0.3.0",
         "NSHumanReadableCopyright": "",
     },
 )
