@@ -13,6 +13,7 @@ import threading
 
 from agent import launchd
 from agent.config import AgentConfig, app_data_dir
+from agent.strings import t
 
 
 def executable_path() -> str:
@@ -63,31 +64,33 @@ def run_menubar_app(config: AgentConfig) -> None:
 
     log_path = app_data_dir() / "logs" / "agent.log"
 
+    lang = config.ui_language
+
     class AgentMenuBarApp(rumps.App):
         def __init__(self):
             super().__init__("Rapport Agent", title="🟢", quit_button=None)
             self.menu = [
-                rumps.MenuItem(f"Läuft auf Port {config.port}"),
+                rumps.MenuItem(t("running_on_port", lang, port=config.port)),
                 None,
-                rumps.MenuItem("Token kopieren", callback=self.copy_token),
-                rumps.MenuItem("Logs öffnen", callback=self.open_logs),
+                rumps.MenuItem(t("copy_token", lang), callback=self.copy_token),
+                rumps.MenuItem(t("open_logs", lang), callback=self.open_logs),
                 None,
-                rumps.MenuItem("Deinstallieren", callback=self.uninstall),
-                rumps.MenuItem("Beenden", callback=self.quit),
+                rumps.MenuItem(t("uninstall", lang), callback=self.uninstall),
+                rumps.MenuItem(t("quit", lang), callback=self.quit),
             ]
 
         def copy_token(self, _):
             _copy_to_clipboard(config.token)
-            rumps.notification("Rapport Agent", "", "Token in Zwischenablage kopiert")
+            rumps.notification(t("notification_title", lang), "", t("token_copied", lang))
 
         def open_logs(self, _):
             subprocess.Popen(["open", str(log_path)])
 
         def uninstall(self, _):
             if rumps.alert(
-                title="Agent deinstallieren?",
-                message="Entfernt den Autostart-Eintrag und beendet den Agenten.",
-                ok="Deinstallieren", cancel="Abbrechen",
+                title=t("uninstall_confirm_title", lang),
+                message=t("uninstall_confirm_message", lang),
+                ok=t("uninstall_confirm_ok", lang), cancel=t("uninstall_confirm_cancel", lang),
             ) == 1:
                 launchd.unregister()
                 rumps.quit_application()

@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.67.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n (Phase 11/13, Rapport Agent): Der native Mac-Agent (Menüleiste) unterstützt jetzt ebenfalls Deutsch/Englisch — neues agent/strings.py mit allen Menü-/Dialogtexten, neues Feld AgentConfig.ui_language sowie ein neuer PATCH /config-Endpunkt, den das Backend beim Speichern/Verifizieren des Agent-Tokens automatisch mit der Kontosprache aufruft. Da rumps das Menü nur einmal beim Start aufbaut, wirkt ein Sprachwechsel erst nach einem Neustart des Agenten. Wichtig: Diese Phase erfordert zusätzlich zum Code einen manuellen Rebuild + Neuinstallation des Agenten auf dem Mac (siehe agent/README.md) — mit grüner CI allein ist sie nicht "fertig".',
+    ],
+  },
+  {
     version: '3.66.0',
     date: '2026-07-12',
     changes: [

@@ -118,7 +118,7 @@ def get_agent_settings(db: Session = Depends(get_db), current_user: models.User 
 
 
 @router.post("/agent", response_model=schemas.AgentSettingsRead)
-def save_agent_settings(
+async def save_agent_settings(
     payload: schemas.AgentSettingsWrite,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -136,6 +136,14 @@ def save_agent_settings(
 
     db.commit()
     db.refresh(cfg)
+
+    if cfg.token_enc:
+        from app.agent_client import agent_post
+        try:
+            await agent_post(db, "/config", json={"ui_language": current_user.ui_language}, timeout=5)
+        except Exception:
+            pass  # agent may not be reachable yet — pairing itself must not fail because of this
+
     return schemas.AgentSettingsRead(url=cfg.url, has_token=bool(cfg.token_enc))
 
 
