@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw, Upload, FileText } from 'lucide-react'
 import { api, authFetch } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
@@ -35,41 +36,41 @@ interface AiProvider {
 
 const PROVIDERS: AiProvider[] = [
   {
-    id: 'groq', name: 'Groq', badge: 'kostenlos', badgeColor: 'bg-green-100 text-green-700',
+    id: 'groq', name: 'Groq', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
     model: 'groq/llama-3.3-70b-versatile', keyPh: 'gsk_…', keyUrl: 'https://console.groq.com/keys', needsUrl: false,
     models: [
-      { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  sublabel: 'Versatile', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
-      { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',   sublabel: 'Instant',   badge: 'Schnell',   badgeColor: 'bg-gray-100 text-gray-600' },
+      { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  sublabel: 'Versatile', badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',   sublabel: 'Instant',   badge: 'fast',   badgeColor: 'bg-gray-100 text-gray-600' },
       { model: 'groq/llama3-70b-8192',          label: 'Llama 3 70B',    sublabel: '8192 ctx' },
       { model: 'groq/gemma2-9b-it',             label: 'Gemma 2 9B' },
       { model: 'groq/mixtral-8x7b-32768',       label: 'Mixtral 8×7B',   sublabel: '32k ctx' },
     ],
   },
   {
-    id: 'anthropic', name: 'Anthropic Claude', badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700',
+    id: 'anthropic', name: 'Anthropic Claude', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
     model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com', needsUrl: false,
     models: [
-      { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
-      { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'cheap',    badgeColor: 'bg-green-100 text-green-700' },
+      { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
     ],
   },
   {
-    id: 'openai', name: 'OpenAI', badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700',
+    id: 'openai', name: 'OpenAI', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
     model: 'gpt-4o-mini', keyPh: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys', needsUrl: false,
     models: [
-      { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'Günstig',    badgeColor: 'bg-green-100 text-green-700' },
-      { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'Empfohlen', badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'cheap',    badgeColor: 'bg-green-100 text-green-700' },
+      { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
     ],
   },
   {
-    id: 'gemini', name: 'Google Gemini', badge: 'kostenlos', badgeColor: 'bg-green-100 text-green-700',
+    id: 'gemini', name: 'Google Gemini', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
     model: 'gemini/gemini-2.0-flash', keyPh: 'AIza…', keyUrl: 'https://aistudio.google.com/app/apikey', needsUrl: false,
     models: [
-      { model: 'gemini/gemini-2.0-flash',               label: 'Gemini 2.0 Flash',      badge: 'Empfohlen',       badgeColor: 'bg-indigo-100 text-indigo-700' },
-      { model: 'gemini/gemini-2.0-flash-lite',          label: 'Gemini 2.0 Flash Lite', badge: 'Schnell',          badgeColor: 'bg-gray-100 text-gray-600' },
+      { model: 'gemini/gemini-2.0-flash',               label: 'Gemini 2.0 Flash',      badge: 'recommended',       badgeColor: 'bg-indigo-100 text-indigo-700' },
+      { model: 'gemini/gemini-2.0-flash-lite',          label: 'Gemini 2.0 Flash Lite', badge: 'fast',          badgeColor: 'bg-gray-100 text-gray-600' },
       { model: 'gemini/gemini-1.5-flash',               label: 'Gemini 1.5 Flash' },
-      { model: 'gemini/gemini-1.5-pro',                 label: 'Gemini 1.5 Pro',        badge: 'kostenpflichtig', badgeColor: 'bg-orange-100 text-orange-700' },
-      { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash',      badge: 'Preview',         badgeColor: 'bg-purple-100 text-purple-700' },
+      { model: 'gemini/gemini-1.5-pro',                 label: 'Gemini 1.5 Pro',        badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700' },
+      { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash',      badge: 'preview',         badgeColor: 'bg-purple-100 text-purple-700' },
     ],
   },
   {
@@ -99,6 +100,7 @@ const POPULAR_OLLAMA_MODELS: OllamaModel[] = [
 
 // ── Google Sync Panel ─────────────────────────────────────────────────────────
 function GoogleSyncPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const locale = useLocale()
   const [status, setStatus] = useState<GoogleSyncStatus | null>(null)
   const [creds, setCreds] = useState({ client_id: '', client_secret: '' })
@@ -185,27 +187,27 @@ function GoogleSyncPanel() {
   }
 
   const fmtDate = (d?: string) =>
-    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : t('shared.never')
 
   return (
     <div className="space-y-5">
       {/* Credentials */}
       <div>
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-          Google OAuth 2.0 Credentials
+          {t('google.credentialsTitle')}
           <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer"
             className="ml-2 normal-case text-indigo-600 hover:underline inline-flex items-center gap-0.5">
-            Cloud Console <ExternalLink className="h-3 w-3" />
+            {t('google.cloudConsole')} <ExternalLink className="h-3 w-3" />
           </a>
         </p>
         <p className="text-xs text-gray-400 mb-3">
-          Projekt anlegen → APIs aktivieren (Gmail + Calendar) → OAuth-Client erstellen (Typ: Webanwendung)<br/>
-          Autorisierte Redirect-URI: <code className="bg-gray-100 px-1 rounded">http://localhost:8000/api/sync/google/callback</code>
+          {t('google.setupHint')}<br/>
+          {t('google.redirectUriLabel')} <code className="bg-gray-100 px-1 rounded">http://localhost:8000/api/sync/google/callback</code>
         </p>
         <div className="space-y-2">
           <input
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Client ID"
+            placeholder={t('google.clientIdPlaceholder')}
             value={creds.client_id}
             onChange={e => setCreds(c => ({ ...c, client_id: e.target.value }))}
           />
@@ -213,7 +215,7 @@ function GoogleSyncPanel() {
             <input
               type={showSecret ? 'text' : 'password'}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Client Secret"
+              placeholder={t('google.clientSecretPlaceholder')}
               value={creds.client_secret}
               onChange={e => setCreds(c => ({ ...c, client_secret: e.target.value }))}
             />
@@ -224,7 +226,7 @@ function GoogleSyncPanel() {
           </div>
           <button onClick={saveCreds} disabled={savingCreds || !creds.client_id}
             className="rounded-lg bg-gray-800 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-50">
-            {savingCreds ? 'Speichern…' : 'Credentials speichern'}
+            {savingCreds ? t('common:saving') : t('google.saveCredentials')}
           </button>
         </div>
       </div>
@@ -236,16 +238,16 @@ function GoogleSyncPanel() {
             <div className="flex items-center gap-2">
               <div className={clsx('h-2.5 w-2.5 rounded-full', status.connected ? 'bg-green-500' : 'bg-gray-300')} />
               <span className="text-sm font-medium text-gray-800">
-                {status.connected ? 'Verbunden' : 'Nicht verbunden'}
+                {status.connected ? t('shared.connected') : t('shared.notConnected')}
               </span>
             </div>
             {status.connected
               ? <button onClick={disconnect} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600">
-                  <Unlink className="h-3.5 w-3.5" /> Trennen
+                  <Unlink className="h-3.5 w-3.5" /> {t('shared.disconnect')}
                 </button>
               : <button onClick={openOAuth}
                   className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">
-                  Mit Google verbinden
+                  {t('google.connectWithGoogle')}
                 </button>
             }
           </div>
@@ -255,40 +257,40 @@ function GoogleSyncPanel() {
               {/* Gmail */}
               <div className="rounded-lg bg-gray-50 border border-gray-100 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-700">Gmail</p>
+                  <p className="text-xs font-semibold text-gray-700">{t('google.gmail')}</p>
                   <div className="flex gap-1">
                     <button onClick={() => runSync('gmail')} disabled={!!syncing || resetting}
                       className="flex items-center gap-1 rounded-md bg-white border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                      title="Neue Mails seit letztem Sync holen">
+                      title={t('google.syncMailTitle')}>
                       {syncing === 'gmail'
                         ? <Loader className="h-3 w-3 animate-spin" />
                         : <RefreshCw className="h-3 w-3" />}
-                      Sync
+                      {t('shared.sync')}
                     </button>
                     <button onClick={resetAndSync} disabled={!!syncing || resetting}
                       className="flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                      title="Letzte 90 Tage erneut durchsuchen">
+                      title={t('google.resyncAllTitle')}>
                       {resetting ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                      Alles neu
+                      {t('shared.resyncAll')}
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-400">Letzter Sync: {fmtDate(status.gmail_last_sync)}</p>
+                <p className="text-xs text-gray-400">{t('google.lastSync', { date: fmtDate(status.gmail_last_sync) })}</p>
               </div>
 
               {/* Calendar */}
               <div className="rounded-lg bg-gray-50 border border-gray-100 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-700">Kalender</p>
+                  <p className="text-xs font-semibold text-gray-700">{t('google.calendar')}</p>
                   <button onClick={() => runSync('gcal')} disabled={!!syncing}
                     className="flex items-center gap-1 rounded-md bg-white border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50">
                     {syncing === 'gcal'
                       ? <Loader className="h-3 w-3 animate-spin" />
                       : <RefreshCw className="h-3 w-3" />}
-                    Sync
+                    {t('shared.sync')}
                   </button>
                 </div>
-                <p className="text-xs text-gray-400">Letzter Sync: {fmtDate(status.gcal_last_sync)}</p>
+                <p className="text-xs text-gray-400">{t('google.lastSync', { date: fmtDate(status.gcal_last_sync) })}</p>
               </div>
             </div>
           )}
@@ -296,8 +298,8 @@ function GoogleSyncPanel() {
           {/* Sync result */}
           {lastResult && (
             <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 space-y-1">
-              <p className="font-semibold">{lastResult.target === 'gmail' ? 'Gmail' : 'Kalender'} Sync abgeschlossen</p>
-              <p>{lastResult.processed} verarbeitet · {lastResult.created} Events erstellt · {lastResult.skipped} übersprungen</p>
+              <p className="font-semibold">{t('google.syncDoneTitle', { target: lastResult.target === 'gmail' ? t('google.gmail') : t('google.calendar') })}</p>
+              <p>{t('google.syncStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}</p>
               {lastResult.errors.length > 0 && (
                 <p className="text-red-600">{lastResult.errors.slice(0, 3).join(' | ')}</p>
               )}
@@ -318,6 +320,7 @@ function GoogleSyncPanel() {
 
 // ── AI Panel ──────────────────────────────────────────────────────────────────
 function AiPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const [form, setForm] = useState<AiSettingsWrite>({ provider: 'groq', model: 'groq/llama-3.3-70b-versatile', api_key: '', base_url: '', enabled: true })
   const [hasStoredKey, setHasStoredKey] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -394,11 +397,11 @@ function AiPanel() {
   }
 
   async function pullModel(modelName: string) {
-    setPulling({ model: modelName, status: 'Starte Download…', pct: null })
+    setPulling({ model: modelName, status: t('ai.startingDownload'), pct: null })
     const url = api.settings.pullOllamaModel(modelName, form.base_url || 'http://host.docker.internal:11434')
     try {
       const resp = await authFetch(url)
-      if (!resp.body) throw new Error('Kein Stream')
+      if (!resp.body) throw new Error(t('ai.noStream'))
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
@@ -412,7 +415,7 @@ function AiPanel() {
           if (!line.startsWith('data: ')) continue
           try {
             const d = JSON.parse(line.slice(6))
-            if (d.status === 'error') { setPulling({ model: modelName, status: `Fehler: ${d.error}`, pct: null }); return }
+            if (d.status === 'error') { setPulling({ model: modelName, status: t('ai.downloadError', { error: d.error }), pct: null }); return }
             if (d.status === 'done' || d.status === 'success') {
               setPulling(null)
               loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
@@ -420,12 +423,12 @@ function AiPanel() {
               return
             }
             const pct = d.total ? d.completed / d.total : null
-            setPulling({ model: modelName, status: d.status ?? 'Lädt…', pct })
+            setPulling({ model: modelName, status: d.status ?? t('ai.downloading'), pct })
           } catch { /* ignore parse errors */ }
         }
       }
     } catch (e) {
-      setPulling({ model: modelName, status: `Fehler: ${e instanceof Error ? e.message : String(e)}`, pct: null })
+      setPulling({ model: modelName, status: t('ai.downloadError', { error: e instanceof Error ? e.message : String(e) }), pct: null })
     } finally {
       setPulling(prev => prev?.model === modelName ? null : prev)
     }
@@ -444,7 +447,7 @@ function AiPanel() {
     try {
       const payload: AiSettingsWrite = { ...form, api_key: form.api_key?.trim() || undefined, base_url: form.base_url?.trim() || undefined }
       const r = await api.settings.testAi(payload)
-      setTestResult({ ok: true, msg: `Verbindung OK — ${r.message}` })
+      setTestResult({ ok: true, msg: t('ai.connectionOk', { message: r.message }) })
     } catch (e: unknown) {
       setTestResult({ ok: false, msg: e instanceof Error ? e.message : String(e) })
     } finally { setTesting(false) }
@@ -454,14 +457,14 @@ function AiPanel() {
   const providerModels = prov.needsUrl ? null : (prov.models ?? null)
   const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
 
-  if (loading) return <div className="py-8 text-center text-gray-400 text-sm">Lädt…</div>
+  if (loading) return <div className="py-8 text-center text-gray-400 text-sm">{t('common:loading')}</div>
 
   return (
     <div className="space-y-5">
 
       {/* Save status indicator */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-400">Änderungen werden automatisch gespeichert</p>
+        <p className="text-xs text-gray-400">{t('ai.autoSaveHint')}</p>
         <div className="flex items-center gap-1.5">
           {saveResult === 'saving' && <Loader className="h-3.5 w-3.5 animate-spin text-gray-400" />}
           {saveResult === 'saved' && <CheckCircle className="h-3.5 w-3.5 text-green-500" />}
@@ -470,7 +473,7 @@ function AiPanel() {
       </div>
 
       <label className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">KI-Analyse aktiviert</span>
+        <span className="text-sm font-medium text-gray-700">{t('ai.enabledLabel')}</span>
         <button type="button" onClick={() => { const patch = { enabled: !form.enabled }; setForm(f => ({ ...f, ...patch })); autoSave(patch) }}
           className={clsx('relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500', form.enabled ? 'bg-indigo-600' : 'bg-gray-200')}>
           <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transition-transform', form.enabled ? 'translate-x-6' : 'translate-x-1')} />
@@ -478,14 +481,14 @@ function AiPanel() {
       </label>
 
       <div>
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Anbieter</p>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{t('ai.provider')}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {PROVIDERS.map(p => (
             <button key={p.id} type="button" onClick={() => selectProvider(p)}
               className={clsx('flex flex-col items-start rounded-xl border p-3 text-left transition-all',
                 form.provider === p.id ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-gray-200 hover:border-gray-300 bg-white')}>
               <span className="text-sm font-medium text-gray-800">{p.name}</span>
-              <span className={clsx('mt-1 text-xs px-1.5 py-0.5 rounded-full font-medium', p.badgeColor)}>{p.badge}</span>
+              <span className={clsx('mt-1 text-xs px-1.5 py-0.5 rounded-full font-medium', p.badgeColor)}>{t(`ai.badge.${p.badge}`)}</span>
             </button>
           ))}
         </div>
@@ -495,24 +498,24 @@ function AiPanel() {
       {prov.needsUrl && (
         <>
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Base URL</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{t('ai.baseUrl')}</p>
             <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="http://host.docker.internal:11434" value={form.base_url ?? ''}
               onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
               onBlur={() => { autoSave({ base_url: form.base_url }); loadOllamaModels(form.base_url || 'http://host.docker.internal:11434') }} />
-            <p className="mt-1 text-xs text-gray-400">Mac-Host aus Docker: <code className="bg-gray-100 px-1 rounded">host.docker.internal:11434</code></p>
+            <p className="mt-1 text-xs text-gray-400">{t('ai.baseUrlHint')} <code className="bg-gray-100 px-1 rounded">host.docker.internal:11434</code></p>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modell</p>
-              {ollamaReachable === false && <span className="text-xs text-red-500">Ollama nicht erreichbar</span>}
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('ai.model')}</p>
+              {ollamaReachable === false && <span className="text-xs text-red-500">{t('ai.ollamaUnreachable')}</span>}
               {loadingModels && <Loader className="h-3.5 w-3.5 animate-spin text-gray-400" />}
             </div>
 
             {ollamaInstalled.length > 0 && (
               <div className="mb-3">
-                <p className="text-xs text-gray-400 mb-1.5">Installiert</p>
+                <p className="text-xs text-gray-400 mb-1.5">{t('ai.installed')}</p>
                 <div className="flex flex-wrap gap-2">
                   {ollamaInstalled.map(name => (
                     <button key={name} type="button" onClick={() => selectOllamaModel(name)}
@@ -527,7 +530,7 @@ function AiPanel() {
             )}
 
             <div>
-              <p className="text-xs text-gray-400 mb-1.5">Verfügbar zum Download</p>
+              <p className="text-xs text-gray-400 mb-1.5">{t('ai.availableForDownload')}</p>
               <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                 {POPULAR_OLLAMA_MODELS
                   .filter(m => !ollamaInstalled.some(i => i === m.name || i.startsWith(m.name + ':')))
@@ -556,7 +559,7 @@ function AiPanel() {
                           className={clsx('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors shrink-0',
                             isPulling ? 'bg-indigo-100 text-indigo-500 cursor-wait' : pulling ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700')}>
                           {isPulling ? <Loader className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                          {isPulling ? 'Lädt…' : 'Herunterladen'}
+                          {isPulling ? t('ai.downloading') : t('ai.download')}
                         </button>
                       </div>
                     )
@@ -565,7 +568,7 @@ function AiPanel() {
             </div>
 
             <div className="mt-3">
-              <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>
+              <p className="text-xs text-gray-400 mb-1">{t('ai.enterManually')}</p>
               <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
                 onBlur={() => autoSave({ model: form.model })} placeholder="ollama/llama3.2" />
@@ -577,7 +580,7 @@ function AiPanel() {
       {/* Model (non-Ollama) */}
       {!prov.needsUrl && (
         <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Modell</p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{t('ai.model')}</p>
           {providerModels && (
             <div className="flex flex-wrap gap-2 mb-3">
               {providerModels.map(m => (
@@ -597,7 +600,7 @@ function AiPanel() {
                       {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
                       {m.badge && (
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
-                          {m.badge}
+                          {t(`ai.badge.${m.badge}`)}
                         </span>
                       )}
                     </div>
@@ -608,10 +611,10 @@ function AiPanel() {
           )}
           {(!providerModels || !isKnownModel) && (
             <>
-              {providerModels && <p className="text-xs text-gray-400 mb-1">Oder manuell eingeben:</p>}
+              {providerModels && <p className="text-xs text-gray-400 mb-1">{t('ai.enterManually')}</p>}
               <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                onBlur={() => autoSave({ model: form.model })} placeholder="z.B. groq/llama-3.3-70b-versatile" />
+                onBlur={() => autoSave({ model: form.model })} placeholder={t('ai.modelPlaceholder')} />
             </>
           )}
           {providerModels && isKnownModel && (
@@ -624,22 +627,22 @@ function AiPanel() {
       {!prov.needsUrl && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">API Key</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('ai.apiKey')}</p>
             {prov.keyUrl && <a href={prov.keyUrl} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1 text-xs text-indigo-600 hover:underline">Key holen <ExternalLink className="h-3 w-3" /></a>}
+              className="flex items-center gap-1 text-xs text-indigo-600 hover:underline">{t('ai.getKey')} <ExternalLink className="h-3 w-3" /></a>}
           </div>
           {hasStoredKey && !form.api_key ? (
             <div className="flex items-center gap-2">
-              <div className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 bg-gray-50">●●●●●●●●●●●● (gespeichert)</div>
-              <button type="button" onClick={() => { api.settings.clearAiKey(); setHasStoredKey(false) }} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">Löschen</button>
-              <button type="button" onClick={() => setForm(f => ({ ...f, api_key: ' ' }))} className="text-xs text-indigo-600 hover:text-indigo-700 whitespace-nowrap">Ändern</button>
+              <div className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 bg-gray-50">{t('ai.keyStored')}</div>
+              <button type="button" onClick={() => { api.settings.clearAiKey(); setHasStoredKey(false) }} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">{t('common:delete')}</button>
+              <button type="button" onClick={() => setForm(f => ({ ...f, api_key: ' ' }))} className="text-xs text-indigo-600 hover:text-indigo-700 whitespace-nowrap">{t('ai.changeKey')}</button>
             </div>
           ) : (
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <input type={showKey ? 'text' : 'password'}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder={prov.keyPh || 'API Key'} value={form.api_key ?? ''}
+                  placeholder={prov.keyPh || t('ai.apiKey')} value={form.api_key ?? ''}
                   onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))} />
                 <button type="button" onClick={() => setShowKey(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -665,7 +668,7 @@ function AiPanel() {
       <div className="pt-1">
         <button type="button" onClick={test} disabled={testing}
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50">
-          {testing && <Loader className="h-4 w-4 animate-spin" />} Verbindung testen
+          {testing && <Loader className="h-4 w-4 animate-spin" />} {t('shared.testConnection')}
         </button>
       </div>
     </div>
@@ -674,6 +677,7 @@ function AiPanel() {
 
 // ── iCloud Sync Panel ─────────────────────────────────────────────────────────
 function ICloudSyncPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const locale = useLocale()
   const [status, setStatus] = useState<ICloudSyncStatus | null>(null)
   const [creds, setCreds] = useState({ apple_id: '', app_password: '', icloud_email: '', web_password: '' })
@@ -695,7 +699,7 @@ function ICloudSyncPanel() {
   useEffect(() => { api.icloud.status().then(setStatus) }, [])
 
   const fmtDate = (d?: string) =>
-    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : t('shared.never')
 
   async function saveCreds() {
     if (!creds.apple_id || !creds.app_password) return
@@ -773,18 +777,18 @@ function ICloudSyncPanel() {
   }
 
   const SOURCES: { id: string; label: string; syncFn: () => Promise<SyncResult>; resetFn?: () => Promise<Response>; lastSync?: string; disabled?: boolean }[] = status?.connected ? [
-    { id: 'mail',      label: 'Mail',        syncFn: api.icloud.syncMail,      resetFn: api.icloud.resetMail,     lastSync: status.mail_last_sync },
-    { id: 'calendar',  label: 'Kalender',    syncFn: api.icloud.syncCalendar,  resetFn: api.icloud.resetCalendar, lastSync: status.calendar_last_sync },
-    { id: 'reminders', label: 'Erinnerungen',syncFn: api.icloud.syncReminders, lastSync: status.reminders_last_sync },
-    { id: 'contacts',  label: 'Kontakte',    syncFn: api.icloud.syncContacts,  lastSync: status.contacts_last_sync },
-    { id: 'notes',     label: 'Notizen',     syncFn: api.icloud.syncNotes,     resetFn: api.icloud.resetNotes,    lastSync: status.notes_last_sync },
+    { id: 'mail',      label: t('icloud.sourceMail'),      syncFn: api.icloud.syncMail,      resetFn: api.icloud.resetMail,     lastSync: status.mail_last_sync },
+    { id: 'calendar',  label: t('icloud.sourceCalendar'),  syncFn: api.icloud.syncCalendar,  resetFn: api.icloud.resetCalendar, lastSync: status.calendar_last_sync },
+    { id: 'reminders', label: t('icloud.sourceReminders'), syncFn: api.icloud.syncReminders, lastSync: status.reminders_last_sync },
+    { id: 'contacts',  label: t('icloud.sourceContacts'),  syncFn: api.icloud.syncContacts,  lastSync: status.contacts_last_sync },
+    { id: 'notes',     label: t('icloud.sourceNotes'),     syncFn: api.icloud.syncNotes,     resetFn: api.icloud.resetNotes,    lastSync: status.notes_last_sync },
   ] : []
 
   return (
     <div className="space-y-5">
       <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-800 space-y-1">
-        <p className="font-semibold">App-spezifisches Passwort erforderlich</p>
-        <p>Apple ID → Sicherheit → App-spezifische Passwörter → Generieren</p>
+        <p className="font-semibold">{t('icloud.appPasswordTitle')}</p>
+        <p>{t('icloud.appPasswordHint')}</p>
         <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noreferrer"
           className="inline-flex items-center gap-1 text-blue-700 hover:underline font-medium">
           appleid.apple.com <ExternalLink className="h-3 w-3" />
@@ -794,13 +798,13 @@ function ICloudSyncPanel() {
       <div className="space-y-2">
         <input
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="Apple ID (z.B. vorname@gmail.com)"
+          placeholder={t('icloud.appleIdPlaceholder')}
           value={creds.apple_id}
           onChange={e => setCreds(c => ({ ...c, apple_id: e.target.value }))}
         />
         <input
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="iCloud-Mail-Adresse für Mail/Notizen (z.B. vorname@icloud.com) – optional"
+          placeholder={t('icloud.icloudEmailPlaceholder')}
           value={creds.icloud_email}
           onChange={e => setCreds(c => ({ ...c, icloud_email: e.target.value }))}
         />
@@ -808,7 +812,7 @@ function ICloudSyncPanel() {
           <input
             type={showPw ? 'text' : 'password'}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="App-spezifisches Passwort (xxxx-xxxx-xxxx-xxxx)"
+            placeholder={t('icloud.appPasswordPlaceholder')}
             value={creds.app_password}
             onChange={e => setCreds(c => ({ ...c, app_password: e.target.value }))}
           />
@@ -820,12 +824,12 @@ function ICloudSyncPanel() {
         <div className="flex gap-2">
           <button onClick={saveCreds} disabled={saving || !creds.apple_id || !creds.app_password}
             className="rounded-lg bg-gray-800 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-50">
-            {saving ? 'Speichern…' : 'Speichern'}
+            {saving ? t('common:saving') : t('common:save')}
           </button>
           {(status?.connected || status?.apple_id) && (
             <button onClick={testConn} disabled={testing}
               className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-              {testing && <Loader className="h-3.5 w-3.5 animate-spin" />} Verbindung testen
+              {testing && <Loader className="h-3.5 w-3.5 animate-spin" />} {t('shared.testConnection')}
             </button>
           )}
         </div>
@@ -848,7 +852,7 @@ function ICloudSyncPanel() {
               {status.icloud_email && <span className="text-xs text-gray-400">· {status.icloud_email}</span>}
             </div>
             <button onClick={disconnect} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600">
-              <Unlink className="h-3.5 w-3.5" /> Trennen
+              <Unlink className="h-3.5 w-3.5" /> {t('shared.disconnect')}
             </button>
           </div>
 
@@ -862,7 +866,7 @@ function ICloudSyncPanel() {
                       onClick={() => runSync(src.id, src.syncFn)}
                       disabled={!!syncing || src.disabled}
                       className="flex items-center gap-0.5 rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[11px] hover:bg-gray-50 disabled:opacity-50"
-                      title={src.disabled ? 'Nicht verfügbar' : 'Sync'}
+                      title={src.disabled ? t('icloud.notAvailable') : t('shared.sync')}
                     >
                       {syncing === src.id ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     </button>
@@ -871,7 +875,7 @@ function ICloudSyncPanel() {
                         onClick={() => src.resetFn!().then(() => runSync(src.id, src.syncFn))}
                         disabled={!!syncing}
                         className="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                        title="Alles neu (90 Tage)"
+                        title={t('icloud.resyncAllTitle')}
                       >
                         ↺
                       </button>
@@ -885,7 +889,7 @@ function ICloudSyncPanel() {
 
           {needs2fa && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
-              <p className="text-xs font-semibold text-amber-800">2-Faktor-Authentifizierung erforderlich</p>
+              <p className="text-xs font-semibold text-amber-800">{t('icloud.twoFaTitle')}</p>
               {twoFaMsg && <p className="text-xs text-amber-700">{twoFaMsg}</p>}
               <div className="flex gap-2">
                 <input
@@ -899,7 +903,7 @@ function ICloudSyncPanel() {
                 />
                 <button onClick={submit2fa} disabled={verifying2fa || twoFaCode.length < 6}
                   className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
-                  {verifying2fa ? <Loader className="h-3.5 w-3.5 animate-spin" /> : 'Bestätigen'}
+                  {verifying2fa ? <Loader className="h-3.5 w-3.5 animate-spin" /> : t('icloud.twoFaConfirm')}
                 </button>
               </div>
             </div>
@@ -907,8 +911,8 @@ function ICloudSyncPanel() {
 
           {lastResult && !needs2fa && (
             <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 space-y-1">
-              <p className="font-semibold">{lastResult.target} Sync abgeschlossen</p>
-              <p>{lastResult.processed} verarbeitet · {lastResult.created} erstellt · {lastResult.skipped} übersprungen</p>
+              <p className="font-semibold">{t('icloud.syncDoneTitle', { target: lastResult.target })}</p>
+              <p>{t('shared.processedStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}</p>
               {lastResult.errors.length > 0 && <p className="text-red-600">{lastResult.errors.slice(0, 3).join(' | ')}</p>}
             </div>
           )}
@@ -922,7 +926,7 @@ function ICloudSyncPanel() {
       )}
 
       {!status?.connected && (
-        <p className="text-xs text-gray-400 italic">Credentials eingeben und speichern, dann Verbindung testen.</p>
+        <p className="text-xs text-gray-400 italic">{t('icloud.enterCredentialsHint')}</p>
       )}
     </div>
   )
@@ -930,6 +934,7 @@ function ICloudSyncPanel() {
 
 // ── Calls / Anrufliste Panel ──────────────────────────────────────────────────
 function CallsPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const locale = useLocale()
   const [status, setStatus] = useState<CallsStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
@@ -939,7 +944,7 @@ function CallsPanel() {
   useEffect(() => { api.icloud.callsStatus().then(setStatus) }, [])
 
   const fmtDate = (d?: string) =>
-    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : t('shared.never')
 
   async function toggle() {
     if (!status) return
@@ -973,7 +978,7 @@ function CallsPanel() {
     } finally { setSyncing(false) }
   }
 
-  if (!status) return <div className="py-8 text-center text-gray-400 text-sm">Lädt…</div>
+  if (!status) return <div className="py-8 text-center text-gray-400 text-sm">{t('common:loading')}</div>
 
   return (
     <div className="space-y-5">
@@ -981,10 +986,10 @@ function CallsPanel() {
       <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-2 text-xs text-gray-600">
         <div className="flex items-center gap-2 font-semibold text-gray-800">
           <Phone className="h-4 w-4 text-indigo-500" />
-          Anrufliste (iPhone + WhatsApp)
+          {t('calls.title')}
         </div>
-        <p>Liest Anrufe aus der Mac-Anrufliste und WhatsApp und verknüpft sie mit Bewerbungen über Kontakte.</p>
-        <p className="text-gray-400">Erfordert den Rapport Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
+        <p>{t('calls.description')}</p>
+        <p className="text-gray-400">{t('calls.requiresAgent')}</p>
       </div>
 
       {/* Bridge status + toggle */}
@@ -995,11 +1000,11 @@ function CallsPanel() {
               ? <Wifi className="h-4 w-4 text-green-500" />
               : <WifiOff className="h-4 w-4 text-gray-400" />}
             <span className="text-sm font-medium text-gray-800">
-              Bridge {status.bridge_reachable ? 'erreichbar' : 'nicht erreichbar'}
+              {t('calls.bridge')} {status.bridge_reachable ? t('shared.reachable') : t('shared.notReachable')}
             </span>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-xs text-gray-500">Sync aktiviert</span>
+            <span className="text-xs text-gray-500">{t('calls.syncEnabled')}</span>
             <button
               type="button"
               onClick={toggle}
@@ -1014,24 +1019,24 @@ function CallsPanel() {
         </div>
 
         <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-400">Letzter Sync: {fmtDate(status.last_sync)}</p>
+          <p className="text-xs text-gray-400">{t('calls.lastSync', { date: fmtDate(status.last_sync) })}</p>
           <div className="flex gap-2">
             <button
               onClick={runSync}
               disabled={syncing || !status.bridge_reachable || !status.enabled}
               className="flex items-center gap-1 rounded-md bg-white border border-gray-200 px-2.5 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
-              title="Neue Anrufe seit letztem Sync"
+              title={t('calls.syncNewTitle')}
             >
               {syncing ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-              Sync
+              {t('shared.sync')}
             </button>
             <button
               onClick={reset}
               disabled={syncing || !status.bridge_reachable || !status.enabled}
               className="rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-              title="Alle Anrufe neu einlesen"
+              title={t('calls.resyncAllTitle')}
             >
-              ↺ Alles neu
+              ↺ {t('calls.resyncAll')}
             </button>
           </div>
         </div>
@@ -1039,15 +1044,15 @@ function CallsPanel() {
         {!status.bridge_reachable && (
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
             <WifiOff className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            Agent nicht erreichbar. Prüfe den „Agent“-Tab (läuft er? Token korrekt hinterlegt?).
+            {t('calls.agentUnreachable')}
           </div>
         )}
       </div>
 
       {lastResult && (
         <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 space-y-1">
-          <p className="font-semibold">Sync abgeschlossen</p>
-          <p>{lastResult.processed} verarbeitet · {lastResult.created} Events erstellt · {lastResult.skipped} übersprungen</p>
+          <p className="font-semibold">{t('calls.syncDone')}</p>
+          <p>{t('calls.syncStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}</p>
           {lastResult.errors.length > 0 && <p className="text-red-600">{lastResult.errors.slice(0, 3).join(' | ')}</p>}
         </div>
       )}
@@ -1063,6 +1068,7 @@ function CallsPanel() {
 
 // ── Files / Dokumente Panel ───────────────────────────────────────────────────
 function FilesPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const locale = useLocale()
   const [cfg, setCfg] = useState<FilesConfig>({ enabled: true, folder_path: '' })
   const [bridgeOk, setBridgeOk] = useState<boolean | null>(null)
@@ -1082,7 +1088,7 @@ function FilesPanel() {
   }, [])
 
   const fmtDate = (d?: string) =>
-    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'
+    d ? formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : t('shared.never')
 
   async function save() {
     setSaving(true); setSaved(false)
@@ -1124,10 +1130,10 @@ function FilesPanel() {
       <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-2 text-xs text-gray-600">
         <div className="flex items-center gap-2 font-semibold text-gray-800">
           <FolderOpen className="h-4 w-4 text-indigo-500" />
-          Lokale Bewerbungsunterlagen
+          {t('files.title')}
         </div>
-        <p>Scannt einen Ordner nach PDF, DOCX, TXT und Markdown-Dateien und verknüpft sie anhand des Datei- und Ordnernamens mit Bewerbungen.</p>
-        <p className="text-gray-400">Erfordert den Rapport Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.</p>
+        <p>{t('files.description')}</p>
+        <p className="text-gray-400">{t('files.requiresAgent')}</p>
       </div>
 
       {/* Agent status */}
@@ -1138,29 +1144,29 @@ function FilesPanel() {
             ? <Wifi className="h-4 w-4 text-green-500" />
             : <WifiOff className="h-4 w-4 text-gray-400" />}
         <span className="text-sm text-gray-700">
-          Agent {bridgeOk ? 'erreichbar' : 'nicht erreichbar'}
+          {t('files.agent')} {bridgeOk ? t('shared.reachable') : t('shared.notReachable')}
         </span>
       </div>
 
       {/* Folder path */}
       <div>
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Ordnerpfad (absolut)</p>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{t('files.folderPath')}</p>
         <input
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="/Users/dein-name/Documents/Bewerbungen"
+          placeholder={t('files.folderPathPlaceholder')}
           value={path}
           onChange={e => setPath(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && save()}
         />
         <p className="mt-1 text-xs text-gray-400">
-          Unterordner-Namen (z.B. „Contoso", „Fabrikam") werden als Firmenname erkannt.
+          {t('files.folderPathHint')}
         </p>
       </div>
 
       {/* Enable toggle + save */}
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-2 cursor-pointer">
-          <span className="text-sm text-gray-700">Sync aktiviert</span>
+          <span className="text-sm text-gray-700">{t('files.syncEnabled')}</span>
           <button
             type="button"
             onClick={toggleEnabled}
@@ -1178,7 +1184,7 @@ function FilesPanel() {
             disabled={saving}
             className="rounded-lg bg-gray-800 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-50"
           >
-            {saving ? 'Speichern…' : saved ? '✓ Gespeichert' : 'Speichern'}
+            {saving ? t('common:saving') : saved ? `✓ ${t('common:saved')}` : t('common:save')}
           </button>
         </div>
       </div>
@@ -1187,7 +1193,7 @@ function FilesPanel() {
       {cfg.folder_path && (
         <div className="rounded-xl border border-gray-200 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">Letzter Sync: {fmtDate(cfg.last_sync)}</p>
+            <p className="text-xs text-gray-400">{t('files.lastSync', { date: fmtDate(cfg.last_sync) })}</p>
             <div className="flex gap-2">
               <button
                 onClick={runSync}
@@ -1195,15 +1201,15 @@ function FilesPanel() {
                 className="flex items-center gap-1 rounded-md bg-white border border-gray-200 px-2.5 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
               >
                 {syncing ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                Sync
+                {t('shared.sync')}
               </button>
               <button
                 onClick={reset}
                 disabled={syncing}
                 className="rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                title="Alle Dateien erneut einlesen"
+                title={t('files.resyncAllTitle')}
               >
-                ↺ Alles neu
+                ↺ {t('files.resyncAll')}
               </button>
             </div>
           </div>
@@ -1211,7 +1217,7 @@ function FilesPanel() {
           {!bridgeOk && (
             <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
               <WifiOff className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              Agent nicht erreichbar. Prüfe den „Agent“-Tab (läuft er? Token korrekt hinterlegt?).
+              {t('files.agentUnreachable')}
             </div>
           )}
         </div>
@@ -1219,7 +1225,7 @@ function FilesPanel() {
 
       {lastResult && (
         <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800">
-          <p className="font-semibold">Sync gestartet – läuft im Hintergrund</p>
+          <p className="font-semibold">{t('files.syncStarted')}</p>
         </div>
       )}
 
@@ -1287,6 +1293,7 @@ function SyncRow({ label, enabled, onToggle }: { label: string; enabled: boolean
 }
 
 function SyncControlPanel() {
+  const { t } = useTranslation('settings')
   const [settings, setSettings] = useState<SyncSettings>(DEFAULT_SYNC)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1309,60 +1316,61 @@ function SyncControlPanel() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        Deaktivierte Quellen werden beim nächsten globalen Sync übersprungen. Einzelne Quellen können weiterhin manuell in den jeweiligen Panels ausgelöst werden.
+        {t('syncControl.description')}
       </p>
 
-      <SyncGroup label="Google" enabled={settings.google_enabled} onToggle={v => toggle('google_enabled', v)}>
-        <SyncRow label="Gmail" enabled={settings.gmail_enabled} onToggle={v => toggle('gmail_enabled', v)} />
-        <SyncRow label="Google Kalender" enabled={settings.gcal_enabled} onToggle={v => toggle('gcal_enabled', v)} />
+      <SyncGroup label={t('syncControl.google')} enabled={settings.google_enabled} onToggle={v => toggle('google_enabled', v)}>
+        <SyncRow label={t('syncControl.gmail')} enabled={settings.gmail_enabled} onToggle={v => toggle('gmail_enabled', v)} />
+        <SyncRow label={t('syncControl.googleCalendar')} enabled={settings.gcal_enabled} onToggle={v => toggle('gcal_enabled', v)} />
       </SyncGroup>
 
-      <SyncGroup label="Apple / iCloud" enabled={settings.icloud_enabled} onToggle={v => toggle('icloud_enabled', v)}>
-        <SyncRow label="iCloud Mail" enabled={settings.icloud_mail_enabled} onToggle={v => toggle('icloud_mail_enabled', v)} />
-        <SyncRow label="iCloud Kalender" enabled={settings.icloud_cal_enabled} onToggle={v => toggle('icloud_cal_enabled', v)} />
-        <SyncRow label="Apple Notizen" enabled={settings.icloud_notes_enabled} onToggle={v => toggle('icloud_notes_enabled', v)} />
-        <SyncRow label="Erinnerungen" enabled={settings.icloud_reminders_enabled} onToggle={v => toggle('icloud_reminders_enabled', v)} />
-        <SyncRow label="Kontakte" enabled={settings.icloud_contacts_enabled} onToggle={v => toggle('icloud_contacts_enabled', v)} />
-        <SyncRow label="Anrufliste" enabled={settings.icloud_calls_enabled} onToggle={v => toggle('icloud_calls_enabled', v)} />
+      <SyncGroup label={t('syncControl.appleIcloud')} enabled={settings.icloud_enabled} onToggle={v => toggle('icloud_enabled', v)}>
+        <SyncRow label={t('syncControl.icloudMail')} enabled={settings.icloud_mail_enabled} onToggle={v => toggle('icloud_mail_enabled', v)} />
+        <SyncRow label={t('syncControl.icloudCalendar')} enabled={settings.icloud_cal_enabled} onToggle={v => toggle('icloud_cal_enabled', v)} />
+        <SyncRow label={t('syncControl.appleNotes')} enabled={settings.icloud_notes_enabled} onToggle={v => toggle('icloud_notes_enabled', v)} />
+        <SyncRow label={t('syncControl.reminders')} enabled={settings.icloud_reminders_enabled} onToggle={v => toggle('icloud_reminders_enabled', v)} />
+        <SyncRow label={t('syncControl.contacts')} enabled={settings.icloud_contacts_enabled} onToggle={v => toggle('icloud_contacts_enabled', v)} />
+        <SyncRow label={t('syncControl.callList')} enabled={settings.icloud_calls_enabled} onToggle={v => toggle('icloud_calls_enabled', v)} />
       </SyncGroup>
 
-      <SyncGroup label="LinkedIn" enabled={settings.linkedin_enabled} onToggle={v => toggle('linkedin_enabled', v)}>
-        <div className="px-4 py-2.5 text-xs text-gray-400">LinkedIn Scraper (konfiguriert in Tab „LinkedIn")</div>
+      <SyncGroup label={t('syncControl.linkedin')} enabled={settings.linkedin_enabled} onToggle={v => toggle('linkedin_enabled', v)}>
+        <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.linkedinHint')}</div>
       </SyncGroup>
 
-      <SyncGroup label="Lokale Dokumente" enabled={settings.files_enabled} onToggle={v => toggle('files_enabled', v)}>
-        <div className="px-4 py-2.5 text-xs text-gray-400">Ordner-Konfiguration im Tab „Dokumente"</div>
+      <SyncGroup label={t('syncControl.localDocuments')} enabled={settings.files_enabled} onToggle={v => toggle('files_enabled', v)}>
+        <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.localDocumentsHint')}</div>
       </SyncGroup>
 
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-800">Audit-Log</span>
+          <span className="text-sm font-semibold text-gray-800">{t('syncControl.auditLog')}</span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
           <div>
-            <span className="text-sm text-gray-700">Log-Stufe</span>
-            <p className="text-xs text-gray-400 mt-0.5">Normal: Status, Erstellen, Löschen, Merge, Import · Ausführlich: + alle Feldänderungen</p>
+            <span className="text-sm text-gray-700">{t('syncControl.logLevel')}</span>
+            <p className="text-xs text-gray-400 mt-0.5">{t('syncControl.logLevelHint')}</p>
           </div>
           <select
             value={settings.audit_log_level}
             onChange={e => toggle('audit_log_level', e.target.value)}
             className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
           >
-            <option value="off">Aus</option>
-            <option value="normal">Normal</option>
-            <option value="verbose">Ausführlich</option>
+            <option value="off">{t('syncControl.logLevelOff')}</option>
+            <option value="normal">{t('syncControl.logLevelNormal')}</option>
+            <option value="verbose">{t('syncControl.logLevelVerbose')}</option>
           </select>
         </div>
       </div>
 
       {(saving || saved) && (
-        <p className="text-xs text-center text-indigo-500">{saving ? 'Speichert…' : '✓ Gespeichert'}</p>
+        <p className="text-xs text-center text-indigo-500">{saving ? t('syncControl.saving') : `✓ ${t('common:saved')}`}</p>
       )}
     </div>
   )
 }
 
 function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
+  const { t } = useTranslation(['settings', 'common'])
   const locale = useLocale()
   const [liConfig, setLiConfig] = useState<{ configured: boolean; email?: string; has_session: boolean; last_sync?: string } | null>(null)
   const [email, setEmail] = useState('')
@@ -1423,10 +1431,10 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
   }
 
   function logLabel(e: LinkedInSyncLogEntry) {
-    if (e.aktion === 'neu') return { text: 'Neu', cls: 'bg-indigo-50 text-indigo-700' }
-    if (e.aktion === 'abgesagt') return { text: 'Abgesagt', cls: 'bg-red-50 text-red-700' }
-    if (e.aktion === 'aktualisiert') return { text: 'Aktualisiert', cls: 'bg-blue-50 text-blue-700' }
-    return { text: 'Unverändert', cls: 'bg-gray-50 text-gray-500' }
+    if (e.aktion === 'neu') return { text: t('linkedin.logNew'), cls: 'bg-indigo-50 text-indigo-700' }
+    if (e.aktion === 'abgesagt') return { text: t('linkedin.logRejected'), cls: 'bg-red-50 text-red-700' }
+    if (e.aktion === 'aktualisiert') return { text: t('linkedin.logUpdated'), cls: 'bg-blue-50 text-blue-700' }
+    return { text: t('linkedin.logUnchanged'), cls: 'bg-gray-50 text-gray-500' }
   }
 
   async function handleSubmit2fa() {
@@ -1448,7 +1456,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-        <Linkedin className="h-4 w-4 text-[#0077B5]" /> LinkedIn Sync
+        <Linkedin className="h-4 w-4 text-[#0077B5]" /> {t('linkedin.title')}
       </h3>
 
       {/* Config */}
@@ -1458,8 +1466,8 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
             <div>
               <p className="text-xs font-medium text-green-800">{liConfig.email}</p>
               <p className="text-[10px] text-green-600">
-                {liConfig.has_session ? 'Session aktiv' : 'Kein gespeichertes Login'}
-                {liConfig.last_sync ? ` · Letzter Sync: ${formatDate(liConfig.last_sync, locale)}` : ''}
+                {liConfig.has_session ? t('linkedin.sessionActive') : t('linkedin.noSession')}
+                {liConfig.last_sync ? t('linkedin.lastSyncSuffix', { date: formatDate(liConfig.last_sync, locale) }) : ''}
               </p>
             </div>
             <button onClick={handleDelete} className="p-1 text-green-400 hover:text-red-500">
@@ -1468,24 +1476,23 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           </div>
           {liConfig.has_session && (
             <button onClick={handleClearSession} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
-              <RefreshCw className="h-3 w-3" /> Session zurücksetzen
+              <RefreshCw className="h-3 w-3" /> {t('linkedin.resetSession')}
             </button>
           )}
           <p className="text-xs text-gray-500">
-            Synchronisiert eingereichte Bewerbungen von LinkedIn. Neue werden angelegt,
-            Archivierte (in früher Phase) als Absage markiert.
+            {t('linkedin.syncDescription')}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            LinkedIn-Zugangsdaten eingeben. Das Passwort wird verschlüsselt gespeichert.
+            {t('linkedin.credentialsHint')}
           </p>
           <div className="space-y-2">
-            <input type="email" placeholder="E-Mail" value={email} onChange={e => setEmail(e.target.value)}
+            <input type="email" placeholder={t('linkedin.emailPlaceholder')} value={email} onChange={e => setEmail(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0077B5]/30" />
             <div className="relative">
-              <input type={showPw ? 'text' : 'password'} placeholder="Passwort" value={password}
+              <input type={showPw ? 'text' : 'password'} placeholder={t('linkedin.passwordPlaceholder')} value={password}
                 onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-[#0077B5]/30" />
               <button type="button" onClick={() => setShowPw(v => !v)}
@@ -1496,7 +1503,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           </div>
           <button onClick={handleSave} disabled={saving || !email.trim() || !password.trim()}
             className="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#0077B5] text-white hover:bg-[#005f91] disabled:opacity-50">
-            {saving ? 'Speichern…' : 'Speichern'}
+            {saving ? t('common:saving') : t('common:save')}
           </button>
         </div>
       )}
@@ -1508,7 +1515,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
         <button onClick={handleSync} disabled={isRunning}
           className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#0077B5] text-white hover:bg-[#005f91] disabled:opacity-50">
           {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Linkedin className="h-3.5 w-3.5" />}
-          {isRunning ? 'Läuft…' : 'Jetzt synchronisieren'}
+          {isRunning ? t('linkedin.running') : t('linkedin.syncNow')}
         </button>
       )}
 
@@ -1518,15 +1525,15 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           {(isRunning || needs2fa) && (
             <div className="flex items-center gap-2 text-xs text-gray-600">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0077B5]" />
-              <span>{syncState.step || 'Läuft…'}</span>
+              <span>{syncState.step || t('linkedin.running')}</span>
             </div>
           )}
           {needs2fa && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
-              <p className="text-xs font-semibold text-amber-800">LinkedIn Bestätigung erforderlich</p>
+              <p className="text-xs font-semibold text-amber-800">{t('linkedin.confirmationRequired')}</p>
               <p className="text-xs text-amber-700">
-                <strong>Option A:</strong> LinkedIn-App auf dem Handy öffnen und die Anmeldeanfrage bestätigen — der Sync läuft danach automatisch weiter.<br />
-                <strong>Option B:</strong> 6-stelligen Code aus E-Mail oder SMS eingeben:
+                <strong>{t('linkedin.optionA')}</strong> {t('linkedin.optionAText')}<br />
+                <strong>{t('linkedin.optionB')}</strong> {t('linkedin.optionBText')}
               </p>
               <div className="flex gap-2">
                 <input
@@ -1539,35 +1546,35 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
                 />
                 <button onClick={handleSubmit2fa} disabled={submitting2fa || twoFaCode.length < 6}
                   className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
-                  {submitting2fa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Code senden'}
+                  {submitting2fa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('linkedin.sendCode')}
                 </button>
               </div>
             </div>
           )}
           {isDone && (
             <div className="flex items-center gap-2 text-xs text-green-700">
-              <CheckCircle className="h-3.5 w-3.5" /> Sync abgeschlossen
+              <CheckCircle className="h-3.5 w-3.5" /> {t('linkedin.syncDone')}
             </div>
           )}
           {(isError || needsLogin) && (
             <div className="flex items-start gap-2 text-xs text-red-700">
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              <span>{syncState.step || 'Fehler'}</span>
+              <span>{syncState.step || t('linkedin.genericError')}</span>
             </div>
           )}
           {needsLogin && (
             <p className="text-xs text-gray-400">
-              Tipp: Einmal manuell auf linkedin.com einloggen, dann erneut versuchen.
+              {t('linkedin.loginTip')}
             </p>
           )}
 
           {(isDone || isError) && syncState.processed > 0 && (
             <div className="flex gap-2 flex-wrap">
               {[
-                { n: syncState.processed, label: 'Gefunden', cls: 'bg-gray-50 text-gray-600' },
-                { n: syncState.created, label: 'Neu', cls: 'bg-indigo-50 text-indigo-700' },
-                { n: syncState.updated, label: 'Aktualisiert', cls: 'bg-blue-50 text-blue-700' },
-                { n: syncState.skipped, label: 'Unverändert', cls: 'bg-gray-50 text-gray-400' },
+                { n: syncState.processed, label: t('linkedin.statFound'), cls: 'bg-gray-50 text-gray-600' },
+                { n: syncState.created, label: t('linkedin.statNew'), cls: 'bg-indigo-50 text-indigo-700' },
+                { n: syncState.updated, label: t('linkedin.statUpdated'), cls: 'bg-blue-50 text-blue-700' },
+                { n: syncState.skipped, label: t('linkedin.statUnchanged'), cls: 'bg-gray-50 text-gray-400' },
               ].filter(x => x.n > 0).map(x => (
                 <div key={x.label} className={`flex flex-col items-center px-2.5 py-1 rounded-lg ${x.cls}`}>
                   <span className="text-base font-bold leading-tight">{x.n}</span>
@@ -1580,7 +1587,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           {isDone && syncState.log && syncState.log.filter(e => e.aktion !== 'unverändert').length > 0 && (
             <details open className="text-xs">
               <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">
-                Aktionslog ({syncState.log.filter(e => e.aktion !== 'unverändert').length} Änderungen)
+                {t('linkedin.actionLog', { count: syncState.log.filter(e => e.aktion !== 'unverändert').length })}
               </summary>
               <div className="mt-1 max-h-48 overflow-y-auto space-y-1">
                 {syncState.log.filter(e => e.aktion !== 'unverändert').map((entry, i) => {
@@ -1591,8 +1598,8 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
                       <span className="text-gray-700 leading-tight">
                         <span className="font-medium">{entry.firma}</span>
                         {entry.rolle && <span className="text-gray-400"> · {entry.rolle}</span>}
-                        {entry.aktion === 'aktualisiert' && entry.von && entry.zu && <span className="text-gray-400"> ({entry.von} → {entry.zu})</span>}
-                        {entry.aktion === 'abgesagt' && entry.von && <span className="text-gray-400"> (war: {entry.von})</span>}
+                        {entry.aktion === 'aktualisiert' && entry.von && entry.zu && <span className="text-gray-400">{t('linkedin.logUpdateArrow', { from: entry.von, to: entry.zu })}</span>}
+                        {entry.aktion === 'abgesagt' && entry.von && <span className="text-gray-400">{t('linkedin.logWasRejected', { from: entry.von })}</span>}
                       </span>
                     </div>
                   )
@@ -1604,7 +1611,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           {isDone && syncState.log && syncState.log.filter(e => e.aktion === 'unverändert').length > 0 && (
             <details className="text-xs">
               <summary className="cursor-pointer text-gray-400 hover:text-gray-600">
-                {syncState.log.filter(e => e.aktion === 'unverändert').length} unverändert
+                {t('linkedin.unchangedCount', { count: syncState.log.filter(e => e.aktion === 'unverändert').length })}
               </summary>
               <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5 ml-2">
                 {syncState.log.filter(e => e.aktion === 'unverändert').map((entry, i) => (
@@ -1616,7 +1623,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
 
           {syncState.errors.length > 0 && (
             <details className="text-xs text-red-600">
-              <summary className="cursor-pointer text-gray-500 hover:text-gray-700">{syncState.errors.length} Fehler</summary>
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-700">{t('linkedin.errorsCount', { count: syncState.errors.length })}</summary>
               <ul className="mt-1 space-y-0.5 ml-2">{syncState.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
             </details>
           )}
@@ -1627,6 +1634,7 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
 }
 
 function BackupPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const locale = useLocale()
   const [status, setStatus] = useState<BackupStatus | null>(null)
   const [folder, setFolder] = useState('')
@@ -1736,7 +1744,7 @@ function BackupPanel() {
   }
 
   const fmtDate = (ts?: string | number) => {
-    if (!ts) return 'noch nie'
+    if (!ts) return t('shared.never')
     const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
     return formatDateTime(d, locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
@@ -1745,11 +1753,11 @@ function BackupPanel() {
     bytes > 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`
 
   const FREQUENCY_OPTIONS = [
-    { value: 1,   label: 'Stündlich' },
-    { value: 6,   label: 'Alle 6 Stunden' },
-    { value: 12,  label: 'Alle 12 Stunden' },
-    { value: 24,  label: 'Täglich' },
-    { value: 168, label: 'Wöchentlich' },
+    { value: 1,   label: t('backup.frequencyHourly') },
+    { value: 6,   label: t('backup.frequencyEvery6h') },
+    { value: 12,  label: t('backup.frequencyEvery12h') },
+    { value: 24,  label: t('backup.frequencyDaily') },
+    { value: 168, label: t('backup.frequencyWeekly') },
   ]
 
   return (
@@ -1757,14 +1765,14 @@ function BackupPanel() {
       <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-1.5 text-xs text-gray-600">
         <div className="flex items-center gap-2 font-semibold text-gray-800">
           <Database className="h-4 w-4 text-indigo-500" />
-          Datenbank-Backup
+          {t('backup.title')}
         </div>
-        <p>Erstellt regelmäßige Kopien der SQLite-Datenbank (enthält alle Bewerbungen und Einstellungen) in einem konfigurierbaren Ordner auf deinem Mac.</p>
+        <p>{t('backup.description')}</p>
       </div>
 
       {/* Enable toggle */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">Automatisches Backup</span>
+        <span className="text-sm font-medium text-gray-700">{t('backup.autoBackup')}</span>
         <button onClick={toggleEnabled}
           className={clsx('relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
             status?.enabled ? 'bg-indigo-600' : 'bg-gray-200')}>
@@ -1775,23 +1783,23 @@ function BackupPanel() {
 
       {/* Backup folder */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-gray-700">Backup-Ordner</label>
+        <label className="text-xs font-medium text-gray-700">{t('backup.backupFolder')}</label>
         <div className="flex gap-2">
           <input
             type="text"
             value={folder}
             onChange={e => setFolder(e.target.value)}
-            placeholder="/Users/…/Backups/Rapport"
+            placeholder={t('backup.backupFolderPlaceholder')}
             className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
           <button
             onClick={pickFolder}
             disabled={pickingFolder}
-            title="Ordner auswählen"
+            title={t('backup.chooseFolderTitle')}
             className="shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             {pickingFolder ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5 text-indigo-500" />}
-            Wählen
+            {t('backup.choose')}
           </button>
         </div>
       </div>
@@ -1799,7 +1807,7 @@ function BackupPanel() {
       {/* Frequency + Keep count */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-700">Frequenz</label>
+          <label className="text-xs font-medium text-gray-700">{t('backup.frequency')}</label>
           <select value={frequencyHours} onChange={e => setFrequencyHours(Number(e.target.value))}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
             {FREQUENCY_OPTIONS.map(o => (
@@ -1808,7 +1816,7 @@ function BackupPanel() {
           </select>
         </div>
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-700">Backups behalten</label>
+          <label className="text-xs font-medium text-gray-700">{t('backup.keepCount')}</label>
           <input
             type="number"
             min={1}
@@ -1825,12 +1833,12 @@ function BackupPanel() {
         <button onClick={() => save()} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {saved ? 'Gespeichert' : 'Speichern'}
+          {saved ? t('common:saved') : t('common:save')}
         </button>
         <button onClick={runNow} disabled={running || !folder.trim()}
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">
           {running ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
-          Jetzt sichern
+          {t('backup.backupNow')}
         </button>
       </div>
 
@@ -1843,29 +1851,29 @@ function BackupPanel() {
       {runResult && (
         <div className="flex items-center gap-2 text-xs text-green-700">
           <CheckCircle className="h-3.5 w-3.5" />
-          Backup erstellt: {runResult}
+          {t('backup.backupCreated', { filename: runResult })}
         </div>
       )}
 
       {restoreResult && (
         <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
           <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
-          <span>Wiederhergestellt aus <strong>{restoreResult}</strong> — bitte Seite neu laden.</span>
+          <span>{t('backup.restoredFromPrefix')} <strong>{restoreResult}</strong> {t('backup.restoredFromSuffix')}</span>
         </div>
       )}
 
       {restoreConfirm && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
-          <p className="text-xs font-semibold text-red-800">Backup wirklich wiederherstellen?</p>
-          <p className="text-xs text-red-700">Alle aktuellen Daten werden durch <strong>{restoreConfirm}</strong> ersetzt. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+          <p className="text-xs font-semibold text-red-800">{t('backup.confirmRestoreTitle')}</p>
+          <p className="text-xs text-red-700">{t('backup.confirmRestoreTextPrefix')} <strong>{restoreConfirm}</strong> {t('backup.confirmRestoreTextSuffix')}</p>
           <div className="flex gap-2">
             <button onClick={() => doRestore(restoreConfirm)}
               className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
-              Ja, wiederherstellen
+              {t('backup.yesRestore')}
             </button>
             <button onClick={() => setRestoreConfirm(null)}
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
-              Abbrechen
+              {t('common:cancel')}
             </button>
           </div>
         </div>
@@ -1873,21 +1881,21 @@ function BackupPanel() {
 
       {/* Manuelle Wiederherstellung — unabhängig von automatischem Backup/backup_folder */}
       <div className="border-t border-gray-100 pt-4 space-y-2">
-        <div className="text-xs font-medium text-gray-700">Manuell wiederherstellen</div>
+        <div className="text-xs font-medium text-gray-700">{t('backup.manualRestoreTitle')}</div>
         <p className="text-xs text-gray-400">
-          Beliebige Backup-Datei (.zip oder .db) auswählen und wiederherstellen — funktioniert unabhängig davon, ob automatisches Backup aktiviert oder ein Backup-Ordner eingerichtet ist.
+          {t('backup.manualRestoreHint')}
         </p>
         <div className="flex gap-2">
           <button onClick={pickFile} disabled={pickingFile}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
             {pickingFile ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5 text-indigo-500" />}
-            Datei auswählen…
+            {t('backup.chooseFile')}
           </button>
           {pickedFilePath && (
             <button onClick={() => setManualRestoreConfirm(true)} disabled={manualRestoring}
               className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-red-50 hover:border-red-200 hover:text-red-700 disabled:opacity-50">
               {manualRestoring ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              Wiederherstellen
+              {t('backup.restore')}
             </button>
           )}
         </div>
@@ -1903,21 +1911,21 @@ function BackupPanel() {
         {manualRestoreResult && (
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
             <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
-            <span>Wiederhergestellt aus <strong>{manualRestoreResult}</strong> — bitte Seite neu laden.</span>
+            <span>{t('backup.restoredFromPrefix')} <strong>{manualRestoreResult}</strong> {t('backup.restoredFromSuffix')}</span>
           </div>
         )}
         {manualRestoreConfirm && pickedFilePath && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 space-y-2">
-            <p className="text-xs font-semibold text-red-800">Backup wirklich wiederherstellen?</p>
-            <p className="text-xs text-red-700">Alle aktuellen Daten werden durch den Inhalt dieser Datei ersetzt. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+            <p className="text-xs font-semibold text-red-800">{t('backup.confirmRestoreTitle')}</p>
+            <p className="text-xs text-red-700">{t('backup.confirmRestoreTextManual')}</p>
             <div className="flex gap-2">
               <button onClick={doManualRestore}
                 className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
-                Ja, wiederherstellen
+                {t('backup.yesRestore')}
               </button>
               <button onClick={() => setManualRestoreConfirm(false)}
                 className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
-                Abbrechen
+                {t('common:cancel')}
               </button>
             </div>
           </div>
@@ -1927,7 +1935,7 @@ function BackupPanel() {
       {/* Existing backups */}
       {status && status.backups.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-xs font-medium text-gray-700">Vorhandene Backups ({status.backups.length})</div>
+          <div className="text-xs font-medium text-gray-700">{t('backup.existingBackups', { count: status.backups.length })}</div>
           <div className="rounded-lg border border-gray-100 divide-y divide-gray-50 max-h-56 overflow-y-auto">
             {status.backups.map(b => (
               <div key={b.name} className="flex items-center justify-between px-3 py-2 text-xs gap-2">
@@ -1943,7 +1951,7 @@ function BackupPanel() {
                   {restoring === b.name
                     ? <Loader className="h-3 w-3 animate-spin" />
                     : <RotateCcw className="h-3 w-3" />}
-                  Restore
+                  {t('backup.restoreButton')}
                 </button>
               </div>
             ))}
@@ -1952,13 +1960,14 @@ function BackupPanel() {
       )}
 
       {status?.last_backup && (
-        <div className="text-xs text-gray-400">Letztes Backup: {fmtDate(status.last_backup)}</div>
+        <div className="text-xs text-gray-400">{t('backup.lastBackup', { date: fmtDate(status.last_backup) })}</div>
       )}
     </div>
   )
 }
 
 function AccountPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const { user, logout, refreshUser } = useAuth()
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -2047,11 +2056,11 @@ function AccountPanel() {
   async function changePassword() {
     setError(null)
     if (newPassword.length < 8) {
-      setError('Das neue Passwort muss mindestens 8 Zeichen lang sein.')
+      setError(t('account.passwordTooShort'))
       return
     }
     if (newPassword !== confirm) {
-      setError('Die Passwörter stimmen nicht überein.')
+      setError(t('account.passwordMismatch'))
       return
     }
     setSaving(true)
@@ -2072,13 +2081,13 @@ function AccountPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">Konto</h3>
-        <p className="text-xs text-gray-400">Angemeldet als</p>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('account.title')}</h3>
+        <p className="text-xs text-gray-400">{t('account.loggedInAs')}</p>
         <p className="text-sm text-gray-800 font-medium mt-0.5">{user?.email}</p>
       </div>
 
       <div className="space-y-3 border-t border-gray-100 pt-4">
-        <h4 className="text-xs font-semibold text-gray-700">Profil</h4>
+        <h4 className="text-xs font-semibold text-gray-700">{t('account.profile')}</h4>
         {profileError && (
           <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
             <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -2087,14 +2096,14 @@ function AccountPanel() {
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Vorname</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.firstName')}</label>
             <input
               type="text" value={vorname} onChange={e => setVorname(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nachname</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.lastName')}</label>
             <input
               type="text" value={nachname} onChange={e => setNachname(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -2102,7 +2111,7 @@ function AccountPanel() {
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">LinkedIn-Profil</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.linkedinProfile')}</label>
           <input
             type="text" value={linkedinUrl} onChange={e => setLinkedinUrl(e.target.value)}
             placeholder="https://www.linkedin.com/in/..."
@@ -2115,12 +2124,12 @@ function AccountPanel() {
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {profileSaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : profileSaved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          {profileSaved ? 'Gespeichert' : 'Profil speichern'}
+          {profileSaved ? t('common:saved') : t('account.saveProfile')}
         </button>
       </div>
 
       <div className="space-y-3 border-t border-gray-100 pt-4">
-        <h4 className="text-xs font-semibold text-gray-700">Sprache</h4>
+        <h4 className="text-xs font-semibold text-gray-700">{t('account.language')}</h4>
         {languageError && (
           <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
             <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -2128,7 +2137,7 @@ function AccountPanel() {
           </div>
         )}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">UI-Sprache</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.uiLanguage')}</label>
           <select
             value={uiLanguage}
             onChange={e => setUiLanguage(e.target.value as SupportedLanguage)}
@@ -2145,12 +2154,12 @@ function AccountPanel() {
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {languageSaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : languageSaved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          {languageSaved ? 'Gespeichert' : 'Sprache speichern'}
+          {languageSaved ? t('common:saved') : t('account.saveLanguage')}
         </button>
       </div>
 
       <div className="space-y-3 border-t border-gray-100 pt-4">
-        <h4 className="text-xs font-semibold text-gray-700">Lebenslauf (PDF, DOC, DOCX)</h4>
+        <h4 className="text-xs font-semibold text-gray-700">{t('account.cv')}</h4>
         {cvError && (
           <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
             <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -2169,14 +2178,14 @@ function AccountPanel() {
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={() => api.auth.downloadCv(user.cv_filename!)}
-                title="Herunterladen"
+                title={t('account.download')}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={deleteCv}
-                title="Löschen"
+                title={t('common:delete')}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -2186,7 +2195,7 @@ function AccountPanel() {
         ) : (
           <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 px-3 py-5 text-xs text-gray-400 cursor-pointer hover:border-indigo-300 hover:text-indigo-500">
             {cvUploading ? <Loader className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {cvUploading ? 'Wird hochgeladen…' : 'Klicken, um Lebenslauf hochzuladen'}
+            {cvUploading ? t('account.cvUploading') : t('account.cvUploadPrompt')}
             <input
               type="file" accept=".pdf,.doc,.docx" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) uploadCv(f); e.target.value = '' }}
@@ -2196,7 +2205,7 @@ function AccountPanel() {
       </div>
 
       <div className="space-y-3 border-t border-gray-100 pt-4">
-        <h4 className="text-xs font-semibold text-gray-700">Passwort ändern</h4>
+        <h4 className="text-xs font-semibold text-gray-700">{t('account.changePassword')}</h4>
         {error && (
           <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
             <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -2204,22 +2213,22 @@ function AccountPanel() {
           </div>
         )}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Aktuelles Passwort</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.currentPassword')}</label>
           <input
             type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Neues Passwort</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.newPassword')}</label>
           <input
             type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-            placeholder="Mindestens 8 Zeichen"
+            placeholder={t('account.newPasswordPlaceholder')}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Neues Passwort bestätigen</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('account.confirmNewPassword')}</label>
           <input
             type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -2231,7 +2240,7 @@ function AccountPanel() {
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          {saved ? 'Gespeichert' : 'Passwort ändern'}
+          {saved ? t('common:saved') : t('account.changePassword')}
         </button>
       </div>
 
@@ -2240,7 +2249,7 @@ function AccountPanel() {
           onClick={logout}
           className="text-xs text-red-500 hover:text-red-600 font-medium"
         >
-          Abmelden
+          {t('account.logout')}
         </button>
       </div>
     </div>
@@ -2249,22 +2258,10 @@ function AccountPanel() {
 
 type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'maps' | 'agent' | 'account'
 
-const TABS: [Tab, string][] = [
-  ['account',    'Konto'],
-  ['sync',       'Sync'],
-  ['ai',         'KI / API'],
-  ['google',     'Google'],
-  ['icloud',     'iCloud'],
-  ['calls',      'Anrufe'],
-  ['files',      'Dokumente'],
-  ['linkedin',   'LinkedIn'],
-  ['backup',     'Backup'],
-  ['logos',      'Logos'],
-  ['maps',       'Karten'],
-  ['agent',      'Agent'],
-]
+const TABS: Tab[] = ['account', 'sync', 'ai', 'google', 'icloud', 'calls', 'files', 'linkedin', 'backup', 'logos', 'maps', 'agent']
 
 function LogoPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const { logoDevKey, setLogoDevKey } = useLogoKey()
   const [key, setKey] = useState(logoDevKey ?? '')
   const [saved, setSaved] = useState(false)
@@ -2285,17 +2282,16 @@ function LogoPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">Firmenlogos</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('logos.title')}</h3>
         <p className="text-xs text-gray-400">
-          Logo.dev liefert hochwertige Firmenlogos (inkl. Headhunter). Kostenlos bis 10.000 Abrufe/Monat.
-          Ohne Key wird Google Favicons als Fallback verwendet.
+          {t('logos.description')}
         </p>
       </div>
 
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">
-            Logo.dev Public Key{' '}
+            {t('logos.publicKeyLabel')}{' '}
             <a href="https://logo.dev" target="_blank" rel="noreferrer"
                className="text-indigo-500 hover:underline font-normal">logo.dev →</a>
           </label>
@@ -2313,7 +2309,7 @@ function LogoPanel() {
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
             >
               {saved ? <Check className="h-4 w-4" /> : saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saved ? 'Gespeichert' : 'Speichern'}
+              {saved ? t('common:saved') : t('common:save')}
             </button>
           </div>
         </div>
@@ -2321,13 +2317,13 @@ function LogoPanel() {
         {logoDevKey && (
           <div className="flex items-center gap-1.5 text-xs text-emerald-600">
             <CheckCircle className="h-3.5 w-3.5" />
-            Logo.dev aktiv — Logos werden bevorzugt geladen
+            {t('logos.active')}
           </div>
         )}
         {!logoDevKey && (
           <div className="flex items-center gap-1.5 text-xs text-gray-400">
             <XCircle className="h-3.5 w-3.5" />
-            Kein Key — nur Google Favicons als Fallback
+            {t('logos.inactive')}
           </div>
         )}
       </div>
@@ -2336,6 +2332,7 @@ function LogoPanel() {
 }
 
 function MapsPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const [hasKey, setHasKey] = useState(false)
   const [key, setKey] = useState('')
   const [saved, setSaved] = useState(false)
@@ -2368,19 +2365,16 @@ function MapsPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">Orts-Autocomplete</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('maps.title')}</h3>
         <p className="text-xs text-gray-400">
-          Mit einem Google Maps API-Key (Places API) nutzt die Ortssuche bei Bewerbungen
-          Google-Vorschläge inkl. konkreter Orte/POIs statt nur Städtenamen. Ohne Key fällt
-          die Suche auf OpenStreetMap (Nominatim) zurück — funktioniert, liefert aber nur Städte.
-          Der Key wird verschlüsselt gespeichert und nie an den Browser gesendet.
+          {t('maps.description')}
         </p>
       </div>
 
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">
-            Google Maps API-Key{' '}
+            {t('maps.apiKeyLabel')}{' '}
             <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noreferrer"
                className="text-indigo-500 hover:underline font-normal inline-flex items-center gap-0.5">
               Google Cloud Console <ExternalLink className="h-2.5 w-2.5" />
@@ -2391,7 +2385,7 @@ function MapsPanel() {
               type="password"
               value={key}
               onChange={e => setKey(e.target.value)}
-              placeholder={hasKey ? '••••••••••• (gespeichert)' : 'AIza…'}
+              placeholder={hasKey ? t('maps.keyStoredPlaceholder') : 'AIza…'}
               className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
@@ -2400,7 +2394,7 @@ function MapsPanel() {
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
             >
               {saved ? <Check className="h-4 w-4" /> : saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saved ? 'Gespeichert' : 'Speichern'}
+              {saved ? t('common:saved') : t('common:save')}
             </button>
           </div>
         </div>
@@ -2409,15 +2403,15 @@ function MapsPanel() {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-xs text-emerald-600">
               <CheckCircle className="h-3.5 w-3.5" />
-              Google Places aktiv — Autocomplete liefert auch POIs
+              {t('maps.active')}
             </div>
-            <button onClick={clearKey} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">Löschen</button>
+            <button onClick={clearKey} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">{t('common:delete')}</button>
           </div>
         )}
         {!loading && !hasKey && (
           <div className="flex items-center gap-1.5 text-xs text-gray-400">
             <XCircle className="h-3.5 w-3.5" />
-            Kein Key — Ortssuche nutzt OpenStreetMap (nur Städte, keine POIs)
+            {t('maps.inactive')}
           </div>
         )}
       </div>
@@ -2425,13 +2419,8 @@ function MapsPanel() {
   )
 }
 
-const AGENT_MODULE_LABELS: Record<string, string> = {
-  files: 'Dateien',
-  notes: 'Notizen',
-  calls: 'Anrufe',
-}
-
 function AgentPanel() {
+  const { t } = useTranslation(['settings', 'common'])
   const [url, setUrl] = useState('')
   const [hasToken, setHasToken] = useState(false)
   const [token, setToken] = useState('')
@@ -2447,7 +2436,7 @@ function AgentPanel() {
     try {
       setHealth(await api.settings.getAgentHealth())
     } catch {
-      setHealth({ reachable: false, modules: {}, error: 'Anfrage fehlgeschlagen' })
+      setHealth({ reachable: false, modules: {}, error: t('agent.requestFailed') })
     } finally {
       setChecking(false)
     }
@@ -2486,11 +2475,9 @@ function AgentPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">Rapport Agent</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('agent.title')}</h3>
         <p className="text-xs text-gray-400">
-          Der Agent läuft auf deinem Mac und ersetzt die früheren separaten Bridges (Dateien, Notizen,
-          Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um
-          die Verbindung herzustellen. Verschlüsselt gespeichert, verlässt den Server nie im Klartext.
+          {t('agent.description')}
         </p>
       </div>
 
@@ -2499,12 +2486,12 @@ function AgentPanel() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs font-medium">
             {health?.reachable ? (
-              <span className="flex items-center gap-1.5 text-emerald-600"><Wifi className="h-3.5 w-3.5" /> Agent erreichbar</span>
+              <span className="flex items-center gap-1.5 text-emerald-600"><Wifi className="h-3.5 w-3.5" /> {t('agent.agentReachable')}</span>
             ) : (
-              <span className="flex items-center gap-1.5 text-red-500"><WifiOff className="h-3.5 w-3.5" /> Agent nicht erreichbar</span>
+              <span className="flex items-center gap-1.5 text-red-500"><WifiOff className="h-3.5 w-3.5" /> {t('agent.agentNotReachable')}</span>
             )}
           </div>
-          <button onClick={refreshHealth} disabled={checking} title="Status aktualisieren"
+          <button onClick={refreshHealth} disabled={checking} title={t('agent.refreshStatusTitle')}
             className="p-1 rounded hover:bg-gray-200 text-gray-400 disabled:opacity-50">
             <RefreshCw className={clsx('h-3.5 w-3.5', checking && 'animate-spin')} />
           </button>
@@ -2512,7 +2499,7 @@ function AgentPanel() {
         {health?.reachable && (
           <>
             <p className="text-[11px] text-gray-500">
-              Version {health.version ?? '?'} · {health.platform ?? '?'}
+              {t('agent.versionInfo', { version: health.version ?? '?', platform: health.platform ?? '?' })}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(health.modules).map(([key, mod]) => (
@@ -2522,7 +2509,7 @@ function AgentPanel() {
                     mod.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100',
                   )}>
                   {mod.ok ? <CheckCircle className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
-                  {AGENT_MODULE_LABELS[key] ?? key}
+                  {t(`agent.module${key.charAt(0).toUpperCase()}${key.slice(1)}`, { defaultValue: key })}
                 </span>
               ))}
             </div>
@@ -2535,25 +2522,25 @@ function AgentPanel() {
 
       {/* URL override */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-gray-700">Agent-URL (optional)</label>
+        <label className="text-xs font-medium text-gray-700">{t('agent.urlLabel')}</label>
         <input
           type="text"
           value={url}
           onChange={e => setUrl(e.target.value)}
-          placeholder="http://host.docker.internal:9996 (Standard)"
+          placeholder={t('agent.urlPlaceholder')}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
         />
       </div>
 
       {/* Token */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-gray-700">Token</label>
+        <label className="text-xs font-medium text-gray-700">{t('agent.tokenLabel')}</label>
         <div className="flex gap-2">
           <input
             type="password"
             value={token}
             onChange={e => setToken(e.target.value)}
-            placeholder={hasToken ? '••••••••••• (gespeichert)' : 'Beim ersten Start des Agenten angezeigt'}
+            placeholder={hasToken ? t('agent.tokenStoredPlaceholder') : t('agent.tokenPlaceholder')}
             className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
           <button
@@ -2562,7 +2549,7 @@ function AgentPanel() {
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
           >
             {saved ? <Check className="h-4 w-4" /> : saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saved ? 'Gespeichert' : 'Speichern'}
+            {saved ? t('common:saved') : t('common:save')}
           </button>
         </div>
       </div>
@@ -2575,13 +2562,14 @@ function AgentPanel() {
       )}
 
       {!loading && hasToken && (
-        <button onClick={clearToken} className="text-xs text-red-500 hover:text-red-600">Token löschen</button>
+        <button onClick={clearToken} className="text-xs text-red-500 hover:text-red-600">{t('agent.deleteToken')}</button>
       )}
     </div>
   )
 }
 
 export function SettingsModal({ onClose, onReviewOpen }: Props) {
+  const { t } = useTranslation('settings')
   const [tab, setTab] = useState<Tab>('sync')
 
   return (
@@ -2591,7 +2579,7 @@ export function SettingsModal({ onClose, onReviewOpen }: Props) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
-          <h2 className="text-sm font-semibold text-gray-800">Einstellungen</h2>
+          <h2 className="text-sm font-semibold text-gray-800">{t('title')}</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
             <X className="h-5 w-5" />
           </button>
@@ -2601,15 +2589,15 @@ export function SettingsModal({ onClose, onReviewOpen }: Props) {
         <div className="flex flex-1 min-h-0">
           {/* Sidebar */}
           <nav className="w-36 shrink-0 border-r border-gray-100 py-2 flex flex-col gap-0.5 overflow-y-auto">
-            {TABS.map(([t, label]) => (
-              <button key={t} onClick={() => setTab(t)}
+            {TABS.map(tb => (
+              <button key={tb} onClick={() => setTab(tb)}
                 className={clsx(
                   'w-full text-left px-4 py-2 text-xs font-medium transition-colors rounded-none',
-                  tab === t
+                  tab === tb
                     ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
                     : 'text-gray-600 hover:bg-gray-50'
                 )}>
-                {label}
+                {t(`tabs.${tb}`)}
               </button>
             ))}
           </nav>
