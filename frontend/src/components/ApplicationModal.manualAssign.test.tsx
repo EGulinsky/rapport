@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ApplicationModal } from './ApplicationModal'
 import { api } from '../api/client'
+import i18n from '../i18n'
 import type { Application, ManualCandidate } from '../types'
 
 vi.mock('../api/client', () => ({
@@ -54,6 +55,8 @@ async function openManualDialog() {
 describe('ApplicationModal — manuelles Mehrfach-Zuordnen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Pin to German regardless of the app's current pre-login default (see i18n/index.ts).
+    i18n.changeLanguage('de')
     ;(api.applications.get as ReturnType<typeof vi.fn>).mockResolvedValue(BASE_APP)
   })
 

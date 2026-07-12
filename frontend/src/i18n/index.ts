@@ -25,6 +25,8 @@ import cleanupDe from './locales/de/cleanup.json'
 import cleanupEn from './locales/en/cleanup.json'
 import reviewDe from './locales/de/review.json'
 import reviewEn from './locales/en/review.json'
+import applicationsDe from './locales/de/applications.json'
+import applicationsEn from './locales/en/applications.json'
 
 export const SUPPORTED_LANGUAGES = ['de', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -48,8 +50,8 @@ export function rememberPreLoginLanguage(lang: SupportedLanguage): void {
 
 i18n.use(initReactI18next).init({
   resources: {
-    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe, calendar: calendarDe, analytics: analyticsDe, cleanup: cleanupDe, review: reviewDe },
-    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn, calendar: calendarEn, analytics: analyticsEn, cleanup: cleanupEn, review: reviewEn },
+    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe, calendar: calendarDe, analytics: analyticsDe, cleanup: cleanupDe, review: reviewDe, applications: applicationsDe },
+    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn, calendar: calendarEn, analytics: analyticsEn, cleanup: cleanupEn, review: reviewEn, applications: applicationsEn },
   },
   lng: getPreLoginLanguage(),
   fallbackLng: 'en',

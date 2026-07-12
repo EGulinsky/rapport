@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
@@ -33,6 +34,7 @@ const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
 export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields, onReviewOpen }: Props) {
+  const { t } = useTranslation('applications')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const locale = useLocale()
   const [app, setApp] = useState<Application | null>(null)
@@ -170,9 +172,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
-        setAiAssessError('Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.')
+        setAiAssessError(t('overview.rateLimitError'))
       } else {
-        setAiAssessError('KI-Analyse fehlgeschlagen.')
+        setAiAssessError(t('overview.aiFailedError'))
       }
     } finally {
       setAiAssessing(false)
@@ -280,7 +282,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   }
 
   async function deleteApp() {
-    if (!appId || !confirm(`Bewerbung bei "${app?.firma}" wirklich löschen?`)) return
+    if (!appId || !confirm(t('footer.confirmDelete', { firma: app?.firma }))) return
     await api.applications.delete(appId)
     onClose()
     onSaved()
@@ -363,7 +365,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       remove_from_other: removeFromOther,
     })
     if (res.conflict && !removeFromOther) {
-      setManualConflict({ candidate, conflict_app_firma: res.conflict_app_firma ?? 'andere Bewerbung' })
+      setManualConflict({ candidate, conflict_app_firma: res.conflict_app_firma ?? t('manualAssign.otherApplicationFallback') })
       return
     }
     setManualConflict(null)
@@ -390,7 +392,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             remove_from_other: false,
           })
           if (res.conflict) {
-            errors.push(`"${candidate.titel || candidate.source}" ist bereits mit ${res.conflict_app_firma ?? 'einer anderen Bewerbung'} verknüpft — übersprungen.`)
+            errors.push(t('manualAssign.bulkConflictSkipped', { title: candidate.titel || candidate.source, firma: res.conflict_app_firma ?? t('manualAssign.anotherApplicationFallback') }))
             continue
           }
           assignedKeys.add(candidateKey(candidate))
@@ -419,7 +421,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setDocBrowseRoot(result.default_root)
       setDocBrowseItems(result.items)
     } catch (e: unknown) {
-      setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      setDocBrowseError(e instanceof Error ? e.message : t('docBrowser.loadError'))
     } finally {
       setDocBrowseLoading(false)
     }
@@ -433,7 +435,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setDocBrowsePath(result.path)
       setDocBrowseItems(result.items)
     } catch (e: unknown) {
-      setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      setDocBrowseError(e instanceof Error ? e.message : t('docBrowser.loadError'))
     } finally {
       setDocBrowseLoading(false)
     }
@@ -447,7 +449,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       setDocBrowseOpen(false)
       await refreshContacts()
     } catch (e: unknown) {
-      setDocBrowseError(e instanceof Error ? e.message : 'Fehler beim Anhängen')
+      setDocBrowseError(e instanceof Error ? e.message : t('docBrowser.attachError'))
     } finally {
       setDocAttaching(null)
     }
@@ -673,7 +675,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   }
 
   async function deleteContact(contactId: number, name: string) {
-    if (!appId || !confirm(`Kontakt "${name}" löschen?`)) return
+    if (!appId || !confirm(t('contacts.confirmDelete', { name }))) return
     await api.contacts.delete(appId, contactId)
     await refreshContacts()
   }
@@ -696,7 +698,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
   async function bulkDeleteSelectedEvents() {
     if (!appId || selectedEventIds.size === 0) return
-    if (!confirm(`${selectedEventIds.size} ${selectedEventIds.size === 1 ? 'Eintrag' : 'Einträge'} löschen?`)) return
+    if (!confirm(t('timeline.confirmDeleteEntries', { count: selectedEventIds.size }))) return
     setBulkDeleting(true)
     try {
       await api.applications.bulkDeleteEvents(appId, [...selectedEventIds])
@@ -709,7 +711,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
   async function bulkDeleteSelectedContacts() {
     if (!appId || selectedContactIds.size === 0) return
-    if (!confirm(`${selectedContactIds.size} ${selectedContactIds.size === 1 ? 'Kontakt' : 'Kontakte'} löschen?`)) return
+    if (!confirm(t('contacts.confirmDeleteContacts', { count: selectedContactIds.size }))) return
     setBulkDeleting(true)
     try {
       await api.applications.bulkDeleteContacts(appId, [...selectedContactIds])
@@ -737,13 +739,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   }
 
   const STEP_LABELS: Record<string, string> = {
-    prospecting: 'Anbahnung',
-    applied:     'Beworben',
-    hr:          'HR / HH',
-    fb:          'Fachbereich',
-    waiting:     'Entscheidung',
-    negotiating: 'Angebot',
-    signed:      'Zusage',
+    prospecting: t('pipeline.prospecting'),
+    applied:     t('pipeline.applied'),
+    hr:          t('pipeline.hr'),
+    fb:          t('pipeline.fb'),
+    waiting:     t('pipeline.waiting'),
+    negotiating: t('pipeline.negotiating'),
+    signed:      t('pipeline.signed'),
   }
 
   const reachedIdx = (() => {
@@ -827,7 +829,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       size="sm"
                     />
                     <span className="text-base font-semibold text-gray-900 truncate flex-1 min-w-0">
-                      {draft.firma || app?.firma || <span className="text-gray-400 font-normal">Firma wählen…</span>}
+                      {draft.firma || app?.firma || <span className="text-gray-400 font-normal">{t('pickCompanyPlaceholder')}</span>}
                     </span>
                     <button
                       type="button"
@@ -835,7 +837,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       className="shrink-0 flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50"
                     >
                       <Building2 className="h-3.5 w-3.5" />
-                      Ändern
+                      {t('changeCompany')}
                     </button>
                   </div>
                   {firmaPicker && (
@@ -845,14 +847,14 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                           autoFocus
                           value={firmaQuery}
                           onChange={e => setFirmaQuery(e.target.value)}
-                          placeholder="Firma suchen…"
+                          placeholder={t('searchCompanyPlaceholder')}
                           className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                       </div>
                       <div className="max-h-52 overflow-y-auto py-1">
-                        {firmaLoading && <p className="text-xs text-gray-400 px-3 py-2">Suche…</p>}
+                        {firmaLoading && <p className="text-xs text-gray-400 px-3 py-2">{t('searching')}</p>}
                         {!firmaLoading && firmaResults.length === 0 && !firmaQuery && (
-                          <p className="text-xs text-gray-400 px-3 py-2 italic">Suchbegriff eingeben…</p>
+                          <p className="text-xs text-gray-400 px-3 py-2 italic">{t('enterSearchTerm')}</p>
                         )}
                         {firmaResults.slice(0, 12).map(c => (
                           <button
@@ -873,7 +875,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                             className="w-full text-left px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center gap-2 border-t border-gray-100 mt-1"
                           >
                             <Plus className="h-3.5 w-3.5 shrink-0" />
-                            {firmaCreating ? 'Anlegen…' : `"${firmaQuery.trim()}" neu anlegen`}
+                            {firmaCreating ? t('creating') : t('createNew', { name: firmaQuery.trim() })}
                           </button>
                         )}
                       </div>
@@ -884,7 +886,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   className="w-full text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={draft.rolle ?? ''}
                   onChange={e => setDraft(d => ({ ...d, rolle: e.target.value }))}
-                  placeholder="Rolle"
+                  placeholder={t('rolePlaceholder')}
                 />
               </div>
             ) : (
@@ -916,11 +918,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <button
                 onClick={() => runSync(false)}
                 disabled={syncing}
-                title="Gezielter Sync für diese Bewerbung (KI)"
+                title={t('sync.targetedTitle')}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors rounded-l-lg"
               >
                 <Crosshair className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Sync…' : 'Sync'}
+                {syncing ? t('sync.syncing') : t('sync.sync')}
               </button>
               <button
                 onClick={() => setSyncMenuOpen(o => !o)}
@@ -936,7 +938,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
                     <Crosshair className="h-3.5 w-3.5 text-indigo-400" />
-                    Sync
+                    {t('sync.sync')}
                   </button>
                   <button
                     onClick={() => runSync(true)}
@@ -944,8 +946,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   >
                     <RefreshCw className="h-3.5 w-3.5 text-amber-400" />
                     <span>
-                      Re-sync
-                      <span className="block text-[10px] text-gray-400">Reset + neu einlesen</span>
+                      {t('sync.resync')}
+                      <span className="block text-[10px] text-gray-400">{t('sync.resyncHint')}</span>
                     </span>
                   </button>
                   <button
@@ -954,8 +956,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   >
                     <Trash2 className="h-3.5 w-3.5 text-red-400" />
                     <span>
-                      Sync-Events löschen
-                      <span className="block text-[10px] text-gray-400">Nur entfernen, kein Neu-Sync</span>
+                      {t('sync.clearEvents')}
+                      <span className="block text-[10px] text-gray-400">{t('sync.clearEventsHint')}</span>
                     </span>
                   </button>
                   <hr className="my-1 border-gray-100" />
@@ -965,8 +967,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   >
                     <Search className="h-3.5 w-3.5 text-green-500" />
                     <span>
-                      Manuell zuordnen
-                      <span className="block text-[10px] text-gray-400">Direkt aus Sync-Quellen</span>
+                      {t('sync.manualAssign')}
+                      <span className="block text-[10px] text-gray-400">{t('sync.manualAssignHint')}</span>
                     </span>
                   </button>
                   <button
@@ -975,8 +977,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   >
                     <FolderOpen className="h-3.5 w-3.5 text-amber-500" />
                     <span>
-                      Dokument hinzufügen
-                      <span className="block text-[10px] text-gray-400">Im Anhänge-Tab</span>
+                      {t('sync.addDocument')}
+                      <span className="block text-[10px] text-gray-400">{t('sync.addDocumentHint')}</span>
                     </span>
                   </button>
                 </div>
@@ -1000,9 +1002,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   const m = app.sub_status!.match(/^(\d+)_(scheduled|done)$/)
                   if (!m) return null
                   const n = m[1]; const kind = m[2]
-                  return n === '1'
-                    ? (kind === 'scheduled' ? 'terminiert' : 'geführt')
-                    : `${n}. ${kind === 'scheduled' ? 'terminiert' : 'geführt'}`
+                  const kindLabel = kind === 'scheduled' ? t('pipeline.scheduled') : t('pipeline.done')
+                  return n === '1' ? kindLabel : `${n}. ${kindLabel}`
                 })() : null
                 return (
                   <div key={step} className="flex items-start flex-1 min-w-0">
@@ -1059,7 +1060,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 )}
                 <span className={`mt-1 text-center text-[9px] leading-tight ${
                   app.abgesagt ? 'text-red-500 font-semibold' : 'text-gray-300'
-                }`}>Absage</span>
+                }`}>{t('pipeline.rejected')}</span>
               </div>
             </div>
           </div>
@@ -1069,7 +1070,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         {syncing && (Object.keys(syncProgress).length > 0 || liStatus?.status === 'running') && (
           <div className="border-b border-indigo-100 bg-indigo-50 px-5 py-3 space-y-2">
             <p className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1.5">
-              <Crosshair className="h-3 w-3 animate-spin" /> Sync läuft…
+              <Crosshair className="h-3 w-3 animate-spin" /> {t('sync.running')}
             </p>
             {Object.values(syncProgress).map(p => (
               <div key={p.label} className="space-y-0.5">
@@ -1113,10 +1114,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           <div className={`px-5 py-2 text-xs flex items-center justify-between border-b ${syncResult.errors.length > 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-green-50 border-green-100 text-green-700'}`}>
             <span>
               {syncResult.errors.length > 0
-                ? `Sync: ${syncResult.errors[0]}`
+                ? t('sync.resultError', { message: syncResult.errors[0] })
                 : syncResult.created < 0
-                  ? `${Math.abs(syncResult.created)} Sync-Events gelöscht`
-                  : `Sync abgeschlossen — ${syncResult.created} neue Einträge${liStatus && liStatus.status === 'done' ? `, LI: ${liStatus.updated} Vorschläge` : ''}`}
+                  ? t('sync.resultDeleted', { count: Math.abs(syncResult.created) })
+                  : `${t('sync.resultDone', { count: syncResult.created })}${liStatus && liStatus.status === 'done' ? t('sync.resultLinkedinSuggestions', { count: liStatus.updated }) : ''}`}
             </span>
             <button onClick={() => { setSyncResult(null); setLiStatus(null) }} className="ml-2 opacity-60 hover:opacity-100">✕</button>
           </div>
@@ -1125,10 +1126,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         {/* Tab bar */}
         <div className="flex border-b border-gray-100 px-6 shrink-0 gap-1">
           {([
-            { id: 'overview',     label: 'Übersicht',  icon: null },
-            { id: 'timeline',     label: 'Verlauf',    count: rawTimelineEvents.length },
-            { id: 'attachments',  label: 'Anhänge',    count: fileEvents.length },
-            { id: 'contacts',     label: 'Kontakte',   count: app?.contacts?.length ?? 0, icon: <Users className="h-3 w-3" /> },
+            { id: 'overview',     label: t('tabs.overview'),  icon: null },
+            { id: 'timeline',     label: t('tabs.timeline'),    count: rawTimelineEvents.length },
+            { id: 'attachments',  label: t('tabs.attachments'),    count: fileEvents.length },
+            { id: 'contacts',     label: t('tabs.contacts'),   count: app?.contacts?.length ?? 0, icon: <Users className="h-3 w-3" /> },
           ] as const).map(tab => (
             <button
               key={tab.id}
@@ -1152,7 +1153,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           {/* Status */}
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-              Status{updDot('main_status')}{updDot('sub_status')}{updDot('abgesagt')}
+              {t('overview.status')}{updDot('main_status')}{updDot('sub_status')}{updDot('abgesagt')}
             </p>
             {editing ? (
               <div className="space-y-2">
@@ -1186,7 +1187,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <input type="checkbox" checked={!!draft.is_headhunter}
                   onChange={e => setDraft(d => ({ ...d, is_headhunter: e.target.checked }))}
                   className="rounded border-gray-300 text-indigo-600" />
-                Headhunter
+                {t('headhunter')}
               </label>
             </div>
           )}
@@ -1194,7 +1195,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           {/* Meta fields */}
           {editing ? (
             <div className="grid grid-cols-2 gap-3">
-              {[['quelle', 'Quelle (LinkedIn, XING, …)'], ['zielfirma_bei_hh', 'Zielfirma (bei HH)'], ['wurde_besetzt_von', 'Besetzt von']].map(([key, placeholder]) => (
+              {([['quelle', t('overview.sourcePlaceholder')], ['zielfirma_bei_hh', t('overview.targetCompanyPlaceholder')], ['wurde_besetzt_von', t('overview.filledByPlaceholder')]] as const).map(([key, placeholder]) => (
                 <input key={key}
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder={placeholder}
@@ -1205,31 +1206,31 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <LocationSearchInput
                 value={draft.ort ?? ''}
                 onChange={v => setDraft(d => ({ ...d, ort: v }))}
-                placeholder="Ort"
+                placeholder={t('overview.locationPlaceholder')}
               />
               <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-500">
-                <span className="text-xs text-gray-400 mr-1">Bewerbungsdatum:</span>
-                {app?.datum_bewerbung ? formatDate(app.datum_bewerbung, locale) : <span className="italic">über Timeline "Bewerbung" setzen</span>}
+                <span className="text-xs text-gray-400 mr-1">{t('overview.appliedDate')}</span>
+                {app?.datum_bewerbung ? formatDate(app.datum_bewerbung, locale) : <span className="italic">{t('overview.appliedDateHint')}</span>}
               </div>
             </div>
           ) : (
             <dl className="grid grid-cols-2 gap-3">
-              {field('Quelle', app?.quelle, 'quelle')}
-              {field('Ort', app?.ort, 'ort')}
-              {field('Datum Bewerbung', app?.datum_bewerbung)}
-              {field('Letztes Update', app?.letztes_update)}
-              {field('Zielfirma (HH)', app?.zielfirma_bei_hh, 'zielfirma_bei_hh')}
-              {field('Besetzt von', app?.wurde_besetzt_von, 'wurde_besetzt_von')}
+              {field(t('overview.fieldSource'), app?.quelle, 'quelle')}
+              {field(t('overview.fieldLocation'), app?.ort, 'ort')}
+              {field(t('overview.fieldAppliedDate'), app?.datum_bewerbung)}
+              {field(t('overview.fieldLastUpdate'), app?.letztes_update)}
+              {field(t('overview.fieldTargetCompany'), app?.zielfirma_bei_hh, 'zielfirma_bei_hh')}
+              {field(t('overview.fieldFilledBy'), app?.wurde_besetzt_von, 'wurde_besetzt_von')}
               {app?.is_headhunter && (
                 <div className={updatedFields?.has('is_headhunter') ? 'rounded px-2 py-0.5 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
-                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Headhunter{updDot('is_headhunter')}</dt>
-                  <dd className="mt-0.5 text-sm text-indigo-700 font-medium">Ja</dd>
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('headhunter')}{updDot('is_headhunter')}</dt>
+                  <dd className="mt-0.5 text-sm text-indigo-700 font-medium">{t('overview.yes')}</dd>
                 </div>
               )}
               {app?.ghosting && (
                 <div className={updatedFields?.has('ghosting') ? 'rounded px-2 py-0.5 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
-                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Ghosting{updDot('ghosting')}</dt>
-                  <dd className="mt-0.5 text-sm text-red-600 font-medium">Ja</dd>
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('overview.ghosting')}{updDot('ghosting')}</dt>
+                  <dd className="mt-0.5 text-sm text-red-600 font-medium">{t('overview.yes')}</dd>
                 </div>
               )}
             </dl>
@@ -1238,12 +1239,12 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           {/* Stellenanzeige */}
           <div className={!editing && updatedFields?.has('stellenanzeige_url') ? 'rounded px-2 py-1 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
-              Stellenanzeige{updDot('stellenanzeige_url')}
+              {t('overview.jobPosting')}{updDot('stellenanzeige_url')}
             </p>
             {editing ? (
               <input type="url"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={draft.stellenanzeige_url ?? ''} placeholder="https://…"
+                value={draft.stellenanzeige_url ?? ''} placeholder={t('overview.jobPostingPlaceholder')}
                 onChange={e => setDraft(d => ({ ...d, stellenanzeige_url: e.target.value || undefined }))}
               />
             ) : app?.stellenanzeige_url ? (
@@ -1251,29 +1252,29 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 hover:underline break-all">
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />{app.stellenanzeige_url}
               </a>
-            ) : <span className="text-gray-400 italic text-sm">Kein Link</span>}
+            ) : <span className="text-gray-400 italic text-sm">{t('overview.noLink')}</span>}
           </div>
 
           {/* Kommentar */}
           <div className={!editing && updatedFields?.has('kommentar') ? 'rounded px-2 py-1 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
-              Kommentar{updDot('kommentar')}
+              {t('overview.comment')}{updDot('kommentar')}
             </p>
             {editing ? (
               <textarea rows={4}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={draft.kommentar ?? ''} placeholder="Notizen zur Bewerbung…"
+                value={draft.kommentar ?? ''} placeholder={t('overview.commentPlaceholder')}
                 onChange={e => setDraft(d => ({ ...d, kommentar: e.target.value }))}
               />
             ) : (
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{app?.kommentar || <span className="text-gray-400 italic">Kein Kommentar</span>}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{app?.kommentar || <span className="text-gray-400 italic">{t('overview.noComment')}</span>}</p>
             )}
           </div>
 
           {/* Gesprächsnotizen (view only) */}
           {!editing && [app?.gespraech_1, app?.gespraech_2, app?.gespraech_3, app?.gespraech_4, app?.gespraech_5].some(Boolean) && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Gesprächsnotizen</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{t('overview.interviewNotes')}</p>
               <div className="space-y-2">
                 {[app?.gespraech_1, app?.gespraech_2, app?.gespraech_3, app?.gespraech_4, app?.gespraech_5].map((g, i) => {
                   if (!g) return null
@@ -1282,7 +1283,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   return (
                     <div key={i} className={`rounded-lg border px-3 py-2 ${gUpdated ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-gray-50'}`}>
                       <p className="text-[10px] text-gray-400 font-medium uppercase mb-0.5">
-                        {i + 1}. Gespräch{gUpdated && <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 ml-1 align-middle" />}
+                        {t('overview.interviewNote', { n: i + 1 })}{gUpdated && <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 ml-1 align-middle" />}
                       </p>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{g}</p>
                     </div>
@@ -1297,7 +1298,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  {app?.abgesagt ? 'KI-Absageanalyse' : 'KI-Einschätzung'}
+                  {app?.abgesagt ? t('overview.aiRejectionAnalysis') : t('overview.aiAssessment')}
                 </p>
                 <button
                   onClick={runAiAssess}
@@ -1305,7 +1306,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   className="flex items-center gap-1 text-[10px] text-purple-600 hover:text-purple-800 disabled:opacity-50"
                 >
                   <Sparkles className={`h-3 w-3 ${aiAssessing ? 'animate-pulse' : ''}`} />
-                  {aiAssessing ? 'Analysiere…' : 'Neu bewerten'}
+                  {aiAssessing ? t('overview.analyzing') : t('overview.reassess')}
                 </button>
               </div>
               {app?.ai_color ? (
@@ -1323,8 +1324,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         app.ai_color === 'green' ? 'text-green-700' :
                         app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
                       }`}>
-                        {app.ai_color === 'green' ? 'Hohe Erfolgschance (>60 %)' :
-                         app.ai_color === 'red'   ? 'Niedrige Erfolgschance (<30 %)' : 'Mittlere Erfolgschance (30–60 %)'}
+                        {app.ai_color === 'green' ? t('overview.chanceHigh') :
+                         app.ai_color === 'red'   ? t('overview.chanceLow') : t('overview.chanceMedium')}
                       </span>
                     </div>
                   )}
@@ -1334,20 +1335,20 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <p className="text-sm text-gray-700 leading-snug font-medium">{app.ai_next_step}</p>
                   {app.ai_assessed_at && (
                     <p className="text-[10px] text-gray-400 mt-1.5">
-                      Bewertet am {formatDate(app.ai_assessed_at, locale)}
+                      {t('overview.assessedAt', { date: formatDate(app.ai_assessed_at, locale) })}
                     </p>
                   )}
                 </div>
               ) : (
                 <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-sm text-gray-400 italic">Noch keine KI-Einschätzung</span>
+                  <span className="text-sm text-gray-400 italic">{t('overview.noAssessmentYet')}</span>
                   <button
                     onClick={runAiAssess}
                     disabled={aiAssessing}
                     className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50"
                   >
                     <Sparkles className="h-3 w-3" />
-                    Jetzt bewerten
+                    {t('overview.assessNow')}
                   </button>
                 </div>
               )}
@@ -1366,8 +1367,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           <div className="px-6 pt-4 pb-3 border-b border-gray-100 space-y-2 shrink-0">
             {/* Time filter */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs text-gray-400 shrink-0 mr-0.5">Zeitraum:</span>
-              {([['all', 'Alle'], ['1m', '1 Monat'], ['3m', '3 Monate'], ['6m', '6 Monate'], ['1y', '1 Jahr']] as const).map(([v, l]) => (
+              <span className="text-xs text-gray-400 shrink-0 mr-0.5">{t('timeline.period')}</span>
+              {([['all', t('timeline.periodAll')], ['1m', t('timeline.period1m')], ['3m', t('timeline.period3m')], ['6m', t('timeline.period6m')], ['1y', t('timeline.period1y')]] as const).map(([v, l]) => (
                 <button key={v} onClick={() => setTimeFilter(v)}
                   className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${timeFilter === v ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
                 >{l}</button>
@@ -1376,18 +1377,15 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             {/* Type filter */}
             {availableTypes.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-gray-400 shrink-0 mr-0.5">Typ:</span>
+                <span className="text-xs text-gray-400 shrink-0 mr-0.5">{t('timeline.type')}</span>
                 <button onClick={() => setTypeFilter('all')}
                   className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${typeFilter === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
-                >Alle</button>
-                {availableTypes.map(t => {
-                  const labels: Record<string, string> = { bewerbung: 'Bewerbung', gespräch: 'Gespräch', notiz: 'Notiz', status: 'Status', mail: 'Mail', calendar: 'Kalender' }
-                  return (
-                    <button key={t} onClick={() => setTypeFilter(t)}
-                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${typeFilter === t ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
-                    >{labels[t] ?? t}</button>
-                  )
-                })}
+                >{t('timeline.typeAll')}</button>
+                {availableTypes.map(typ => (
+                  <button key={typ} onClick={() => setTypeFilter(typ)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${typeFilter === typ ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'}`}
+                  >{t(`eventType.${typ}`, { defaultValue: typ })}</button>
+                ))}
               </div>
             )}
             {timelineEvents.length > 0 && (
@@ -1404,11 +1402,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   }}
                   className="rounded border-gray-300 text-indigo-600 cursor-pointer"
                 />
-                <span className="text-xs text-gray-400">Alle auswählen</span>
+                <span className="text-xs text-gray-400">{t('timeline.selectAll')}</span>
                 {selectedEventIds.size > 0 && (
                   <button onClick={bulkDeleteSelectedEvents} disabled={bulkDeleting}
                     className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2">
-                    <Trash2 className="h-3 w-3" /> {selectedEventIds.size} {selectedEventIds.size === 1 ? 'Eintrag' : 'Einträge'} löschen
+                    <Trash2 className="h-3 w-3" /> {t('timeline.deleteEntries', { count: selectedEventIds.size })}
                   </button>
                 )}
               </div>
@@ -1420,16 +1418,16 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             {!addingNote && !addingBewerbung && !addingOther && !addingFile && (
               <div className="flex items-center gap-3 mb-1 flex-wrap">
                 <button onClick={() => setAddingNote(true)} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
-                  <Plus className="h-3 w-3" /> Notiz
+                  <Plus className="h-3 w-3" /> {t('timeline.addNote')}
                 </button>
                 <button onClick={() => setAddingBewerbung(true)} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700">
-                  <Plus className="h-3 w-3" /> Bewerbung
+                  <Plus className="h-3 w-3" /> {t('timeline.addApplication')}
                 </button>
                 <button onClick={() => setAddingOther(true)} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700">
-                  <Plus className="h-3 w-3" /> Weiteres
+                  <Plus className="h-3 w-3" /> {t('timeline.addOther')}
                 </button>
                 <button onClick={() => setAddingFile(true)} className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700">
-                  <Paperclip className="h-3 w-3" /> Anhang
+                  <Paperclip className="h-3 w-3" /> {t('timeline.addAttachment')}
                 </button>
               </div>
             )}
@@ -1438,7 +1436,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
                 <textarea autoFocus rows={2}
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Notiz…" value={noteDraft.notiz}
+                  placeholder={t('timeline.notePlaceholder')} value={noteDraft.notiz}
                   onChange={e => setNoteDraft(d => ({ ...d, notiz: e.target.value }))}
                 />
                 <div className="flex items-center justify-between">
@@ -1447,9 +1445,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     value={noteDraft.datum} onChange={e => setNoteDraft(d => ({ ...d, datum: e.target.value }))}
                   />
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => { setAddingNote(false); setNoteDraft({ notiz: '', datum: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" onClick={() => { setAddingNote(false); setNoteDraft({ notiz: '', datum: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">{t('timeline.cancel')}</button>
                     <button type="button" disabled={!noteDraft.notiz.trim() || savingNote} onClick={saveNote} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                      {savingNote ? 'Speichern…' : 'Speichern'}
+                      {savingNote ? t('timeline.saving') : t('timeline.save')}
                     </button>
                   </div>
                 </div>
@@ -1458,10 +1456,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
             {addingBewerbung && (
               <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-2">
-                <p className="text-xs text-green-700 font-medium">Bewerbungsdatum setzen</p>
+                <p className="text-xs text-green-700 font-medium">{t('timeline.setApplicationDate')}</p>
                 <input autoFocus
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Titel (z.B. Bewerbung eingereicht)" value={bewerbungDraft.titel}
+                  placeholder={t('timeline.titlePlaceholder')} value={bewerbungDraft.titel}
                   onChange={e => setBewerbungDraft(d => ({ ...d, titel: e.target.value }))}
                 />
                 <div className="flex items-center justify-between">
@@ -1470,9 +1468,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     value={bewerbungDraft.datum} onChange={e => setBewerbungDraft(d => ({ ...d, datum: e.target.value }))}
                   />
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => { setAddingBewerbung(false); setBewerbungDraft({ datum: '', titel: 'Bewerbung eingereicht' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" onClick={() => { setAddingBewerbung(false); setBewerbungDraft({ datum: '', titel: 'Bewerbung eingereicht' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">{t('timeline.cancel')}</button>
                     <button type="button" disabled={!bewerbungDraft.datum || savingBewerbung} onClick={saveBewerbung} className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50">
-                      {savingBewerbung ? 'Speichern…' : 'Speichern'}
+                      {savingBewerbung ? t('timeline.saving') : t('timeline.save')}
                     </button>
                   </div>
                 </div>
@@ -1485,18 +1483,18 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   value={otherDraft.typ} onChange={e => setOtherDraft(d => ({ ...d, typ: e.target.value }))}
                 >
-                  {OTHER_EVENT_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                  {OTHER_EVENT_TYPES.map(o => (
+                    <option key={o.value} value={o.value}>{t(`eventType.${o.value}`, { defaultValue: o.label })}</option>
                   ))}
                 </select>
                 <input
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="Titel (optional)" value={otherDraft.titel}
+                  placeholder={t('timeline.titleOptionalPlaceholder')} value={otherDraft.titel}
                   onChange={e => setOtherDraft(d => ({ ...d, titel: e.target.value }))}
                 />
                 <textarea rows={2}
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="Notiz (optional)" value={otherDraft.notiz}
+                  placeholder={t('timeline.noteOptionalPlaceholder')} value={otherDraft.notiz}
                   onChange={e => setOtherDraft(d => ({ ...d, notiz: e.target.value }))}
                 />
                 <div className="flex items-center justify-between">
@@ -1505,9 +1503,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     value={otherDraft.datum} onChange={e => setOtherDraft(d => ({ ...d, datum: e.target.value }))}
                   />
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => { setAddingOther(false); setOtherDraft({ typ: 'status', datum: '', titel: '', notiz: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" onClick={() => { setAddingOther(false); setOtherDraft({ typ: 'status', datum: '', titel: '', notiz: '' }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">{t('timeline.cancel')}</button>
                     <button type="button" disabled={savingOther} onClick={saveOther} className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50">
-                      {savingOther ? 'Speichern…' : 'Speichern'}
+                      {savingOther ? t('timeline.saving') : t('timeline.save')}
                     </button>
                   </div>
                 </div>
@@ -1528,11 +1526,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
                 >
                   <Paperclip className="h-3.5 w-3.5" />
-                  {fileDraft.file ? fileDraft.file.name : 'Datei auswählen…'}
+                  {fileDraft.file ? fileDraft.file.name : t('timeline.chooseFile')}
                 </button>
                 <input
                   className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="Titel (optional, Dateiname als Standard)" value={fileDraft.titel}
+                  placeholder={t('timeline.fileTitlePlaceholder')} value={fileDraft.titel}
                   onChange={e => setFileDraft(d => ({ ...d, titel: e.target.value }))}
                 />
                 <div className="flex items-center justify-between">
@@ -1541,9 +1539,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     value={fileDraft.datum} onChange={e => setFileDraft(d => ({ ...d, datum: e.target.value }))}
                   />
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => { setAddingFile(false); setFileDraft({ datum: '', titel: '', file: null }); if (fileInputRef.current) fileInputRef.current.value = '' }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                    <button type="button" onClick={() => { setAddingFile(false); setFileDraft({ datum: '', titel: '', file: null }); if (fileInputRef.current) fileInputRef.current.value = '' }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">{t('timeline.cancel')}</button>
                     <button type="button" disabled={!fileDraft.file || savingFile} onClick={saveFile} className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
-                      {savingFile ? 'Hochladen…' : 'Hochladen'}
+                      {savingFile ? t('timeline.uploading') : t('timeline.upload')}
                     </button>
                   </div>
                 </div>
@@ -1552,7 +1550,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
 
             {timelineEvents.length === 0 && !addingNote && !addingBewerbung && !addingOther && !addingFile ? (
               <p className="text-sm text-gray-400 italic">
-                {rawTimelineEvents.length > 0 ? 'Keine Einträge für diesen Filter' : 'Noch keine Einträge'}
+                {rawTimelineEvents.length > 0 ? t('timeline.noEntriesForFilter') : t('timeline.noEntriesYet')}
               </p>
             ) : (
               <div className="relative">
@@ -1579,17 +1577,17 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         <div className="overflow-y-auto flex-1 p-6 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-              <File className="h-3.5 w-3.5" /> Dokumente
+              <File className="h-3.5 w-3.5" /> {t('attachments.documents')}
             </p>
             <button
               onClick={openDocBrowse}
               className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700"
             >
-              <Plus className="h-3 w-3" /> Dokument hinzufügen
+              <Plus className="h-3 w-3" /> {t('attachments.addDocument')}
             </button>
           </div>
           {fileEvents.length === 0 ? (
-            <p className="text-sm text-gray-400 italic">Keine Anhänge</p>
+            <p className="text-sm text-gray-400 italic">{t('attachments.none')}</p>
           ) : (
             <>
               <div className="flex items-center gap-2">
@@ -1605,11 +1603,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   }}
                   className="rounded border-gray-300 text-indigo-600 cursor-pointer"
                 />
-                <span className="text-xs text-gray-400">Alle auswählen</span>
+                <span className="text-xs text-gray-400">{t('attachments.selectAll')}</span>
                 {selectedEventIds.size > 0 && (
                   <button onClick={bulkDeleteSelectedEvents} disabled={bulkDeleting}
                     className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2">
-                    <Trash2 className="h-3 w-3" /> {selectedEventIds.size} {selectedEventIds.size === 1 ? 'Anhang' : 'Anhänge'} löschen
+                    <Trash2 className="h-3 w-3" /> {t('attachments.deleteAttachments', { count: selectedEventIds.size })}
                   </button>
                 )}
               </div>
@@ -1633,10 +1631,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
         {activeTab === 'contacts' && (
         <div className="overflow-y-auto flex-1 p-6 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Kontakte</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('contacts.title')}</p>
             {!addingContact && (
               <button onClick={() => { setAddingContact(true); setAddMode('new') }} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700">
-                <Plus className="h-3 w-3" /> Hinzufügen
+                <Plus className="h-3 w-3" /> {t('contacts.add')}
               </button>
             )}
           </div>
@@ -1655,11 +1653,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 }}
                 className="rounded border-gray-300 text-indigo-600 cursor-pointer"
               />
-              <span className="text-xs text-gray-400">Alle auswählen</span>
+              <span className="text-xs text-gray-400">{t('contacts.selectAll')}</span>
               {selectedContactIds.size > 0 && (
                 <button onClick={bulkDeleteSelectedContacts} disabled={bulkDeleting}
                   className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2">
-                  <Trash2 className="h-3 w-3" /> {selectedContactIds.size} {selectedContactIds.size === 1 ? 'Kontakt' : 'Kontakte'} löschen
+                  <Trash2 className="h-3 w-3" /> {t('contacts.deleteContacts', { count: selectedContactIds.size })}
                 </button>
               )}
             </div>
@@ -1674,26 +1672,26 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       <div className="grid grid-cols-2 gap-2">
                         <input autoFocus
                           className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          value={editContactDraft.vorname ?? ''} placeholder="Vorname"
+                          value={editContactDraft.vorname ?? ''} placeholder={t('contacts.firstNamePlaceholder')}
                           onChange={e => setEditContactDraft(d => ({ ...d, vorname: e.target.value }))}
                         />
                         <input
                           className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          value={editContactDraft.name ?? ''} placeholder="Nachname *"
+                          value={editContactDraft.name ?? ''} placeholder={t('contacts.lastNamePlaceholder')}
                           onChange={e => setEditContactDraft(d => ({ ...d, name: e.target.value }))}
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
-                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
-                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={editContactDraft.rolle ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, rolle: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.emailPlaceholder')} value={editContactDraft.email ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, email: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.phonePlaceholder')} value={editContactDraft.telefon ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, telefon: e.target.value }))} />
+                        <input className="rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.rolePlaceholder')} value={editContactDraft.rolle ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, rolle: e.target.value }))} />
                         <div className="relative" ref={ecFirmaRef}>
                           <div
                             className="flex items-center justify-between rounded-md border border-gray-200 px-2 py-1 text-sm cursor-pointer hover:border-indigo-300"
                             onClick={() => setEcFirmaPicker(o => !o)}
                           >
                             <span className={editContactDraft.firma ? 'text-gray-900 truncate' : 'text-gray-400'}>
-                              {editContactDraft.firma || 'Firma…'}
+                              {editContactDraft.firma || t('contacts.companyPlaceholder')}
                             </span>
                             <Building2 className="h-3.5 w-3.5 text-gray-400 shrink-0 ml-1" />
                           </div>
@@ -1701,12 +1699,12 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                             <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg">
                               <div className="p-1.5 border-b border-gray-100">
                                 <input autoFocus value={ecFirmaQuery} onChange={e => setEcFirmaQuery(e.target.value)}
-                                  placeholder="Firma suchen…" className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                                  placeholder={t('contacts.companySearchPlaceholder')} className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                               </div>
                               <div className="max-h-40 overflow-y-auto py-1">
-                                {ecFirmaLoading && <p className="text-xs text-gray-400 px-3 py-1.5">Suche…</p>}
+                                {ecFirmaLoading && <p className="text-xs text-gray-400 px-3 py-1.5">{t('contacts.searching')}</p>}
                                 {!ecFirmaLoading && ecFirmaResults.length === 0 && !ecFirmaQuery && (
-                                  <p className="text-xs text-gray-400 px-3 py-1.5 italic">Suchbegriff eingeben…</p>
+                                  <p className="text-xs text-gray-400 px-3 py-1.5 italic">{t('enterSearchTerm')}</p>
                                 )}
                                 {ecFirmaResults.slice(0, 8).map(c => (
                                   <button key={c.id} type="button" onClick={() => pickEditContactCompany(c)}
@@ -1718,7 +1716,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                                   <button type="button" disabled={ecFirmaCreating} onClick={() => createAndPickEditContactCompany(ecFirmaQuery.trim())}
                                     className="w-full text-left px-3 py-1 text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border-t border-gray-100 mt-1">
                                     <Plus className="h-3 w-3 shrink-0" />
-                                    {ecFirmaCreating ? 'Anlegen…' : `"${ecFirmaQuery.trim()}" neu anlegen`}
+                                    {ecFirmaCreating ? t('creating') : t('createNew', { name: ecFirmaQuery.trim() })}
                                   </button>
                                 )}
                               </div>
@@ -1726,15 +1724,15 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                           )}
                         </div>
                         <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={editContactDraft.typ ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, typ: e.target.value }))}>
-                          <option value="">Typ wählen…</option>
-                          {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          <option value="">{t('contacts.typeSelectPlaceholder')}</option>
+                          {CONTACT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
                         </select>
                       </div>
-                      <input className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="LinkedIn URL" value={editContactDraft.linkedin_url ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
+                      <input className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.linkedinUrlPlaceholder')} value={editContactDraft.linkedin_url ?? ''} onChange={e => setEditContactDraft(d => ({ ...d, linkedin_url: e.target.value }))} />
                       <div className="flex justify-end gap-2 pt-1">
-                        <button type="button" onClick={() => setEditingContactId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+                        <button type="button" onClick={() => setEditingContactId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">{t('contacts.cancel')}</button>
                         <button type="button" disabled={!editContactDraft.name || !editContactDraft.email || savingContact} onClick={() => updateContact(c.id)} className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                          <Check className="h-3 w-3" /> Speichern
+                          <Check className="h-3 w-3" /> {t('contacts.save')}
                         </button>
                       </div>
                     </div>
@@ -1748,13 +1746,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
                         {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
                         {c.telefon && <p className="text-xs text-gray-400">{c.telefon}</p>}
-                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">LinkedIn</a>}
+                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">{t('contacts.linkedin')}</a>}
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ vorname: c.vorname, name: c.name, email: c.email, telefon: c.telefon, rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
-                          className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600" title="Bearbeiten"><Pencil className="h-3.5 w-3.5" /></button>
+                          className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600" title={t('contacts.edit')}><Pencil className="h-3.5 w-3.5" /></button>
                         <button onClick={() => deleteContact(c.id, c.name)}
-                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Löschen"><Trash2 className="h-3.5 w-3.5" /></button>
+                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title={t('contacts.delete')}><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     </div>
                   )}
@@ -1764,7 +1762,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           )}
 
           {(app?.contacts ?? []).length === 0 && !addingContact && (
-            <p className="text-sm text-gray-400 italic">Keine Kontakte hinterlegt</p>
+            <p className="text-sm text-gray-400 italic">{t('contacts.none')}</p>
           )}
 
           {addingContact && (
@@ -1774,12 +1772,12 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <button type="button"
                   onClick={() => { setAddMode('new'); setLinkSearch(''); setLinkResults([]) }}
                   className={`flex-1 px-2 py-1.5 ${addMode === 'new' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
-                  Neu erstellen
+                  {t('contacts.createNewMode')}
                 </button>
                 <button type="button"
                   onClick={() => { setAddMode('link'); setContactDraft(EMPTY_CONTACT) }}
                   className={`flex-1 px-2 py-1.5 ${addMode === 'link' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50'}`}>
-                  Vorhandenen zuordnen
+                  {t('contacts.linkExistingMode')}
                 </button>
               </div>
 
@@ -1788,26 +1786,26 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <div className="grid grid-cols-2 gap-2">
                     <input autoFocus
                       className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Vorname" value={contactDraft.vorname ?? ''}
+                      placeholder={t('contacts.firstNamePlaceholder')} value={contactDraft.vorname ?? ''}
                       onChange={e => setContactDraft(d => ({ ...d, vorname: e.target.value }))}
                     />
                     <input
                       className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Nachname *" value={contactDraft.name ?? ''}
+                      placeholder={t('contacts.lastNamePlaceholder')} value={contactDraft.name ?? ''}
                       onChange={e => setContactDraft(d => ({ ...d, name: e.target.value }))}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="E-Mail *" value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
-                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefon" value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
-                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Rolle" value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.emailPlaceholder')} value={contactDraft.email ?? ''} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.phonePlaceholder')} value={contactDraft.telefon ?? ''} onChange={e => setContactDraft(d => ({ ...d, telefon: e.target.value }))} />
+                    <input className="rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder={t('contacts.rolePlaceholder')} value={contactDraft.rolle ?? ''} onChange={e => setContactDraft(d => ({ ...d, rolle: e.target.value }))} />
                     <div className="relative" ref={cFirmaRef}>
                       <div
                         className="flex items-center justify-between rounded-md border border-gray-200 px-2 py-1.5 text-sm cursor-pointer hover:border-indigo-300"
                         onClick={() => setCFirmaPicker(o => !o)}
                       >
                         <span className={contactDraft.firma ? 'text-gray-900 truncate' : 'text-gray-400'}>
-                          {contactDraft.firma || 'Firma…'}
+                          {contactDraft.firma || t('contacts.companyPlaceholder')}
                         </span>
                         <Building2 className="h-3.5 w-3.5 text-gray-400 shrink-0 ml-1" />
                       </div>
@@ -1815,12 +1813,12 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg">
                           <div className="p-1.5 border-b border-gray-100">
                             <input autoFocus value={cFirmaQuery} onChange={e => setCFirmaQuery(e.target.value)}
-                              placeholder="Firma suchen…" className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                              placeholder={t('contacts.companySearchPlaceholder')} className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </div>
                           <div className="max-h-40 overflow-y-auto py-1">
-                            {cFirmaLoading && <p className="text-xs text-gray-400 px-3 py-1.5">Suche…</p>}
+                            {cFirmaLoading && <p className="text-xs text-gray-400 px-3 py-1.5">{t('contacts.searching')}</p>}
                             {!cFirmaLoading && cFirmaResults.length === 0 && !cFirmaQuery && (
-                              <p className="text-xs text-gray-400 px-3 py-1.5 italic">Suchbegriff eingeben…</p>
+                              <p className="text-xs text-gray-400 px-3 py-1.5 italic">{t('enterSearchTerm')}</p>
                             )}
                             {cFirmaResults.slice(0, 8).map(c => (
                               <button key={c.id} type="button" onClick={() => pickContactCompany(c)}
@@ -1832,7 +1830,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                               <button type="button" disabled={cFirmaCreating} onClick={() => createAndPickContactCompany(cFirmaQuery.trim())}
                                 className="w-full text-left px-3 py-1 text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border-t border-gray-100 mt-1">
                                 <Plus className="h-3 w-3 shrink-0" />
-                                {cFirmaCreating ? 'Anlegen…' : `"${cFirmaQuery.trim()}" neu anlegen`}
+                                {cFirmaCreating ? t('creating') : t('createNew', { name: cFirmaQuery.trim() })}
                               </button>
                             )}
                           </div>
@@ -1840,17 +1838,17 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       )}
                     </div>
                     <select className="col-span-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" value={contactDraft.typ ?? ''} onChange={e => setContactDraft(d => ({ ...d, typ: e.target.value }))}>
-                      <option value="">Typ wählen…</option>
-                      {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      <option value="">{t('contacts.typeSelectPlaceholder')}</option>
+                      {CONTACT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
                     </select>
                   </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <button type="button" onClick={() => { setAddingContact(false); setContactDraft(EMPTY_CONTACT) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-                      <Trash2 className="h-3 w-3" /> Abbrechen
+                      <Trash2 className="h-3 w-3" /> {t('contacts.cancel')}
                     </button>
                     <button type="button" disabled={!contactDraft.name || !contactDraft.email || savingContact} onClick={saveContact}
                       className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                      {savingContact ? 'Speichern…' : 'Speichern'}
+                      {savingContact ? t('contacts.saving') : t('contacts.save')}
                     </button>
                   </div>
                 </>
@@ -1860,14 +1858,14 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                     <input autoFocus
                       className="w-full rounded-md border border-gray-200 pl-7 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Name, E-Mail oder Firma suchen…"
+                      placeholder={t('contacts.linkSearchPlaceholder')}
                       value={linkSearch}
                       onChange={e => setLinkSearch(e.target.value)}
                     />
                   </div>
-                  {linkLoading && <p className="text-xs text-gray-400 text-center py-1">Suche…</p>}
+                  {linkLoading && <p className="text-xs text-gray-400 text-center py-1">{t('contacts.searching')}</p>}
                   {!linkLoading && linkSearch.trim() && linkResults.length === 0 && (
-                    <p className="text-xs text-gray-400 italic text-center py-1">Keine Kontakte gefunden</p>
+                    <p className="text-xs text-gray-400 italic text-center py-1">{t('contacts.noneFound')}</p>
                   )}
                   {linkResults.length > 0 && (
                     <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -1884,7 +1882,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   )}
                   <div className="flex justify-end pt-1">
                     <button type="button" onClick={() => { setAddingContact(false); setLinkSearch(''); setLinkResults([]) }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-                      <Trash2 className="h-3 w-3" /> Abbrechen
+                      <Trash2 className="h-3 w-3" /> {t('contacts.cancel')}
                     </button>
                   </div>
                 </>
@@ -1900,21 +1898,21 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             onClick={deleteApp}
             className="text-sm text-red-600 hover:text-red-700 hover:underline"
           >
-            Löschen
+            {t('footer.delete')}
           </button>
           <div className="flex gap-3">
             {editing ? (
               <>
                 <button onClick={() => { setEditing(false); setDraft(app ?? {}) }} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">
-                  Abbrechen
+                  {t('footer.cancel')}
                 </button>
                 <button onClick={save} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
-                  {saving ? 'Speichern…' : 'Speichern'}
+                  {saving ? t('footer.saving') : t('footer.save')}
                 </button>
               </>
             ) : (
               <button onClick={() => setEditing(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                Bearbeiten
+                {t('footer.edit')}
               </button>
             )}
           </div>
@@ -1927,7 +1925,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) { setManualOpen(false); setManualConflict(null) } }}>
         <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[80vh]">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900 text-sm">Manuell zuordnen</h3>
+            <h3 className="font-semibold text-gray-900 text-sm">{t('manualAssign.title')}</h3>
             <button onClick={() => { setManualOpen(false); setManualConflict(null) }} className="p-1 rounded hover:bg-gray-100 text-gray-400">
               <X className="h-4 w-4" />
             </button>
@@ -1935,13 +1933,12 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
           {manualConflict ? (
             <div className="p-5 space-y-4">
               <p className="text-sm text-gray-700">
-                Dieser Eintrag ist bereits mit <strong>{manualConflict.conflict_app_firma}</strong> verknüpft.
-                Was soll passieren?
+                {t('manualAssign.conflictPrefix')} <strong>{manualConflict.conflict_app_firma}</strong>{t('manualAssign.conflictSuffix')}
               </p>
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setManualConflict(null)} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2">Abbrechen</button>
-                <button onClick={() => assignCandidate(manualConflict.candidate, false)} className="rounded-md border border-gray-200 px-3 py-2 text-xs hover:bg-gray-50">Beide verknüpfen</button>
-                <button onClick={() => assignCandidate(manualConflict.candidate, true)} className="rounded-md bg-indigo-600 px-3 py-2 text-xs text-white hover:bg-indigo-700">Aus anderer Bewerbung entfernen</button>
+                <button onClick={() => setManualConflict(null)} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2">{t('manualAssign.cancel')}</button>
+                <button onClick={() => assignCandidate(manualConflict.candidate, false)} className="rounded-md border border-gray-200 px-3 py-2 text-xs hover:bg-gray-50">{t('manualAssign.linkBoth')}</button>
+                <button onClick={() => assignCandidate(manualConflict.candidate, true)} className="rounded-md bg-indigo-600 px-3 py-2 text-xs text-white hover:bg-indigo-700">{t('manualAssign.removeFromOther')}</button>
               </div>
             </div>
           ) : (
@@ -1949,7 +1946,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <div className="px-5 py-3 border-b border-gray-100 flex gap-2">
                 <input
                   className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Suchen…"
+                  placeholder={t('manualAssign.searchPlaceholder')}
                   value={manualQuery}
                   onChange={e => setManualQuery(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && searchManual()}
@@ -1960,17 +1957,17 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               </div>
               {manualSelected.size > 0 && (
                 <div className="px-5 py-2 border-b border-gray-100 flex items-center justify-between bg-indigo-50/50">
-                  <span className="text-xs text-gray-600">{manualSelected.size} ausgewählt</span>
+                  <span className="text-xs text-gray-600">{t('manualAssign.selected', { count: manualSelected.size })}</span>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setManualSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">
-                      Auswahl aufheben
+                      {t('manualAssign.deselect')}
                     </button>
                     <button
                       onClick={assignSelectedCandidates}
                       disabled={manualBulkBusy}
                       className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
                     >
-                      {manualBulkBusy ? 'Importiere…' : `${manualSelected.size} importieren`}
+                      {manualBulkBusy ? t('manualAssign.importing') : t('manualAssign.import', { count: manualSelected.size })}
                     </button>
                   </div>
                 </div>
@@ -1981,9 +1978,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 </div>
               )}
               <div className="overflow-y-auto flex-1 p-3 space-y-3">
-                {manualLoading && <p className="text-sm text-gray-400 text-center py-4">Lädt…</p>}
+                {manualLoading && <p className="text-sm text-gray-400 text-center py-4">{t('manualAssign.loading')}</p>}
                 {!manualLoading && manualCandidates.length === 0 && (
-                  <p className="text-sm text-gray-400 italic text-center py-4">Keine Treffer</p>
+                  <p className="text-sm text-gray-400 italic text-center py-4">{t('manualAssign.noMatches')}</p>
                 )}
                 {!manualLoading && (() => {
                   const SOURCE_ORDER = ['gmail','gcal','icloud_mail','icloud_cal','icloud_notes','pending','event']
@@ -1999,7 +1996,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   return keys.map(src => {
                     const items = grouped[src]
                     const meta = SOURCE_META[src]
-                    const label = meta?.label ?? src
+                    const label = t(`sourceLabel.${src}`, { defaultValue: src })
                     const cls   = meta?.cls   ?? 'bg-gray-50 text-gray-600 border-gray-200'
                     return (
                       <details key={src} open className="text-xs">
@@ -2029,7 +2026,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                                 <p className="text-sm font-medium text-gray-800 truncate">{c.titel || c.event_type || c.source}</p>
                                 {c.datum && <p className="text-xs text-gray-500">{formatDate(c.datum, locale)}</p>}
                                 {c.extract && <p className="text-xs text-gray-400 truncate mt-0.5">{c.extract}</p>}
-                                {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">Vorschlag: {c.suggested_app_firma}</p>}
+                                {c.suggested_app_firma && <p className="text-xs text-amber-600 mt-0.5">{t('manualAssign.suggestion', { firma: c.suggested_app_firma })}</p>}
                               </button>
                             </div>
                           ))}
@@ -2053,7 +2050,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) setDocBrowseOpen(false) }}>
         <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[80vh]">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900 text-sm">Dokument / Ordner hinzufügen</h3>
+            <h3 className="font-semibold text-gray-900 text-sm">{t('docBrowser.title')}</h3>
             <button onClick={() => setDocBrowseOpen(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
               <X className="h-4 w-4" />
             </button>
@@ -2065,7 +2062,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <button
                 onClick={() => browseInto(parentPath(docBrowsePath))}
                 className="flex-shrink-0 p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-                title="Nach oben"
+                title={t('docBrowser.up')}
               >
                 <ChevronRight className="h-3.5 w-3.5 rotate-180" />
               </button>
@@ -2088,16 +2085,16 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 onClick={() => browseInto(docBrowseRoot)}
                 className="flex-shrink-0 ml-auto text-[10px] text-indigo-500 hover:text-indigo-700 whitespace-nowrap pl-2"
               >
-                ↩ Startordner
+                {t('docBrowser.home')}
               </button>
             )}
           </div>
 
           <div className="overflow-y-auto flex-1 p-3 space-y-1">
-            {docBrowseLoading && <p className="text-sm text-gray-400 text-center py-6">Lädt…</p>}
+            {docBrowseLoading && <p className="text-sm text-gray-400 text-center py-6">{t('docBrowser.loading')}</p>}
             {docBrowseError && <p className="text-sm text-red-500 text-center py-4">{docBrowseError}</p>}
             {!docBrowseLoading && !docBrowseError && docBrowseItems.length === 0 && (
-              <p className="text-sm text-gray-400 italic text-center py-6">Keine Dateien gefunden</p>
+              <p className="text-sm text-gray-400 italic text-center py-6">{t('docBrowser.noFiles')}</p>
             )}
             {!docBrowseLoading && docBrowseItems.map(item => (
               <div key={item.path} className="flex items-center gap-2 group">
@@ -2121,7 +2118,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   </div>
                   {item.type === 'folder' && <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />}
                   {item.type === 'file' && docAttaching === item.path && (
-                    <span className="text-[10px] text-indigo-500 flex-shrink-0">Anhängen…</span>
+                    <span className="text-[10px] text-indigo-500 flex-shrink-0">{t('docBrowser.attaching')}</span>
                   )}
                 </button>
                 {/* "Hinzufügen"-Button für Ordner */}
@@ -2129,7 +2126,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   <button
                     disabled={docAttaching !== null}
                     onClick={() => attachDoc(item)}
-                    title="Ordner hinzufügen"
+                    title={t('docBrowser.addFolder')}
                     className="flex-shrink-0 p-2 rounded-lg border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -2144,18 +2141,6 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     })()}
     </>
   )
-}
-
-const EVENT_STYLES: Record<string, { dot: string; label: string }> = {
-  bewerbung: { dot: 'bg-green-500',  label: 'Bewerbung' },
-  status:    { dot: 'bg-indigo-500', label: 'Status' },
-  notiz:     { dot: 'bg-gray-400',   label: 'Notiz' },
-  gespräch:  { dot: 'bg-purple-500', label: 'Gespräch' },
-  mail:      { dot: 'bg-red-400',    label: 'Mail' },
-  anruf:     { dot: 'bg-teal-500',   label: 'Anruf' },
-  angebot:   { dot: 'bg-emerald-500',label: 'Angebot' },
-  absage:    { dot: 'bg-rose-500',   label: 'Absage' },
-  file:      { dot: 'bg-amber-500',  label: 'Anhang' },
 }
 
 const OTHER_EVENT_TYPES = [
@@ -2216,16 +2201,17 @@ function buildDeepLink(source: string | undefined, external_id: string | undefin
 }
 
 function SourceBadge({ source, external_id }: { source?: string; external_id?: string }) {
+  const { t } = useTranslation('applications')
   if (!source) return null
   const meta = SOURCE_META[source]
   const deepLink = buildDeepLink(source, external_id)
   const cls = meta
     ? `inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${meta.cls}`
     : 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium bg-gray-50 text-gray-500 border-gray-200'
-  const label = meta ? meta.label : source
+  const label = t(`sourceLabel.${source}`, { defaultValue: source })
   if (deepLink) {
     return (
-      <a href={deepLink} target="_blank" rel="noreferrer" className={`${cls} hover:opacity-80 cursor-pointer`} title="In App öffnen">
+      <a href={deepLink} target="_blank" rel="noreferrer" className={`${cls} hover:opacity-80 cursor-pointer`} title={t('timeline.openInApp')}>
         {label} <ExternalLink className="h-2.5 w-2.5 opacity-60" />
       </a>
     )
@@ -2236,6 +2222,7 @@ function SourceBadge({ source, external_id }: { source?: string; external_id?: s
 const EVENT_TYPES = ['bewerbung', 'status', 'notiz', 'gespräch', 'mail', 'anruf', 'angebot', 'absage'] as const
 
 function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onDeleted: () => void }) {
+  const { t } = useTranslation('applications')
   const [opening, setOpening] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const path = event.notiz ?? ''
@@ -2272,7 +2259,7 @@ function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onD
         onClick={deleteFile}
         disabled={deleting}
         className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-400 hover:text-red-500 shrink-0 transition-opacity"
-        title="Entfernen"
+        title={t('timeline.removeTitle')}
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -2281,12 +2268,13 @@ function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onD
 }
 
 function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: number; onUpdated: () => void }) {
+  const { t } = useTranslation('applications')
   const locale = useLocale()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ typ: event.typ, datum: event.datum ?? '', titel: event.titel ?? '', notiz: event.notiz ?? '' })
   const [saving, setSaving] = useState(false)
 
-  const style = EVENT_STYLES[event.typ] ?? { dot: 'bg-gray-300', label: event.typ }
+  const styleLabel = t(`eventType.${event.typ}`, { defaultValue: event.typ })
   const dateStr = event.datum
     ? formatDate(event.datum, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
     : null
@@ -2313,7 +2301,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
   }
 
   async function deleteEvent() {
-    if (!confirm('Eintrag löschen?')) return
+    if (!confirm(t('timeline.confirmDeleteEvent'))) return
     await api.applications.deleteEvent(appId, event.id)
     onUpdated()
   }
@@ -2332,8 +2320,8 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
               value={draft.typ}
               onChange={e => setDraft(d => ({ ...d, typ: e.target.value }))}
             >
-              {EVENT_TYPES.map(t => (
-                <option key={t} value={t}>{EVENT_STYLES[t]?.label ?? t}</option>
+              {EVENT_TYPES.map(typ => (
+                <option key={typ} value={typ}>{t(`eventType.${typ}`, { defaultValue: typ })}</option>
               ))}
             </select>
             <input
@@ -2345,21 +2333,21 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
           </div>
           <input
             className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Titel"
+            placeholder={t('timeline.titlePlaceholderPlain')}
             value={draft.titel}
             onChange={e => setDraft(d => ({ ...d, titel: e.target.value }))}
           />
           <textarea
             rows={2}
             className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Notiz"
+            placeholder={t('timeline.notePlaceholderPlain')}
             value={draft.notiz}
             onChange={e => setDraft(d => ({ ...d, notiz: e.target.value }))}
           />
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Abbrechen</button>
+            <button type="button" onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">{t('timeline.cancel')}</button>
             <button type="button" disabled={saving} onClick={save} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-              {saving ? 'Speichern…' : 'Speichern'}
+              {saving ? t('timeline.saving') : t('timeline.save')}
             </button>
           </div>
         </div>
@@ -2374,21 +2362,21 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
         <span className={evFg}>{evIcon}</span>
       </div>
       <div className="text-xs text-gray-400 mb-0.5 flex items-center gap-2 flex-wrap">
-        <span>{dateStr ?? <span className="italic">kein Datum</span>}{timeStr && <span className="text-gray-400">, {timeStr}</span>}</span>
-        <span className="uppercase tracking-wide font-medium text-gray-400">{style.label}</span>
+        <span>{dateStr ?? <span className="italic">{t('timeline.noDate')}</span>}{timeStr && <span className="text-gray-400">, {timeStr}</span>}</span>
+        <span className="uppercase tracking-wide font-medium text-gray-400">{styleLabel}</span>
         <SourceBadge source={event.source} external_id={event.external_id} />
         <span className="ml-auto hidden group-hover:flex items-center gap-1">
           <button
             onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}
             className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
-            title="Bearbeiten"
+            title={t('timeline.editTitle')}
           >
             <Pencil className="h-3 w-3" />
           </button>
           <button
             onClick={deleteEvent}
             className="p-0.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
-            title="Löschen"
+            title={t('timeline.deleteTitle')}
           >
             <Trash2 className="h-3 w-3" />
           </button>

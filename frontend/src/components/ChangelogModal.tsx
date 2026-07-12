@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.64.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n (Phase 8/13, Bewerbungs-Detaildialog): Der komplette Bewerbungs-Detaildialog (2400+ Zeilen) ist jetzt übersetzt — Kopfzeile mit Firmen-Picker, Sync-Menü, Lifecycle-Leiste, alle vier Tabs (Übersicht, Verlauf, Anhänge, Kontakte) samt aller Formulare, der Manuell-zuordnen-Dialog und der Dokument-Browser. Neuer applications.json-Namespace (de+en, ~150 Keys).',
+    ],
+  },
+  {
     version: '3.63.0',
     date: '2026-07-11',
     changes: [
