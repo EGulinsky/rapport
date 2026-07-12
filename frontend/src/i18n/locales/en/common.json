@@ -10,5 +10,6 @@
   "back": "Back",
   "loading": "Loading…",
   "saved": "Saved",
-  "changeStatus": "Change status"
+  "changeStatus": "Change status",
+  "current": "current"
 }

@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { BUILD_NUMBER } from '../version'
 
 interface Release {
@@ -8,6 +9,13 @@ interface Release {
 }
 
 const CHANGELOG: Release[] = [
+  {
+    version: '3.77.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n: translated the entire changelog history to English — all 311 entries, going all the way back to v0.1.0. Reverses an earlier decision this same day to leave historical entries in German; going forward, every changelog entry (new and old) stays in English, matching the existing "commits always in English" rule. Also translated the "current" badge in this modal\'s own header, which had been hardcoded German (`aktuell`) since it was never covered by any of the i18n phases.',
+    ],
+  },
   {
     version: '3.76.0',
     date: '2026-07-12',
@@ -64,2316 +72,2316 @@ const CHANGELOG: Release[] = [
     version: '3.69.0',
     date: '2026-07-12',
     changes: [
-      'i18n (Phase 13/13, Abschluss): Finaler Vollständigkeits-Sweep über die gesamte Komponenten-Baumstruktur — zwei bislang übersehene Stellen gefunden und behoben: den "Status ändern"-Tooltip in der Bewerbungstabelle (neuer common.json-Schlüssel changeStatus) und PdfExportButton.tsx, eine komplett unübersetzte, seit dem Umbau auf ImportExportMenu.tsx nirgends mehr verwendete Altkomponente — entfernt statt übersetzt. Neuer StatsBar-Test ergänzt den bereits bestehenden StatusBadge-Test um einen zweiten Sprachwechsel-Nachweis auf Komponentenebene (anderer Namespace: app statt status). Damit sind alle 13 geplanten Phasen der Internationalisierung abgeschlossen — Web-App, Backend-Fehlermeldungen, nativer Mac-Agent und E2E-Tests unterstützen jetzt durchgängig Deutsch/Englisch, per Konto umschaltbar.',
+      'i18n (Phase 13/13, wrap-up): final completeness sweep across the entire component tree — found and fixed two previously overlooked spots: the "change status" tooltip in the application table (new common.json key changeStatus) and PdfExportButton.tsx, a completely untranslated legacy component no longer used anywhere since the move to ImportExportMenu.tsx — removed rather than translated. New StatsBar test adds a second component-level language-switch proof alongside the existing StatusBadge test (different namespace: app instead of status). With this, all 13 planned i18n phases are complete — the web app, backend error messages, native Mac agent, and E2E tests now support German/English throughout, switchable per account.',
     ],
   },
   {
     version: '3.68.0',
     date: '2026-07-12',
     changes: [
-      'i18n (Phase 12/13, E2E-Selektoren): Alle 12 Playwright-Spezifikationen sind von deutschen Text-Selektoren auf stabile data-testid-Attribute umgestellt — betrifft App.tsx, ApplicationModal.tsx, CleanupModal.tsx, MergeDialog.tsx, CompaniesView.tsx, StatusBadge.tsx und das Backup-Panel. Dabei eine bislang komplett unübersetzte Komponente entdeckt und nachgezogen: ImportExportMenu.tsx (Excel-/PDF-Export, Excel-Import). Neue authToken-Fixture-Option `uiLanguage` (Default weiterhin "de") legt die Grundlage für künftige Testläufe in anderen Sprachen. Das eigentliche CI-Setup für einen zusätzlichen Englisch-Testlauf (siehe Plan) ist noch offen.',
+      'i18n (Phase 12/13, E2E selectors): all 12 Playwright specs converted from German-text selectors to stable data-testid attributes — covers App.tsx, ApplicationModal.tsx, CleanupModal.tsx, MergeDialog.tsx, CompaniesView.tsx, StatusBadge.tsx, and the backup panel. Discovered and translated a component that had been completely missed until now: ImportExportMenu.tsx (Excel/PDF export, Excel import). New authToken fixture option `uiLanguage` (still defaulting to "de") lays the groundwork for future test runs in other languages. The actual CI setup for an additional English test run (see plan) is still open.',
     ],
   },
   {
     version: '3.67.0',
     date: '2026-07-12',
     changes: [
-      'i18n (Phase 11/13, Rapport Agent): Der native Mac-Agent (Menüleiste) unterstützt jetzt ebenfalls Deutsch/Englisch — neues agent/strings.py mit allen Menü-/Dialogtexten, neues Feld AgentConfig.ui_language sowie ein neuer PATCH /config-Endpunkt, den das Backend beim Speichern/Verifizieren des Agent-Tokens automatisch mit der Kontosprache aufruft. Da rumps das Menü nur einmal beim Start aufbaut, wirkt ein Sprachwechsel erst nach einem Neustart des Agenten. Wichtig: Diese Phase erfordert zusätzlich zum Code einen manuellen Rebuild + Neuinstallation des Agenten auf dem Mac (siehe agent/README.md) — mit grüner CI allein ist sie nicht "fertig".',
+      'i18n (Phase 11/13, Rapport Agent): the native Mac agent (menu bar) now also supports German/English — new agent/strings.py with all menu/dialog text, a new AgentConfig.ui_language field, and a new PATCH /config endpoint that the backend calls automatically with the account language whenever the agent token is saved/verified. Since rumps only builds the menu once at startup, a language change only takes effect after the agent is restarted. Important: this phase requires a manual rebuild + reinstall of the agent on the Mac in addition to the code (see agent/README.md) — green CI alone doesn\'t mean it\'s "done".',
     ],
   },
   {
     version: '3.66.0',
     date: '2026-07-12',
     changes: [
-      'i18n (Phase 10/13, Backend-Fehlerschlüssel): "Nicht gefunden"-Fehler in applications.py, contacts.py, companies.py, attachments.py und merge.py liefern jetzt stabile error_key-Werte statt nur deutschem Text — 38 Stellen umgestellt, dabei zwei bestehende Inkonsistenzen mitkorrigiert (companies.py verwendete an zwei Stellen englischen Text, merge.py bei Kontakten einen Grammatikfehler). Reine Backend-Änderung, noch ohne sichtbaren Effekt — die betroffenen Frontend-Dialoge übersetzen Fehlermeldungen bislang nur teilweise über den error_key-Mechanismus.',
+      'i18n (Phase 10/13, backend error keys): "not found" errors in applications.py, contacts.py, companies.py, attachments.py, and merge.py now return stable error_key values instead of just German text — 38 call sites converted, fixing two existing inconsistencies along the way (companies.py used English text in two places, merge.py had a grammar error for contacts). Backend-only change, no visible effect yet — the affected frontend dialogs so far only partially translate error messages via the error_key mechanism.',
     ],
   },
   {
     version: '3.65.0',
     date: '2026-07-12',
     changes: [
-      'i18n (Phase 9/13, Einstellungen-Dialog): Alle 12 Einstellungen-Tabs (Konto, Sync, KI/API, Google, iCloud, Anrufe, Dokumente, LinkedIn, Backup, Logos, Karten, Agent) sind jetzt vollständig übersetzt — Tab-Namen, Formulare, Sync-Status, KI-Anbieter-Badges, LinkedIn-Aktionslog und alle Hinweistexte. Neuer settings.json-Namespace (de+en, ~150 Keys).',
+      'i18n (Phase 9/13, Settings dialog): all 12 Settings tabs (Account, Sync, AI/API, Google, iCloud, Calls, Documents, LinkedIn, Backup, Logos, Maps, Agent) are now fully translated — tab names, forms, sync status, AI provider badges, LinkedIn action log, and all hint texts. New settings.json namespace (de+en, ~150 keys).',
     ],
   },
   {
     version: '3.64.0',
     date: '2026-07-12',
     changes: [
-      'i18n (Phase 8/13, Bewerbungs-Detaildialog): Der komplette Bewerbungs-Detaildialog (2400+ Zeilen) ist jetzt übersetzt — Kopfzeile mit Firmen-Picker, Sync-Menü, Lifecycle-Leiste, alle vier Tabs (Übersicht, Verlauf, Anhänge, Kontakte) samt aller Formulare, der Manuell-zuordnen-Dialog und der Dokument-Browser. Neuer applications.json-Namespace (de+en, ~150 Keys).',
+      'i18n (Phase 8/13, application detail dialog): the entire application detail dialog (2400+ lines) is now translated — header with company picker, sync menu, lifecycle bar, all four tabs (overview, timeline, attachments, contacts) including all forms, the manual-assign dialog, and the document browser. New applications.json namespace (de+en, ~150 keys).',
     ],
   },
   {
     version: '3.63.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 7/13, Kalender + Auswertungen + Kleindialoge): Kalender-Ansicht (Monats-/Wochenansicht, Ansichtsumschalter, Detail-Popup), die komplette Auswertungen-Seite (KPI-Kacheln, Trichter, Engpass-Analyse, Stufen-Konversion, Headhunter-vs-Direkt, alle Diagrammtitel/-legenden/-tooltips) sowie StatsBar, die Startup-Warnbanner-Meldungen, der Duplikate-bereinigen-Dialog und der Manuelle-Überprüfung-Dialog sind jetzt vollständig übersetzt. Neue Namespaces calendar.json/analytics.json/cleanup.json/review.json (de+en); app.json um stats/startupWarning erweitert.',
+      'i18n (Phase 7/13, calendar + analytics + small dialogs): the calendar view (month/week view, view switcher, detail popup), the entire analytics page (KPI tiles, funnel, bottleneck analysis, stage conversion, headhunter-vs-direct, all chart titles/legends/tooltips), StatsBar, the startup warning banner messages, the duplicate-cleanup dialog, and the manual-review dialog are now fully translated. New namespaces calendar.json/analytics.json/cleanup.json/review.json (de+en); app.json extended with stats/startupWarning.',
     ],
   },
   {
     version: '3.62.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 6b/13, Firmen-Detail + Zusammenführen): Firma-Detaildialog (Profil/Bewerbungen/Kontakte-Tabs, Bearbeiten-Formular, Logo-Upload, Kontakt-Zuordnung), Firmen-Übersichtstabelle (Sync-Menü, Kontakte verknüpfen, Muttergesellschaft zuordnen) und alle drei Zusammenführen-Dialoge (Bewerbungen/Kontakte/Firmen) sind jetzt vollständig übersetzt. Neuer merge.json-Namespace; companies.json um companyType/syncSource-Labels und die Firma-Detailansicht erweitert.',
+      'i18n (Phase 6b/13, company detail + merge): the company detail dialog (profile/applications/contacts tabs, edit form, logo upload, contact assignment), the companies overview table (sync menu, link contacts, assign parent company), and all three merge dialogs (applications/contacts/companies) are now fully translated. New merge.json namespace; companies.json extended with companyType/syncSource labels and the company detail view.',
     ],
   },
   {
     version: '3.61.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 6a/13, Kontakte + Firmen-Dialoge): Die komplette Kontakte-Ansicht ist jetzt übersetzt — Tabelle, Firma-Zuordnung, Merge/Löschen-Aktionen, "Neuer Kontakt"-Dialog, iCloud-/LinkedIn-Import-Dialog und der Kontakt-Detaildialog samt Bearbeiten-Formular. Außerdem die kleinen Firmen-Dialoge "Neue Firma" und LinkedIn-Firmenimport. Neue contacts.json/companies.json-Namespaces de+en (Firmen-Detail/-Liste folgen in Phase 6b).',
+      'i18n (Phase 6a/13, contacts + company dialogs): the entire contacts view is now translated — table, company assignment, merge/delete actions, "new contact" dialog, iCloud/LinkedIn import dialog, and the contact detail dialog including the edit form. Also the small company dialogs "new company" and LinkedIn company import. New contacts.json/companies.json namespaces de+en (company detail/list follow in Phase 6b).',
     ],
   },
   {
     version: '3.60.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 5/13, Datumsformate): Alle bislang hart auf "de-DE" verdrahteten Datums-/Zeit-Formatierungen und eine Sortier-Kollation (localeCompare) sind jetzt sprachabhängig — 23 Stellen über 9 Dateien (Firmen-Detail, Kontakte, Kontakt-Detail, Audit-Log, Kanban, Kalender, Bewerbungstabelle, Bewerbungs-Detail, Einstellungen). Neue Helfer formatDate()/formatDateTime()/collate() in i18n/formatDate.ts kapseln das für Komponenten wie für eigenständige Hilfsfunktionen einheitlich, jetzt mit eigenen Tests abgesichert.',
+      'i18n (Phase 5/13, date formats): every date/time formatting call site previously hardcoded to "de-DE", plus one sort collation (localeCompare), is now language-aware — 23 call sites across 9 files (company detail, contacts, contact detail, audit log, Kanban, calendar, application table, application detail, settings). New formatDate()/formatDateTime()/collate() helpers in i18n/formatDate.ts wrap this uniformly for both components and standalone helper functions, now backed by their own tests.',
     ],
   },
   {
     version: '3.59.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 4/13): Die komplette App-Hülle in App.tsx ist jetzt übersetzt — Navigation, Suchleiste, Status-Filter, "KI bewerten"/"Bereinigen"/"Neu"-Buttons samt Dropdown-Menü, LinkedIn-Import-Dialog und der Formular für neue Bewerbungen. Sprachwechsel (Registrierung oder Einstellungen → Konto) wirkt jetzt auf die gesamte sichtbare App-Oberfläche sofort — nur die einzelnen Ansichten (Kontakte, Firmen, Kalender, Auswertungen, Einstellungen selbst) bleiben vorerst Deutsch, das folgt in den nächsten Phasen.',
+      'i18n (Phase 4/13): the entire app shell in App.tsx is now translated — navigation, search bar, status filter, "AI assess"/"Clean up"/"New" buttons including the dropdown menu, LinkedIn import dialog, and the new-application form. Switching language (at registration or in Settings → Account) now immediately affects the entire visible app chrome — only the individual views (Contacts, Companies, Calendar, Analytics, Settings itself) remain German for now, following in the next phases.',
     ],
   },
   {
     version: '3.58.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 3/13): Einstellungen → Konto hat jetzt eine Sprachauswahl (Deutsch/Englisch), die sofort app-weit wirkt. Die Status-Labels (Anbahnung, Beworben, Gespräch HR/HH, …) sind aus einer statischen deutschen Liste in types.ts in die neuen Sprachkataloge gewandert und werden jetzt an allen 9 Stellen, die sie anzeigen (Tabelle, Kanban, Kalender, Änderungsvorschläge, Zusammenführen-Dialog, Bewerbungs-Detail), sprachabhängig übersetzt.',
+      'i18n (Phase 3/13): Settings → Account now has a language selector (German/English) that takes effect app-wide immediately. The status labels (Prospecting, Applied, Interview HR/HH, …) moved from a static German list in types.ts into the new language catalogs and are now translated at all 9 places that display them (table, Kanban, calendar, suggested changes, merge dialog, application detail).',
     ],
   },
   {
     version: '3.57.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 2/13, Login/Registrierung): Der Registrierungs-Dialog hat jetzt eine Sprachauswahl (Deutsch/Englisch, Default Englisch) — alle 6 Auth-Seiten (Login, Registrierung, Passwort vergessen/zurücksetzen, E-Mail bestätigen) sind vollständig übersetzt und schalten live um. Backend: Auth-Fehlermeldungen (falsches Passwort, Code ungültig/abgelaufen, E-Mail nicht bestätigt, CV-Validierung, …) liefern jetzt einen stabilen error_key statt nur deutschem Text — das Frontend übersetzt ihn, mit dem bisherigen deutschen Text als Fallback für alles Ungekeyte. Bestätigungs-/Reset-Mails werden serverseitig in der gewählten Kontosprache verschickt.',
+      'i18n (Phase 2/13, login/registration): the registration dialog now has a language selector (German/English, defaulting to English) — all 6 auth pages (login, registration, forgot/reset password, verify email) are fully translated and switch live. Backend: auth error messages (wrong password, code invalid/expired, email not verified, CV validation, …) now return a stable error_key instead of just German text — the frontend translates it, with the previous German text as a fallback for anything not yet keyed. Verification/reset emails are now sent server-side in the account\'s chosen language.',
     ],
   },
   {
     version: '3.56.0',
     date: '2026-07-11',
     changes: [
-      'i18n (Phase 1/13, Grundlagen): Konten haben jetzt eine UI-Sprache (ui_language, Default "de" für Bestandskonten, "en" für neue Registrierungen) — DB-Migration, Register-/Profil-Endpunkte, /api/e2e/setup-user. Frontend: react-i18next-Grundgerüst (i18n/index.ts, useLocale/formatDate/collate-Helfer, erste common.json-Namespace de+en) plus ein Test, der sicherstellt, dass alle Sprachkataloge dieselben Keys haben. Noch keine sichtbare Änderung — die eigentliche Sprachauswahl (Registrierung + Einstellungen) folgt in der nächsten Phase.',
+      'i18n (Phase 1/13, foundations): accounts now have a UI language (ui_language, defaulting to "de" for existing accounts, "en" for new registrations) — DB migration, register/profile endpoints, /api/e2e/setup-user. Frontend: react-i18next scaffolding (i18n/index.ts, useLocale/formatDate/collate helpers, first common.json namespace de+en) plus a test ensuring every language catalog has the same keys. No visible change yet — the actual language selection (registration + settings) follows in the next phase.',
     ],
   },
   {
     version: '3.55.14',
     date: '2026-07-11',
     changes: [
-      'Docs: CLAUDE.md dokumentiert jetzt den zweiten Arbeits-Checkout /Users/eugengulinsky/code/rapport-dev — Claude-Code-Sessions arbeiten dort, damit der automatische deploy-Job (git reset --hard in /rapport) nie wieder uncommittete Edits verwirft (ist zweimal passiert, siehe Session-Historie).',
+      'Docs: CLAUDE.md now documents the second working checkout /Users/eugengulinsky/code/rapport-dev — Claude Code sessions work there so the automatic deploy job (git reset --hard in /rapport) never again discards uncommitted edits (has happened twice, see session history).',
     ],
   },
   {
     version: '3.55.13',
     date: '2026-07-11',
     changes: [
-      'Docs: docs/TEST_KONZEPT.md und die CI/CD-Sektion in CLAUDE.md hatten veraltete Zahlen (602 statt 1306 Tests, 93 statt 184 Integrationstests, "Phase 5 gestartet" statt tatsächlich abgeschlossener Phasen 1–6) — beide aktualisiert, inkl. einer neuen Coverage-Tabelle mit getrennten PR-Gate- vs. Integration-Werten (74% vs. 87%).',
-      'Docs: agent/README.md und backend/tests/integration/README.md waren komplett auf Deutsch geblieben (bei der Doku-Übersetzung v3.52.0 übersehen bzw. danach neu angelegt) — ins Englische übersetzt, letzteres zusätzlich inhaltlich aktualisiert (iCloud Mail/Calendar/Reminders/Contacts/Notes/Calls sind längst umgesetzt, nicht mehr "noch offen").',
+      'Docs: docs/TEST_KONZEPT.md and the CI/CD section in CLAUDE.md had stale numbers (602 instead of 1306 tests, 93 instead of 184 integration tests, "Phase 5 started" instead of Phases 1–6 actually being complete) — both updated, including a new coverage table with separate PR-gate vs. integration figures (74% vs. 87%).',
+      'Docs: agent/README.md and backend/tests/integration/README.md had stayed entirely in German (missed during the v3.52.0 doc translation, or created afterward) — translated to English, the latter also updated in content (iCloud Mail/Calendar/Reminders/Contacts/Notes/Calls have long been implemented, no longer "still open").',
     ],
   },
   {
     version: '3.55.12',
     date: '2026-07-11',
     changes: [
-      'Fix: test_linkedin_job_description.py hatte zusätzlich ein überflüssiges pytest.mark.asyncio auf Modulebene, das für die drei synchronen Tests in TestExtractionJs bei jedem Lauf eine PytestWarning auslöste (pytest.ini setzt asyncio_mode=auto, die explizite Markierung war nie nötig).',
+      'Fix: test_linkedin_job_description.py also had a superfluous module-level pytest.mark.asyncio, which triggered a PytestWarning on every run for the three synchronous tests in TestExtractionJs (pytest.ini already sets asyncio_mode=auto, the explicit marker was never needed).',
     ],
   },
   {
     version: '3.55.11',
     date: '2026-07-11',
     changes: [
-      'Fix: test_linkedin_job_description.py lief seit seiner Einführung nie in CI — es fehlte die pytest.mark.unit-Markierung, die der Marker-Filter (`-m "unit or component or api"`) für die Ausführung braucht. linkedin_job_description.py stand dadurch in echten CI-Läufen bei 11% statt der angenommenen 82%.',
-      'Tests: contacts.py von 80% auf 100% Testabdeckung — GET /api/contacts/ (Suche, Mandanten-Scoping, Firmen-Anreicherung aus verlinkten CompanyProfiles) und DELETE /api/contacts/bulk (gezielt und all=true) waren komplett ungetestet.',
-      'Tests: sync_company.py von 83% auf 99% Testabdeckung — _get_linkedin_context() (echter Playwright-Start, kaputtes Cookie-JSON), resolve_company_candidate()-Fehlerzweige (SPARQL-Fehler, Logo-Fallbacks) und der vollständige _run_sync_batch()-Erfolgspfad über Wikidata inkl. Logo-Download, der bisher nur in den Cancel-Tests vor der SPARQL-Antwort abbrach.',
+      'Fix: test_linkedin_job_description.py had never run in CI since it was introduced — it was missing the pytest.mark.unit marker that the marker filter (`-m "unit or component or api"`) needs to run it. As a result, linkedin_job_description.py sat at 11% in real CI runs instead of the assumed 82%.',
+      'Tests: contacts.py from 80% to 100% test coverage — GET /api/contacts/ (search, tenant scoping, company enrichment from linked CompanyProfiles) and DELETE /api/contacts/bulk (targeted and all=true) were completely untested.',
+      'Tests: sync_company.py from 83% to 99% test coverage — _get_linkedin_context() (real Playwright start, broken cookie JSON), resolve_company_candidate() error branches (SPARQL errors, logo fallbacks), and the full successful _run_sync_batch() path via Wikidata including logo download, which previously only ran in the cancel tests before the SPARQL response arrived.',
     ],
   },
   {
     version: '3.55.10',
     date: '2026-07-10',
     changes: [
-      'Tests: sync_linkedin.py von 43% auf 52% Testabdeckung — Config-/Status-/Run-/2FA-Endpunkte sowie Personen-/Firmensuche-Import vollständig getestet. Der verbleibende Rest (Login-Flow, 2FA-Checkpoint, Scraping) braucht dedizierte Playwright-Fixture-Infrastruktur (siehe offener Punkt).',
+      'Tests: sync_linkedin.py from 43% to 52% test coverage — config/status/run/2FA endpoints plus people/company search-import fully tested. The remaining part (login flow, 2FA checkpoint, scraping) needs dedicated Playwright fixture infrastructure (see open item).',
     ],
   },
   {
     version: '3.55.9',
     date: '2026-07-10',
     changes: [
-      'Tests: main.py von 33% auf 86% Testabdeckung — _run_source()-Nebenläufigkeitsschutz, _auto_link_contacts(), /health + /api/sync/schedule/status, und der komplette Hintergrund-Sync-Loop (Quellen-Auswahl nach Einstellungen, fällige Backups, Fehler-Resilienz).',
+      'Tests: main.py from 33% to 86% test coverage — _run_source() concurrency guard, _auto_link_contacts(), /health + /api/sync/schedule/status, and the complete background sync loop (source selection per settings, due backups, error resilience).',
     ],
   },
   {
     version: '3.55.8',
     date: '2026-07-10',
     changes: [
-      'Tests: sync_targeted.py von 58% auf 77% Testabdeckung — neue Tests für den kompletten _do_sync()-Ablauf (KI-Bewertung, Fehlersammlung pro Quelle) und die fünf Live-Kandidatensuchen (Gmail/GCal/iCloud Mail/Kalender/Notizen).',
+      'Tests: sync_targeted.py from 58% to 77% test coverage — new tests for the complete _do_sync() flow (AI assessment, per-source error collection) and the five live candidate searches (Gmail/GCal/iCloud Mail/Calendar/Notes).',
     ],
   },
   {
     version: '3.55.7',
     date: '2026-07-10',
     changes: [
-      'Tests: applications.py, companies.py, settings.py, sync_files.py, export_pdf.py, import/export_excel.py, attachments.py, auth/email.py und sync_company.py jeweils auf 83–100% Testabdeckung angehoben.',
-      'Fix: export_pdf.py — Content-Disposition-Header mit Umlaut im Dateinamen war nicht RFC-6266-konform und brach unter strikten HTTP-Clients; jetzt RFC-5987-kodiert.',
-      'Fix: export_excel.py — show_rejected=false löste einen 500er aus (Filter auf eine reine Python-Property statt eine Datenbankspalte).',
+      'Tests: applications.py, companies.py, settings.py, sync_files.py, export_pdf.py, import/export_excel.py, attachments.py, auth/email.py, and sync_company.py each raised to 83–100% test coverage.',
+      'Fix: export_pdf.py — a Content-Disposition header with an umlaut in the filename wasn\'t RFC-6266-compliant and broke under strict HTTP clients; now RFC-5987 encoded.',
+      'Fix: export_excel.py — show_rejected=false triggered a 500 (filtering on a plain Python property instead of a database column).',
     ],
   },
   {
     version: '3.55.6',
     date: '2026-07-10',
     changes: [
-      'Tests: sync_icloud.py von 51% auf 83% Testabdeckung — neue Tests für Status-/Credentials-/Reset-Endpunkte, Mail-/Kalender-/Erinnerungen-Fehlerzweige, den aktiven Notizen- und Anrufliste-Sync sowie CardDAV-Kontakt-Anreicherung.',
+      'Tests: sync_icloud.py from 51% to 83% test coverage — new tests for status/credentials/reset endpoints, mail/calendar/reminders error branches, the active notes and call-log sync, and CardDAV contact enrichment.',
     ],
   },
   {
     version: '3.55.4',
     date: '2026-07-10',
     changes: [
-      'Tests: ai/tasks.py von 64% auf 100% Testabdeckung — 34 neue Tests decken alle sieben KI-Funktionen ab (classify_for_app, Batch-Fallback/Rate-Limit-Zweige, test_connection, assess_rejected_application, extract_application_from_text).',
+      'Tests: ai/tasks.py from 64% to 100% test coverage — 34 new tests cover all seven AI functions (classify_for_app, batch fallback/rate-limit branches, test_connection, assess_rejected_application, extract_application_from_text).',
     ],
   },
   {
     version: '3.55.3',
     date: '2026-07-10',
     changes: [
-      'Tests: database.py (Inline-SQLite-Migrationen) von 12% auf 96% Testabdeckung — 83 neue Tests decken alle 26 Migrationsfunktionen ab (Spalten-/Tabellen-Erstellung, Backfills, Idempotenz).',
+      'Tests: database.py (inline SQLite migrations) from 12% to 96% test coverage — 83 new tests cover all 26 migration functions (column/table creation, backfills, idempotency).',
     ],
   },
   {
     version: '3.55.2',
     date: '2026-07-10',
     changes: [
-      'Tests: Testabdeckung erhöht — calendar.py, audit_log.py, sync_common.py und backup.py jeweils auf ≥86% (vorher 73–79%), 37 neue Tests.',
+      'Tests: increased test coverage — calendar.py, audit_log.py, sync_common.py, and backup.py each to ≥86% (previously 73–79%), 37 new tests.',
     ],
   },
   {
     version: '3.55.1',
     date: '2026-07-10',
     changes: [
-      'Doku: CLAUDE.md um den aktuellen Session-Stand ergänzt (Dokuübersetzung, Git-Historie-Umschreibung, Konto-Profil/CV, Audit-Log-Typ/Grund, CI-E2E-Report-Fix, Mehrfachauswahl-Löschen).',
+      'Docs: CLAUDE.md updated with the current session state (doc translation, git history rewrite, account profile/CV, audit-log type/reason, CI E2E report fix, multi-select delete).',
     ],
   },
   {
     version: '3.55.0',
     date: '2026-07-10',
     changes: [
-      'Neu: In einer Bewerbung können Verlaufseinträge, Anhänge und Kontakte jetzt mehrfach markiert und gemeinsam gelöscht werden (Checkboxen + "Alle auswählen" pro Tab).',
+      'New: within an application, timeline entries, attachments, and contacts can now be multi-selected and deleted together (checkboxes + "select all" per tab).',
     ],
   },
   {
     version: '3.54.2',
     date: '2026-07-10',
     changes: [
-      'Fix (Nachbesserung zu v3.54.1): Der eigentliche Grund für den fehlenden E2E-Testreport war nicht nur das entfernte --rm, sondern dass "docker compose run" den fest konfigurierten container_name ignoriert und stattdessen einen zufälligen Namen vergibt — der docker cp-Schritt suchte also nie den richtigen Container. Der JUnit-Report wird jetzt über ein Bind-Mount direkt auf den Host geschrieben, ganz ohne Container-Namen zu erraten.',
+      'Fix (follow-up to v3.54.1): the actual reason for the missing E2E test report wasn\'t just the removed --rm, but that "docker compose run" ignores the configured container_name and assigns a random one instead — so the docker cp step never found the right container. The JUnit report is now written straight to the host via a bind mount, without guessing a container name at all.',
     ],
   },
   {
     version: '3.54.1',
     date: '2026-07-10',
     changes: [
-      'Fix: CI-Schritt "Collect test results" fand nie einen E2E-Testreport, weil der Playwright-Container durch --rm sofort nach Testende entfernt wurde, bevor der anschließende docker cp-Schritt ihn auslesen konnte ("kein Testreport gefunden"). Betraf nur die Report-Zusammenfassung, nicht das eigentliche CI-Ergebnis (Playwright meldet Fehlschläge weiterhin korrekt).',
+      'Fix: the CI "collect test results" step never found an E2E test report, because --rm removed the Playwright container immediately after the test run, before the following docker cp step could read it ("no test report found"). Only affected the report summary, not the actual CI result (Playwright still reported failures correctly).',
     ],
   },
   {
     version: '3.54.0',
     date: '2026-07-10',
     changes: [
-      'Neu: Audit-Log zeigt jetzt eine eigene Typ-Spalte (Bewerbung/Kontakt/Firma/Termin) mit Filter, statt den Typ nur indirekt über die Bezug-Spalte erkennbar zu machen.',
-      'Verbessert: Der Grund-Spalte steht bei automatischen Änderungen (Sync, KI, PendingMatch-Freigabe) jetzt der konkrete Auslöser statt nur die Quelle — z.B. "in Bewerbungstext/E-Mail erwähnt" oder die KI-Begründung statt nur "KI-Bewertung".',
-      'Fix: Firmen-Merge-Einträge im Audit-Log hatten bisher keine Firmen-Referenz und waren dadurch weder auffindbar noch typisierbar.',
+      'New: the audit log now shows its own type column (application/contact/company/event) with a filter, instead of only being able to infer the type indirectly via the reference column.',
+      'Improved: for automatic changes (sync, AI, PendingMatch approval), the reason column now shows the concrete trigger instead of just the source — e.g. "mentioned in application text/email" or the AI reasoning instead of just "AI assessment".',
+      'Fix: company-merge entries in the audit log previously had no company reference, making them neither findable nor typeable.',
     ],
   },
   {
     version: '3.53.0',
     date: '2026-07-10',
     changes: [
-      'Neu: Konto-Profil um Vorname, Nachname und LinkedIn-Link erweitert sowie CV-Upload (PDF/DOC/DOCX) — Grundlage für spätere KI-Use-Cases wie automatisch generierte Anschreiben.',
+      'New: account profile extended with first name, last name, and LinkedIn link, plus CV upload (PDF/DOC/DOCX) — groundwork for later AI use cases like auto-generated cover letters.',
     ],
   },
   {
     version: '3.52.0',
     date: '2026-07-10',
     changes: [
-      'Doku: Alle Markdown-Dokumente (ARCHITECTURE.md, TEST_KONZEPT.md, Rapport_Konzept_Architektur.md, Rapport_Projektstand.md, CLAUDE.md, README.md) ins Englische übersetzt.',
+      'Docs: translated all Markdown documents (ARCHITECTURE.md, TEST_KONZEPT.md, Rapport_Konzept_Architektur.md, Rapport_Projektstand.md, CLAUDE.md, README.md) to English.',
     ],
   },
   {
     version: '3.51.2',
     date: '2026-07-10',
     changes: [
-      'Performance: Der LinkedIn-Sync für eine einzelne Bewerbung durchsucht jetzt nicht mehr das komplette Archiv (bis zu 99 Seiten) — das war der langsamste Teil, obwohl eine gezielt neu gesyncte Bewerbung praktisch nie dort liegt. Nur bei bereits abgesagten Bewerbungen wird weiterhin auch im Archiv gesucht.',
+      'Performance: the LinkedIn sync for a single application no longer searches the entire archive (up to 99 pages) — that was the slowest part, even though a freshly targeted-synced application is practically never found there. Only already-rejected applications still get searched in the archive as well.',
     ],
   },
   {
     version: '3.51.1',
     date: '2026-07-10',
     changes: [
-      'Fix: Zusammenführen (Bewerbungen/Kontakte/Firmen) lehnt es jetzt sauber mit einer verständlichen Fehlermeldung ab, wenn der Gewinner versehentlich auch als Verlierer ausgewählt wurde, statt mit einer verwirrenden "nicht gefunden"-Meldung zu scheitern.',
-      'CI: Lint-Fehler (ungenutzter Import) und 4 fehlgeschlagene Merge-Regressionstests aus dem letzten Commit behoben.',
+      'Fix: merging (applications/contacts/companies) now cleanly rejects with an understandable error message when the winner was accidentally also selected as a loser, instead of failing with a confusing "not found" message.',
+      'CI: fixed a lint error (unused import) and 4 failing merge regression tests from the last commit.',
     ],
   },
   {
     version: '3.51.0',
     date: '2026-07-10',
     changes: [
-      'Fix: Batch-Sync erstellt jetzt CompanyProfile für neue LinkedIn-Bewerbungen.',
-      'Neu: Firmen manuell anlegen über "Neu"-Button im Firmen-Tab.',
-      'Neu: Firmen aus LinkedIn importieren (Suche + Mehrfachauswahl).',
-      'Neu: GET/POST /api/sync/linkedin/companies/search + /import Endpoints.',
+      'Fix: batch sync now creates a CompanyProfile for new LinkedIn applications.',
+      'New: create companies manually via the "New" button in the companies tab.',
+      'New: import companies from LinkedIn (search + multi-select).',
+      'New: GET/POST /api/sync/linkedin/companies/search + /import endpoints.',
     ],
   },
   {
     version: '3.50.4',
     date: '2026-07-09',
     changes: [
-      'Fix: L5 Frontend-Smoke: while-Schleife über localhost:3000.',
-      'Optimierung: Docker-Build läuft parallel zu E2E (entfernt unnötige Abhängigkeit).',
+      'Fix: L5 frontend smoke test: while loop over localhost:3000.',
+      'Optimization: Docker build now runs in parallel with E2E (removed an unnecessary dependency).',
     ],
   },
   {
     version: '3.50.0',
     date: '2026-07-09',
     changes: [
-      'L5 Smoke-Test nach Deploy: Backend Health, Frontend-Ladetest, Login + API-Call.',
-      'Testkonzept Phase 1–6 vollständig abgeschlossen.',
+      'L5 smoke test after deploy: backend health, frontend load test, login + API call.',
+      'Test concept Phases 1–6 fully complete.',
     ],
   },
   {
     version: '3.49.0',
     date: '2026-07-09',
     changes: [
-      'Phase-4-Lücke geschlossen: linkedin_job_description.py von 0 % auf >90 % Coverage via 10 Unit-Tests.',
-      'Nightly-Cron-Job (0 6 * * *) im CI aktiviert für Integration + E2E.',
-      'Volume-Mount für Backend-Tests in docker-compose.test.yml — kein Rebuild mehr nötig bei Test-Änderungen.',
+      'Closed the Phase 4 gap: linkedin_job_description.py from 0% to >90% coverage via 10 unit tests.',
+      'Nightly cron job (0 6 * * *) enabled in CI for integration + E2E.',
+      'Volume mount for backend tests in docker-compose.test.yml — no more rebuild needed for test changes.',
     ],
   },
   {
     version: '3.48.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 12: Excel-Import, Export und Round-Trip über die Im/Export-Menü-Schaltfläche.',
-      'Phase 5 des Testkonzepts abgeschlossen — alle 12 E2E-User-Journeys implementiert.',
+      'E2E Journey 12: Excel import, export, and round-trip via the import/export menu button.',
+      'Test concept Phase 5 complete — all 12 E2E user journeys implemented.',
     ],
   },
   {
     version: '3.47.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 11: Backup konfigurieren, manuell sichern, Backup-Liste anzeigen, Wiederherstellung mit Bestätigungsdialog.',
+      'E2E Journey 11: configure backup, manual backup run, show backup list, restore with confirmation dialog.',
     ],
   },
   {
     version: '3.46.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 10: Firmen-Sync mit Auswahl mehrerer Firmen und Scoped-Sync (kein Auto-Continue).',
+      'E2E Journey 10: company sync with selection of multiple companies and scoped sync (no auto-continue).',
     ],
   },
   {
     version: '3.45.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 9: Batch-KI-Bewertung mit SSE-Mock (page.route mit Verzögerung) und Rate-Limit-Simulation.',
+      'E2E Journey 9: batch AI assessment with an SSE mock (page.route with delay) and rate-limit simulation.',
     ],
   },
   {
     version: '3.44.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 8: KI-Bewertung (Neu bewerten → Ampel + Reasoning) mit gemocktem /ai-assess-Endpoint.',
+      'E2E Journey 8: AI assessment (reassess → traffic light + reasoning) with a mocked /ai-assess endpoint.',
     ],
   },
   {
     version: '3.43.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 7: Manuelle Kandidatenzuordnung via page.evaluate für Checkbox-Selektion im Dialog-Overlay.',
+      'E2E Journey 7: manual candidate assignment via page.evaluate for checkbox selection in the dialog overlay.',
     ],
   },
   {
     version: '3.42.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 6: Targeted-Sync mit gemockten Backend-Endpoints (page.route) und title-basiertem Sync-Button-Selektor.',
+      'E2E Journey 6: targeted sync with mocked backend endpoints (page.route) and a title-based sync-button selector.',
     ],
   },
   {
     version: '3.41.0',
     date: '2026-07-09',
     changes: [
-      'E2E Journey 5: Merge-Dialog (zwei Bewerbungen mit unterschiedlichen Feldern über Tabellenansicht zusammenführen). Fix: CI docker build check läuft jetzt vor deploy.',
+      'E2E Journey 5: merge dialog (merging two applications with different fields via the table view). Fix: CI docker build check now runs before deploy.',
     ],
   },
   {
     version: '3.40.0',
     date: '2026-07-08',
     changes: [
-      'E2E Journey 4: Cleanup-Bereinigung (Dubletten erkennen + löschen). Fix: CleanupModal rief onDone() synchron nach setPhase("done") auf → React 18 batching closhte Modal vor Render der "Bereinigung abgeschlossen"-Meldung. onDone() jetzt mit setTimeout(200) asynchron.',
+      'E2E Journey 4: cleanup (detect + delete duplicates). Fix: CleanupModal called onDone() synchronously right after setPhase("done") → React 18 batching closed the modal before the "cleanup complete" message rendered. onDone() is now async via setTimeout(200).',
     ],
   },
   {
     version: '3.39.0',
     date: '2026-07-08',
     changes: [
-      'E2E Journeys 1-3: Application-Lifecycle, Kanban-Statuswechsel und LinkedIn-Import laufen jetzt stabil unter Docker/E2E. Fix: Backend POST /api/companies gab ResponseValidationError (app_count fehlte). Journey 1+2 nutzen API-Setup statt UI-Form (robuster). Selektoren auf exact/last umgestellt (Strict-Mode-Konflikte mit Spalten-Headern). Alle drei Tests grün.',
+      'E2E Journeys 1-3: application lifecycle, Kanban status change, and LinkedIn import now run stably under Docker/E2E. Fix: backend POST /api/companies returned a ResponseValidationError (app_count was missing). Journeys 1+2 use API setup instead of the UI form (more robust). Selectors switched to exact/last (strict-mode conflicts with column headers). All three tests green.',
     ],
   },
   {
     version: '3.38.0',
     date: '2026-07-08',
     changes: [
-      'E2E Journey 3: LinkedIn-Link importieren → Formular vorausgefüllt → speichern. Mockt den Backend-Endpoint /api/applications/extract-from-linkedin-url via page.route(), prüft Vorbelegung von Firma, Rolle, Quelle und Kommentar im NewApplicationModal und speichert die Bewerbung ab.',
+      'E2E Journey 3: import a LinkedIn link → form pre-filled → save. Mocks the backend endpoint /api/applications/extract-from-linkedin-url via page.route(), checks that company, role, source, and comment are pre-filled in NewApplicationModal, and saves the application.',
     ],
   },
   {
     version: '3.37.0',
     date: '2026-07-08',
     changes: [
-      'E2E Journey 2: Kanban Drag & Drop — Karte per Maus (page.mouse) von "Beworben" nach "Gespräch HR/HH" ziehen (Statusänderung), Sub-Status setzen, dann Karte in "Angebotsverhandlung" ziehen (Sub-Status-Reset durch Backend verifiziert). Custom dragTo-Funktion für @dnd-kit-Kompatibilität (PointerSensor + 8px-ActivationConstraint).',
+      'E2E Journey 2: Kanban drag & drop — drag a card by mouse (page.mouse) from "Applied" to "Interview HR/HH" (status change), set a sub-status, then drag the card to "Offer negotiation" (sub-status reset verified via the backend). Custom dragTo function for @dnd-kit compatibility (PointerSensor + 8px activation constraint).',
     ],
   },
   {
     version: '3.36.0',
     date: '2026-07-08',
     changes: [
-      'Testkonzept Phase 5 (E2E): Playwright-Infrastruktur aufgebaut mit Docker-basiertem E2E-Runner, Testbenutzer-Setup über /api/e2e/setup-user, erster E2E-Test für den Bewerbungs-Lebenszyklus (Anlegen, Statuswechsel, Absage). Neuer CI-Job "E2E (Playwright)" läuft bei Push auf main — startet isolierten Test-Stack (docker-compose.test.yml), führt die Playwright-Suite aus und baut alles ab. linkedin_job_description.py weiterhin bei 0 % (Phase-4-Lücke, für Phase 6 vorgemerkt).',
+      'Test concept Phase 5 (E2E): built Playwright infrastructure with a Docker-based E2E runner, test-user setup via /api/e2e/setup-user, first E2E test for the application lifecycle (create, status change, rejection). New CI job "E2E (Playwright)" runs on push to main — starts an isolated test stack (docker-compose.test.yml), runs the Playwright suite, and tears everything down. linkedin_job_description.py still at 0% (Phase 4 gap, earmarked for Phase 6).',
     ],
   },
   {
     version: '3.35.1',
     date: '2026-07-08',
     changes: [
-      'PDF-Export: "Termine der letzten 4 Wochen" berücksichtigt jetzt nur noch echte Kalendereinträge (Gespräche/Interviews/Termine sowie Google-/iCloud-Kalender), keine Anrufe mehr — dieselbe Definition wie im Kalender-Tab.',
+      'PDF export: "appointments from the last 4 weeks" now only considers real calendar entries (interviews or Google/iCloud calendar), no more calls — same definition as the calendar tab.',
     ],
   },
   {
     version: '3.35.0',
     date: '2026-07-08',
     changes: [
-      'Audit-Log erfasst jetzt auch alle Neuanlagen, Änderungen und Löschungen von Kontakten, Firmen und Kalendereinträgen — bisher nur Bewerbungen. Deckt manuelle Aktionen (Kontakt-/Firmen-Zusammenführen, Termin manuell zuweisen/verschieben, Sync zurücksetzen) genauso ab wie automatische Sync-Vorgänge (neue Kontakte aus E-Mails/iCloud, Firmen-Anreicherung via LinkedIn/Wikidata, synchronisierte Termine). Der Audit-Log-Dialog zeigt den jeweiligen Bezug (Kontakt/Firma/Termin, ggf. mit zugehöriger Bewerbung) direkt in der Übersicht an.',
+      'The audit log now also records all creations, changes, and deletions of contacts, companies, and calendar entries — previously applications only. Covers manual actions (merging contacts/companies, manually assigning/moving an appointment, resetting sync) as well as automatic sync operations (new contacts from emails/iCloud, company enrichment via LinkedIn/Wikidata, synced appointments) equally. The audit log dialog now shows the respective reference (contact/company/appointment, with the associated application where relevant) directly in the overview.',
     ],
   },
   {
     version: '3.34.5',
     date: '2026-07-08',
     changes: [
-      'Audit-Log: mehrere Lücken geschlossen, in denen Änderungen an Bewerbungen bisher nicht protokolliert wurden — u.a. einige Felder im Bearbeiten-Dialog (Ort, Headhunter-Flag, Gesprächsnotizen), Firmenzuordnung, Teilstatus-Wechsel, KI-Bewertung, automatische Datum-Ergänzung, stille LinkedIn-Sync-Korrekturen, nicht-Status-Felder beim Zusammenführen von Bewerbungen sowie automatisch gelöschte Duplikate bei der Bereinigung. Neue Quelle "Automatisch" für Einträge, die nicht von einer manuellen Aktion stammen.',
+      'Audit log: closed several gaps where changes to applications weren\'t being logged — including some fields in the edit dialog (location, headhunter flag, interview notes), company assignment, sub-status changes, AI assessment, automatic date backfill, silent LinkedIn-sync corrections, non-status fields when merging applications, and duplicates auto-deleted during cleanup. New source "Automatic" for entries that don\'t originate from a manual action.',
     ],
   },
   {
     version: '3.34.4',
     date: '2026-07-07',
     changes: [
-      'Neu: "Code erneut senden" auf der E-Mail-Bestätigen-Seite. Vorher gab es keinen Weg, einen neuen Bestätigungscode zu bekommen, wenn der ursprüngliche abgelaufen war oder der Versand fehlgeschlagen ist — eine erneute Registrierung mit derselben Adresse schlug mit "bereits registriert" fehl.',
+      'New: "resend code" on the verify-email page. Previously there was no way to get a new confirmation code if the original one had expired or sending had failed — re-registering with the same address failed with "already registered".',
     ],
   },
   {
     version: '3.34.3',
     date: '2026-07-07',
     changes: [
-      'Benutzerkonten Phase 3/5 + 4/5: echte Mandantentrennung ist jetzt aktiv. Alle Endpunkte verlangen eine Anmeldung und liefern ausschließlich die Daten des eigenen Kontos (Bewerbungen, Kontakte, Firmen, Termine, alle Sync-Einstellungen). Neue Login-/Registrierungs-Oberfläche inkl. E-Mail-Bestätigung und Passwort-vergessen-Flow sowie ein neuer "Konto"-Tab in den Einstellungen zum Passwort ändern und Abmelden.',
+      'User accounts Phase 3/5 + 4/5: real tenant separation is now active. Every endpoint requires login and returns only the logged-in account\'s own data (applications, contacts, companies, appointments, all sync settings). New login/registration UI including email verification and forgot-password flow, plus a new "Account" tab in Settings for changing password and logging out.',
     ],
   },
   {
     version: '3.34.2',
     date: '2026-07-07',
     changes: [
-      'Sicherheit: passwort-ähnliche Test-Fixture-Strings in test_auth_api.py durch eindeutig als Test-Daten erkennbare Werte ersetzt, um wiederholte GitGuardian-Fehlalarme (False Positives auf hardcodierte Test-Passwörter) zu vermeiden. Keine funktionale Änderung.',
+      'Security: replaced password-like test fixture strings in test_auth_api.py with values clearly recognizable as test data, to avoid recurring GitGuardian false positives on hardcoded test passwords. No functional change.',
     ],
   },
   {
     version: '3.34.1',
     date: '2026-07-07',
     changes: [
-      'Benutzerkonten Phase 2/5: Mandantentrennung in der Datenbank. Alle 20 bisher globalen Tabellen (Bewerbungen, Kontakte, Firmenprofile, Termine, alle Sync-Einstellungen) haben jetzt eine Konto-Zuordnung. Der bisherige (konto-lose) Datenbestand wird automatisch dem ersten bestätigten Konto zugewiesen, sobald sich jemand zum ersten Mal registriert und verifiziert. Noch nicht aktiv: die Endpunkte filtern noch nicht nach Konto (folgt in Phase 3) — bis dahin bleibt der Zugriff wie bisher offen.',
+      'User accounts Phase 2/5: tenant separation in the database. All 20 previously global tables (applications, contacts, company profiles, appointments, all sync settings) now have an account association. The existing (accountless) data is automatically assigned to the first confirmed account as soon as someone registers and verifies for the first time. Not yet active: endpoints don\'t yet filter by account (comes in Phase 3) — until then, access remains open as before.',
     ],
   },
   {
     version: '3.34.0',
     date: '2026-07-07',
     changes: [
-      'Neues Feature (Phase 1/5, Backend-Fundament): Benutzerkonten mit E-Mail+Passwort. Registrierung mit 6-stelligem Bestätigungscode per E-Mail, Login, Passwort-Reset per Code, Passwort ändern — /api/auth/register, /verify-email, /login, /forgot-password, /reset-password, /me, /change-password. Noch nicht aktiv: bestehende Bewerbungen/Kontakte/Einstellungen sind noch nicht an Konten gebunden (folgt in Phase 2/3), Frontend-Login-Oberfläche folgt in Phase 4.',
+      'New feature (Phase 1/5, backend foundation): user accounts with email+password. Registration with a 6-digit confirmation code by email, login, password reset by code, change password — /api/auth/register, /verify-email, /login, /forgot-password, /reset-password, /me, /change-password. Not yet active: existing applications/contacts/settings aren\'t yet tied to accounts (comes in Phase 2/3), the frontend login UI follows in Phase 4.',
     ],
   },
   {
     version: '3.33.15',
     date: '2026-07-06',
     changes: [
-      'Testkonzept: 49 neue Tests für den LinkedIn-Import mit Fokus auf Stellenausschreibungen, Firmenname und Bewerbungsdatum — Datums-Parsing ("3d/2w/3mo ago", absolute Formate), Text-Extraktion mehrerer Job-Einträge (Firma, Dedup, Status-Hinweise), LinkedIn-Job-ID-Zuordnung und die Übernahme von Firmenname/Bewerbungsdatum beim Anlegen neuer Bewerbungen. sync_linkedin.py von 37% auf 42% Coverage.',
+      'Test concept: 49 new tests for LinkedIn import focused on job postings, company name, and application date — date parsing ("3d/2w/3mo ago", absolute formats), text extraction of multiple job entries (company, dedup, status hints), LinkedIn job-ID matching, and carrying over company name/application date when creating new applications. sync_linkedin.py from 37% to 42% coverage.',
     ],
   },
   {
     version: '3.33.14',
     date: '2026-07-06',
     changes: [
-      'CI: manueller workflow_dispatch-Trigger für ci.yml hinzugefügt — erlaubt gezielt "nur testen" (Standard) oder "testen + deployen" (per deploy-Input), analog zu klassischen make test/make deploy-Targets. Push auf main verhält sich unverändert (immer Test+Deploy).',
+      'CI: added a manual workflow_dispatch trigger for ci.yml — allows choosing "test only" (default) or "test + deploy" (via the deploy input), similar to classic make test/make deploy targets. Push to main behaves unchanged (always test+deploy).',
     ],
   },
   {
     version: '3.33.13',
     date: '2026-07-06',
     changes: [
-      'Doku-Feinschliff: veraltete Testzahlen in CLAUDE.md/README.md (noch "271 Tests"/"Phase 1–3") auf den aktuellen Stand (357 PR-Gate-Tests, Phase 1–4) gebracht. Reine Doku-Korrektur, kein Code geändert.',
+      'Doc polish: brought stale test numbers in CLAUDE.md/README.md (still "271 tests"/"Phase 1–3") up to date (357 PR-gate tests, Phase 1–4). Pure doc correction, no code changed.',
     ],
   },
   {
     version: '3.33.12',
     date: '2026-07-06',
     changes: [
-      'Testkonzept Phase 4 (iCloud-Mocking) abgeschlossen: 7 neue Tests für den Notizen-Sync. Dabei festgestellt, dass der aktive Notizen-Sync schon länger über den lokalen Rapport-Agenten statt über einen direkten Apple-ID-Login läuft — nur der alte, ungenutzte Login-Pfad blieb ungetestet. sync_icloud.py auf 50%, Gesamtabdeckung auf 54% gestiegen. Damit ist Phase 4 des Testkonzepts bis auf LinkedIn-Playwright-Fixture-Replay abgeschlossen.',
+      'Test concept Phase 4 (iCloud mocking) complete: 7 new tests for the notes sync. Found along the way that the active notes sync has long run through the local Rapport agent instead of a direct Apple ID login — only the old, unused login path remained untested. sync_icloud.py to 50%, overall coverage to 54%. This completes Phase 4 of the test concept except for LinkedIn Playwright fixture replay.',
     ],
   },
   {
     version: '3.33.11',
     date: '2026-07-06',
     changes: [
-      'Testkonzept Phase 4 (iCloud-Mocking) fortgesetzt: 14 neue Tests für iCloud Kontakte (CardDAV) — global und im gezielten Einzelbewerbungs-Sync, inkl. Regressionstests für zwei früher live aufgetretene Massenimport-Bugs (Kontakte aus verwaisten Firmenprofilen ohne echte Bewerbungsanbindung bzw. ohne passende E-Mail-Domain). sync_icloud.py auf 45%, sync_targeted.py auf 57%, Gesamtabdeckung auf 53% gestiegen.',
+      'Test concept Phase 4 (iCloud mocking) continued: 14 new tests for iCloud contacts (CardDAV) — both globally and in the targeted per-application sync, including regression tests for two mass-import bugs that had occurred live before (contacts from orphaned company profiles with no real application link, or with no matching email domain). sync_icloud.py to 45%, sync_targeted.py to 57%, overall coverage to 53%.',
     ],
   },
   {
     version: '3.33.10',
     date: '2026-07-06',
     changes: [
-      'Fix: Über iCloud synchronisierte Kalendertermine und Erinnerungen wurden mit fehlerhaftem Titel gespeichert (Rohtext wie "<SUMMARY{}Interview bei Contoso>" statt "Interview bei Contoso") — betraf jeden über iCloud synchronisierten Kalender-/Erinnerungs-Eintrag. Beim Aufbau der zugehörigen Tests entdeckt und behoben.',
-      'Testkonzept Phase 4 (iCloud-Mocking) begonnen: 31 neue Tests für iCloud Mail (IMAP), Calendar und Reminders (CalDAV) — jeweils global und im gezielten Einzelbewerbungs-Sync. sync_icloud.py von 23% auf 43%, sync_targeted.py von 38% auf 53%, Gesamtabdeckung auf 52% gestiegen.',
+      'Fix: calendar appointments and reminders synced via iCloud were saved with a broken title (raw text like "<SUMMARY{}Interview at Contoso>" instead of "Interview at Contoso") — affected every calendar/reminder entry synced via iCloud. Found and fixed while building the corresponding tests.',
+      'Test concept Phase 4 (iCloud mocking) started: 31 new tests for iCloud Mail (IMAP), Calendar, and Reminders (CalDAV) — both globally and in the targeted per-application sync. sync_icloud.py from 23% to 43%, sync_targeted.py from 38% to 53%, overall coverage to 52%.',
     ],
   },
   {
     version: '3.33.9',
     date: '2026-07-06',
     changes: [
-      'Testkonzept: Testabdeckung des gezielten Einzelbewerbungs-Syncs (sync_targeted.py, zweitgrößte Backend-Datei) von 5% auf 38% angehoben — 72 neue Tests für Suchbegriffs-/Domain-Logik, die API-Endpunkte (Reset, Kandidatenliste, manuelle Zuweisung), die domain-basierte Filterung von Gmail/Calendar sowie die agentenbasierten Quellen (iCloud-Notizen, Anrufe).',
-      'Fix: Über den gezielten Sync angelegte Kalendertermine (Google + iCloud) setzten die externe ID nicht, wodurch sie in der Kandidatenliste/bei manueller Zuweisung nicht zuverlässig wiedergefunden werden konnten — beim Schreiben der zugehörigen Tests entdeckt. Gesamtabdeckung damit auf 47% gestiegen.',
+      'Test concept: raised test coverage of the targeted per-application sync (sync_targeted.py, the second-largest backend file) from 5% to 38% — 72 new tests for search-term/domain logic, the API endpoints (reset, candidate list, manual assignment), domain-based filtering of Gmail/Calendar, and the agent-based sources (iCloud notes, calls).',
+      'Fix: calendar appointments created via targeted sync (Google + iCloud) didn\'t set the external ID, so they couldn\'t be reliably found again in the candidate list/manual assignment — found while writing the corresponding tests. Overall coverage rose to 47% as a result.',
     ],
   },
   {
     version: '3.33.8',
     date: '2026-07-06',
     changes: [
-      'Testkonzept Phase 4: gezielte Lücken-Analyse der bisherigen Fehlerfall-Abdeckung durchgeführt und 5 Blindflecken mit 18 neuen Tests geschlossen — fehlende KI-Konfiguration/deaktivierter Provider, ungültiger API-Key, nicht unterstützter JSON-Modus und unbekanntes Modell bei der KI-Bewertung; "nicht mit Google verbunden" bei Calendar- und Gmail-Sync; abgelaufener/widerrufener Google-Token beim Refresh; sowie der LinkedIn-MergeAlias-Fallback nach einem manuellen Zusammenführen von Bewerbungen. Gesamtabdeckung damit auf 42% gestiegen, `ai/provider.py` auf 96%.',
+      'Test concept Phase 4: ran a targeted gap analysis of existing error-case coverage and closed 5 blind spots with 18 new tests — missing AI configuration/disabled provider, invalid API key, unsupported JSON mode, and unknown model during AI assessment; "not connected to Google" for calendar and Gmail sync; expired/revoked Google token on refresh; and the LinkedIn merge-alias fallback after manually merging applications. Overall coverage rose to 42% as a result, `ai/provider.py` to 96%.',
     ],
   },
   {
     version: '3.33.7',
     date: '2026-07-06',
     changes: [
-      'Testkonzept Phase 4 fortgesetzt: 7 neue L3-Integrationstests für den Gmail-Sync — deckt als Erstes die zweiphasige Batch-Abholung ab (erst Nachrichten-Metadaten, dann Volltext für relevante Treffer), inkl. Pagination über mehrere Seiten und teilweisem Batch-Fehler ohne Gesamtabbruch. Google-Sync-Bereich (Gmail + Calendar) damit von 12% auf 62% Testabdeckung.',
+      'Test concept Phase 4 continued: 7 new L3 integration tests for the Gmail sync — first covers the two-phase batch fetch (message metadata first, then full text for relevant matches), including pagination across multiple pages and a partial batch error without a full abort. Google sync area (Gmail + Calendar) thus from 12% to 62% test coverage.',
     ],
   },
   {
     version: '3.33.6',
     date: '2026-07-06',
     changes: [
-      'Fix: Jede neue, über LinkedIn-Sync angelegte Bewerbung erzeugte einen sinnlosen Review-Eintrag ("Neu (LI Archiv): applied → X"), auch wenn X exakt der Status war, mit dem die Bewerbung ohnehin schon angelegt wurde — betraf alle Status außer Absagen. Beim Schreiben der zugehörigen Tests entdeckt: 8 solche No-op-Einträge steckten bereits in der echten Review-Queue. Jetzt wird nur noch bei tatsächlichen Archiv-/Absage-Fällen ein Review-Eintrag erzeugt.',
-      'Testkonzept Phase 4 fortgesetzt: Status-Übergangs- und Duplikat-Vermeidungslogik des LinkedIn-Syncs (bisher nur über einen echten Sync-Lauf erreichbar) in eine eigenständige, testbare Funktion ausgelagert und mit 9 Tests abgesichert — u.a. Regressionsschutz für die alten Issues #9/#14 (wiederholte Statusvorschläge).',
+      'Fix: every new application created via LinkedIn sync generated a pointless review entry ("New (LI archive): applied → X"), even when X was exactly the status the application was already created with — affected every status except rejections. Found while writing the corresponding tests: 8 such no-op entries were already sitting in the real review queue. Now a review entry is only created for actual archive/rejection cases.',
+      'Test concept Phase 4 continued: extracted the LinkedIn sync\'s status-transition and duplicate-avoidance logic (previously only reachable via a real sync run) into a standalone, testable function and backed it with 9 tests — including regression protection for the old issues #9/#14 (repeated status suggestions).',
     ],
   },
   {
     version: '3.33.5',
     date: '2026-07-05',
     changes: [
-      'Testkonzept Phase 4 fortgesetzt: 5 neue L3-Integrationstests für den Google-Calendar-Sync (Kontakt-Match, Änderungserkennung, Löschen verwaister Termine, Calendar-API-Fehler) über einen Fake für googleapiclient. Dabei eine Testfalle entdeckt und dokumentiert: Sync-Funktionen öffnen intern eine eigene DB-Session — ungecommittete Test-Fixtures blockieren sonst bis zum SQLite-busy_timeout (60s) statt sofort zu failen.',
+      'Test concept Phase 4 continued: 5 new L3 integration tests for the Google Calendar sync (contact match, change detection, deleting orphaned appointments, Calendar API errors) via a fake for googleapiclient. Found and documented a test trap along the way: sync functions internally open their own DB session — uncommitted test fixtures otherwise block until the SQLite busy_timeout (60s) instead of failing immediately.',
     ],
   },
   {
     version: '3.33.4',
     date: '2026-07-05',
     changes: [
-      'Testkonzept um gemessene Testabdeckung ergänzt (343 Tests insgesamt, 36% Backend-Zeilenabdeckung) — mit Aufschlüsselung, welche Bereiche das 80%-Ziel schon erreichen (Dedup/Status/Krypto) und wo die größten Lücken liegen (Sync-Router: targeted 5%, google 12%, icloud 23%, linkedin 30%). Reine Doku-Ergänzung, kein Code geändert.',
+      'Added measured test coverage to the test concept (343 tests total, 36% backend line coverage) — with a breakdown of which areas already hit the 80% goal (dedup/status/crypto) and where the biggest gaps are (sync routers: targeted 5%, google 12%, icloud 23%, linkedin 30%). Pure doc addition, no code changed.',
     ],
   },
   {
     version: '3.33.3',
     date: '2026-07-05',
     changes: [
-      'Testkonzept Phase 4 gestartet: erste L3-Integrationstests für den KI-Provider-Flow (assess_application, match_and_classify, Batch-Klassifikation inkl. Fallback-Regression bei falscher Antwortgröße) — mocken an der Netzwerkgrenze (litellm.acompletion), nicht an der eigenen Businesslogik. Laufen bei jedem Push auf main zusätzlich zum bestehenden PR-Gate.',
+      'Test concept Phase 4 started: first L3 integration tests for the AI provider flow (assess_application, match_and_classify, batch classification including a fallback regression for the wrong response size) — mocking at the network boundary (litellm.acompletion), not the business logic itself. Run on every push to main in addition to the existing PR gate.',
     ],
   },
   {
     version: '3.33.2',
     date: '2026-07-05',
     changes: [
-      'Doku auf aktuellen Stand gebracht (Architektur beschrieb noch den alten DuckDuckGo/Wikipedia-Firmensync und die alte LinkedIn-Kategorienliste statt Wikidata bzw. Draft/Clicked-apply; fehlende Router/Tabellen ergänzt) und reale Firmennamen/Personendaten aus früheren Bug-Regressionstests sowie aus Changelog-Einträgen durch generische Platzhalter ersetzt — Vorbereitung für die öffentliche Repo-Freigabe.',
+      'Brought docs up to date (the architecture doc still described the old DuckDuckGo/Wikipedia company sync and the old LinkedIn category list instead of Wikidata and Draft/Clicked-apply; added missing routers/tables) and replaced real company names/personal data from earlier bug regression tests and changelog entries with generic placeholders — preparation for making the repo public.',
     ],
   },
   {
     version: '3.33.1',
     date: '2026-07-05',
     changes: [
-      'Umbenennung vollständig durchgezogen: Docker-Container, Repo-Ordner (jetzt `~/code/rapport`), GitHub-Repo (github.com/EGulinsky/rapport) und der lokale Mac-Hintergrunddienst ("Rapport Agent", vormals "JobTracker Agent") heißen jetzt konsistent rapport. App-URLs sind entsprechend umgezogen (z.B. backend.rapport.orb.local statt backend.jobtracker.orb.local). Bewerbungen, Kontakte und Einstellungen sind unverändert erhalten geblieben.',
+      'Completed the rename throughout: Docker containers, the repo folder (now `~/code/rapport`), the GitHub repo (github.com/EGulinsky/rapport), and the local Mac background service ("Rapport Agent", formerly "JobTracker Agent") are now consistently named rapport. App URLs moved accordingly (e.g. backend.rapport.orb.local instead of backend.jobtracker.orb.local). Applications, contacts, and settings remained unchanged.',
     ],
   },
   {
     version: '3.33.0',
     date: '2026-07-05',
     changes: [
-      'Die App heißt jetzt "rapport" (statt "JobTracker") und hat ein eigenes Logo bekommen — sichtbar im Browser-Tab-Titel, Favicon und im README. Grund: der bisherige Name war rein beschreibend und stand einer öffentlichen Repo-Freigabe mit klarer Wiedererkennung im Weg.',
+      'The app is now called "rapport" (instead of "JobTracker") and got its own logo — visible in the browser tab title, favicon, and README. Reason: the previous name was purely descriptive and stood in the way of making the repo public with clear recognizability.',
     ],
   },
   {
     version: '3.32.4',
     date: '2026-07-04',
     changes: [
-      'Fix: Jobs im LinkedIn-Status "In Progress" wurden beim Sync komplett übersprungen. Ursache: "In Progress" ist bei LinkedIn nur eine Sammel-Ansicht zweier echter Unterkategorien ("Draft" und "Clicked apply"), die eigene, funktionierende Adressen brauchen — die bisher verwendete Adresse lieferte immer eine leere Seite. Beide Unterkategorien werden jetzt korrekt erkannt und wie erwartet als "Anbahnung" übernommen (nicht als "Beworben"), da LinkedIn bei "Clicked apply" selbst erst nachfragt, ob die Bewerbung überhaupt abgeschlossen wurde.',
+      'Fix: jobs in LinkedIn\'s "In Progress" status were completely skipped during sync. Cause: on LinkedIn, "In Progress" is just a combined view of two real subcategories ("Draft" and "Clicked apply") that need their own, working URLs — the URL used until now always returned an empty page. Both subcategories are now correctly recognized and picked up as "Prospecting" as expected (not "Applied"), since LinkedIn itself asks whether the application was even completed for "Clicked apply".',
     ],
   },
   {
     version: '3.32.3',
     date: '2026-07-03',
     changes: [
-      'Fix: Kontakt speichern (z.B. beim manuellen Aufteilen in Vorname/Nachname) schlug mit Fehler 500 fehl, sobald "Letzter Kontakt" ein Datum enthielt — das Feld war im Bearbeiten-Endpunkt falsch typisiert (Text statt Datum) und die Datenbank hat den rohen Text abgelehnt. Betraf jede Kontakt-Bearbeitung mit gesetztem Datum, nicht nur den Namens-Split.',
+      'Fix: saving a contact (e.g. when manually splitting into first/last name) failed with a 500 error as soon as "last contact" contained a date — the field was mistyped in the edit endpoint (text instead of date) and the database rejected the raw text. Affected every contact edit with a date set, not just the name split.',
     ],
   },
   {
     version: '3.32.2',
     date: '2026-07-03',
     changes: [
-      'Fix: die letzte Änderung (getrennte Vorname/Nachname-Spalten) zeigte bei fast allen Bestandskontakten den vollen Namen in der Nachname-Spalte, weil der iCloud-Import nie das strukturierte Vor-/Nachname-Feld der vCard gelesen hat, nur den (uneinheitlich formatierten) Anzeigenamen. Jetzt wird das echte Adressbuch-Feld verwendet — zuverlässig unabhängig davon, ob der Anzeigename "Vorname Nachname" oder "Nachname Vorname" lautet. 169 von 198 Bestandskontakten wurden aus den echten Adressbuch-Daten automatisch korrigiert, der Rest bewusst unverändert gelassen statt geraten (z.B. bei Firmen-Einträgen).',
+      'Fix: the previous change (separate first/last name columns) showed the full name in the last-name column for almost all existing contacts, because the iCloud import never read the vCard\'s structured first/last name field, only the (inconsistently formatted) display name. It now uses the real address-book field — reliable regardless of whether the display name reads "First Last" or "Last First". 169 of 198 existing contacts were automatically corrected from the real address-book data, the rest deliberately left unchanged instead of guessed (e.g. for company entries).',
     ],
   },
   {
     version: '3.32.1',
     date: '2026-07-03',
     changes: [
-      'Kontakteübersicht: Vorname und Nachname jetzt als eigene, sortierbare Spalten statt eines kombinierten Namens. Getrennte Bearbeitung war im Detail-Modal bereits möglich, ist jetzt auch in der Übersicht direkt sichtbar.',
+      'Contacts overview: first name and last name are now separate, sortable columns instead of a combined name. Editing them separately was already possible in the detail modal — now also visible directly in the overview.',
     ],
   },
   {
     version: '3.32.0',
     date: '2026-07-03',
     changes: [
-      'Nach jedem abgeschlossenen Sync (Haupt-Sync, Firmensync, Bewerbungs-Sync, LinkedIn-Sync aus den Einstellungen) öffnet sich die "Manuelle Überprüfung" jetzt automatisch, sobald es etwas zu entscheiden gibt — bisher musste man selbst auf die Glocke klicken, auch wenn dort schon länger etwas offen war.',
-      'Firmen-Disambiguierung im Review-Dialog: bei mehreren LinkedIn-Treffern wird jetzt neben Name und Link auch ein Einzeiler mit Branche und Ort angezeigt (z.B. "IT Services and IT Consulting · San Francisco, California") — hilft z.B. "GitLab" von "GitLab Foundation" oder "Peach Tech (Acquired by GitLab)" zu unterscheiden.',
+      'After every completed sync (main sync, company sync, application sync, LinkedIn sync from Settings), "manual review" now opens automatically as soon as there\'s something to decide — previously you had to click the bell yourself, even if something had been open for a while.',
+      'Company disambiguation in the review dialog: with multiple LinkedIn matches, a one-line summary with industry and location now appears next to name and link (e.g. "IT Services and IT Consulting · San Francisco, California") — helps distinguish e.g. "GitLab" from "GitLab Foundation" or "Peach Tech (Acquired by GitLab)".',
     ],
   },
   {
     version: '3.31.3',
     date: '2026-07-03',
     changes: [
-      'LinkedIn-Kontaktimport: Firmenerkennung aus der Kurzbeschreibung erkennt jetzt auch "Rolle @ Firma" (nicht nur "at"/"bei"). Bewusst NICHT ergänzt: Trennung an "|", da viele Kurzbeschreibungen das für Skill-Listen statt "Rolle | Firma" nutzen — das hätte falsche Firmen erzeugt. Für Profile mit individuell angepasster Kurzbeschreibung ohne jede Firmenerwähnung (z.B. nur "Head of Customer Program Management") bleibt die Firma leer statt geraten — LinkedIns Zugriffsbeschränkung für nicht direkt verbundene Profile ("Nur mit Premium sichtbar") verhindert einen zuverlässigen Blick auf die volle Profilseite als Fallback. Import-Dialog weist jetzt auf diese Einschränkung hin.',
+      'LinkedIn contact import: company detection from the headline now also recognizes "Role @ Company" (not just "at"/"bei"). Deliberately NOT added: splitting on "|", since many headlines use that for skill lists instead of "Role | Company" — that would have produced wrong companies. For profiles with a custom headline that mentions no company at all (e.g. just "Head of Customer Program Management"), the company stays empty instead of being guessed — LinkedIn\'s access restriction for not-directly-connected profiles ("visible with Premium only") prevents a reliable look at the full profile page as a fallback. The import dialog now points out this limitation.',
     ],
   },
   {
     version: '3.31.2',
     date: '2026-07-03',
     changes: [
-      'Fix: iCloud-Kontaktsuche lieferte 0 Treffer, wenn alle gefundenen vCards bereits importierte Kontakte waren (Suche nach "qorix" fand 3 echte Treffer, zeigte aber fälschlich ein leeres Ergebnis). Bereits vorhandene Kontakte werden jetzt weiterhin angezeigt, nur als "bereits vorhanden" markiert statt versteckt.',
-      'Fix: LinkedIn-Personensuche zeigte oft Treffer ohne Firma/Headline — Ursache waren Personen, die nur als "X, Y und 20 weitere gemeinsame Kontakte" innerhalb einer fremden Karte erwähnt werden; sie wurden fälschlich als eigene Suchergebnisse gewertet und verbrauchten das Ergebnis-Kontingent, wodurch es wirkte, als käme nur die erste Trefferseite zurück. Echte Suchergebnisse werden jetzt am Verbindungsgrad ("• 1st/2nd/3rd") erkannt, reine Erwähnungen werden verworfen.',
+      'Fix: iCloud contact search returned 0 results when every matching vCard was already an imported contact (searching "qorix" found 3 real matches but wrongly showed an empty result). Already-existing contacts are now still shown, just marked as "already added" instead of hidden.',
+      'Fix: LinkedIn people search often showed results without company/headline — caused by people only mentioned as "X, Y, and 20 other mutual connections" inside someone else\'s card; they were wrongly counted as their own search results and used up the result quota, making it look like only the first results page came back. Real search results are now recognized by connection degree ("• 1st/2nd/3rd"), plain mentions are discarded.',
     ],
   },
   {
     version: '3.31.1',
     date: '2026-07-03',
     changes: [
-      'Kontakt-Import aus iCloud/LinkedIn nutzt jetzt den bereits bestehenden globalen "Neu"-Knopf statt eigener Buttons in der Kontakteübersicht — das "Neu"-Menü zeigt kontextabhängig die passenden Optionen (in der Kontaktansicht: Manuell anlegen / Aus iCloud / Aus LinkedIn statt der Bewerbungs-Optionen). "Aus LinkedIn importieren" bedeutet damit in der Kontaktansicht jetzt korrekt Personen-Import statt Stellenanzeigen-Import.',
+      'Contact import from iCloud/LinkedIn now uses the existing global "New" button instead of separate buttons in the contacts overview — the "New" menu shows the right options depending on context (in the contacts view: create manually / from iCloud / from LinkedIn instead of the application options). "Import from LinkedIn" now correctly means people import instead of job-posting import in the contacts view.',
     ],
   },
   {
     version: '3.31.0',
     date: '2026-07-03',
     changes: [
-      'Kontakteübersicht: neben manueller Neuanlage jetzt auch gezielter Import aus dem vollen iCloud-Adressbuch ("Aus iCloud") und aus LinkedIn-Personensuche ("Aus LinkedIn") — mit Suche, Mehrfachauswahl und "N importieren". Anders als der automatische Sync gilt hier keine Relevanz-Prüfung: der User sucht bewusst nach einer bestimmten Person und entscheidet selbst. Neue LinkedIn-Personensuche nutzt die bestehende Session (kein zusätzlicher Login) und splittet Headlines wie "Senior Engineer at Contoso" automatisch in Rolle/Firma. Live verifiziert, dabei einen Bug beim Verbindungsgrad-Text ("• 3rd+", der teils direkt am Namen klebte) gefunden und behoben.',
+      'Contacts overview: besides manual creation, now also targeted import from the full iCloud address book ("From iCloud") and from LinkedIn people search ("From LinkedIn") — with search, multi-select, and "import N". Unlike the automatic sync, there\'s no relevance check here: the user deliberately searches for a specific person and decides for themselves. The new LinkedIn people search uses the existing session (no extra login) and automatically splits headlines like "Senior Engineer at Contoso" into role/company. Verified live, finding and fixing a bug in the connection-degree text along the way ("• 3rd+", which sometimes stuck directly to the name).',
     ],
   },
   {
     version: '3.30.0',
     date: '2026-07-03',
     changes: [
-      'Manuell konnten Bewerbungen bisher nur zwei Eintrags-Arten (Notiz, Bewerbung) direkt anlegen — Mail, Anruf, Angebot, Absage, Status/Gespräch sowie Datei-Anhänge existierten nur, wenn sie über eine Sync-Quelle oder die KI-Review-Queue entstanden. Neu: "Weiteres" (alle übrigen Eintrags-Arten frei wählbar) und "Anhang" (Datei-Upload direkt an eine Bewerbung, der Backend-Endpunkt dafür existierte bereits, war aber an keiner Stelle im Frontend verdrahtet) in der Timeline. Der Typ eines bestehenden Eintrags lässt sich jetzt ebenfalls auf alle Arten (außer Anhänge) ändern, nicht nur die ursprünglichen vier.',
+      'Applications could previously only manually create two entry types directly (note, application) — mail, call, offer, rejection, status/interview, and file attachments only existed if they came from a sync source or the AI review queue. New: "Other" (freely choose any remaining entry type) and "Attachment" (file upload directly to an application — the backend endpoint for it already existed but wasn\'t wired up anywhere in the frontend) in the timeline. The type of an existing entry can now also be changed to any type (except attachments), not just the original four.',
     ],
   },
   {
     version: '3.29.1',
     date: '2026-07-03',
     changes: [
-      'Fix: In der "Manuelle Überprüfung" (Review-Modal) gab es nach Klick auf "Annehmen"/"Ablehnen" (einzeln oder als Batch) keine sichtbare Rückmeldung, solange die Anfrage lief (z.B. bei Firmensync-Auswahlen mit LinkedIn-Scrape/Wikidata-Fallback im Hintergrund) — wirkte wie ein Hänger. Buttons zeigen jetzt einen Spinner und "Wird verarbeitet…", solange die Aktion läuft.',
+      'Fix: in "manual review" (the review modal), clicking "accept"/"reject" (individually or as a batch) gave no visible feedback while the request was running (e.g. for company-sync selections with a LinkedIn scrape/Wikidata fallback in the background) — felt like it had hung. Buttons now show a spinner and "Processing…" while the action is running.',
     ],
   },
   {
     version: '3.29.0',
     date: '2026-07-03',
     changes: [
-      'Firmensync-Reihenfolge umgedreht: LinkedIn-Firmenseite ist jetzt primär, Wikidata nur noch Fallback bei 0 LinkedIn-Treffern. Bei mehreren plausiblen LinkedIn-Treffern für eine Firma wird nicht mehr automatisch geraten — sie landet als offener Eintrag in der bestehenden "Manuelle Überprüfung"-Queue (Einstellungen-Glocke), wo man den richtigen Kandidaten auswählt oder "Keiner davon" klickt (löst dann den Wikidata-Fallback für genau diese eine Firma aus). Live an "GitLab" verifiziert und dabei einen echten Bug gefunden und behoben: LinkedIns Suchergebnis-Link umschließt die komplette Ergebniskarte (Name, Branche, Ort, Beschreibung), wodurch der erkannte Firmenname anfangs den ganzen Kartentext statt nur den Namen enthielt.',
+      'Reversed the company-sync order: the LinkedIn company page is now primary, Wikidata is only a fallback when there are 0 LinkedIn matches. With multiple plausible LinkedIn matches for a company, it\'s no longer auto-guessed — it lands as an open entry in the existing "manual review" queue (the settings bell), where you pick the right candidate or click "none of these" (which then triggers the Wikidata fallback for just that one company). Verified live on "GitLab", finding and fixing a real bug along the way: LinkedIn\'s search-result link wraps the entire result card (name, industry, location, description), so the detected company name initially contained the whole card text instead of just the name.',
     ],
   },
   {
     version: '3.28.1',
     date: '2026-07-03',
     changes: [
-      'Fix: ein abgebrochener Firmensync (Cancel während des Laufs) hat Firmen, für die bereits ein Wikidata-Eintrag gefunden, aber dessen Detaildaten noch nicht abgefragt waren, fälschlich als "fertig, kein Datensatz" markiert statt sie für den nächsten Lauf erneut vorzumerken — durch die "done wird nie automatisch wiederholt"-Regel wären sie sonst dauerhaft mit leeren Daten hängen geblieben. Live beim ersten produktiven Sync-Lauf nach der Wikidata-Umstellung aufgefallen (über 150 betroffene Firmen), jetzt mit Regressionstest abgesichert.',
+      'Fix: a cancelled company sync (cancel while running) wrongly marked companies for which a Wikidata entry had already been found, but whose detail data hadn\'t been fetched yet, as "done, no record" instead of re-queuing them for the next run — under the "done never auto-retries" rule, they would otherwise have stayed permanently stuck with empty data. Noticed live during the first production sync run after the Wikidata switch (over 150 affected companies), now backed by a regression test.',
     ],
   },
   {
     version: '3.28.0',
     date: '2026-07-03',
     changes: [
-      'Firmensync grundlegend überarbeitet: Wikidata (Suche + strukturierte Firmendaten) ist jetzt die primäre Quelle statt DuckDuckGo/Wikipedia — behebt einen Datenqualitätsbug, bei dem 127 von 183 Firmen identisch "Softwareentwicklung" als Branche zeigten (ein zu allgemeines Suchwort hatte die Rechtsform mit der Branche verwechselt). Neu: LinkedIn-Firmenseiten-Fallback für Firmen ohne Wikidata-Eintrag (nutzt die bestehende LinkedIn-Session, kein zusätzlicher Login). Neu: automatische grobe Startup/KMU/Konzern-Einstufung aus Mitarbeiterzahl + Gründungsjahr, sobald frische Daten vorliegen. Live an Produktivdaten verifiziert (mehrere reale Firmenprofile, u.a. mit Tochterfirmen-Struktur) und dabei zwei echte Bugs gefunden und behoben: ein Abbruch-Bug, der nie versuchte Firmen fälschlich als "fertig, kein Treffer" markiert hätte, und eine LinkedIn-Sonderzeichen-Falle bei der Hauptsitz-Extraktion (deshalb bewusst nicht mehr aus LinkedIn übernommen, Hauptsitz kommt zuverlässig aus Wikidata).',
+      'Fundamentally reworked company sync: Wikidata (search + structured company data) is now the primary source instead of DuckDuckGo/Wikipedia — fixes a data-quality bug where 127 of 183 companies identically showed "software development" as their industry (an overly generic search term had confused the legal form with the industry). New: LinkedIn company-page fallback for companies without a Wikidata entry (uses the existing LinkedIn session, no extra login). New: automatic rough startup/SME/enterprise classification from employee count + founding year, once fresh data is available. Verified live against production data (several real company profiles, including ones with a subsidiary structure), finding and fixing two real bugs along the way: an abort bug that would have wrongly marked never-attempted companies as "done, no match", and a LinkedIn special-character trap in headquarters extraction (deliberately no longer taken from LinkedIn because of this — headquarters now comes reliably from Wikidata).',
     ],
   },
   {
     version: '3.27.0',
     date: '2026-07-03',
     changes: [
-      'Die drei alten separaten Hintergrund-Bridges (files_bridge.py, notes_bridge.py, calls_bridge.py) sind entfernt — der neue JobTracker Agent läuft seit einigen Tagen produktiv als vollwertiger Ersatz und wurde live gegen die echte Instanz verifiziert (Health-Check, Startup-Check, echter Backup-Roundtrip), bevor die alten Skripte abgeschaltet und gelöscht wurden. Dokumentation (README, Architektur, Projektstand) entsprechend aktualisiert.',
+      'The three old separate background bridges (files_bridge.py, notes_bridge.py, calls_bridge.py) have been removed — the new JobTracker Agent has been running in production as a full replacement for several days and was verified live against the real instance (health check, startup check, a real backup round-trip) before the old scripts were shut down and deleted. Documentation (README, architecture, project status) updated accordingly.',
     ],
   },
   {
     version: '3.26.1',
     date: '2026-07-03',
     changes: [
-      'Fix: /api/startup-check stürzte mit einem 500er ab, sobald der lokale Dateien-Sync aktiviert war — der Code las das falsche Feldnamen (FilesConfig.folder statt .folder_path). Beim Live-Verifizieren des neuen Agenten aufgefallen und behoben; bisher ungetestet, jetzt mit 7 neuen Tests abgesichert.',
+      'Fix: /api/startup-check crashed with a 500 as soon as local file sync was enabled — the code read the wrong field name (FilesConfig.folder instead of .folder_path). Found and fixed while verifying the new agent live; previously untested, now backed by 7 new tests.',
     ],
   },
   {
     version: '3.26.0',
     date: '2026-07-03',
     changes: [
-      'JobTracker Agent: die drei separaten Hintergrund-Bridges (Dateien, Notizen, Anrufe) sind durch einen einzigen, echt installierbaren Hintergrund-Dienst ersetzt — mit Bearer-Token-Auth statt offener Ports, als .app/.dmg mit Menüleisten-Icon und automatischer Selbstregistrierung als Autostart (kein manuelles Terminal-Fenster mehr). Neuer "Agent"-Tab in den Einstellungen zum Verbinden (Token einfügen, Live-Status je Modul). Architektur ist bewusst plattformübergreifend angelegt (macOS jetzt, Windows später über dieselbe Provider-Schnittstelle). Die alten drei Bridge-Skripte laufen als Übergang noch parallel.',
+      'JobTracker Agent: the three separate background bridges (files, notes, calls) are replaced by a single, actually installable background service — with Bearer-token auth instead of open ports, packaged as a .app/.dmg with a menu-bar icon and automatic self-registration as a startup item (no more manual terminal window). New "Agent" tab in Settings for connecting (paste token, live status per module). The architecture is deliberately cross-platform (macOS now, Windows later via the same provider interface). The old three bridge scripts still run in parallel as a transition.',
     ],
   },
   {
     version: '3.25.0',
     date: '2026-07-02',
     changes: [
-      'Neue manuelle Restore-Funktion in Einstellungen → Backup: beliebige Backup-Datei (.zip oder .db) über einen nativen Datei-Picker auswählen und wiederherstellen — funktioniert unabhängig davon, ob automatisches Backup aktiviert oder überhaupt ein Backup-Ordner eingerichtet ist. Praktisch z.B. um ein Produktiv-Backup gezielt in die neue isolierte Testumgebung zu laden.',
+      'New manual restore feature in Settings → Backup: pick and restore any backup file (.zip or .db) via a native file picker — works regardless of whether automatic backup is enabled or a backup folder is even configured. Handy e.g. for loading a production backup deliberately into the new isolated test environment.',
     ],
   },
   {
     version: '3.24.1',
     date: '2026-07-02',
     changes: [
-      'Neue isolierte 1:1-Testumgebung (docker-compose.test.yml): eigene leere Datenbank, eigenes Volume, eigener Port (GUI unter :3001, API unter :8001), komplett getrennt von der Produktivinstanz. Über die GUI ganz normal bedienbar, aber deutlich mit einem roten "TESTUMGEBUNG"-Banner oben markiert, damit sie nie mit den echten Daten verwechselt wird — gedacht z.B. zum gefahrlosen Testen von Restore aus einem Produktiv-Backup.',
+      'New isolated 1:1 test environment (docker-compose.test.yml): its own empty database, its own volume, its own ports (GUI on :3001, API on :8001), completely separate from the production instance. Fully usable via the GUI as normal, but clearly marked with a red "TEST ENVIRONMENT" banner at the top so it\'s never confused with real data — intended e.g. for safely testing a restore from a production backup.',
     ],
   },
   {
     version: '3.24.0',
     date: '2026-07-02',
     changes: [
-      'Backup/Restore-Lücke geschlossen: der Verschlüsselungsschlüssel (fernet.key) für gespeicherte API-Keys/Passwörter lag außerhalb der Datenbank und wurde bisher nicht mitgesichert — nach einem Restore auf eine neue Maschine/ein frisches Volume wären verschlüsselte Felder (AI-Key, iCloud-Passwort, Google-Client-Secret, Maps-Key) dauerhaft nicht mehr entschlüsselbar gewesen. Backups sind jetzt ein Zip-Bundle aus Datenbank und Schlüssel; Restore stellt beide zusammen wieder her. Ältere reine .db-Backups bleiben weiterhin restorebar. Hinweis: der host-seitige files_bridge-Prozess muss nach diesem Update einmal manuell neu gestartet werden.',
+      'Closed a backup/restore gap: the encryption key (fernet.key) for stored API keys/passwords lived outside the database and wasn\'t being backed up — after a restore onto a new machine/fresh volume, encrypted fields (AI key, iCloud password, Google client secret, Maps key) would have become permanently undecryptable. Backups are now a zip bundle of the database and the key; restore brings both back together. Older plain .db backups remain restorable. Note: the host-side files_bridge process needs to be manually restarted once after this update.',
     ],
   },
   {
     version: '3.23.0',
     date: '2026-07-02',
     changes: [
-      'Fix (kritisch): Beim Zusammenführen von Bewerbungen ("Merge") sowie beim automatischen Bereinigen von Bewerbungs-Dubletten wurden Timeline-Einträge (Events) der entfernten Bewerbung nicht auf die verbleibende Bewerbung umgehängt, sondern durch eine ORM-Kaskade beim Löschen versehentlich mitgelöscht. Ursache: die Zuordnung erfolgte über das rohe Fremdschlüssel-Feld statt über die Beziehungs-API, wodurch der interne Objekt-Cache veraltet blieb. Beim Firmen-Merge trat dasselbe Problem bei Bewerbungen/Kontakten auf (Zuordnung ging beim Löschen der verlierenden Firma verloren). Beide Stellen sind jetzt korrekt — der Bug wurde durch neue Tests für Phase 3 des Testkonzepts gefunden, bevor er sich weiter auswirken konnte.',
-      'Testkonzept Phase 3 abgeschlossen: L1/L2-Tests für Merge (Bewerbungen/Kontakte/Firmen) sowie für die bisher ungetesteten Cleanup-Dublettenfinder (Bewerbungen, Kontakte) und die /cleanup-Endpoints inkl. scope-Filterung.',
+      'Fix (critical): when merging applications, and during automatic cleanup of application duplicates, timeline entries (events) belonging to the removed application weren\'t reassigned to the surviving application — instead, an ORM cascade accidentally deleted them along with it on delete. Cause: the assignment happened via the raw foreign-key field instead of the relationship API, leaving the internal object cache stale. The same problem occurred for applications/contacts during company merges (the assignment was lost when the losing company was deleted). Both spots are now correct — the bug was found by new tests for Phase 3 of the test concept before it could cause further damage.',
+      'Test concept Phase 3 complete: L1/L2 tests for merge (applications/contacts/companies) as well as for the previously untested cleanup duplicate finders (applications, contacts) and the /cleanup endpoints including scope filtering.',
     ],
   },
   {
     version: '3.22.4',
     date: '2026-07-02',
     changes: [
-      'Testkonzept Phase 2 abgeschlossen: Round-Trip-Tests für die Fernet-Verschlüsselung gespeicherter API-Keys (encrypt/decrypt, automatische Schlüsselerzeugung, Fehlerfälle bei kaputtem/falschem Schlüssel). Damit sind alle drei "scharfen" Bereiche aus dem Testkonzept (Dedup, Statuslogik, Krypto) mit L0-Unit-Tests abgesichert.',
+      'Test concept Phase 2 complete: round-trip tests for the Fernet encryption of stored API keys (encrypt/decrypt, automatic key generation, error cases for a broken/wrong key). This backs all three "sensitive" areas from the test concept (dedup, status logic, crypto) with L0 unit tests.',
     ],
   },
   {
     version: '3.22.3',
     date: '2026-07-02',
     changes: [
-      'LICENSE-Datei hinzugefügt (Business Source License 1.1): freie Nutzung für private, nicht-kommerzielle Zwecke, kommerzielle Nutzung erfordert eine separate Lizenz. Wandelt sich am 2030-07-02 automatisch in Apache License 2.0 um.',
+      'Added a LICENSE file (Business Source License 1.1): free use for private, non-commercial purposes, commercial use requires a separate license. Automatically converts to the Apache License 2.0 on 2030-07-02.',
     ],
   },
   {
     version: '3.22.2',
     date: '2026-07-02',
     changes: [
-      'Sicherheits-Härtung für die geplante Public-Stellung: die self-hosted-CI-Jobs (Deploy, Fehler-Benachrichtigung), die auf diesem Mac laufen, sind jetzt explizit auf push-Events beschränkt und können nie mehr durch einen pull_request (auch nicht von einem Fork) ausgelöst werden. Test-/Build-Jobs für Pull Requests laufen weiterhin wie gewohnt auf GitHub-gehosteten Runnern.',
+      'Security hardening ahead of the planned public release: the self-hosted CI jobs (Deploy, failure notification) that run on this Mac are now explicitly restricted to push events and can never again be triggered by a pull_request (even from a fork). Test/build jobs for pull requests continue to run as usual on GitHub-hosted runners.',
     ],
   },
   {
     version: '3.22.1',
     date: '2026-07-02',
     changes: [
-      'Sicherheits-Bereinigung: eine versehentlich committete DB-Sicherung mit echten Kontakt- und Bewerbungsdaten wurde vollständig aus der Git-Historie entfernt (Voraussetzung für eine geplante Veröffentlichung des Repos). Der Deploy-Schritt in der CI nutzt jetzt "fetch + reset --hard" statt "git pull", damit Force-Pushes wie dieser den Auto-Deploy nicht mehr brechen.',
+      'Security cleanup: an accidentally committed DB backup with real contact and application data was completely removed from the git history (a prerequisite for a planned public release of the repo). The CI deploy step now uses "fetch + reset --hard" instead of "git pull", so force-pushes like this one no longer break auto-deploy.',
     ],
   },
   {
     version: '3.22.0',
     date: '2026-07-02',
     changes: [
-      'Orts-Autocomplete läuft jetzt optional über Google Maps (Places API) statt nur OpenStreetMap — inklusive konkreter Orte/POIs (z.B. Firmenstandorte), nicht nur Städtenamen. Neuer Einstellungen-Tab "Karten" zum Hinterlegen eines Google Maps API-Keys (verschlüsselt gespeichert, verlässt den Server nie). Ohne Key funktioniert die Ortssuche weiterhin wie bisher über Nominatim/OpenStreetMap.',
+      'Location autocomplete now optionally runs via Google Maps (Places API) instead of just OpenStreetMap — including specific places/POIs (e.g. office locations), not just city names. New "Maps" settings tab for entering a Google Maps API key (stored encrypted, never leaves the server). Without a key, location search continues to work as before via Nominatim/OpenStreetMap.',
     ],
   },
   {
     version: '3.21.2',
     date: '2026-07-02',
     changes: [
-      'Fix: Der Ort war zwar im Übersicht-Tab sichtbar, aber nicht auf der Kanban-Karte — das Response-Schema der Bewerbungsliste (die auch die Kanban-Karten befüllt) deklarierte das Feld "ort" nicht, wodurch es aus der Antwort gefiltert wurde, obwohl es in der Datenbank gesetzt war.',
+      'Fix: the location was visible in the overview tab, but not on the Kanban card — the applications-list response schema (which also populates the Kanban cards) didn\'t declare the "ort" field, so it got filtered out of the response even though it was set in the database.',
     ],
   },
   {
     version: '3.21.1',
     date: '2026-07-02',
     changes: [
-      'Der Ort einer Bewerbung wird jetzt auch in der Kanban-Karte unten rechts angezeigt — als Link, der die Adresse direkt in Google Maps öffnet.',
+      'An application\'s location is now also shown on the Kanban card, bottom right — as a link that opens the address directly in Google Maps.',
     ],
   },
   {
     version: '3.21.0',
     date: '2026-07-02',
     changes: [
-      'Neues Feld "Ort" bei Bewerbungen (optional, sichtbar im Übersicht-Tab). Manuelle Eingabe mit Autocomplete über eine kostenlose Karten-API (OpenStreetMap/Nominatim, kein API-Key nötig). Wird beim LinkedIn-Sync automatisch aus dem Stellenangebot übernommen, ohne einen bereits manuell gepflegten Ort zu überschreiben.',
+      'New "location" field on applications (optional, visible in the overview tab). Manual entry with autocomplete via a free maps API (OpenStreetMap/Nominatim, no API key needed). Automatically filled in from the job posting during LinkedIn sync, without overwriting a location already set manually.',
     ],
   },
   {
     version: '3.20.0',
     date: '2026-07-02',
     changes: [
-      'Der separate Firmenfilter (Dropdown-Button) in der Bewerbungs- und Kontaktansicht ist entfallen. Stattdessen bieten die normalen Suchfelder jetzt eine Firmen-Autocomplete: beim Tippen erscheinen passende Firmen zur Auswahl, die den Suchtext direkt übernimmt. Der Sprung von einer Firma zu ihren Bewerbungen/Kontakten (Firmenansicht) funktioniert weiterhin, setzt jetzt aber einfach den Suchtext statt eines separaten Filters.',
+      'Removed the separate company filter (dropdown button) in the applications and contacts views. Instead, the normal search fields now offer company autocomplete: matching companies appear as you type, picking one fills in the search text directly. Jumping from a company to its applications/contacts (company view) still works, but now simply sets the search text instead of a separate filter.',
     ],
   },
   {
     version: '3.19.2',
     date: '2026-07-01',
     changes: [
-      'iCloud-Kontakte-Sync (Follow-up zu v3.19.1): Ein Domain-Match der E-Mail-Adresse gegen die Firmen-Website reichte allein aus, um Kontakte zu importieren — auch wenn zu dieser Firma gar keine Bewerbung existiert (live: 32 Contoso-Kontakte importiert, obwohl 0 Bewerbungen zu Contoso bestehen; die CompanyProfile war nur noch eine Datenleiche). Der Domain-Match zählt jetzt nur noch, wenn die Firma auch tatsächlich mit mindestens einer Bewerbung verknüpft ist.',
+      'iCloud contacts sync (follow-up to v3.19.1): a domain match of the email address against the company website alone was enough to import contacts — even when no application existed for that company at all (live: 32 Contoso contacts imported despite 0 applications to Contoso; the CompanyProfile was just a data leftover). A domain match now only counts when the company is actually linked to at least one application.',
     ],
   },
   {
     version: '3.19.1',
     date: '2026-07-01',
     changes: [
-      'iCloud-Kontakte-Sync importierte teils hunderte irrelevante Kontakte (live 592, davon 272 allein mit Firma "Contoso GmbH") — ein reiner Textmatch des ORG-Felds einer vCard gegen den Namen einer bekannten Firma reichte aus, um praktisch das komplette Adressbuch eines früheren Arbeitgebers zu importieren, unabhängig von jeder echten Verbindung zu einer Bewerbung. Ein Firmen-Namens-Match allein zählt jetzt nicht mehr — zusätzlich muss entweder die E-Mail-Domain des Kontakts zur Firmen-Website passen, oder der Kontakt ist tatsächlich in einer Bewerbung erwähnt bzw. per Firmentext verknüpft.',
+      'iCloud contacts sync sometimes imported hundreds of irrelevant contacts (592 live, 272 of them with company "Contoso GmbH" alone) — a plain text match of a vCard\'s ORG field against the name of a known company was enough to import practically the entire address book of a former employer, regardless of any real connection to an application. A company-name match alone no longer counts — in addition, either the contact\'s email domain must match the company website, or the contact must actually be mentioned in an application or linked via company text.',
     ],
   },
   {
     version: '3.19.0',
     date: '2026-07-01',
     changes: [
-      'Beim manuellen Suchen und Zuordnen von Sync-Treffern zu einer Bewerbung ("Manuell zuordnen") lassen sich jetzt mehrere Einträge per Checkbox markieren und in einem Schritt gemeinsam importieren, statt sie einzeln anklicken zu müssen. Konflikte einzelner Einträge (bereits mit einer anderen Bewerbung verknüpft) werden übersprungen und gemeldet, der Rest wird trotzdem importiert.',
+      'When manually searching for and assigning sync matches to an application ("manual assign"), you can now check multiple entries and import them together in one step, instead of having to click them one at a time. Conflicts on individual entries (already linked to another application) are skipped and reported, the rest is still imported.',
     ],
   },
   {
     version: '3.18.2',
     date: '2026-07-01',
     changes: [
-      'Bereinigen bei Firmen erkannte Tochterfirmen fälschlich als Duplikate, wenn sie sich die Website-Domain der Mutter teilen (z.B. "Contoso Digital Industries Software" unter contoso.com) — selbst wenn die Mutter-Tochter-Beziehung bereits gepflegt war. Bereits verknüpfte Paare werden jetzt ignoriert. Für noch unverknüpfte Duplikate gibt es zusätzlich zum Zusammenführen die neue Option "Als Tochterfirma zuordnen".',
+      'Cleanup wrongly detected subsidiaries as duplicates when they share the parent\'s website domain (e.g. "Contoso Digital Industries Software" under contoso.com) — even when the parent-subsidiary relationship was already set up. Already-linked pairs are now ignored. For still-unlinked duplicates, there\'s now a new "assign as subsidiary" option alongside merging.',
     ],
   },
   {
     version: '3.18.1',
     date: '2026-07-01',
     changes: [
-      'Firmen-Sync (endgültig): "Sync" fand bei jedem Klick immer wieder dieselbe Handvoll kleiner/obskurer Firmen ohne Web-Auftreten, weil "fehlende Beschreibung" weiterhin unbegrenzt als Retry-Grund galt (derselbe Fehlertyp wie beim Logo-Fix in v3.17.3, nur an anderer Stelle wieder eingebaut). Ein "done"-Profil wird jetzt nie mehr automatisch auf "pending" zurückgesetzt — weder wegen fehlendem Logo noch fehlender Beschreibung. "Sync" verarbeitet nur noch wirklich neue Firmen, "Re-Sync" bleibt der bewusste Weg für einen erneuten Versuch.',
+      'Company sync (for good this time): every click on "Sync" kept finding the same handful of small/obscure companies with no web presence, because "missing description" still counted as an unlimited retry reason (the same bug type as the logo fix in v3.17.3, just reintroduced elsewhere). A "done" profile is now never automatically reset to "pending" again — neither for a missing logo nor a missing description. "Sync" now only processes genuinely new companies, "re-sync" remains the deliberate way to retry.',
     ],
   },
   {
     version: '3.18.0',
     date: '2026-07-01',
     changes: [
-      'Neue Auswertungen: Größter Pipeline-Engpass wird jetzt explizit hervorgehoben (Stufe mit dem größten absoluten Bewerbungsverlust, nicht nur niedrigste Rate — vermeidet Fehlschlüsse aus kleinen Stichproben). Neuer Chart "Konversion je Übergang" zeigt die Rate für jeden einzelnen Pipeline-Schritt.',
-      'Erfolg nach Firmentyp (Startup/Konzern/KMU/Beratung/…) und Firmengröße als eigene Auswertung — Gespräch- und Angebotsquote je Gruppe.',
-      'Erfolg nach Rollen-Kategorie: grobe Einordnung aus dem Stellentitel per Keyword-Heuristik (Führung/Senior/Sonstige), da es kein strukturiertes Feld für "Art der Stelle" gibt.',
+      'New analytics: the biggest pipeline bottleneck is now explicitly highlighted (the stage with the largest absolute application loss, not just the lowest rate — avoids wrong conclusions from small sample sizes). New "conversion per transition" chart shows the rate for each individual pipeline step.',
+      'Success by company type (startup/enterprise/SME/consulting/…) and company size as their own analytics — interview and offer rate per group.',
+      'Success by role category: rough classification from the job title via keyword heuristics (leadership/senior/other), since there\'s no structured field for "type of role".',
     ],
   },
   {
     version: '3.17.5',
     date: '2026-07-01',
     changes: [
-      'Bereinigen in der Kalenderansicht behandelt jetzt nur noch echte Kalendereinträge (gleiche Definition wie die Kalenderansicht selbst: Termine/Interviews oder Google-/iCloud-Kalender-Quelle) statt aller Timeline-Objekte (Mails, Anrufe, Notizen). Live verifiziert: 33 → 15 Duplikate im Kalender-Scope, die restlichen 18 waren Mail-/Anruf-Duplikate und gehören nicht dorthin.',
+      'Cleanup in the calendar view now only handles real calendar entries (same definition as the calendar view itself: interviews/appointments or Google/iCloud calendar source) instead of all timeline objects (mails, calls, notes). Verified live: 33 → 15 duplicates in the calendar scope, the remaining 18 were mail/call duplicates and don\'t belong there.',
     ],
   },
   {
     version: '3.17.4',
     date: '2026-07-01',
     changes: [
-      'Bereinigen (Kalender/Timeline): fand echte Duplikate nicht, wenn derselbe synchronisierte Termin/Anruf/Mail bei mehreren Sync-Durchläufen mit unterschiedlichem Typ gespeichert wurde (z.B. "status" und "gespräch" für denselben Kalendertermin). 33 solcher Duplikate live gefunden, die vorher komplett übersehen wurden. Aussagekräftiger Typ (gespräch/termin/anruf) wird beim Zusammenführen jetzt bevorzugt behalten.',
+      'Cleanup (calendar/timeline): didn\'t find real duplicates when the same synced appointment/call/mail was saved with a different type across multiple sync runs (e.g. "status" and "interview" for the same calendar appointment). Found 33 such duplicates live that had previously been completely missed. The more meaningful type (interview/appointment/call) is now preferentially kept when merging.',
     ],
   },
   {
     version: '3.17.3',
     date: '2026-07-01',
     changes: [
-      'Firmen-Sync: Firmen ohne Clearbit-Logo (v.a. kleine Personalberatungen — 101 von 158 betroffen) wurden bei jedem Sync-Klick erneut als "unvollständig" erkannt und neu synct, obwohl die Liste sie bereits als "Synced" zeigte. Logo-Lookup ist deterministisch — ein einmal fehlendes Logo bleibt fehlend. Nur eine fehlende Firmenbeschreibung löst jetzt noch einen Retry aus.',
+      'Company sync: companies without a Clearbit logo (mostly small recruiting agencies — 101 of 158 affected) were repeatedly detected as "incomplete" and re-synced on every sync click, even though the list already showed them as "synced". Logo lookup is deterministic — a logo that\'s missing once stays missing. Only a missing company description now triggers a retry.',
     ],
   },
   {
     version: '3.17.2',
     date: '2026-07-01',
     changes: [
-      'CI: Testergebnisse sind jetzt direkt in der GitHub-Actions-Run-Zusammenfassung sichtbar (Pass/Fail-Zahlen + Namen fehlgeschlagener Tests), ohne die Logs aufklappen zu müssen — für Backend (pytest) und Frontend (vitest), beide über JUnit-XML.',
+      'CI: test results are now visible directly in the GitHub Actions run summary (pass/fail counts + names of failed tests), without having to expand the logs — for backend (pytest) and frontend (vitest), both via JUnit XML.',
     ],
   },
   {
     version: '3.17.1',
     date: '2026-07-01',
     changes: [
-      'Fix: pytest schlug in echter CI fehl ("No module named app") — lokal mit `python -m pytest` getestet, was das Arbeitsverzeichnis automatisch zu sys.path hinzufügt, CI ruft aber bares `pytest` auf. `pythonpath = .` in pytest.ini ergänzt, gegen exakten CI-Aufruf im Container verifiziert.',
+      'Fix: pytest failed in real CI ("No module named app") — tested locally with `python -m pytest`, which automatically adds the working directory to sys.path, but CI calls bare `pytest`. Added `pythonpath = .` to pytest.ini, verified against the exact CI invocation in the container.',
     ],
   },
   {
     version: '3.17.0',
     date: '2026-07-01',
     changes: [
-      'Testkonzept Phase 1 umgesetzt: pytest-Grundgerüst mit Test-DB-Isolation, Factories (Bewerbung/Kontakt/Firma/Event), 37 Backend-Tests (Unit/Component/API) und Vitest-Setup mit ersten Frontend-Komponententests. PR-Gate in CI erweitert — läuft in unter 6 Sekunden.',
+      'Implemented test concept Phase 1: pytest scaffolding with test-DB isolation, factories (application/contact/company/event), 37 backend tests (unit/component/API), and a Vitest setup with the first frontend component tests. Extended the CI PR gate — runs in under 6 seconds.',
     ],
   },
   {
     version: '3.16.2',
     date: '2026-07-01',
     changes: [
-      'CI: Deploy-Benachrichtigung auf dem Mac zeigt jetzt die volle App-Version (z.B. "v3.16.2") statt nur der Build-Nummer — wie oben links in der App angezeigt.',
+      'CI: the deploy notification on the Mac now shows the full app version (e.g. "v3.16.2") instead of just the build number — matching what\'s shown top-left in the app.',
     ],
   },
   {
     version: '3.16.1',
     date: '2026-07-01',
     changes: [
-      'Gmail-/iCloud-Sync einer Bewerbung fand keine Mails, wenn die automatisch angereicherte Firmen-Website die falsche Domain hatte (z.B. hahn-schickard.com statt .de) — die Suche filterte ausschließlich nach dieser einen Domain. Bestätigte Kontakt-E-Mail-Adressen der Bewerbung fließen jetzt zusätzlich in die Domain-Suche ein, unabhängig von der (ggf. fehlerhaften) Firmenanreicherung.',
+      'Gmail/iCloud sync for an application found no mails when the auto-enriched company website had the wrong domain (e.g. hahn-schickard.com instead of .de) — the search filtered exclusively on that one domain. Confirmed contact email addresses of the application now also feed into the domain search, independent of the (possibly wrong) company enrichment.',
     ],
   },
   {
     version: '3.16.0',
     date: '2026-07-01',
     changes: [
-      'Firmen-Sync: Fix für v3.15.8 — der Auto-Continue-Poller nach einem Sync-Batch ignorierte die Markierung und synchronisierte trotzdem alle ausstehenden Firmen weiter. Scoped Runs stoppen jetzt nach ihrem eigenen Batch.',
-      'LinkedIn-Einrichtung war doppelt (Sync-Dropdown und Options-Menü) — aus dem Sync-Dropdown entfernt, nur noch in den Einstellungen unter "LinkedIn".',
-      'Bereinigen-Funktion ist jetzt kontextsensitiv: der Button zeigt und bereinigt nur die Kategorie der aktuellen Ansicht (Bewerbungen/Kontakte/Firmen/Kalender) statt immer alles. Neu: Firmen-Duplikate werden per Website-Domain erkannt (Namensfeld ist bereits eindeutig in der DB) und über die bestehende Merge-Logik zusammengeführt. Bewerbungs-Matching nutzt jetzt dieselbe normalisierte Firmen-/Rollen-Erkennung wie der Rest der App, Kontakt-Matching berücksichtigt zusätzlich die Firma um Namensgleichheit bei unterschiedlichen Personen nicht mehr fälschlich zusammenzuführen.',
+      'Company sync: fix for v3.15.8 — the auto-continue poller after a sync batch ignored the selection and kept syncing all pending companies anyway. Scoped runs now stop after their own batch.',
+      'LinkedIn setup was duplicated (sync dropdown and options menu) — removed from the sync dropdown, now only in Settings under "LinkedIn".',
+      'The cleanup function is now context-sensitive: the button only shows and cleans up the category of the current view (applications/contacts/companies/calendar) instead of always everything. New: company duplicates are detected by website domain (the name field is already unique in the DB) and merged via the existing merge logic. Application matching now uses the same normalized company/role detection as the rest of the app; contact matching additionally considers the company so same-name-but-different-person contacts are no longer wrongly merged.',
     ],
   },
   {
     version: '3.15.8',
     date: '2026-07-01',
     changes: [
-      'Firmen: Sync, Re-Sync und "Kontakte verknüpfen" berücksichtigen jetzt die Markierung — bei ausgewählten Firmen laufen alle drei Aktionen nur für die Auswahl statt für die komplette Liste. Ohne Auswahl unverändertes Verhalten (alle Firmen).',
+      'Companies: sync, re-sync, and "link contacts" now respect the selection — with companies selected, all three actions only run for the selection instead of the whole list. Without a selection, behavior is unchanged (all companies).',
     ],
   },
   {
     version: '3.15.7',
     date: '2026-06-30',
     changes: [
-      'Firmenmodal: Änderungen (Bearbeiten, Logo, Kontakte zuordnen) fehlte ein onSaved-Callback — Firmenliste und Bewerbungsansichten zeigten Änderungen erst nach manuellem Reload. Behoben.',
+      'Company modal: changes (edit, logo, assign contacts) were missing an onSaved callback — the companies list and application views only showed changes after a manual reload. Fixed.',
     ],
   },
   {
     version: '3.15.6',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Import: Root-Cause gefunden und gefixt — LinkedIn hasht mittlerweile alle CSS-Klassennamen, dadurch griffen sämtliche bisherigen Firmenname-Selektoren ins Leere. Firmenname wird jetzt über stabile strukturelle Signale gelesen (Link zur Firmen-Seite im Anzeigenkopf, Seitentitel-Pattern) statt über Klassennamen — live an einer echten Headhunter-Anzeige verifiziert (BLACKBULL INTERNATIONAL GmbH korrekt erkannt).',
+      'LinkedIn import: found and fixed the root cause — LinkedIn now hashes all CSS class names, so every existing company-name selector was hitting nothing. Company name is now read via stable structural signals (link to the company page in the posting header, page-title pattern) instead of class names — verified live on a real headhunter posting (BLACKBULL INTERNATIONAL GmbH correctly recognized).',
     ],
   },
   {
     version: '3.15.5',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Import: Fallback für anonymisierte/"confidential" Stellenanzeigen — wenn die Firma im Seitenkopf nicht sichtbar ist, wird zusätzlich der "Hiring Team"/Recruiter-Bereich nach dem zugehörigen Firmennamen durchsucht (Headhunter-Name), bevor das Feld leer bleibt.',
+      'LinkedIn import: fallback for anonymized/"confidential" job postings — when the company isn\'t visible in the page header, the "hiring team"/recruiter section is also searched for the associated company name (headhunter name) before the field is left empty.',
     ],
   },
   {
     version: '3.15.4',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Import: KI-Prompt erkennt Headhunter-Anzeigen jetzt anhand klarer Signale (z.B. "im Auftrag von", "Executive Search" im Firmennamen, anonymisierte Auftraggeber-Beschreibung) und füllt "Zielfirma" mit der verfügbaren Beschreibung statt sie leer zu lassen oder im Kommentar zu verstecken.',
+      'LinkedIn import: the AI prompt now recognizes headhunter postings from clear signals (e.g. "on behalf of", "Executive Search" in the company name, an anonymized client description) and fills "target company" with the available description instead of leaving it empty or hiding it in the comment.',
     ],
   },
   {
     version: '3.15.3',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Import: Firmenname wird jetzt strukturell aus dem Seitenkopf der Stellenanzeige gelesen statt von der KI aus dem Beschreibungstext geraten — behebt fehlende Firma bei Headhunter-Postings, die den Auftraggeber im Text anonymisieren ("Ein börsennotierter Technologiekonzern…").',
+      'LinkedIn import: company name is now read structurally from the job-posting header instead of guessed by the AI from the description text — fixes a missing company for headhunter postings that anonymize the client in the text ("A publicly traded technology group…").',
     ],
   },
   {
     version: '3.15.2',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Import: Firma wird jetzt automatisch mit bestehenden Firmenprofilen abgeglichen oder sauber neu angelegt — bei Neuanlage läuft im Hintergrund einmalig der Firmendaten-Fetch (Beschreibung, Logo, Branche, Standort) an, wie beim regulären Firmen-Sync.',
+      'LinkedIn import: the company is now automatically matched against existing company profiles or cleanly created — on creation, the company-data fetch (description, logo, industry, location) runs once in the background, same as the regular company sync.',
     ],
   },
   {
     version: '3.15.1',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Import korrigiert: statt Text manuell einzufügen, einfach den Link zur Stellenanzeige eingeben — die Seite wird automatisch über die bestehende LinkedIn-Anmeldung geladen, die KI extrahiert daraus alle Felder.',
+      'Fixed LinkedIn import: instead of manually pasting text, just enter the link to the job posting — the page is loaded automatically via the existing LinkedIn session, and the AI extracts all fields from it.',
     ],
   },
   {
     version: '3.15.0',
     date: '2026-06-30',
     changes: [
-      'Jobsuche-Funktion komplett entfernt (Tab, Jobportale-Einstellungen, Backend-Router, Datenmodell). War kein aktiv genutztes Feature mehr.',
-      'Neue Bewerbung: "Neu"-Button ist jetzt ein Dropdown mit "Manuell anlegen" und "Aus LinkedIn importieren" — beim LinkedIn-Import wird der kopierte Stellenanzeigen-Text per KI analysiert und Firma, Rolle, Quelle, Headhunter-Flag und Kommentar automatisch vorausgefüllt.',
+      'Completely removed the job-search feature (tab, job-board settings, backend router, data model). Was no longer an actively used feature.',
+      'New application: the "New" button is now a dropdown with "create manually" and "import from LinkedIn" — for LinkedIn import, the copied job-posting text is analyzed by AI and company, role, source, headhunter flag, and comment are automatically pre-filled.',
     ],
   },
   {
     version: '3.14.52',
     date: '2026-06-30',
     changes: [
-      'KI-Batchlauf ("KI bewerten"): zeigt jetzt Live-Fortschritt im Button ("KI: 3/27") statt nur einem statischen "KI läuft…" — Backend streamt Fortschritt per SSE, Kanban aktualisiert sich nach jeder Bewertung.',
+      'AI batch run ("AI assess"): now shows live progress in the button ("AI: 3/27") instead of just a static "AI running…" — the backend streams progress via SSE, the Kanban view updates after every assessment.',
     ],
   },
   {
     version: '3.14.51',
     date: '2026-06-30',
     changes: [
-      'KI-Einstellungen: Modellauswahl-Chips für Groq, Gemini, Anthropic, OpenAI waren bisher nur in der ungenutzten AiSettingsModal-Komponente implementiert — App.tsx rendert tatsächlich SettingsModal. Chip-Auswahl jetzt dort eingebaut, totes AiSettingsModal.tsx entfernt.',
-      'KI-Bewertung im Bewerbungsmodal: Kanban-Ansicht und Bewerbungsliste aktualisieren sich jetzt sofort nach "Neu bewerten" (onSaved() wurde nicht aufgerufen).',
+      'AI settings: model-selection chips for Groq, Gemini, Anthropic, OpenAI had so far only been implemented in the unused AiSettingsModal component — App.tsx actually renders SettingsModal. Chip selection is now built in there, dead AiSettingsModal.tsx removed.',
+      'AI assessment in the application modal: the Kanban view and applications list now update immediately after "reassess" (onSaved() wasn\'t being called).',
     ],
   },
   {
     version: '3.14.50',
     date: '2026-06-30',
     changes: [
-      'KI-Einstellungen: Modellauswahl-Chips für Groq, Gemini, Anthropic, OpenAI — Modelle jetzt direkt im Provider-Array statt in separatem Dictionary (robusterer Lookup).',
+      'AI settings: model-selection chips for Groq, Gemini, Anthropic, OpenAI — models now live directly in the provider array instead of a separate dictionary (more robust lookup).',
     ],
   },
   {
     version: '3.14.49',
     date: '2026-06-30',
     changes: [
-      'KI: Modelle die kein JSON-Modus unterstützen oder nicht existieren geben jetzt eine klare Fehlermeldung (400) statt einen rohen 502-Stacktrace.',
+      'AI: models that don\'t support JSON mode or don\'t exist now return a clear error message (400) instead of a raw 502 stack trace.',
     ],
   },
   {
     version: '3.14.48',
     date: '2026-06-30',
     changes: [
-      'KI-Bewertung: UI-Refresh nach "Neu bewerten" funktioniert jetzt — Felder werden direkt aus der API-Antwort in den lokalen State geschrieben, kein zweiter GET-Request mehr.',
+      'AI assessment: the UI refresh after "reassess" now works — fields are written directly from the API response into local state, no more second GET request.',
     ],
   },
   {
     version: '3.14.47',
     date: '2026-06-30',
     changes: [
-      'KI-Einstellungen: Modellauswahl-Fix — IIFE-Pattern durch saubere Variablen ersetzt (providerModels/isKnownModel).',
+      'AI settings: model-selection fix — replaced an IIFE pattern with clean variables (providerModels/isKnownModel).',
     ],
   },
   {
     version: '3.14.46',
     date: '2026-06-30',
     changes: [
-      'KI-Optionen: Rate-Limit und Auth-Fehler werden verständlich angezeigt (nicht mehr als roher JSON-Blob).',
+      'AI options: rate-limit and auth errors are now shown in an understandable way (no longer as a raw JSON blob).',
     ],
   },
   {
     version: '3.14.45',
     date: '2026-06-30',
     changes: [
-      'KI-Batch: 5 Sekunden Pause zwischen Anfragen bei Gemini/Groq — verhindert Rate-Limit-Fehler. Jede Bewerbung wird direkt nach Bewertung gespeichert.',
-      'Rate-Limit-Fehler (429) werden im Modal verständlich angezeigt statt als 502.',
+      'AI batch: 5-second pause between requests for Gemini/Groq — prevents rate-limit errors. Each application is saved right after being assessed.',
+      'Rate-limit errors (429) are now shown understandably in the modal instead of as a 502.',
     ],
   },
   {
     version: '3.14.44',
     date: '2026-06-30',
     changes: [
-      'KI-Einstellungen: Modellauswahl per Chip für Groq (5 Modelle), Gemini (5 Modelle), Anthropic und OpenAI — analog Ollama. Ausgewähltes Modell wird unterhalb als ID angezeigt.',
+      'AI settings: chip-based model selection for Groq (5 models), Gemini (5 models), Anthropic, and OpenAI — same as Ollama. The selected model is shown below as an ID.',
     ],
   },
   {
     version: '3.14.43',
     date: '2026-06-30',
     changes: [
-      'KI-Einschätzung: neues Feld "Begründung" erklärt warum die Erfolgschance so bewertet wurde (konkrete Fakten aus der Timeline).',
-      'KI-Absageanalyse: Bei abgesagten Bewerbungen explizit aufgerufen → analysiert Absagegründe + Optimierungsvorschläge für zukünftige Bewerbungen.',
-      'Batch-Bewertung überspringt abgesagte Bewerbungen (main_status=rejected).',
+      'AI assessment: new "reasoning" field explains why the success chance was rated this way (concrete facts from the timeline).',
+      'AI rejection analysis: called explicitly for rejected applications → analyzes rejection reasons + improvement suggestions for future applications.',
+      'Batch assessment skips rejected applications (main_status=rejected).',
     ],
   },
   {
     version: '3.14.42',
     date: '2026-06-30',
     changes: [
-      'KI-Prompt: Heutiges Datum explizit übergeben. Erfundene Daten/Wochentage verboten. next_step verlangt jetzt 2–4 Sätze mit Situationszusammenfassung + Handlungsempfehlung.',
+      'AI prompt: today\'s date is now passed explicitly. Made-up dates/weekdays are forbidden. next_step now requires 2–4 sentences with a situation summary + recommended action.',
     ],
   },
   {
     version: '3.14.41',
     date: '2026-06-30',
     changes: [
-      'KI-Einschätzung: Timeline-Events werden jetzt vollständig (ungekürzt) an die KI übergeben — E-Mail-Inhalt, Kalendernotizen etc.',
-      'KI-Einschätzung: Erfolgschance wird jetzt explizit als Text angezeigt ("Hoch / Mittel / Niedrig") in Tabelle, Kanban und Modal.',
+      'AI assessment: timeline events are now passed to the AI in full (untruncated) — email content, calendar notes, etc.',
+      'AI assessment: success chance is now explicitly shown as text ("High / Medium / Low") in the table, Kanban, and modal.',
     ],
   },
   {
     version: '3.14.40',
     date: '2026-06-30',
     changes: [
-      'KI-Einschätzung: Prompt schreibt next_step jetzt als Handlungsanweisung (Imperativ) mit echten Zahlen. Verboten: Status-Labels kopieren, E-Mail-Betreff wiederholen, vage Phrasen.',
-      'AI-Logging: Jeder KI-Request und jede Antwort wird mit Kategorie "ai" geloggt (docker logs + Seq).',
+      'AI assessment: the prompt now writes next_step as an imperative action instruction with real numbers. Forbidden: copying status labels, repeating the email subject, vague phrases.',
+      'AI logging: every AI request and response is logged under category "ai" (docker logs + Seq).',
     ],
   },
   {
     version: '3.14.39',
     date: '2026-06-30',
     changes: [
-      'KI-Einschätzung: bewertet jetzt alle Timeline-Events vollständig (chronologisch, inkl. Betreff und Inhalt). Gesprächsnotizen und Kommentar fließen ebenfalls ein.',
+      'AI assessment: now evaluates all timeline events in full (chronologically, including subject and content). Interview notes and the comment field are factored in too.',
     ],
   },
   {
     version: '3.14.38',
     date: '2026-06-30',
     changes: [
-      'KI-Einschätzung: Prompt überarbeitet — berechnet echte Tage, wertet Prozesstiefe (Anzahl Gespräche) und konkrete Timeline aus. Platzierung: im Modal in der Übersicht unten (mit Datum und "Neu bewerten"), in Tabelle/Kanban als Farbpunkt + Text.',
+      'AI assessment: reworked the prompt — computes real day counts, evaluates process depth (number of interviews) and the concrete timeline. Placement: at the bottom of the overview in the modal (with date and "reassess"), as a color dot + text in table/Kanban.',
     ],
   },
   {
     version: '3.14.37',
     date: '2026-06-30',
     changes: [
-      'KI-Einschätzung: Farbe (grün/gelb/rot) und nächster Schritt pro Bewerbung basierend auf Status und Timeline. Wird nach gezieltem Sync automatisch aktualisiert. "KI bewerten"-Button für alle aktiven Bewerbungen im Header; "KI"-Button pro Bewerbung im Modal.',
+      'AI assessment: color (green/yellow/red) and next step per application based on status and timeline. Updates automatically after a targeted sync. "AI assess" button for all active applications in the header; "AI" button per application in the modal.',
     ],
   },
   {
     version: '3.14.36',
     date: '2026-06-30',
     changes: [
-      'Firmenname auf Bewerbungen kommt jetzt aus dem Firmenstammdatensatz (name_display) wenn verknüpft — in Tabelle, Kanban, Bewerbungsmodal, Review und Kontaktansichten.',
+      'The company name on applications now comes from the company master record (name_display) when linked — in table, Kanban, application modal, review, and contact views.',
     ],
   },
   {
     version: '3.14.35',
     date: '2026-06-30',
     changes: [
-      'iCloud-Kontaktsync: importiert nur noch relevante Kontakte — Name/E-Mail muss in Bewerbungsereignissen oder -feldern vorkommen, oder Firma muss zu einer Bewerbung oder einem Firmenprofil passen. Adressbuch-Kontakte ohne Jobbezug werden übersprungen.',
+      'iCloud contact sync: now only imports relevant contacts — name/email must appear in application events or fields, or the company must match an application or a company profile. Address-book contacts with no job connection are skipped.',
     ],
   },
   {
     version: '3.14.34',
     date: '2026-06-30',
     changes: [
-      'Firmen: Checkbox "Alle markieren" (filterbewusst), "X löschen"-Button, Anzahl/Auswahl im Footer — analog Kontakte. Kontakte: "Alle markieren" berücksichtigt jetzt aktive Filter.',
+      'Companies: "select all" checkbox (filter-aware), "delete X" button, count/selection in the footer — same as contacts. Contacts: "select all" now respects active filters.',
     ],
   },
   {
     version: '3.14.33',
     date: '2026-06-30',
     changes: [
-      'Kontakte: Filter "Bewerbungen vorhanden" (Alle / Ja / Nein). Firmen: Filter "Bewerbungen vorhanden" und "Kontakte vorhanden" — client-seitig, ohne Backend-Anfrage.',
+      'Contacts: filter "has applications" (all / yes / no). Companies: filters "has applications" and "has contacts" — client-side, no backend request.',
     ],
   },
   {
     version: '3.14.32',
     date: '2026-06-30',
     changes: [
-      'Firma-Picker beim manuellen Anlegen von Bewerbungen und Kontakten: Firmen-Dropdown mit Suche und "Neu anlegen"-Option — analog zum Bearbeitungsmodus. Kontakte-Tab in Firmenprofil hat jetzt Modus-Umschalter "Neu erstellen" / "Vorhandenen zuordnen".',
+      'Company picker when manually creating applications and contacts: company dropdown with search and a "create new" option — same as edit mode. The contacts tab in a company profile now has a mode switch "create new" / "assign existing".',
     ],
   },
   {
     version: '3.14.31',
     date: '2026-06-30',
     changes: [
-      'Firmensync: Wikipedia REST API als Fallback wenn DDG nichts liefert. Logo-Fallback via Clearbit (domain-basiert). sync_source zeigt an welche Quelle genutzt wurde.',
+      'Company sync: Wikipedia REST API as a fallback when DDG returns nothing. Logo fallback via Clearbit (domain-based). sync_source shows which source was used.',
     ],
   },
   {
     version: '3.14.30',
     date: '2026-06-30',
     changes: [
-      'Cancel-Button für Firmensync und Kontaktverknüpfung — bricht nach dem aktuellen Eintrag graceful ab. Kontaktverknüpfung zeigt jetzt Fortschrittszähler (x/Gesamt).',
+      'Cancel button for company sync and contact linking — aborts gracefully after the current entry. Contact linking now shows a progress counter (x/total).',
     ],
   },
   {
     version: '3.14.29',
     date: '2026-06-30',
     changes: [
-      'Firmensync: Wikidata ersetzt durch DuckDuckGo Instant Answer API — kein Rate-Limit, kein API-Key, kein Warten. Liefert Beschreibung, Logo, HQ, Gründungsjahr, Mitarbeiterzahl und Branche aus Wikipedia-Infoboxen.',
+      'Company sync: replaced Wikidata with the DuckDuckGo Instant Answer API — no rate limit, no API key, no waiting. Provides description, logo, HQ, founding year, employee count, and industry from Wikipedia infoboxes.',
     ],
   },
   {
     version: '3.14.28',
     date: '2026-06-30',
     changes: [
-      'Firmensync: Retry mit Exponential Backoff bei Wikidata 429/503 (bis 4 Versuche, respektiert Retry-After). Search-API-Abstand auf 1s erhöht, SPARQL-Batch-Pause auf 5s.',
+      'Company sync: retry with exponential backoff on Wikidata 429/503 (up to 4 attempts, respects Retry-After). Increased search-API spacing to 1s, SPARQL batch pause to 5s.',
     ],
   },
   {
     version: '3.14.27',
     date: '2026-06-30',
     changes: [
-      'Firmensync: Batch-SPARQL — alle Q-IDs werden erst per Search-API gesammelt (0,3s Abstand), dann in einem einzigen SPARQL-Request abgefragt (bis zu 40 Firmen pro Query). Logo-Downloads parallel (max 3 gleichzeitig). Behebt "Too Many Requests" bei größeren Batches.',
+      'Company sync: batch SPARQL — all Q-IDs are first collected via the search API (0.3s spacing), then queried in a single SPARQL request (up to 40 companies per query). Logo downloads run in parallel (max 3 at once). Fixes "too many requests" on larger batches.',
     ],
   },
   {
     version: '3.14.26',
     date: '2026-06-30',
     changes: [
-      'Firmensync: Logo wird direkt aus Wikidata (P154) geladen und als base64 gespeichert — kein manueller Upload mehr nötig für bekannte Firmen.',
+      'Company sync: the logo is now loaded directly from Wikidata (P154) and stored as base64 — no more manual upload needed for known companies.',
     ],
   },
   {
     version: '3.14.25',
     date: '2026-06-30',
     changes: [
-      'Firmensync: KI entfernt — Daten kommen jetzt aus Wikidata (Search-API + SPARQL). Felder: HQ-Stadt/-Land, Gründungsjahr, Mitarbeiterzahl, Website, LinkedIn-URL, Branche, Beschreibung.',
+      'Company sync: removed AI — data now comes from Wikidata (search API + SPARQL). Fields: HQ city/country, founding year, employee count, website, LinkedIn URL, industry, description.',
     ],
   },
   {
     version: '3.14.24',
     date: '2026-06-30',
     changes: [
-      'Seq-Log: source-Feld pro Sync-Quelle — in Seq nach source = linkedin bzw. source = targeted filtern.',
+      'Seq log: source field per sync source — filter in Seq by source = linkedin or source = targeted.',
     ],
   },
   {
     version: '3.14.23',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Sync: Bewerbungsdatum wird für bestehende Apps nachgefüllt, falls noch nicht gesetzt.',
+      'LinkedIn sync: application date is backfilled for existing apps if not yet set.',
     ],
   },
   {
     version: '3.14.22',
     date: '2026-06-30',
     changes: [
-      'Fix: LI-Sync extrahiert Job-ID aus der gescrapten Stellenanzeige-URL (job["stellenanzeige_url"]) — bisher war job["id"] immer leer, URL-basierter Match schlug deshalb nie an.',
+      'Fix: LI sync extracts the job ID from the scraped job-posting URL (job["stellenanzeige_url"]) — job["id"] was previously always empty, so URL-based matching never fired.',
     ],
   },
   {
     version: '3.14.21',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Sync individuell: scrapt Kategorie für Kategorie und matcht sofort per LI-Job-ID (aus linkedin_job_id oder stellenanzeige_url) bzw. Firma+Rolle — stoppt nach erstem Match, ohne alle anderen Jobs zu verarbeiten.',
+      'Individual LinkedIn sync: scrapes category by category and matches immediately by LI job ID (from linkedin_job_id or stellenanzeige_url) or company+role — stops after the first match without processing all other jobs.',
     ],
   },
   {
     version: '3.14.20',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Sync: Bewerbungs-URL (stellenanzeige_url) wird als LI-Job-ID-Quelle genutzt — Match auch wenn linkedin_job_id noch nicht gesetzt.',
-      'LinkedIn-Sync pro Bewerbung: stoppt sobald die Ziel-Bewerbung gefunden wurde, überspringt alle anderen Jobs.',
+      'LinkedIn sync: the application URL (stellenanzeige_url) is used as an LI job-ID source — matches even when linkedin_job_id isn\'t set yet.',
+      'Per-application LinkedIn sync: stops as soon as the target application is found, skipping all other jobs.',
     ],
   },
   {
     version: '3.14.19',
     date: '2026-06-30',
     changes: [
-      'Sync pro Bewerbung schließt jetzt auch LinkedIn ein — LI läuft parallel, Fortschrittsbalken und Vorschlag-Zähler erscheinen im Modal.',
+      'Per-application sync now also includes LinkedIn — LI runs in parallel, progress bar and suggestion counter appear in the modal.',
     ],
   },
   {
     version: '3.14.18',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Sync: Debug-Excel entfernt — alle Sync-Details (Match-Grund, Kategorie-Zählungen, Paginierung, Fehler) fließen ins strukturierte Log (Seq, Category: sync).',
+      'LinkedIn sync: removed the debug Excel — all sync details (match reason, category counts, pagination, errors) now flow into the structured log (Seq, category: sync).',
     ],
   },
   {
     version: '3.14.17',
     date: '2026-06-30',
     changes: [
-      'LinkedIn-Sync: Match-Grund (job_id / firma+rolle / alias / neu) pro Eintrag im Log sichtbar.',
-      'Wenn ein Status-Vorschlag übersprungen wird (bereits ausstehend / bereits überprüft), steht das jetzt im Log.',
+      'LinkedIn sync: match reason (job_id / company+role / alias / new) visible per entry in the log.',
+      'When a status suggestion is skipped (already pending / already reviewed), it now shows in the log.',
     ],
   },
   {
     version: '3.14.16',
     date: '2026-06-30',
     changes: [
-      'Bewerbung: Firmenname ist kein Freitextfeld mehr — nur Zuordnung aus vorhandenen Firmenprofilen oder Neuanlage (analog Kontakte).',
+      'Application: company name is no longer a free-text field — only assignment from existing company profiles or creating a new one (same as contacts).',
     ],
   },
   {
     version: '3.14.15',
     date: '2026-06-29',
     changes: [
-      'Fix: Firma-Merge aktualisiert jetzt app.firma, zielfirma_bei_hh und contact.firma auf den Gewinner-Namen.',
+      'Fix: company merge now updates app.firma, zielfirma_bei_hh, and contact.firma to the winner\'s name.',
     ],
   },
   {
     version: '3.14.14',
     date: '2026-06-29',
     changes: [
-      'Kontakte: Separate Vorname/Nachname-Felder — Sync erkennt "Mehra, Malvika" und "Malvika Mehra" als dieselbe Person.',
-      'Kontakte: Bearbeitungsmodal (klick auf Zeile) — alle Felder editierbar analog Firmenprofile.',
-      'Kontakte: Bewerbungsformular zeigt Vorname/Nachname als separate Felder.',
+      'Contacts: separate first-/last-name fields — sync recognizes "Mehra, Malvika" and "Malvika Mehra" as the same person.',
+      'Contacts: edit modal (click a row) — all fields editable, same as company profiles.',
+      'Contacts: the application form shows first/last name as separate fields.',
     ],
   },
   {
     version: '3.14.13',
     date: '2026-06-29',
     changes: [
-      'Sync: Domain-basiertes Matching (Mail/Kalender) statt Kontakt-Index — Datum >= Bewerbungsdatum.',
-      'Sync: Kontakte-Sync läuft nach Mail/Cal, sodass Kontakte in neuen Events gefunden werden.',
-      'Sync: iCloud Notes — kein "recent 30"-Fallback mehr, nur noch text-matching.',
-      'Kontakte: E-Mail ist jetzt Pflichtfeld beim Erstellen und Bearbeiten.',
+      'Sync: domain-based matching (mail/calendar) instead of a contact index — date >= application date.',
+      'Sync: contact sync now runs after mail/calendar, so contacts get found in new events.',
+      'Sync: iCloud Notes — no more "recent 30" fallback, text matching only.',
+      'Contacts: email is now a required field when creating and editing.',
     ],
   },
   {
     version: '3.14.12',
     date: '2026-06-29',
     changes: [
-      'Bewerbungsmodal: Kontakte können jetzt entweder neu erstellt oder aus bestehenden Kontakten zugeordnet werden.',
-      'Live-Suche im "Vorhandenen zuordnen"-Modus filtert sofort nach Name, E-Mail oder Firma.',
+      'Application modal: contacts can now either be created fresh or assigned from existing contacts.',
+      'Live search in "assign existing" mode filters immediately by name, email, or company.',
     ],
   },
   {
     version: '3.14.11',
     date: '2026-06-29',
     changes: [
-      'Structured Logging: Loguru ersetzt stdlib logging — JSON auf stdout, alle Logs an Seq weitergeleitet.',
-      'Kategorien: sync, ai, backup, app — in Seq nach Kategorie, Level und Zeitraum filterbar.',
-      'Seq Log-Viewer läuft auf http://localhost:8088',
+      'Structured logging: Loguru replaces stdlib logging — JSON to stdout, all logs forwarded to Seq.',
+      'Categories: sync, ai, backup, app — filterable in Seq by category, level, and time range.',
+      'The Seq log viewer runs at http://localhost:8088',
     ],
   },
   {
     version: '3.14.10',
     date: '2026-06-29',
     changes: [
-      'Detailliertes Sync-Logging: Alle Sync-Quellen (Gmail, GCal, iCloud Mail, iCloud Cal, Notes, Reminders) loggen jetzt per-Item-Entscheidungen im Docker-Log (DEBUG-Level).',
-      'Format: [SYNC #<id> <quelle>] <item-id> → SKIP/CREATED/pending mit Betreff, Absender und Grund.',
+      'Detailed sync logging: all sync sources (Gmail, GCal, iCloud Mail, iCloud Cal, Notes, Reminders) now log per-item decisions to the Docker log (DEBUG level).',
+      'Format: [SYNC #<id> <source>] <item-id> → SKIP/CREATED/pending with subject, sender, and reason.',
     ],
   },
   {
     version: '3.14.9',
     date: '2026-06-29',
     changes: [
-      'Startup-Check: Beim Laden der App werden alle lokalen Bridges (Files, Notes, Calls) und Verbindungen (Google, iCloud, AI, Lokale Dateien) geprüft.',
-      'Fehlende/nicht erreichbare Dienste erscheinen als gelbes Banner mit Details — per Klick aufklappbar, wiederholbar und schließbar.',
+      'Startup check: when the app loads, all local bridges (Files, Notes, Calls) and connections (Google, iCloud, AI, local files) are checked.',
+      'Missing/unreachable services appear as a yellow banner with details — expandable on click, retriable, and dismissible.',
     ],
   },
   {
     version: '3.14.8',
     date: '2026-06-29',
     changes: [
-      'Sync-Menü: Neuer Eintrag „Sync-Events löschen" — entfernt alle automatisch erzeugten Timeline-Einträge einer Bewerbung, ohne einen neuen Sync zu starten.',
+      'Sync menu: new entry "clear sync events" — removes all automatically generated timeline entries for an application without starting a new sync.',
     ],
   },
   {
     version: '3.14.7',
     date: '2026-06-29',
     changes: [
-      'Targeted Sync (Gmail, iCloud Mail, iCloud Cal) fällt nicht mehr auf Firmennamen zurück, wenn keine Kontakte verknüpft sind — dadurch keine Fremd-Mails/-Termine mehr durch mehrdeutige Namen (z.B. „HERE" matcht „there").',
-      'iCloud Mail: Suche jetzt adressbasiert (Kontakt-Domains/-E-Mails statt Firmenname).',
-      'iCloud Cal: Matching jetzt per Organizer/Attendee-E-Mail statt Textsuche im Titel.',
+      'Targeted sync (Gmail, iCloud Mail, iCloud Cal) no longer falls back to the company name when no contacts are linked — eliminates false-positive mails/appointments from ambiguous names (e.g. "HERE" matching "there").',
+      'iCloud Mail: search is now address-based (contact domains/emails instead of company name).',
+      'iCloud Cal: matching is now via organizer/attendee email instead of a text search in the title.',
     ],
   },
   {
     version: '3.14.6',
     date: '2026-06-29',
     changes: [
-      'AI komplett aus dem Sync entfernt: Mails, Kalendereinträge, iCloud-Notizen und Erinnerungen werden jetzt rein deterministisch klassifiziert (Regex-Muster für Typ, Betreffzeile als Titel).',
-      'Kein AI-Fallback mehr bei mehreren gematchten Bewerbungen — der erste Treffer wird verwendet.',
+      'Removed AI from sync entirely: mails, calendar entries, iCloud notes, and reminders are now classified purely deterministically (regex patterns for type, subject line as title).',
+      'No more AI fallback for multiple matched applications — the first match is used.',
     ],
   },
   {
     version: '3.14.5',
     date: '2026-06-29',
     changes: [
-      'Gmail/Kalender-Matching radikal vereinfacht: Mails und Termine werden nur noch anhand von E-Mail-Adressen der verknüpften Kontakte gematcht (exakte Adresse oder Firmendomain) — kein Firmenname-Substring-Matching mehr, das False Positives wie „there" → HERE verursacht hat.',
-      'Globaler Gmail-Sync nutzt jetzt einen domainbasierten Suchfilter statt Firmennamen.',
-      'Neuer Kontakt wird automatisch angelegt, wenn eine neue Adresse aus einer bekannten Firmendomain erkannt wird.',
+      'Radically simplified Gmail/calendar matching: mails and appointments are now matched only by the email addresses of linked contacts (exact address or company domain) — no more company-name substring matching, which caused false positives like "there" → HERE.',
+      'The global Gmail sync now uses a domain-based search filter instead of the company name.',
+      'A new contact is automatically created when a new address from a known company domain is detected.',
     ],
   },
   {
     version: '3.14.4',
     date: '2026-06-29',
     changes: [
-      'Gmail: Abgelaufene/widerrufene OAuth-Token werden jetzt erkannt (invalid_grant). Tokens werden automatisch gelöscht und eine klare Meldung mit Hinweis zum Neu-Verbinden erscheint.',
+      'Gmail: expired/revoked OAuth tokens are now detected (invalid_grant). Tokens are automatically deleted and a clear message with a hint to reconnect appears.',
     ],
   },
   {
     version: '3.14.3',
     date: '2026-06-29',
     changes: [
-      'Sync-Änderungsanzeige: Nach einem Sync werden nicht nur geänderte Bewerbungen markiert, sondern auch die konkreten Felder hervorgehoben (Amber-Hintergrund + Punkt bei Status, Kommentar, Quelle, Gesprächsnotizen, Stellenanzeige, etc.).',
-      'Die Feld-Markierungen verschwinden, sobald die Bewerbung geöffnet wird.',
+      'Sync change indicator: after a sync, not only changed applications are marked, but the specific fields are also highlighted (amber background + dot for status, comment, source, interview notes, job posting, etc.).',
+      'The field highlights disappear as soon as the application is opened.',
     ],
   },
   {
     version: '3.14.2',
     date: '2026-06-29',
     changes: [
-      'Kanban-Layout: Spalten verteilen sich jetzt automatisch über die gesamte Breite — wenige Spalten füllen den Bildschirm gleichmäßig, viele Spalten scrollen horizontal.',
+      'Kanban layout: columns now automatically spread across the full width — few columns fill the screen evenly, many columns scroll horizontally.',
     ],
   },
   {
     version: '3.14.1',
     date: '2026-06-26',
     changes: [
-      'LinkedIn-Nachrichten-Matching korrigiert: Kontaktnamen (aus der Datenbank) werden jetzt als primäres Matching-Signal verwendet — LinkedIn zeigt Personennamen, keine Firmennamen in der Sidebar.',
-      'Fallback: Firmenname im Nachrichtenvorschau-Text (≥ 5 Zeichen) für noch unbekannte Recruiter.',
-      'Threads werden nur bei tatsächlichem Match geöffnet, kein blindes Öffnen aller Konversationen.',
+      'Fixed LinkedIn message matching: contact names (from the database) are now used as the primary matching signal — LinkedIn shows people\'s names, not company names, in the sidebar.',
+      'Fallback: company name in the message-preview text (≥ 5 characters) for recruiters not yet known.',
+      'Threads are only opened on an actual match, no more blindly opening every conversation.',
     ],
   },
   {
     version: '3.14.0',
     date: '2026-06-26',
     changes: [
-      'LinkedIn-Sync in den normalen Sync-Button integriert — läuft jetzt automatisch mit allen anderen Quellen.',
-      'Neue Datenquelle "linkedin_msg": LinkedIn-Nachrichten werden gescraped und als Timeline-Events (Typ: Mail) verknüpft.',
-      '2FA-Eingabe direkt im Sync-Progress-Overlay ohne separaten Dialog.',
-      '"LinkedIn einrichten" im Sync-Dropdown öffnet die Konfiguration (Zugangsdaten, Session-Reset).',
+      'Integrated LinkedIn sync into the normal sync button — now runs automatically with all other sources.',
+      'New data source "linkedin_msg": LinkedIn messages are scraped and linked as timeline events (type: mail).',
+      '2FA entry directly in the sync progress overlay, no separate dialog.',
+      '"Set up LinkedIn" in the sync dropdown opens the configuration (credentials, session reset).',
     ],
   },
   {
     version: '3.13.1',
     date: '2026-06-26',
     changes: [
-      'PDF-Export: Kalendereinträge (Google/iCloud) jetzt vollständig in der Terminübersicht — auch wenn sie vom globalen Sync nicht als "Gespräch" klassifiziert wurden.',
+      'PDF export: calendar entries (Google/iCloud) now fully included in the appointments overview — even when the global sync didn\'t classify them as "interview".',
     ],
   },
   {
     version: '3.13.0',
     date: '2026-06-26',
     changes: [
-      'Sync-Indikator: Neue oder geänderte Bewerbungen werden nach jedem Sync mit einem pulsierenden Punkt markiert.',
-      'Automatisches Öffnen des Prüf-Dialogs wenn nach einem Sync manuelle Aufgaben anfallen.',
-      'Review-Zähler: Wird jetzt nach allen Sync-Arten aktualisiert (Einzel-Sync, Firmen-Sync) + 30s-Polling.',
+      'Sync indicator: new or changed applications get marked with a pulsing dot after every sync.',
+      'Automatically opens the review dialog when manual tasks come up after a sync.',
+      'Review counter: now updates after every kind of sync (per-application, company sync) + 30s polling.',
     ],
   },
   {
     version: '3.12.0',
     date: '2026-06-26',
     changes: [
-      'Bewerbungsmodal: Tabs Übersicht / Verlauf / Anhänge / Kontakte (analog Firmenmodal).',
-      'Verlauf-Tab: Filter nach Zeitraum (1M/3M/6M/1J) und Ereignistyp (Mail, Kalender, Gespräch …).',
-      'Anhänge und Kontakte in eigenen Tabs ausgelagert.',
-      'Breites Modal (max-w-3xl) für mehr Platz.',
+      'Application modal: tabs Overview / Timeline / Attachments / Contacts (same as the company modal).',
+      'Timeline tab: filter by time range (1M/3M/6M/1Y) and event type (mail, calendar, interview …).',
+      'Attachments and contacts moved into their own tabs.',
+      'Wider modal (max-w-3xl) for more room.',
     ],
   },
   {
     version: '3.11.0',
     date: '2026-06-26',
     changes: [
-      'Kontakt-Sync: Alle Firmenkontakte vom Rechner werden importiert und im Kontakttab der Firma angezeigt.',
-      'Bewerbungs-Verknüpfung nur noch wenn Kontakt explizit in Mails, Kalender oder Bewerbungsnotizen erwähnt wird.',
+      'Contact sync: all company contacts from the machine are imported and shown in the company\'s contacts tab.',
+      'Application linking only happens when a contact is explicitly mentioned in mails, calendar, or application notes.',
     ],
   },
   {
     version: '3.10.0',
     date: '2026-06-26',
     changes: [
-      'Firmensync: Sync-Aktionen in einem Dropdown zusammengefasst.',
-      'Sync: aktualisiert nur ausstehende Firmen und solche mit leeren Feldern.',
-      'Re-Sync: setzt alle Firmen zurück und holt alle Daten neu.',
-      '"Fehlgeschlagen zurücksetzen" ist jetzt Teil des Sync-Dropdowns.',
+      'Company sync: sync actions combined into a dropdown.',
+      'Sync: only updates pending companies and ones with empty fields.',
+      'Re-sync: resets all companies and re-fetches all data.',
+      '"Reset failed" is now part of the sync dropdown.',
     ],
   },
   {
     version: '3.9.0',
     date: '2026-06-26',
     changes: [
-      'Firmenfilter in Bewerbungen/Kontakten schließt jetzt auch Tochterunternehmen ein.',
+      'The company filter in applications/contacts now also includes subsidiaries.',
     ],
   },
   {
     version: '3.8.0',
     date: '2026-06-26',
     changes: [
-      'Neu: Bulk-Zuweisung von Muttergesellschaft in der Firmenliste — mehrere Firmen auswählen, Muttergesellschaft suchen und zuordnen.',
+      'New: bulk-assign parent company in the companies list — select multiple companies, search for and assign a parent company.',
     ],
   },
   {
     version: '3.7.0',
     date: '2026-06-26',
     changes: [
-      'Neu: Hierarchische Firmenstruktur — Muttergesellschaft und Tochterunternehmen verknüpfen.',
-      'Firmenprofil: Muttergesellschaft im Bearbeitungsmodus per Suche zuordnen (Zyklenerkennung).',
-      'Firmenprofil: Anzeige von Muttergesellschaft und Tochterunternehmen als klickbare Links.',
-      'Firmenliste: Kleiner "↑ Konzernname"-Hinweis bei Tochterunternehmen.',
+      'New: hierarchical company structure — link parent companies and subsidiaries.',
+      'Company profile: assign a parent company in edit mode via search (cycle detection).',
+      'Company profile: shows the parent company and subsidiaries as clickable links.',
+      'Companies list: a small "↑ parent name" hint on subsidiaries.',
     ],
   },
   {
     version: '3.6.0',
     date: '2026-06-26',
     changes: [
-      'Neu: Firmenfilter mit Autocomplete in Bewerbungs- und Kontaktansicht.',
-      'Neu: Firmenliste → Bewerbungen/Kontakte öffnet direkt den Firmenfilter in der Zielansicht.',
-      'Neu: Kontakte manuell einer Firma zuordnen — aus Kontaktliste und aus Firmenmodal.',
-      'Fix: Fehlende Links zur Firma in der Kontaktliste.',
-      'Fix: Kontakte werden beim Backend-Start automatisch mit Firmenprofilen verknüpft.',
+      'New: company filter with autocomplete in the applications and contacts views.',
+      'New: companies list → applications/contacts opens the company filter directly in the target view.',
+      'New: manually assign contacts to a company — from the contacts list and from the company modal.',
+      'Fix: missing links to the company in the contacts list.',
+      'Fix: contacts are automatically linked to company profiles on backend startup.',
     ],
   },
   {
     version: '3.5.0',
     date: '2026-06-26',
     changes: [
-      'Neu: Firmenmodal mit Tabs (Profil / Bewerbungen / Kontakte) — Kontakte aus verknüpften Bewerbungen.',
-      'Neu: Firmen bearbeiten (Anzeigename, Branche, Typ, Mitarbeiter, Standort, Website, Beschreibung).',
-      'Neu: Firmen zusammenführen — analog Bewerbungen/Kontakte, Feld-für-Feld-Auswahl.',
-      'Neu: Kontaktanzahl in der Firmenliste, Multiselect für Merge.',
+      'New: company modal with tabs (profile / applications / contacts) — contacts from linked applications.',
+      'New: edit companies (display name, industry, type, employees, location, website, description).',
+      'New: merge companies — same as applications/contacts, field-by-field selection.',
+      'New: contact count in the companies list, multi-select for merge.',
     ],
   },
   {
     version: '3.4.1',
     date: '2026-06-26',
     changes: [
-      'Neu: Logo.dev als primäre Logo-Quelle (Einstellungen → Logos). Liefert echte Logos inkl. Headhunter-Agenturen; Google Favicons bleibt als Fallback.',
-      'Neu: Firmenlogos in der Bewerbungstabelle und im Kanban-Board.',
-      'Fix: Firmenlogos in der Firmenliste — Clearbit (abgeschaltet) ersetzt durch Google Favicons.',
+      'New: Logo.dev as the primary logo source (Settings → Logos). Provides real logos including headhunter agencies; Google Favicons remains a fallback.',
+      'New: company logos in the applications table and Kanban board.',
+      'Fix: company logos in the companies list — Clearbit (shut down) replaced with Google Favicons.',
     ],
   },
   {
     version: '3.3.8',
     date: '2026-06-25',
     changes: [
-      'Neu: Backup-Ordner per Ordner-Picker (nativer macOS-Dialog) auswählen.',
-      'Neu: Restore-Button pro Backup — stellt die gesamte Datenbank aus einem Snapshot wieder her.',
+      'New: pick the backup folder via a folder picker (native macOS dialog).',
+      'New: a restore button per backup — restores the entire database from a snapshot.',
     ],
   },
   {
     version: '3.3.7',
     date: '2026-06-25',
     changes: [
-      'Neu: Firmenlogos in der Firmenliste — wird automatisch via Clearbit geladen, Initialen als Fallback.',
-      'Fix: Firmenprofil-Button im Bewerbungsmodal war nie klickbar (company_profile_id fehlte im Detail-Endpoint).',
-      'Fix: "Firmendaten aktualisieren" war nach erstem Sync dauerhaft deaktiviert.',
+      'New: company logos in the companies list — loaded automatically via Clearbit, initials as a fallback.',
+      'Fix: the company-profile button in the application modal was never clickable (company_profile_id was missing from the detail endpoint).',
+      'Fix: "refresh company data" stayed permanently disabled after the first sync.',
     ],
   },
   {
     version: '3.3.6',
     date: '2026-06-25',
     changes: [
-      'Fix: LI-Sync Session-Erkennung — nutzt jetzt /feed statt jobs-tracker als Check-URL, damit abgelaufene Sessions zuverlässig erkannt und neu eingeloggt werden.',
-      'UX: 2FA-Dialog erklärt jetzt App-Bestätigung als primäre Option; Code-Eingabe bleibt als Fallback.',
+      'Fix: LI sync session detection — now uses /feed instead of jobs-tracker as the check URL, so expired sessions are reliably detected and re-logged-in.',
+      'UX: the 2FA dialog now explains app confirmation as the primary option; code entry remains as a fallback.',
     ],
   },
   {
     version: '3.3.5',
     date: '2026-06-25',
     changes: [
-      'Fix: Status-Badge im Firmenprofil nutzt jetzt dieselbe StatusBadge-Komponente wie die Bewerbungsübersicht — identische Farben und Bezeichnungen.',
+      'Fix: the status badge on the company profile now uses the same StatusBadge component as the applications overview — identical colors and labels.',
     ],
   },
   {
     version: '3.3.4',
     date: '2026-06-25',
     changes: [
-      'Fix: LinkedIn-Button unten in der App war sichtbar — wird jetzt ausgeblendet, wenn er als reiner Dropdown-Trigger läuft.',
+      'Fix: the LinkedIn button at the bottom of the app was visible — now hidden when it\'s acting as a pure dropdown trigger.',
     ],
   },
   {
     version: '3.3.3',
     date: '2026-06-25',
     changes: [
-      'Firmenprofil: Bewerbungsliste zeigt jetzt Rolle, Bewerbungsdatum und Status — Firmenname wurde entfernt (redundant).',
+      'Company profile: the applications list now shows role, application date, and status — the company name was removed (redundant).',
     ],
   },
   {
     version: '3.3.2',
     date: '2026-06-25',
     changes: [
-      'UX: LinkedIn-Sync in den Sync-Dropdown integriert — kein separater Button mehr im Header.',
-      'UX: Excel-Export, PDF-Export und Excel-Import in ein "Im/Export"-Dropdown zusammengefasst.',
+      'UX: integrated LinkedIn sync into the sync dropdown — no more separate button in the header.',
+      'UX: combined Excel export, PDF export, and Excel import into one "import/export" dropdown.',
     ],
   },
   {
     version: '3.3.1',
     date: '2026-06-25',
     changes: [
-      'Firmensynchronisation von Analytics auf die Firmen-Seite verschoben — Sync-Button, Fortschrittsbalken und Fehler-Reset direkt in der Firmentabelle.',
+      'Moved company sync from Analytics to the companies page — sync button, progress bar, and error reset directly in the companies table.',
     ],
   },
   {
     version: '3.3.0',
     date: '2026-06-25',
     changes: [
-      'Neu: Firmen-Seite — alle Company Profiles tabellarisch mit Branche, Typ, Größe, Standort und Sync-Status.',
-      'Neu: Firmenprofil-Modal mit allen KI-sync\'ten Daten (Beschreibung, Website, LinkedIn, Gründungsjahr, Mitarbeiterzahl) und verlinkten Bewerbungen.',
-      'Firmennamen überall anklickbar: Tabelle, Kanban-Karten und Bewerbungsmodal öffnen jetzt das Firmenprofil.',
+      'New: companies page — all company profiles in a table with industry, type, size, location, and sync status.',
+      'New: company profile modal with all AI-synced data (description, website, LinkedIn, founding year, employee count) and linked applications.',
+      'Company names clickable everywhere: table, Kanban cards, and the application modal now open the company profile.',
     ],
   },
   {
     version: '3.2.10',
     date: '2026-06-25',
     changes: [
-      'Fix: LinkedIn-Sync erkennt abgelaufene Sessions korrekt — wenn LI auf die Startseite statt /login oder /authwall umleitet, wird jetzt trotzdem neu eingeloggt.',
+      'Fix: LinkedIn sync now correctly detects expired sessions — when LI redirects to the home page instead of /login or /authwall, it now still logs back in.',
     ],
   },
   {
     version: '3.2.9',
     date: '2026-06-25',
     changes: [
-      'Fix: Ollama-Modell-Picker, Auto-Save und host.docker.internal-URL in die KI/API-Einstellungen (SettingsModal) portiert — war zuvor nur im standalone AiSettingsModal implementiert.',
-      'Ollama: Modellauswahl als Chips (installiert) + Download-Liste mit Fortschrittsanzeige. Kein globaler Speichern-Button mehr.',
+      'Fix: ported the Ollama model picker, auto-save, and the host.docker.internal URL into the AI/API settings (SettingsModal) — previously only implemented in the standalone AiSettingsModal.',
+      'Ollama: model selection as chips (installed) + a download list with a progress indicator. No more global save button.',
     ],
   },
   {
     version: '3.2.8',
     date: '2026-06-25',
     changes: [
-      'UX: KI-Einstellungen speichern automatisch — Provider-Wechsel, Modell-Auswahl, Toggle und Textfelder (onBlur) triggern sofort einen Save.',
-      'Kein globaler Speichern-Button mehr; API-Key hat einen eigenen OK-Button. Speicher-Status als Icon im Header.',
+      'UX: AI settings save automatically — provider switch, model selection, toggles, and text fields (onBlur) trigger an immediate save.',
+      'No more global save button; the API key has its own OK button. Save status shown as an icon in the header.',
     ],
   },
   {
     version: '3.2.7',
     date: '2026-06-25',
     changes: [
-      'Fix: Groq-API-Key nicht mehr als Fallback in Ollama-Test-Requests injiziert — Provider-Wechsel testet jetzt den richtigen Anbieter.',
-      'Fix: Ollama-URL-Default ist jetzt host.docker.internal:11434 (statt localhost, das aus dem Container nicht erreichbar ist).',
-      'UX: Speichern-Bestätigung zeigt gespeicherten Anbieter + Modell, Fehler werden sichtbar angezeigt.',
+      'Fix: the Groq API key is no longer injected as a fallback into Ollama test requests — switching providers now tests the correct one.',
+      'Fix: the Ollama URL default is now host.docker.internal:11434 (instead of localhost, which isn\'t reachable from the container).',
+      'UX: the save confirmation shows the saved provider + model, errors are shown visibly.',
     ],
   },
   {
     version: '3.2.6',
     date: '2026-06-25',
     changes: [
-      'Ollama-Modell-Picker: installierte Modelle als klickbare Chips, populäre Modelle mit Download-Button und Fortschrittsbalken.',
-      'Neu: GET /api/settings/ollama/models (Modellliste) + GET /api/settings/ollama/pull (SSE-Stream für Download-Fortschritt).',
+      'Ollama model picker: installed models as clickable chips, popular models with a download button and progress bar.',
+      'New: GET /api/settings/ollama/models (model list) + GET /api/settings/ollama/pull (SSE stream for download progress).',
     ],
   },
   {
     version: '3.2.5',
     date: '2026-06-25',
     changes: [
-      'Firmendaten-Sync jetzt via KI (statt LinkedIn-Scraping) — kein Login nötig, funktioniert mit jedem konfigurierten AI-Anbieter.',
-      'Live-Fortschritt: Fortschrittsbalken und aktuell synchronisierte Firma werden während des Sync angezeigt (Polling alle 1,5 s).',
+      'Company-data sync now runs via AI (instead of LinkedIn scraping) — no login needed, works with any configured AI provider.',
+      'Live progress: a progress bar and the company currently being synced are shown during the sync (polling every 1.5s).',
     ],
   },
   {
     version: '3.2.4',
     date: '2026-06-25',
     changes: [
-      'Fix: Letztes Update zeigt jetzt immer das Datum des letzten Timeline-Eintrags — nicht mehr das Datum der letzten Bearbeitung.',
+      'Fix: "last update" now always shows the date of the most recent timeline entry — no longer the date of the last edit.',
     ],
   },
   {
     version: '3.2.3',
     date: '2026-06-25',
     changes: [
-      'Fix: Firmendaten-Sync — Browser-Flags (--no-sandbox), strukturbasierte LI-Firmenerkennung statt gehashter Klassen, Login-Fallback.',
-      'Firmendaten-Sync: Lock-Reset vor jedem Run (kein "already running" mehr), "fehlgeschlagen zurücksetzen"-Button im Auswertungen-Tab.',
+      'Fix: company-data sync — browser flags (--no-sandbox), structure-based LI company detection instead of hashed classes, login fallback.',
+      'Company-data sync: lock reset before every run (no more "already running"), a "reset failed" button in the analytics tab.',
     ],
   },
   {
     version: '3.2.2',
     date: '2026-06-25',
     changes: [
-      'Interview-Rate aus der Bewerbungsseite entfernt — steht jetzt im Auswertungen-Tab.',
+      'Removed the interview rate from the applications page — now lives in the analytics tab.',
     ],
   },
   {
     version: '3.2.1',
     date: '2026-06-25',
     changes: [
-      'Backfill: Beim Containerstart werden für alle bestehenden Bewerbungen automatisch CompanyProfile-Einträge (pending) angelegt — Firmennamen werden dedupliziert.',
+      'Backfill: on container start, CompanyProfile entries (pending) are automatically created for all existing applications — company names get deduplicated.',
     ],
   },
   {
     version: '3.2.0',
     date: '2026-06-25',
     changes: [
-      'Neu: Auswertungen-Tab — KPI-Kacheln, Conversion-Funnel, Pipeline-Donut, Quellen-Balken, HH-vs-Direkt-Vergleich, Bewerbungen über Zeit, Absagen nach Phase.',
-      'Backend: GET /api/analytics/summary — berechnet alle KPIs, Funnel, Monatsverteilung und Firmenprofil-Sync-Status direkt aus der DB.',
-      'Firmendaten-Sync: POST /api/sync/company/run — startet LinkedIn-Scraping für ausstehende CompanyProfile im Hintergrund (max. 10 pro Run).',
-      'Auto-CompanyProfile: Beim Anlegen/Aktualisieren von Bewerbungen werden Firmennamen automatisch normalisiert und in company_profiles eingetragen (sync_status=pending).',
+      'New: analytics tab — KPI tiles, conversion funnel, pipeline donut, source bars, HH-vs-direct comparison, applications over time, rejections by phase.',
+      'Backend: GET /api/analytics/summary — computes all KPIs, funnel, monthly distribution, and company-profile sync status directly from the DB.',
+      'Company-data sync: POST /api/sync/company/run — starts LinkedIn scraping for pending CompanyProfiles in the background (max 10 per run).',
+      'Auto-CompanyProfile: when creating/updating applications, company names are automatically normalized and entered into company_profiles (sync_status=pending).',
     ],
   },
   {
     version: '3.1.0',
     date: '2026-06-25',
     changes: [
-      'Vorbereitung Auswertungen: Neue DB-Tabelle company_profiles (HQ, Branche, Unternehmenstyp, Mitarbeiterzahl, Gründungsjahr, LinkedIn-URL) für Background-Sync von Firmendaten.',
-      'Applications erhalten company_profile_id und target_company_profile_id (bei HH-Bewerbungen) als FK.',
+      'Groundwork for analytics: new DB table company_profiles (HQ, industry, company type, employee count, founding year, LinkedIn URL) for background company-data sync.',
+      'Applications gain company_profile_id and target_company_profile_id (for headhunter applications) as foreign keys.',
     ],
   },
   {
     version: '3.0.4',
     date: '2026-06-25',
     changes: [
-      'Fix: Stellenbeschreibung LI — TreeWalker findet "About the job"/"Stellenbeschreibung"-Abschnitt direkt, kein Klassen-Matching mehr nötig.',
+      'Fix: LI job description — a TreeWalker now finds the "About the job" section directly, no more class-name matching needed.',
     ],
   },
   {
     version: '3.0.3',
     date: '2026-06-25',
     changes: [
-      'Fix: Beschreibungsextraktor schließt Elemente mit Nav/Header/Footer-Kindknoten aus — verhindert dass Seiten-Chrome als Beschreibung zurückgegeben wird.',
+      'Fix: the description extractor now excludes elements with nav/header/footer child nodes — prevents page chrome from being returned as the description.',
     ],
   },
   {
     version: '3.0.2',
     date: '2026-06-25',
     changes: [
-      'Fix: Stellenbeschreibung in Jobsuche — strukturbasierte DOM-Erkennung statt Klassenname (LI hasht alle CSS-Klassen). Findet den reichsten Inhaltsblock außerhalb von Nav/Header/Footer.',
+      'Fix: job description in job search — structure-based DOM detection instead of class name (LI hashes all CSS classes). Finds the richest content block outside of nav/header/footer.',
     ],
   },
   {
     version: '3.0.1',
     date: '2026-06-25',
     changes: [
-      'Fix: Stellenbeschreibung als HTML rendern — innerHTML statt innerText, dangerouslySetInnerHTML mit Prose-Styling im Frontend.',
+      'Fix: render the job description as HTML — innerHTML instead of innerText, dangerouslySetInnerHTML with prose styling on the frontend.',
     ],
   },
   {
     version: '3.0.0',
     date: '2026-06-25',
     changes: [
-      'Neu: Jobsuche — eigener Tab zum Durchsuchen von Jobportalen direkt aus JobTracker',
-      'LinkedIn-Integration: Suche direkt über die bestehende LI-Session, Ergebnisse mit Firma, Stelle, Ort und Easy-Apply-Kennzeichnung',
-      'Weitere Portale (StepStone, Indeed, Xing, Experteer, Headhunter24, Jobware) per Klick im Browser öffnen — Suchanfrage wird automatisch übertragen',
-      'Mehrere Ergebnisse auswählen und mit einem Klick als Anbahnung in den Jobtracker übernehmen — Duplikate werden erkannt und übersprungen',
-      'Einstellungen › Jobportale: eigene Portale hinzufügen, bearbeiten und aktivieren/deaktivieren',
+      'New: job search — its own tab for searching job boards directly from JobTracker',
+      'LinkedIn integration: search directly via the existing LI session, results with company, role, location, and easy-apply flag',
+      'Open other job boards (StepStone, Indeed, Xing, Experteer, Headhunter24, Jobware) in the browser with one click — the search query is transferred automatically',
+      'Select multiple results and add them as "prospecting" into JobTracker with one click — duplicates are detected and skipped',
+      'Settings › job boards: add, edit, and enable/disable your own boards',
     ],
   },
   {
     version: '2.6.5',
     date: '2026-06-25',
     changes: [
-      'Fix: Kanban-Board nutzt jetzt volle Viewport-Breite (außerhalb max-w-7xl) — Lanes werden nicht mehr abgeschnitten, horizontales Scrollen funktioniert über die ganze Bildschirmbreite.',
-      'Fix: Generische Abteilungs-Mailadressen (career@, jobs@, recruiting@, bewerbung@, hr@ u.a.) werden nicht mehr als Kontakte angelegt und nicht an mehrere Bewerbungen angehängt.',
+      'Fix: the Kanban board now uses the full viewport width (outside max-w-7xl) — lanes no longer get cut off, horizontal scrolling works across the full screen width.',
+      'Fix: generic department email addresses (career@, jobs@, recruiting@, bewerbung@, hr@, and others) are no longer created as contacts and no longer attached to multiple applications.',
     ],
   },
   {
     version: '2.6.3',
     date: '2026-06-25',
     changes: [
-      'PDF-Export: Landscape-Format (A4 quer), breitere Spalten, Überlaufschutz mit Ellipsis',
-      'PDF-Export: Terminübersicht der letzten 4 Wochen (Gespräche & Anrufe) nach der Bewerbungsliste',
-      'Fix: LI-Sync hat stellenanzeige_url bei bestehenden Bewerbungen nicht nachgetragen — wird jetzt beim nächsten Sync befüllt, falls noch leer.',
-      'Fix: LI-Sync Aktionslog zeigte keine Firma/Rolle — werden jetzt korrekt aus der DB-Bewerbung übernommen.',
+      'PDF export: landscape format (A4 sideways), wider columns, overflow protection with ellipsis',
+      'PDF export: an overview of appointments from the last 4 weeks (interviews & calls) after the applications list',
+      'Fix: LI sync wasn\'t backfilling stellenanzeige_url on existing applications — now filled in on the next sync if still empty.',
+      'Fix: the LI sync action log showed no company/role — now correctly taken from the DB application.',
     ],
   },
   {
     version: '2.6.1',
     date: '2026-06-24',
     changes: [
-      'Dokumente als eigener Bereich unterhalb der Timeline — nicht mehr als Timeline-Ereignisse',
-      'Klick auf Datei öffnet sie direkt in der zugehörigen Mac-Anwendung (PDF → Vorschau, DOCX → Word, …)',
-      'Datei-Zeile zeigt Dateiname, Erweiterung und Löschen-Button (erscheint beim Hover)',
+      'Documents as their own section below the timeline — no longer as timeline events',
+      'Clicking a file opens it directly in the associated Mac app (PDF → Preview, DOCX → Word, …)',
+      'The file row shows the filename, extension, and a delete button (appears on hover)',
     ],
   },
   {
     version: '2.6.0',
     date: '2026-06-24',
     changes: [
-      'Backup: automatische und manuelle DB-Sicherung in einen konfigurierbaren Mac-Ordner',
-      'Einstellungen › Backup: Ordner, Frequenz (stündlich bis wöchentlich), Anzahl zu behaltender Backups, "Jetzt sichern"-Button, Liste vorhandener Backups',
-      'Scheduler: Backup läuft automatisch im Hintergrund wenn aktiviert und fällig',
+      'Backup: automatic and manual database backup into a configurable Mac folder',
+      'Settings › Backup: folder, frequency (hourly to weekly), number of backups to keep, "back up now" button, list of existing backups',
+      'Scheduler: backup runs automatically in the background when enabled and due',
     ],
   },
   {
     version: '2.5.8',
     date: '2026-06-24',
     changes: [
-      'Fix: last_sync wurde nach jedem Sync-Lauf gesetzt, auch wenn 0 Dateien angelegt wurden — dadurch wurden alle Dateien beim nächsten Sync via since-Filter permanent übersprungen. last_sync wird jetzt nur noch gesetzt wenn mindestens eine Datei neu angelegt wurde.',
+      'Fix: last_sync was set after every sync run, even when 0 files had been created — this permanently skipped all files on the next sync via the since filter. last_sync is now only set when at least one file was newly created.',
     ],
   },
   {
     version: '2.5.7',
     date: '2026-06-24',
     changes: [
-      'Fix: DB-Migration setzte main_status bei jedem Container-Neustart auf den alten Wert zurück, wenn die legacy-Spalte "status" noch befüllt war — betroffen war z.B. Contoso AG #119 (manuell auf "beworben" gesetzt, nach Deploy wieder "abgesagt"). Alte Spalte wird jetzt beim ersten Start gedroppt; Migration überschreibt nur noch Zeilen mit NULL-Status.',
+      'Fix: the DB migration reset main_status to its old value on every container restart if the legacy "status" column was still populated — affected e.g. Contoso AG #119 (manually set to "applied", reverted to "rejected" after every deploy). The old column is now dropped on first start; the migration only overwrites rows with a NULL status.',
     ],
   },
   {
     version: '2.5.6',
     date: '2026-06-24',
     changes: [
-      'Auto-Sync Dokumente: Ordner werden jetzt auch nach Stelle disambiguiert — bei mehreren Bewerbungen für die gleiche Firma wird der Ordnername gegen den Rollentitel geprüft (Bsp: "Contoso AG Senior Software Engineer"). Rekursiv: alle Dateien in beliebig tiefen Unterordnern werden erfasst.',
+      'Auto-sync documents: folders are now also disambiguated by role — with multiple applications for the same company, the folder name is checked against the role title (example: "Contoso AG Senior Software Engineer"). Recursive: all files in arbitrarily deep subfolders are captured.',
     ],
   },
   {
     version: '2.5.5',
     date: '2026-06-24',
     changes: [
-      'Auto-Sync Dokumente: Ordner eine Ebene unterhalb des konfigurierten Stammordners werden direkt als Bewerbungsordner behandelt — Ordnername wird gegen Firmennamen gematcht, alle Dateien darin werden als Ereignis (Typ "Datei") angehängt, ohne dateiweise KI/Keyword-Analyse',
+      'Auto-sync documents: folders one level below the configured root folder are treated directly as application folders — the folder name is matched against the company name, all files in it are attached as an event (type "file"), without per-file AI/keyword analysis',
     ],
   },
   {
     version: '2.5.4',
     date: '2026-06-24',
     changes: [
-      'Dokumentensync manuell: Browser startet im konfigurierten Stammordner, erlaubt aber freie Navigation im gesamten Dateisystem (Pfadleiste mit Klick-Navigation, "nach oben"-Pfeil, "↩ Startordner"-Taste)',
-      'Ordner komplett hinzufügen: + Button neben jedem Ordner hängt alle Dateien darin rekursiv an die Bewerbung an',
+      'Manual document sync: the browser starts in the configured root folder but allows free navigation across the whole file system (path bar with click navigation, an "up" arrow, a "↩ home folder" key)',
+      'Add an entire folder: a + button next to every folder attaches all files in it recursively to the application',
     ],
   },
   {
     version: '2.5.3',
     date: '2026-06-24',
     changes: [
-      'Audit-Log: SQLite-Trigger fängt jede main_status-Änderung auf DB-Ebene ab — auch wenn der Python-Codepfad keinen Eintrag erzeugt (Eintrag erscheint dann mit source="db_trigger")',
-      'Modal: Speichern überträgt nur tatsächlich geänderte Felder, verhindert ungewolltes Überschreiben des Status durch veralteten Modal-Zustand',
-      'Merge: Statusänderung durch field_overrides wird jetzt explizit als status_change geloggt',
+      'Audit log: a SQLite trigger catches every main_status change at the DB level — even when the Python code path doesn\'t create an entry (the entry then appears with source="db_trigger")',
+      'Modal: saving now only sends actually changed fields, preventing an unwanted status overwrite from stale modal state',
+      'Merge: a status change via field_overrides is now explicitly logged as status_change',
     ],
   },
   {
     version: '2.5.2',
     date: '2026-06-24',
     changes: [
-      'Dokumentensync: Auto-Sync gleicht Dateien jetzt anhand des direkten Unterordners im Dokumenten-Stammordner ab (nicht mehr anhand des unmittelbaren Elternordners)',
-      'Dokumentensync: Manueller Sync — neuer "Dokument hinzufügen"-Button im Sync-Menü jeder Bewerbung öffnet einen Datei-Browser mit Ordnernavigation unterhalb des konfigurierten Stammordners',
-      'Files Bridge: neue Endpoints /browse (Ordner-/Dateiliste ohne Textextraktion) und /file (einzelne Datei mit Textinhalt)',
+      'Document sync: auto-sync now matches files by the direct subfolder in the documents root folder (no longer by the immediate parent folder)',
+      'Document sync: manual sync — a new "add document" button in every application\'s sync menu opens a file browser with folder navigation below the configured root folder',
+      'Files bridge: new endpoints /browse (folder/file list without text extraction) and /file (a single file with text content)',
     ],
   },
   {
     version: '2.5.1',
     date: '2026-06-24',
     changes: [
-      'LI-Sync: "No longer accepting applications" und "Stelle nicht mehr verfügbar" werden ignoriert — diese Meldungen betreffen den Status der Stellenanzeige, nicht den eigenen Bewerberstatus im Tracker',
+      'LI sync: "No longer accepting applications" and "position no longer available" are now ignored — these messages refer to the job posting\'s status, not the applicant\'s own status in the tracker',
     ],
   },
   {
     version: '2.5.0',
     date: '2026-06-24',
     changes: [
-      'Audit-Log: vollständiges Änderungsprotokoll für alle Bewerbungen — wann, durch wen (Quelle) und warum wurde was geändert',
-      'Erfasst: Statusänderungen (manuell + via PendingMatch), Anlegen, Löschen, Zusammenführen, Excel-Import, LI-Sync-Neuanlage',
-      'Log-Stufe in den Einstellungen wählbar: Aus / Normal (Standardwert) / Ausführlich (+ alle Feldänderungen)',
-      'Audit-Log-Button im Header (Klemmbrett-Symbol) öffnet globale Ansicht mit Filtern nach Bewerbung und Pagination',
+      'Audit log: a complete change log for all applications — when, by whom (source), and why something was changed',
+      'Records: status changes (manual + via PendingMatch), create, delete, merge, Excel import, LI-sync creation',
+      'Log level selectable in Settings: off / normal (default) / verbose (+ all field changes)',
+      'An audit-log button in the header (clipboard icon) opens a global view with filters by application and pagination',
     ],
   },
   {
     version: '2.4.7',
     date: '2026-06-24',
     changes: [
-      'Fix: Normaler Sync erstellte bei jeder neuen Absage-E-Mail einen neuen Review-Vorschlag — fehlender already_reviewed-Check (analog zum LI-Sync-Fix) in _save_deterministic_event, process_item (AI-Pfad) und save_classified_event; Absage-Vorschläge pro App+Zielstatus werden jetzt nach einmaliger Review-Entscheidung nicht mehr neu erstellt',
+      'Fix: a normal sync created a new review suggestion for every new rejection email — a missing already_reviewed check (same as the LI-sync fix) in _save_deterministic_event, process_item (the AI path), and save_classified_event; rejection suggestions per app+target-status are no longer recreated after a one-time review decision',
     ],
   },
   {
     version: '2.4.6',
     date: '2026-06-24',
     changes: [
-      'Fix: LI-Sync legte neue Bewerbungen aus der Archiviert-Kategorie direkt als "Abgesagt" an — jetzt werden sie als "Beworben" angelegt und ein Review-Vorschlag erstellt (betrifft auch status_hint="rejected" bei Neu-Anlage)',
+      'Fix: LI sync created new applications from the archived category directly as "rejected" — they\'re now created as "applied" with a review suggestion (also affects status_hint="rejected" on creation)',
     ],
   },
   {
     version: '2.4.5',
     date: '2026-06-24',
     changes: [
-      'Syncs ändern Bewerbungsstatus nie mehr automatisch — alle Statusvorschläge (normaler Sync, gezielter Sync, LI-Sync) landen in der manuellen Review-Queue (PendingMatch); gezielter Sync hat diese Logik jetzt ebenfalls (war vorher still ignoriert)',
+      'Syncs never automatically change application status anymore — all status suggestions (normal sync, targeted sync, LI sync) land in the manual review queue (PendingMatch); targeted sync now has this logic too (it was previously silently ignored)',
     ],
   },
   {
     version: '2.4.4',
     date: '2026-06-24',
     changes: [
-      'Fix: Gezielter Sync (Sync-Button im Modal) berücksichtigt jetzt Merge-Aliases — E-Mails mit dem alten Firmennamen zusammengeführter Bewerbungen werden korrekt gefunden',
+      'Fix: targeted sync (the sync button in the modal) now respects merge aliases — emails using the old company name of merged applications are now found correctly',
     ],
   },
   {
     version: '2.4.3',
     date: '2026-06-24',
     changes: [
-      'Fix: Checkboxen in Tabellenansicht konnten keine Einträge auswählen — TD-onClick und Input-onChange riefen beide onToggleSelect auf, Auswahl wurde sofort wieder aufgehoben',
+      'Fix: checkboxes in the table view couldn\'t select entries — both the TD onClick and the input onChange called onToggleSelect, immediately undoing the selection',
     ],
   },
   {
     version: '2.4.2',
     date: '2026-06-24',
     changes: [
-      'Fix: Bewerbung wurde nach jedem LI-Sync erneut als "Abgesagt" vorgeschlagen, obwohl der Vorschlag bereits abgelehnt/genehmigt war — jetzt werden bereits reviewte Vorschläge (approved/rejected) pro App+Zielstatus nicht mehr neu angelegt (behebt Contoso AG #119)',
+      'Fix: an application was suggested as "rejected" again after every LI sync, even though the suggestion had already been rejected/approved — already-reviewed suggestions (approved/rejected) per app+target-status are no longer recreated (fixes Contoso AG #119)',
     ],
   },
   {
     version: '2.4.1',
     date: '2026-06-24',
     changes: [
-      'Abgesagte Bewerbungen: erscheinen beim Einblenden in der Spalte ihres letzten aktiven Status (kein separates "Abgesagt"-Spalte mehr) — rot markiert (Rahmen, Durchstreichung, Hintergrund) sowohl in Kanban als auch Tabelle',
-      'Merge-Funktion: Bewerbungen und Kontakte zusammenführen — 2+ Einträge auswählen (Tabelle: Checkboxen), Merge-Dialog zeigt Felder nebeneinander, pro Feld auswählen welcher Wert übernommen wird; Ereignisse und Kontakte werden automatisch zusammengeführt',
-      'Merge-Alias: nach dem Mergen werden die alten Bezeichnungen gespeichert — zukünftige Syncs (LI und normal) erkennen die ursprünglichen Firmen-/Stellennamen und legen keine Duplikate mehr an',
-      'LinkedIn-Sync: Fortschrittsanzeige pro Stufe — während Scraping: Seite X — Y gefunden pro Kategorie; nach jeder Kategorie: Treffer-Tabelle mit Zählern; während Verarbeitung: Fortschrittsbalken X/Y',
-      'Fix Duplikaterkennung: Firma + Stelle müssen normalisiert gleich sein (nicht Substring) — GmbH/AG/SE etc. werden ignoriert, Gendermarker (m/w/d) aus Stelle entfernt; gilt für LI-Sync und Excel-Import',
-      'Ghosting bei Abgesagten: auch abgesagte Bewerbungen mit >= 14 Tagen Lücke zwischen Bewerbung und Absage werden als Ghosting markiert; "Nur Ghosting"-Filter lädt jetzt auch abgesagte',
-      'Fix: Ghosting-Filter zeigte keine Einträge — letztes_update wurde in-memory durch Sync-Event (Bewerbung eingereicht, datum=heute) überschrieben bevor Ghosting serialisiert wurde',
-      'Stellenanzeige-URL: neues Feld in Bewerbungsmaske — Link zur Ausschreibung, manuell editierbar; LinkedIn-Sync befüllt es automatisch',
-      'Ghosting: wird jetzt automatisch berechnet (letztes_update > 14 Tage, kein Terminalstatus) — kein manuelles Setzen mehr nötig; neuer "Nur Ghosting"-Filter statusübergreifend',
-      'Abgesagt-Flag: jetzt computed property (main_status == rejected) — keine redundante Checkbox mehr, kein Sync-Aufwand',
-      'Sync-Fix: abgesagte Bewerbungen aus Firmenindex ausgeschlossen — verhindert Cross-Match bei mehreren Bewerbungen derselben Firma (z.B. Contoso AG)',
-      'LinkedIn-Sync: Parsing auf Firma·Ort-Anker umgestellt — findet alle Einträge unabhängig davon ob eine Notiz vorhanden ist (behebt fehlende Interview-Einträge)',
+      'Rejected applications: now appear, when shown, in the column of their last active status (no more separate "rejected" column) — marked in red (border, strikethrough, background) in both Kanban and table',
+      'Merge feature: merge applications and contacts — select 2+ entries (table: checkboxes), the merge dialog shows fields side by side, choose per field which value to keep; events and contacts are merged automatically',
+      'Merge alias: after merging, the old names are saved — future syncs (LI and normal) recognize the original company/role names and no longer create duplicates',
+      'LinkedIn sync: progress display per stage — during scraping: page X — Y found per category; after each category: a results table with counts; during processing: a progress bar X/Y',
+      'Fixed duplicate detection: company + role must be normalized-equal (not a substring) — GmbH/AG/SE etc. are ignored, gender markers (m/w/d) removed from the role; applies to LI sync and Excel import',
+      'Ghosting for rejected applications: rejected applications with a >= 14-day gap between application and rejection are now also marked as ghosting; the "ghosting only" filter now also loads rejected ones',
+      'Fix: the ghosting filter showed no entries — letztes_update was overwritten in-memory by a sync event (application submitted, date=today) before ghosting was serialized',
+      'Job-posting URL: a new field on the application form — a link to the posting, manually editable; LinkedIn sync fills it in automatically',
+      'Ghosting: now computed automatically (letztes_update > 14 days, no terminal status) — no more manual setting needed; a new cross-status "ghosting only" filter',
+      'Rejected flag: now a computed property (main_status == rejected) — no more redundant checkbox, no sync overhead',
+      'Sync fix: rejected applications excluded from the company index — prevents cross-matching with multiple applications at the same company (e.g. Contoso AG)',
+      'LinkedIn sync: switched parsing to a company·location anchor — finds all entries regardless of whether a note is present (fixes missing interview entries)',
     ],
   },
   {
     version: '2.2.0',
     date: '2026-06-23',
     changes: [
-      'LinkedIn-Sync: Komplett-Umstellung auf text-basiertes Parsing (inner_text + "Add note"-Trenner) — ersetzt fragiles JS-DOM-Scraping; liest Firma, Stelle, Ort, Beworben-Datum und Statushinweise direkt aus dem Seitentext',
-      'LinkedIn-Sync: Dedup-Key jetzt Firma + Stelle (statt LinkedIn-Job-ID) — robuster gegen URL-Änderungen',
-      'LinkedIn-Sync: Paginierung vereinfacht — nur noch Next-Button-Klick, kein Scrolling mehr nötig',
+      'LinkedIn sync: fully switched to text-based parsing (inner_text + an "add note" separator) — replaces fragile JS DOM scraping; reads company, role, location, applied date, and status hints directly from the page text',
+      'LinkedIn sync: the dedup key is now company + role (instead of the LinkedIn job ID) — more robust against URL changes',
+      'LinkedIn sync: simplified pagination — just clicking Next now, no more scrolling needed',
     ],
   },
   {
     version: '2.1.0',
     date: '2026-06-17',
     changes: [
-      'Issue #1: Unterschriftsfeld aus PDF-Export entfernt',
-      'Issue #2: Kalender-Änderungserkennung — verschobene/gelöschte Termine werden beim Sync automatisch im Timeline aktualisiert/entfernt (iCloud Kalender + Google Kalender)',
-      'Issue #3: Manuell zuordnen — neuer Button im Sync-Dropdown öffnet Kandidaten-Panel mit Direktzuordnung ohne KI; Konfliktabfrage wenn Eintrag bereits in anderer Bewerbung',
-      'Issue #4: Duplikat-Bereinigung erweitert — Kontakte nach Namen, bewerbungsübergreifende Events per external_id; beide gehen in manuelle Nachbearbeitung statt automatischer Löschung',
-      'Issue #5: Dateianhänge — Anhänge werden im Container gespeichert, im Timeline angezeigt und können heruntergeladen werden; >100 MB geht in manuelle Nachbearbeitung',
-      'Issue #6: Deep Links in Timeline — Gmail, Google Kalender, iCloud Mail/Kalender/Notizen können direkt in der jeweiligen App geöffnet werden (klickbarer Source-Badge)',
-      'Issue #7: Bewerbungsdatum readonly — datum_bewerbung nur noch über Timeline-Ereignis "Bewerbung" setzbar; Änderungen synchronisieren automatisch das Datenbankfeld',
-      'Intern: external_id-Feld auf Event-Tabelle für Deep Links und cross-App-Duplikaterkennung',
+      'Issue #1: removed the signature field from the PDF export',
+      'Issue #2: calendar change detection — moved/deleted appointments are automatically updated/removed in the timeline during sync (iCloud Calendar + Google Calendar)',
+      'Issue #3: manual assign — a new button in the sync dropdown opens a candidates panel with direct assignment, no AI; asks for confirmation on conflict if the entry is already in another application',
+      'Issue #4: extended duplicate cleanup — contacts by name, cross-application events by external_id; both go into manual follow-up instead of automatic deletion',
+      'Issue #5: file attachments — attachments are stored in the container, shown in the timeline, and can be downloaded; >100 MB goes into manual follow-up',
+      'Issue #6: deep links in the timeline — Gmail, Google Calendar, iCloud Mail/Calendar/Notes can be opened directly in the respective app (clickable source badge)',
+      'Issue #7: application date read-only — datum_bewerbung can now only be set via the timeline\'s "application" event; changes automatically sync the database field',
+      'Internal: an external_id field on the event table for deep links and cross-app duplicate detection',
     ],
   },
   {
     version: '2.0.42',
     date: '2026-06-17',
     changes: [
-      'Fix: Alle LinkedIn-Kategorien nutzen jetzt jobs-tracker/?stage= (saved/in-progress/applied/interview/archived) — vollständige Pagination für alle Tabs, keine my-items-URL mehr',
+      'Fix: all LinkedIn categories now use jobs-tracker/?stage= (saved/in-progress/applied/interview/archived) — full pagination for every tab, no more my-items URL',
     ],
   },
   {
     version: '2.0.41',
     date: '2026-06-17',
     changes: [
-      'Fix: Pagination ARCHIVED — Playwright-nativer Click statt JS-evaluate + wait_for_load_state("networkidle") statt Polling; stale_rounds-Schwelle auf 5 erhöht',
-      'Debug: Excel-Export enthält jetzt Sheet "Pagination-Log" mit allen Klick- und Stale-Ereignissen pro Kategorie',
+      'Fix: ARCHIVED pagination — a native Playwright click instead of JS evaluate + wait_for_load_state("networkidle") instead of polling; raised the stale_rounds threshold to 5',
+      'Debug: the Excel export now includes a "pagination log" sheet with every click and stale event per category',
     ],
   },
   {
     version: '2.0.40',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Sync legt keine Duplikate mehr an — jede Bewerbung bekommt beim ersten Sync ihre LinkedIn-Job-ID gespeichert; alle folgenden Syncs matchen primär danach (kein Fuzzy-String-Vergleich mehr nötig)',
+      'Fix: LinkedIn sync no longer creates duplicates — every application gets its LinkedIn job ID saved on the first sync; all following syncs match primarily on that (no more fuzzy string comparison needed)',
     ],
   },
   {
     version: '2.0.39',
     date: '2026-06-17',
     changes: [
-      'Neu: LinkedIn-Sync wendet Statusänderungen nicht mehr direkt an — sie landen als "Status-Vorschlag" in der manuellen Überprüfung (LinkedIn-Icon, Text "LinkedIn meldet Status-Änderung:")',
+      'New: LinkedIn sync no longer applies status changes directly — they land as a "status suggestion" in manual review (LinkedIn icon, text "LinkedIn reports a status change:")',
     ],
   },
   {
     version: '2.0.38',
     date: '2026-06-17',
     changes: [
-      'Fix: Interviews-Tab — Kontext-Extraktion begrenzt auf 500 Zeichen pro Karte, verhindert dass alle Stellen einer Seite als Kontext einer einzelnen Stelle übernommen werden (führte zu falscher Firma und Schein-Duplikaten)',
+      'Fix: interviews tab — context extraction limited to 500 characters per card, preventing every posting on a page from being taken as the context of a single posting (was causing the wrong company and fake duplicates)',
     ],
   },
   {
     version: '2.0.37',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper wartet nach "Weiter"-Klick aktiv bis neue Jobs im DOM erscheinen (max. 12 s) — verhindert vorzeitigen Abbruch bei langsamen Seitenübergängen (Archived hatte deshalb zu wenige Ergebnisse)',
-      'Fix: Duplikate zwischen Kategorien eliminiert — erscheint dieselbe Stelle in mehreren Tabs (z. B. Beworben + Interviews), wird nur die höherpriore Kategorie übernommen',
+      'Fix: the LinkedIn scraper now actively waits after clicking "Next" until new jobs appear in the DOM (max 12s) — prevents a premature stop on slow page transitions (this is why Archived had too few results)',
+      'Fix: eliminated duplicates across categories — when the same posting appears in multiple tabs (e.g. Applied + Interviews), only the higher-priority category is kept',
     ],
   },
   {
     version: '2.0.36',
     date: '2026-06-17',
     changes: [
-      'Fix: Interviews-Sync nutzt jetzt die korrekte URL (linkedin.com/jobs-tracker/?stage=interview) statt der ungültigen ?cardType=INTERVIEWS-URL — LinkedIn ignorierte den Parameter und zeigte fälschlicherweise den Saved-Tab',
+      'Fix: the interviews sync now uses the correct URL (linkedin.com/jobs-tracker/?stage=interview) instead of the invalid ?cardType=INTERVIEWS URL — LinkedIn ignored the parameter and wrongly showed the Saved tab',
     ],
   },
   {
     version: '2.0.35',
     date: '2026-06-17',
     changes: [
-      'Debug: LinkedIn-Scraper speichert nach Seitenload das rohe HTML jeder Kategorie nach /tmp/linkedin_capture_CATEGORY.html für Offline-Tests',
+      'Debug: the LinkedIn scraper saves the raw HTML of every category to /tmp/linkedin_capture_CATEGORY.html after page load, for offline testing',
     ],
   },
   {
     version: '2.0.34',
     date: '2026-06-17',
     changes: [
-      'Fix: "database is locked" beim LinkedIn-Sync — busy_timeout auf 60s erhöht; kritische db.commit()-Aufrufe mit Retry-Logik (bis 5 Versuche) abgesichert',
+      'Fix: "database is locked" during LinkedIn sync — raised busy_timeout to 60s; secured critical db.commit() calls with retry logic (up to 5 attempts)',
     ],
   },
   {
     version: '2.0.33',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn Pagination Next-Button per JavaScript gesucht (nicht CSS-Selektor) — funktioniert unabhängig von Locale und LinkedIn-Version',
-      'Fix: Job-Extraktion erkennt jetzt auch /jobs/collections/, /jobs/detail/ und data-job-id-Attribute — deckt Interview-Tab-Links ab',
+      'Fix: the LinkedIn pagination Next button is now found via JavaScript (not a CSS selector) — works regardless of locale and LinkedIn version',
+      'Fix: job extraction now also recognizes /jobs/collections/, /jobs/detail/, and data-job-id attributes — covers interview-tab links',
     ],
   },
   {
     version: '2.0.32',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper paginiert APPLIED/SAVED/IN_PROGRESS nur Seite 1 (aktuelle Jobs), ARCHIVED und INTERVIEWS alle Seiten — verhindert dass alte archivierte Jobs als "Beworben" erscheinen',
-      'Fix: LinkedIn INTERVIEWS — JS-Extraktion erkennt jetzt auch /jobs/collections/ und andere LI-Job-URL-Typen',
+      'Fix: the LinkedIn scraper only paginates page 1 for APPLIED/SAVED/IN_PROGRESS (current jobs), all pages for ARCHIVED and INTERVIEWS — prevents old archived jobs from showing up as "applied"',
+      'Fix: LinkedIn INTERVIEWS — JS extraction now also recognizes /jobs/collections/ and other LI job URL types',
     ],
   },
   {
     version: '2.0.31',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn INTERVIEWS — JS-Extraktion erkennt jetzt auch /jobs/collections/ und andere LI-Job-URL-Typen (nicht nur /jobs/view/); Interview-Karten verwenden andere Link-Formate',
+      'Fix: LinkedIn INTERVIEWS — JS extraction now also recognizes /jobs/collections/ and other LI job URL types (not just /jobs/view/); interview cards use different link formats',
     ],
   },
   {
     version: '2.0.30',
     date: '2026-06-17',
     changes: [
-      'Fix: SQLite TypeError beim Erstellen neuer LinkedIn-Bewerbungen — datum_bewerbung/letztes_update als date-Objekt statt String übergeben',
+      'Fix: a SQLite TypeError when creating new LinkedIn applications — datum_bewerbung/letztes_update passed as a date object instead of a string',
     ],
   },
   {
     version: '2.0.29',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper wartet auf ersten Job-Link im DOM (wait_for_selector) bevor JS läuft — LinkedIn rendert Interview-Karten asynchron, daher wurden nur 1 von 6 gefunden',
+      'Fix: the LinkedIn scraper now waits for the first job link in the DOM (wait_for_selector) before running JS — LinkedIn renders interview cards asynchronously, so only 1 of 6 were being found',
     ],
   },
   {
     version: '2.0.28',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn ARCHIVED/INTERVIEWS nutzen Seitenpaginierung (1/2/3/Next), kein Infinite Scroll — Scraper klickt jetzt "Next"-Button durch bevor er scrollt',
+      'Fix: LinkedIn ARCHIVED/INTERVIEWS use page-based pagination (1/2/3/Next), not infinite scroll — the scraper now clicks through the "Next" button before scrolling',
     ],
   },
   {
     version: '2.0.27',
     date: '2026-06-17',
     changes: [
-      'Debug: LinkedIn-Scraper loggt nach Seitenload alle Buttons, scrollbare Container und Seitenhöhe; nach jedem Scroll-Versuch DOM-Höhe und Job-Link-Anzahl — sichtbar im Sync-Log',
+      'Debug: after page load, the LinkedIn scraper logs all buttons, scrollable containers, and page height; after every scroll attempt, DOM height and job-link count — visible in the sync log',
     ],
   },
   {
     version: '2.0.26',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper Scroll — echte Mausrad-Events (page.mouse.wheel) nach scrollIntoView statt End-Taste; triggert LinkedIn IntersectionObserver zuverlässig; stale-Toleranz auf 5 Runden erhöht (war 3)',
+      'Fix: LinkedIn scraper scroll — real mouse-wheel events (page.mouse.wheel) after scrollIntoView instead of the End key; reliably triggers LinkedIn\'s IntersectionObserver; raised the stale tolerance to 5 rounds (was 3)',
     ],
   },
   {
     version: '2.0.25',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper — Scroll nutzt jetzt scrollIntoView auf letztem Job-Card + End-Taste; funktioniert auf "My Jobs"-Seite unabhängig vom Container-Layout',
+      'Fix: LinkedIn scraper — scroll now uses scrollIntoView on the last job card + the End key; works on the "My Jobs" page regardless of container layout',
     ],
   },
   {
     version: '2.0.24',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper — Firmenname zeigte ", Verified" wenn Badge-Text nach Normalisierung leer wurde (ln_norm-Filter ergänzt)',
-      'Fix: LinkedIn-Scraper — Scroll trifft jetzt die interne List-Div statt window (LinkedIn lazy-lädt über Container-scrollTop)',
-      'Fix: Debug-Excel — Raw-Context-Spalte war leer (_raw_context fehlte im raw-Dict)',
+      'Fix: LinkedIn scraper — company name showed ", Verified" when the badge text became empty after normalization (added an ln_norm filter)',
+      'Fix: LinkedIn scraper — scroll now targets the internal list div instead of window (LinkedIn lazy-loads via the container\'s scrollTop)',
+      'Fix: debug Excel — the raw-context column was empty (_raw_context was missing from the raw dict)',
     ],
   },
   {
     version: '2.0.23',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper — Set-basiertes Stale-Tracking (all_dom_ids) ersetzt dom_count; funktioniert auch bei Virtual Scrolling',
-      'Fix: Datumsextraktion — JS-Extractor ohne \\n-Bedingung, aria-label-Fallback, Raw-Context als letzter Fallback',
-      'Debug: Raw-Context-Spalte im Debug-Excel zeigt was der Scraper aus dem DOM liest',
+      'Fix: LinkedIn scraper — set-based stale tracking (all_dom_ids) replaces dom_count; also works with virtual scrolling',
+      'Fix: date extraction — the JS extractor without a \\n condition, an aria-label fallback, raw context as a last resort',
+      'Debug: the raw-context column in the debug Excel shows what the scraper reads from the DOM',
     ],
   },
   {
     version: '2.0.22',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Scraper scrollt jetzt alle Seiten durch — stale-Erkennung basiert auf DOM-Elementanzahl statt eindeutiger neuer Jobs; scrollTo(scrollHeight) statt scrollBy(800px); "Show more results"-Button wird geklickt',
+      'Fix: the LinkedIn scraper now scrolls through all pages — stale detection is based on the DOM element count instead of unique new jobs; scrollTo(scrollHeight) instead of scrollBy(800px); the "show more results" button gets clicked',
     ],
   },
   {
     version: '2.0.21',
     date: '2026-06-17',
     changes: [
-      'Feature: LinkedIn Debug-Excel nach Sync — alle gefundenen Stellen mit LI Job-ID, Firma, Rolle, Datum, Kategorie, Status-Hint und DB-Aktion; Sheet "Kategorien" zeigt Trefferanzahl pro LI-Kategorie',
+      'Feature: a LinkedIn debug Excel after sync — every posting found with LI job ID, company, role, date, category, status hint, and DB action; a "categories" sheet shows match counts per LI category',
     ],
   },
   {
     version: '2.0.20',
     date: '2026-06-17',
     changes: [
-      'Fix: LinkedIn-Datumserkennung für bare "m" (2m, 3m, 4m, 5m ago) — sowohl Zeilenfilter als auch Parser ergänzt (mo? deckt m und mo ab)',
+      'Fix: LinkedIn date detection for bare "m" (2m, 3m, 4m, 5m ago) — added to both the line filter and the parser (mo? covers m and mo)',
     ],
   },
   {
     version: '2.0.19',
     date: '2026-06-17',
     changes: [
-      'Fix: Bewerbungsdatum in Tabellenansicht — wird jetzt automatisch aus dem frühesten bewerbung-Event abgeleitet wenn DB-Feld leer ist (trifft v.a. LinkedIn-Einträge)',
+      'Fix: application date in the table view — now automatically derived from the earliest "application" event when the DB field is empty (mostly affects LinkedIn entries)',
     ],
   },
   {
     version: '2.0.18',
     date: '2026-06-16',
     changes: [
-      'Feature: PDF-Export "Nachweis der Eigenbemühungen" für die Bundesagentur für Arbeit — Bewerbungen ab 01.02.2026 als strukturierte Liste mit Kopfzeile, Fußzeile und Unterschriftsfeld',
+      'Feature: PDF export "proof of independent job-search efforts" for the German Federal Employment Agency — applications from 2026-02-01 onward as a structured list with a header, footer, and signature field',
     ],
   },
   {
     version: '2.0.17',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Sync — Archived-Einträge wurden durch geteiltes seen_ids-Set mit früheren Kategorien überschrieben; jetzt pro Kategorie isoliert (ARCHIVED schlägt APPLIED korrekt)',
+      'Fix: LinkedIn sync — archived entries were being overwritten by a seen_ids set shared with earlier categories; now isolated per category (ARCHIVED correctly beats APPLIED)',
     ],
   },
   {
     version: '2.0.16',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Scraper — Firma/Rolle-Verwechslung durch ", Verified"-Badge behoben; Datum-Parsing für Kurzformat (6d/2w/1mo) ergänzt',
+      'Fix: LinkedIn scraper — fixed a company/role mix-up caused by the ", Verified" badge; added date parsing for the short format (6d/2w/1mo)',
     ],
   },
   {
     version: '2.0.15',
     date: '2026-06-16',
     changes: [
-      'Fix: Kalendertermine schlagen keine Statusänderungen mehr in der Prüfung vor — Termine sind Einträge, keine Status-Kommunikation',
+      'Fix: calendar appointments no longer suggest status changes in review — appointments are entries, not status communication',
     ],
   },
   {
     version: '2.0.14',
     date: '2026-06-16',
     changes: [
-      'Feature: Nächster Schritt — intelligentes berechnetes Feld in Tabelle und Kanban (zukünftige Termine, Feedback-Status, Ghosting-Warnung, Stage-basierte Empfehlung)',
+      'Feature: "next step" — a smart computed field in the table and Kanban (upcoming appointments, feedback status, ghosting warning, stage-based recommendation)',
     ],
   },
   {
     version: '2.0.13',
     date: '2026-06-16',
     changes: [
-      'Fix: Letztes Update ignoriert jetzt zukünftige Termine — zeigt die letzte tatsächliche Aktivität, nicht den nächsten geplanten Termin',
+      'Fix: "last update" now ignores future appointments — shows the last actual activity, not the next scheduled appointment',
     ],
   },
   {
     version: '2.0.12',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Archived → Abgesagt jetzt für alle Stages (nicht nur Früh-Phase) — unabhängig vom bisherigen Status',
+      'Fix: LinkedIn Archived → Rejected now applies to all stages (not just the early phase) — regardless of the previous status',
     ],
   },
   {
     version: '2.0.11',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Scraper — neuer JS-basierter Ansatz für LinkedIn-Job-Extraktion (layout-stabil, Cookie-Consent wird automatisch weggedrückt)',
+      'Fix: LinkedIn scraper — a new JS-based approach for LinkedIn job extraction (layout-stable, cookie consent gets automatically dismissed)',
     ],
   },
   {
     version: '2.0.10',
     date: '2026-06-16',
     changes: [
-      'Feature: LinkedIn 2FA inline — App-Push-Notification oder Code aus E-Mail/SMS direkt im App eingeben',
+      'Feature: LinkedIn 2FA inline — enter an app push notification or a code from email/SMS directly in the app',
     ],
   },
   {
     version: '2.0.9',
     date: '2026-06-16',
     changes: [
-      'UX: Einstellungen auf Sidebar-Layout umgestellt — skaliert sauber auf viele Tabs',
-      'Feature: LinkedIn-Tab in Einstellungen — Konfiguration und Sync direkt dort',
+      'UX: switched Settings to a sidebar layout — scales cleanly with many tabs',
+      'Feature: a LinkedIn tab in Settings — configuration and sync right there',
     ],
   },
   {
     version: '2.0.8',
     date: '2026-06-16',
     changes: [
-      'Feature: LinkedIn Sync zeigt nach Abschluss ein detailliertes Aktionslog (Neu / Abgesagt / Aktualisiert)',
-      'Fix: LinkedIn-Archiv-Einträge werden jetzt korrekt als Absage markiert (abgesagt=true, Status=rejected) wenn Bewerbung noch in Früh-Phase (beworben/prospecting)',
+      'Feature: LinkedIn sync shows a detailed action log after completion (new / rejected / updated)',
+      'Fix: LinkedIn archive entries are now correctly marked as rejected (abgesagt=true, status=rejected) when the application is still in an early phase (applied/prospecting)',
     ],
   },
   {
     version: '2.0.7',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Login — networkidle durch domcontentloaded ersetzt (LinkedIn erreicht nie networkidle wegen Background-Requests)',
+      'Fix: LinkedIn login — replaced networkidle with domcontentloaded (LinkedIn never reaches networkidle because of background requests)',
     ],
   },
   {
     version: '2.0.6',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Login — warte auf networkidle statt domcontentloaded, dann explizit auf #username mit 10s Timeout',
+      'Fix: LinkedIn login — wait for networkidle instead of domcontentloaded, then explicitly for #username with a 10s timeout',
     ],
   },
   {
     version: '2.0.5',
     date: '2026-06-16',
     changes: [
-      'Perf: Playwright-Chromium in separates Docker-Base-Image ausgelagert — wird nur neu gebaut wenn sich Playwright-Version oder Dockerfile.playwright-base ändert',
-      'Perf: Normale Deploys überspringen Chromium-Download komplett (~10 min gespart)',
+      'Perf: moved Playwright Chromium into a separate Docker base image — only rebuilt when the Playwright version or Dockerfile.playwright-base changes',
+      'Perf: normal deploys now skip the Chromium download entirely (~10 min saved)',
     ],
   },
   {
     version: '2.0.4',
     date: '2026-06-16',
     changes: [
-      'Fix: LinkedIn Login-Timeout — warte explizit auf React-Formular-Hydration bevor Felder befüllt werden',
+      'Fix: LinkedIn login timeout — now explicitly waits for React form hydration before filling in fields',
     ],
   },
   {
     version: '2.0.3',
     date: '2026-06-16',
     changes: [
-      'Perf: Sync-Quellen laden bereits indizierte IDs einmalig in ein Set statt pro Element eine DB-Query',
-      'Perf: Fortschritts-Updates nur alle 10 Elemente statt jeden Schritt (weniger DB-Writes)',
-      'Perf: is_synced-Check in gcal/iCloud-Kalender kommt jetzt vor dem Keyword-Filter',
+      'Perf: sync sources now load already-indexed IDs into a set once instead of running a DB query per item',
+      'Perf: progress updates only every 10 items instead of every step (fewer DB writes)',
+      'Perf: the is_synced check in gcal/iCloud calendar now runs before the keyword filter',
     ],
   },
   {
     version: '2.0.2',
     date: '2026-06-16',
     changes: [
-      'Fix: Lokale Dokumente Toggle-Zustand wird jetzt korrekt gespeichert und geladen',
+      'Fix: the local-documents toggle state is now saved and loaded correctly',
     ],
   },
   {
     version: '2.0.1',
     date: '2026-06-16',
     changes: [
-      'Fix: Tab „Dokumente" in Einstellungen war abgeschnitten — Tab-Leiste ist jetzt horizontal scrollbar',
+      'Fix: the "documents" tab in Settings was cut off — the tab bar is now horizontally scrollable',
     ],
   },
   {
     version: '2.0.0',
     date: '2026-06-16',
     changes: [
-      'Neues Sync-System: Deterministische Klassifizierung ersetzt KI für ~90% der Fälle (Kalender, lokale Dateien, Einzel-Firmenzuordnung)',
-      'Hintergrund-Sync: Automatische Indizierung alle 20 Minuten via asyncio-Loop',
-      'Neue Quelle: Lokale Bewerbungsunterlagen (PDF, DOCX, TXT, MD) via files_bridge.py auf Port 9998',
-      'Einstellungen → Tab „Dokumente": Ordnerpfad konfigurieren, Bridge-Status, manueller Sync',
-      'Sync-Steuerung: Neuer Toggle „Lokale Dokumente" im Sync-Steuerungs-Panel',
-      'Leere Firmenzuordnung → sofortige KI-Umgehung statt unnötiger API-Calls',
+      'New sync system: deterministic classification replaces AI for ~90% of cases (calendar, local files, single-company matching)',
+      'Background sync: automatic indexing every 20 minutes via an asyncio loop',
+      'New source: local application documents (PDF, DOCX, TXT, MD) via files_bridge.py on port 9998',
+      'Settings → "documents" tab: configure the folder path, bridge status, manual sync',
+      'Sync control: a new "local documents" toggle in the sync control panel',
+      'An empty company match now immediately skips AI instead of making an unnecessary API call',
     ],
   },
   {
     version: '1.0.8',
     date: '2026-06-14',
     changes: [
-      'Fix: Kurzformen von Firmennamen mit 4–5 Zeichen (z.B. „Opitz") werden jetzt im Suchindex erfasst',
+      'Fix: short forms of company names with 4–5 characters (e.g. "Opitz") are now captured in the search index',
     ],
   },
   {
     version: '1.0.7',
     date: '2026-06-14',
     changes: [
-      'Sync-Steuerung: Google / Apple / LinkedIn gesamt und einzelne Quellen ein-/ausschaltbar',
-      'Neuer Tab „Sync-Steuerung" in den Einstellungen mit Master-Toggles und Unterquellen',
-      'SyncButton überspringt deaktivierte Quellen beim globalen Sync',
+      'Sync control: Google / Apple / LinkedIn can be toggled on/off as a whole and per individual source',
+      'A new "sync control" tab in Settings with master toggles and sub-sources',
+      'SyncButton now skips disabled sources during a global sync',
     ],
   },
   {
     version: '1.0.6',
     date: '2026-06-14',
     changes: [
-      'Apple Notes Sync: Pre-Filter überspringt Notizen ohne Firmennamen-Treffer (kein KI-Call)',
-      'Apple Notes Sync: parallele KI-Calls in Batches à 5 statt sequenziell',
+      'Apple Notes sync: a pre-filter skips notes with no company-name match (no AI call)',
+      'Apple Notes sync: parallel AI calls in batches of 5 instead of sequentially',
     ],
   },
   {
     version: '1.0.5',
     date: '2026-06-13',
     changes: [
-      'Eigener Kontakt wird beim Sync übersprungen (Google-, iCloud- und LinkedIn-Account)',
-      'Google-E-Mail wird nach OAuth gespeichert (Userinfo-API) und als Owner-Adresse erkannt',
-      'googlemail.com ↔ gmail.com werden als gleiche Adresse behandelt',
+      'Your own contact is now skipped during sync (Google, iCloud, and LinkedIn accounts)',
+      'The Google email is saved after OAuth (userinfo API) and recognized as the owner address',
+      'googlemail.com ↔ gmail.com are now treated as the same address',
     ],
   },
   {
     version: '1.0.4',
     date: '2026-06-13',
     changes: [
-      'Kanban: Reihenfolge innerhalb einer Spalte nach letztem Update (neu → alt)',
+      'Kanban: order within a column is now by last update (newest → oldest)',
     ],
   },
   {
     version: '1.0.3',
     date: '2026-06-13',
     changes: [
-      'Kalender-Wochenansicht: feste Spaltenhöhe, jede Tagesspalte scrollt unabhängig',
+      'Calendar week view: fixed column height, each day column scrolls independently',
     ],
   },
   {
     version: '1.0.2',
     date: '2026-06-13',
     changes: [
-      'Kalender zeigt nur echte Termine (Gespräch, gcal, iCloud Cal) – keine Mails, Notizen oder Statuswechsel',
+      'The calendar now shows only real appointments (interview, gcal, iCloud Cal) – no mails, notes, or status changes',
     ],
   },
   {
     version: '1.0.1',
     date: '2026-06-13',
     changes: [
-      'Fix: Sync-Fortschritt zeigte Daten anderer Bewerbungen (z.B. Contoso GmbH statt Fabrikam GmbH)',
+      'Fix: sync progress showed another application\'s data (e.g. Contoso GmbH instead of Fabrikam GmbH)',
     ],
   },
   {
     version: '1.0.0',
     date: '2026-06-13',
     changes: [
-      'Kalender-View: Tag / Arbeitswoche / Woche / Monat (Outlook-Stil)',
-      'Events farbkodiert nach Bewerbungs-Status',
-      'Klick auf Termin öffnet Detail-Modal mit Bewerbungslink',
-      'Backend: GET /api/calendar/events mit Datumsfilter',
-      'Auto-Deploy via GitHub Actions + self-hosted Runner (SSH-Auth)',
+      'Calendar view: day / work week / week / month (Outlook style)',
+      'Events color-coded by application status',
+      'Clicking an appointment opens a detail modal with a link to the application',
+      'Backend: GET /api/calendar/events with a date filter',
+      'Auto-deploy via GitHub Actions + a self-hosted runner (SSH auth)',
     ],
   },
   {
     version: '0.9.0',
     date: '2026-06-13',
     changes: [
-      'GitHub-Repo + CI/CD Pipeline (ruff, tsc, Docker Buildx)',
-      'Technische Architekturdokumentation (docs/ARCHITECTURE.md)',
-      'Projektstand-Dokument aktualisiert und ins docs/-Verzeichnis verschoben',
-      'Alle ruff-Lintfehler behoben (E402, E702, E712, F401, F811, F821)',
+      'GitHub repo + CI/CD pipeline (ruff, tsc, Docker Buildx)',
+      'Technical architecture documentation (docs/ARCHITECTURE.md)',
+      'Updated the project-status doc and moved it into the docs/ directory',
+      'Fixed all ruff lint errors (E402, E702, E712, F401, F811, F821)',
     ],
   },
   {
     version: '0.8.0',
     date: '2026-06-13',
     changes: [
-      'Versionsnummer + Changelog-Modal im Header',
-      'Lifecycle-Bar in Bewerbungsdetail (horizontaler Fortschritt)',
-      'Letztes Update dynamisch aus max(Timeline-Event) berechnet',
-      'Uhrzeit bei Mail-Events in der Timeline (HH:MM Uhr)',
-      'ID als eigene Spalte in Tabelle und Kanban-Karten',
-      'Letztes Update im Kanban unten in den Karten',
+      'Version number + changelog modal in the header',
+      'A lifecycle bar in the application detail view (horizontal progress)',
+      'Last update computed dynamically from max(timeline event)',
+      'Time of day for mail events in the timeline (HH:MM)',
+      'ID as its own column in the table and on Kanban cards',
+      'Last update shown at the bottom of Kanban cards',
     ],
   },
   {
     version: '0.7.0',
     date: '2026-06-12',
     changes: [
-      'Kontaktübersicht: Firma als eigene Spalte, Sortierung nach Name/Firma/Typ/Letzter Kontakt',
-      'Kontakt-Upsert aus Mail-/Kalender-Sync (Name, E-Mail, Telefon, Rolle aus Footer)',
-      'Targeted Sync: Pro-Bewerbung alle Quellen parallel synchronisieren',
-      'LinkedIn Playwright-Scraper mit gecachten Session-Cookies',
-      'Anrufhistorie via calls_bridge.py (macOS CallHistoryDB)',
-      'iCloud Notizen via notes_bridge.py (AppleScript/JXA)',
+      'Contacts overview: company as its own column, sorting by name/company/type/last contact',
+      'Contact upsert from mail/calendar sync (name, email, phone, role from the footer)',
+      'Targeted sync: sync all sources in parallel for a single application',
+      'A LinkedIn Playwright scraper with cached session cookies',
+      'Call history via calls_bridge.py (macOS CallHistoryDB)',
+      'iCloud Notes via notes_bridge.py (AppleScript/JXA)',
     ],
   },
   {
     version: '0.6.0',
     date: '2026-06-11',
     changes: [
-      'Google OAuth 2.0 + Gmail + Google Calendar Sync',
-      'iCloud Mail (IMAP), Kalender (CalDAV), Kontakte (CardDAV)',
-      'KI-Klassifikation via LiteLLM (Groq, Ollama, OpenAI-kompatibel)',
-      'Review-Queue für KI-Vorschläge mit manueller Freigabe',
-      'Fernet-Verschlüsselung für alle Credentials und API-Keys',
-      'Dedup via synced_items-Tabelle (source + external_id)',
+      'Google OAuth 2.0 + Gmail + Google Calendar sync',
+      'iCloud Mail (IMAP), Calendar (CalDAV), Contacts (CardDAV)',
+      'AI classification via LiteLLM (Groq, Ollama, OpenAI-compatible)',
+      'A review queue for AI suggestions with manual approval',
+      'Fernet encryption for all credentials and API keys',
+      'Dedup via a synced_items table (source + external_id)',
     ],
   },
   {
     version: '0.5.0',
     date: '2026-06-10',
     changes: [
-      'Excel-Export im Originalformat (17 Spalten, Sheet "Tracking")',
-      'Kontaktverwaltung (CRM): n:m-Verknüpfung mit Bewerbungen',
-      'Dubletten-Bereinigung für Bewerbungen, Kontakte und Events',
-      'Status-Popover: Statuswechsel direkt in der Tabellenzeile',
-      'AI-Settings-Modal: Provider, Modell, API-Key, Verbindungstest',
+      'Excel export in the original format (17 columns, sheet "Tracking")',
+      'Contact management (CRM): a many-to-many link with applications',
+      'Duplicate cleanup for applications, contacts, and events',
+      'A status popover: change status directly in the table row',
+      'An AI settings modal: provider, model, API key, connection test',
     ],
   },
   {
     version: '0.4.0',
     date: '2026-06-09',
     changes: [
-      'Zweistufiges Statusmodell: main_status + sub_status',
-      'Migration alter Flat-Status (hr_scheduled → hr + 1_scheduled)',
-      'Sub-Status-Sequenz in HR- und FB-Stages (1_scheduled → 1_done → …)',
-      'Automatisches Status-Event bei Statuswechsel',
-      'KPI-Kacheln in StatsBar',
+      'A two-tier status model: main_status + sub_status',
+      'Migrated the old flat status (hr_scheduled → hr + 1_scheduled)',
+      'A sub-status sequence for the HR and FB stages (1_scheduled → 1_done → …)',
+      'An automatic status event on every status change',
+      'KPI tiles in StatsBar',
     ],
   },
   {
     version: '0.3.0',
     date: '2026-06-08',
     changes: [
-      'Kanban-Board nach main_status-Spalten',
-      'Detail/Edit-Modal mit Timeline und Gesprächsnotizen',
-      'Farbige Status-Badges',
+      'A Kanban board by main_status column',
+      'A detail/edit modal with a timeline and interview notes',
+      'Colored status badges',
     ],
   },
   {
     version: '0.2.0',
     date: '2026-06-07',
     changes: [
-      'Excel-Import (Bewerbungen_Eugen_Gulinsky.xlsx, 133 Einträge)',
-      'Sortierbare Tabellenansicht',
-      'Suchfilter (Firma, Rolle, Quelle)',
+      'Excel import (Bewerbungen_Eugen_Gulinsky.xlsx, 133 entries)',
+      'A sortable table view',
+      'Search filters (company, role, source)',
     ],
   },
   {
     version: '0.1.0',
     date: '2026-06-06',
     changes: [
-      'FastAPI Backend + SQLite (WAL)',
-      'CRUD-Endpunkte für Bewerbungen und Events',
-      'React 18 + TypeScript + Tailwind CSS Frontend',
-      'Docker Compose + OrbStack-kompatibel',
+      'A FastAPI backend + SQLite (WAL)',
+      'CRUD endpoints for applications and events',
+      'A React 18 + TypeScript + Tailwind CSS frontend',
+      'Docker Compose, OrbStack-compatible',
     ],
   },
 ]
@@ -2386,6 +2394,7 @@ interface Props {
 }
 
 export function ChangelogModal({ open, onClose }: Props) {
+  const { t } = useTranslation('common')
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -2410,7 +2419,7 @@ export function ChangelogModal({ open, onClose }: Props) {
                 {i === 0 && (
                   <>
                     <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 rounded px-1.5 py-0.5">
-                      aktuell
+                      {t('current')}
                     </span>
                     <span className="text-[10px] text-gray-400 font-mono">
                       Build {BUILD_NUMBER}
