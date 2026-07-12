@@ -225,5 +225,18 @@
     "call": "Call",
     "pending": "Pending suggestions",
     "event": "Other entries"
+  },
+  "table": {
+    "noResults": "No applications found",
+    "companyRole": "Company / Role",
+    "source": "Source",
+    "status": "Status",
+    "applied": "Applied",
+    "update": "Update",
+    "assessment": "Assessment",
+    "rejectedSuffix": "Rejected",
+    "confidenceHigh": "High",
+    "confidenceLow": "Low",
+    "confidenceMedium": "Medium"
   }
 }

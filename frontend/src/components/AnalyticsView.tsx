@@ -6,6 +6,14 @@ import {
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { AnalyticsSummary } from '../types'
+import { useStatusLabels } from '../i18n/statusLabels'
+import { useLocale } from '../i18n/useLocale'
+import { formatDate } from '../i18n/formatDate'
+
+function monthLabel(monthKey: string, locale: string): string {
+  const [year, month] = monthKey.split('-').map(Number)
+  return formatDate(new Date(year, month - 1, 1), locale, { month: 'short', year: 'numeric' })
+}
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444']
 const INDIGO = '#6366f1'
@@ -84,6 +92,8 @@ function pct(n: number): string {
 export function AnalyticsView() {
   const { t } = useTranslation('analytics')
   const { t: tCompanies } = useTranslation('companies')
+  const { mainStatusLabel } = useStatusLabels()
+  const locale = useLocale()
   const [data, setData] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -138,8 +148,15 @@ export function AnalyticsView() {
     { name: t('hhVsDirect.direct'), total: hh_vs_direct.direct.total, gespräch: hh_vs_direct.direct.gespräch, offer: hh_vs_direct.direct.offer },
   ]
 
+  // funnel/rejection_by_status/by_month carry a stable key (status/month) alongside
+  // a German-only label baked in server-side (analytics.py) — recompute the display
+  // label from the key so the charts actually follow the UI language.
+  const funnelData = funnel.map(f => ({ ...f, label: mainStatusLabel(f.status) }))
+  const rejectionData = rejection_by_status.map(r => ({ ...r, label: mainStatusLabel(r.status) }))
+  const byMonthData = by_month.map(m => ({ ...m, label: monthLabel(m.month, locale) }))
+
   // Status donut data (by current active status)
-  const statusData = funnel
+  const statusData = funnelData
     .map(f => ({ name: f.label, value: f.count }))
     .filter(d => d.value > 0)
 
@@ -175,7 +192,7 @@ export function AnalyticsView() {
       <div className="bg-white rounded-xl border border-gray-100 p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('funnel.title')}</h2>
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={funnel} layout="vertical" margin={{ left: 120, right: 60 }}>
+          <BarChart data={funnelData} layout="vertical" margin={{ left: 120, right: 60 }}>
             <XAxis type="number" hide />
             <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 12 }} />
             <Tooltip
@@ -184,7 +201,7 @@ export function AnalyticsView() {
               }
             />
             <Bar dataKey="count" fill={INDIGO} radius={[0, 4, 4, 0]}>
-              {funnel.map((entry, index) => (
+              {funnelData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Bar>
@@ -291,11 +308,11 @@ export function AnalyticsView() {
       </div>
 
       {/* Bewerbungen über Zeit */}
-      {by_month.length > 0 && (
+      {byMonthData.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('overTime.title')}</h2>
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={by_month} margin={{ left: 0, right: 20 }}>
+            <LineChart data={byMonthData} margin={{ left: 0, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
@@ -307,11 +324,11 @@ export function AnalyticsView() {
       )}
 
       {/* Absagen nach Phase */}
-      {rejection_by_status.length > 0 && (
+      {rejectionData.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('rejectionByPhase.title')}</h2>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={rejection_by_status} margin={{ left: 10, right: 20 }}>
+            <BarChart data={rejectionData} margin={{ left: 10, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />

@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.75.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n gap fixes: ApplicationTable\'s empty state, column headers (Company/Role, Source, Status, Applied, Update, Assessment), the "· Rejected" suffix, and the AI-confidence labels (High/Low/Medium) were all hardcoded German despite the component already using translations elsewhere — added a new `table` section to the applications namespace and wired it in.',
+      'i18n bugfix: the Analytics view\'s funnel chart, status donut, "rejections by phase" chart, and "applications over time" chart all displayed status/month names baked into the backend response in German only (analytics.py computes a display label server-side, independent of the account\'s language) — the frontend now recomputes each label from the stable status/month key that was already being sent alongside it, so these charts actually follow the UI language. Added a regression test asserting the raw backend label never reaches the screen.',
+    ],
+  },
+  {
     version: '3.74.0',
     date: '2026-07-12',
     changes: [

@@ -225,5 +225,18 @@
     "call": "Anruf",
     "pending": "Offene Vorschläge",
     "event": "Sonstige Einträge"
+  },
+  "table": {
+    "noResults": "Keine Bewerbungen gefunden",
+    "companyRole": "Firma / Rolle",
+    "source": "Quelle",
+    "status": "Status",
+    "applied": "Beworben",
+    "update": "Update",
+    "assessment": "Einschätzung",
+    "rejectedSuffix": "Absage",
+    "confidenceHigh": "Hoch",
+    "confidenceLow": "Niedrig",
+    "confidenceMedium": "Mittel"
   }
 }

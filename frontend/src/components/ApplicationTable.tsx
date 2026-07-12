@@ -28,6 +28,7 @@ type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
 
 export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany, updatedIds }: Props) {
   const { t } = useTranslation('common')
+  const { t: tApp } = useTranslation('applications')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const locale = useLocale()
   const [sortKey, setSortKey] = useState<SortKey>('datum_bewerbung')
@@ -84,7 +85,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
   if (applications.length === 0) {
     return (
       <div className="py-16 text-center text-gray-400 text-sm">
-        Keine Bewerbungen gefunden
+        {tApp('table.noResults')}
       </div>
     )
   }
@@ -114,12 +115,12 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
               </th>
             )}
             <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide w-10">#</th>
-            <Th k="firma" label="Firma / Rolle" />
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Quelle</th>
-            <Th k="main_status" label="Status" />
-            <Th k="datum_bewerbung" label="Beworben" />
-            <Th k="letztes_update" label="Update" />
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Einschätzung</th>
+            <Th k="firma" label={tApp('table.companyRole')} />
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{tApp('table.source')}</th>
+            <Th k="main_status" label={tApp('table.status')} />
+            <Th k="datum_bewerbung" label={tApp('table.applied')} />
+            <Th k="letztes_update" label={tApp('table.update')} />
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{tApp('table.assessment')}</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -239,7 +240,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                         MAIN_STATUS_COLORS[app.pre_rejection_status as import('../types').MainStatus],
                       )}>
                         {mainStatusLabel(app.pre_rejection_status)}
-                        <span className="opacity-60">· Absage</span>
+                        <span className="opacity-60">· {tApp('table.rejectedSuffix')}</span>
                       </span>
                     ) : (
                       <StatusBadge status={app.main_status} subStatus={app.sub_status} size="sm" />
@@ -279,7 +280,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                         app.ai_color === 'green' ? 'text-green-700' :
                         app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
                       )}>
-                        {app.ai_color === 'green' ? 'Hoch' : app.ai_color === 'red' ? 'Niedrig' : 'Mittel'}
+                        {app.ai_color === 'green' ? tApp('table.confidenceHigh') : app.ai_color === 'red' ? tApp('table.confidenceLow') : tApp('table.confidenceMedium')}
                       </span>
                     </div>
                     <span className="text-gray-600 leading-tight block">{app.ai_next_step || '—'}</span>
