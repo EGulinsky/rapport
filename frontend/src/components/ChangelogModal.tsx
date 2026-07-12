@@ -9,6 +9,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.65.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n (Phase 9/13, Einstellungen-Dialog): Alle 12 Einstellungen-Tabs (Konto, Sync, KI/API, Google, iCloud, Anrufe, Dokumente, LinkedIn, Backup, Logos, Karten, Agent) sind jetzt vollständig übersetzt — Tab-Namen, Formulare, Sync-Status, KI-Anbieter-Badges, LinkedIn-Aktionslog und alle Hinweistexte. Neuer settings.json-Namespace (de+en, ~150 Keys).',
+    ],
+  },
+  {
     version: '3.64.0',
     date: '2026-07-12',
     changes: [
