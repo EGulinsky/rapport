@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { RefreshCw, ChevronDown, CheckCircle, AlertCircle, X, ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { LinkedInSyncStatus } from '../types'
 import clsx from 'clsx'
@@ -33,18 +34,10 @@ interface ProgressEntry {
   done: boolean
 }
 
-const SOURCE_CONFIGS: { key: string; label: string }[] = [
-  { key: 'gmail',              label: 'Gmail' },
-  { key: 'gcal',               label: 'Google Kalender' },
-  { key: 'icloud_mail',        label: 'iCloud Mail' },
-  { key: 'icloud_cal',         label: 'iCloud Kalender' },
-  { key: 'icloud_notes',       label: 'iCloud Notizen' },
-  { key: 'icloud_reminders',   label: 'iCloud Erinnerungen' },
-  { key: 'icloud_calls',       label: 'Anrufliste' },
-  { key: 'local_files',        label: 'Dokumente' },
-]
+const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'local_files']
 
 export function SyncButton({ onSynced, onReviewOpen }: Props) {
+  const { t } = useTranslation('sync')
   const [syncing, setSyncing] = useState(false)
   const [open, setOpen] = useState(false)
   const [summary, setSummary] = useState<SyncSummary | null>(null)
@@ -194,11 +187,11 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
       const sources: SourceResult[] = []
       let totalCreated = 0
 
-      SOURCE_CONFIGS.forEach(sc => {
-        const r = batchData[sc.key]
+      SOURCE_KEYS.forEach(key => {
+        const r = batchData[key]
         if (r?.done) {
           const src: SourceResult = {
-            label: sc.label,
+            label: t(`sourceLabel.${key}`),
             created: r.created ?? 0,
             processed: r.processed ?? 0,
             skipped: r.skipped ?? 0,
@@ -268,11 +261,11 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
           <button
             onClick={() => runSync(false)}
             disabled={syncing}
-            title="Alle konfigurierten Quellen synchronisieren"
+            title={t('syncAllTitle')}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
             <RefreshCw className={clsx('h-4 w-4 text-indigo-500', syncing && 'animate-spin')} />
-            {syncing ? 'Sync…' : 'Sync'}
+            {syncing ? t('syncing') : t('sync')}
           </button>
           <button
             onClick={() => setOpen(o => !o)}
@@ -290,7 +283,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
               className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
             >
               <RefreshCw className="h-3.5 w-3.5 text-indigo-400" />
-              Sync all
+              {t('syncAll')}
             </button>
             <button
               onClick={() => { setOpen(false); runSync(true) }}
@@ -298,8 +291,8 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
             >
               <RefreshCw className="h-3.5 w-3.5 text-amber-400" />
               <span>
-                Re-sync all
-                <span className="block text-xs text-gray-400">Reset + neu einlesen</span>
+                {t('resyncAll')}
+                <span className="block text-xs text-gray-400">{t('resyncHint')}</span>
               </span>
             </button>
           </div>
@@ -311,7 +304,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
         <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
             <RefreshCw className="h-3.5 w-3.5 text-indigo-500 animate-spin shrink-0" />
-            <span className="text-xs font-semibold text-gray-700">Sync läuft…</span>
+            <span className="text-xs font-semibold text-gray-700">{t('syncRunning')}</span>
           </div>
           <div className="px-4 py-3 space-y-3">
             {allProgressEntries.map(p => (
@@ -320,13 +313,13 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
             {liStatus?.status === 'needs_2fa' && (
               <div className="space-y-1.5">
                 <p className="text-xs text-amber-700 font-medium">
-                  LinkedIn: 2FA-Code eingeben
+                  {t('linkedinTwoFaPrompt')}
                 </p>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     inputMode="numeric"
-                    placeholder="Code…"
+                    placeholder={t('codePlaceholder')}
                     value={twoFaCode}
                     onChange={e => setTwoFaCode(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSubmit2Fa()}
@@ -338,7 +331,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
                     disabled={!twoFaCode.trim()}
                     className="text-xs px-2 py-1 rounded-lg bg-[#0077B5] text-white hover:bg-[#005f91] disabled:opacity-40"
                   >
-                    OK
+                    {t('ok')}
                   </button>
                 </div>
               </div>
@@ -395,6 +388,7 @@ function SyncSummaryModal({
   onClose: () => void
   onReviewOpen?: () => void
 }) {
+  const { t } = useTranslation('sync')
   const { sources, totalCreated, newPending, totalErrors } = summary
 
   // Only show sources that actually ran (appeared in results)
@@ -413,7 +407,7 @@ function SyncSummaryModal({
             {totalErrors > 0
               ? <AlertCircle className="h-4 w-4 text-red-500" />
               : <CheckCircle className="h-4 w-4 text-green-500" />}
-            <h2 className="text-sm font-semibold text-gray-900">Sync abgeschlossen</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{t('summary.title')}</h2>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
             <X className="h-4 w-4" />
@@ -422,11 +416,11 @@ function SyncSummaryModal({
 
         {/* Summary chips */}
         <div className="flex gap-3 px-5 py-3 border-b border-gray-100">
-          <Chip label="Neue Einträge" value={totalCreated} color="indigo" />
-          {newPending > 0 && <Chip label="Zur Prüfung" value={newPending} color="amber" />}
-          {totalErrors > 0 && <Chip label="Fehler" value={totalErrors} color="red" />}
+          <Chip label={t('summary.newEntries')} value={totalCreated} color="indigo" />
+          {newPending > 0 && <Chip label={t('summary.toReview')} value={newPending} color="amber" />}
+          {totalErrors > 0 && <Chip label={t('summary.errors')} value={totalErrors} color="red" />}
           {totalCreated === 0 && newPending === 0 && totalErrors === 0 && (
-            <span className="text-xs text-gray-400 self-center">Alles bereits aktuell</span>
+            <span className="text-xs text-gray-400 self-center">{t('summary.allUpToDate')}</span>
           )}
         </div>
 
@@ -443,7 +437,7 @@ function SyncSummaryModal({
         {quietSources.length > 0 && (
           <div className="px-5 pb-3">
             <p className="text-xs text-gray-400">
-              Keine neuen Daten:{' '}
+              {t('summary.noNewData')}{' '}
               {quietSources.map(s => s.label).join(', ')}
             </p>
           </div>
@@ -456,7 +450,7 @@ function SyncSummaryModal({
               onClick={() => { onClose(); onReviewOpen() }}
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
             >
-              {newPending} prüfen
+              {t('summary.reviewButton', { count: newPending })}
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           )}
@@ -464,7 +458,7 @@ function SyncSummaryModal({
             onClick={onClose}
             className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
           >
-            Schließen
+            {t('summary.close')}
           </button>
         </div>
       </div>
@@ -487,6 +481,7 @@ function Chip({ label, value, color }: { label: string; value: number; color: 'i
 }
 
 function SourceRow({ src }: { src: SourceResult }) {
+  const { t } = useTranslation('sync')
   const [errOpen, setErrOpen] = useState(false)
   return (
     <div className="text-xs">
@@ -496,13 +491,13 @@ function SourceRow({ src }: { src: SourceResult }) {
           {src.created > 0 && (
             <span className="font-semibold text-indigo-600">+{src.created}</span>
           )}
-          <span>{src.processed} geprüft</span>
+          <span>{t('summary.processed', { count: src.processed })}</span>
           {src.errors.length > 0 && (
             <button
               onClick={() => setErrOpen(o => !o)}
               className="text-red-500 font-medium hover:text-red-700"
             >
-              {src.errors.length} Fehler
+              {t('summary.errorsCount', { count: src.errors.length })}
             </button>
           )}
         </div>

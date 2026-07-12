@@ -9,6 +9,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.76.0',
+    date: '2026-07-12',
+    changes: [
+      'i18n: full codebase re-scan for leftover German strings, beyond the per-component sweeps of the last few releases. Found and fixed two more real gaps: SyncButton.tsx (the app-shell sync dropdown, progress overlay, 2FA prompt, and sync-summary modal — 519 lines, entirely hardcoded German) via a new `sync` i18n namespace, and ReviewModal\'s event-type filter dropdown, which rendered raw internal keys ("gespräch", "notiz", "angebot", "absage") as visible option text instead of translating them.',
+      'i18n: `<html lang>` was hardcoded to "de" in index.html and never updated at runtime, so it stayed wrong for any English-language session (affects screen readers, browser spell-check, and translate prompts). Now kept in sync with the active UI language on load and on every language switch.',
+    ],
+  },
+  {
     version: '3.75.0',
     date: '2026-07-12',
     changes: [

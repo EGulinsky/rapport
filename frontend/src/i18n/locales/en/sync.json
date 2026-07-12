@@ -1,0 +1,35 @@
+{
+  "syncAllTitle": "Sync all configured sources",
+  "syncing": "Sync…",
+  "sync": "Sync",
+  "syncAll": "Sync all",
+  "resyncAll": "Re-sync all",
+  "resyncHint": "Reset + re-read everything",
+  "syncRunning": "Sync running…",
+  "linkedinTwoFaPrompt": "LinkedIn: enter 2FA code",
+  "codePlaceholder": "Code…",
+  "ok": "OK",
+  "sourceLabel": {
+    "gmail": "Gmail",
+    "gcal": "Google Calendar",
+    "icloud_mail": "iCloud Mail",
+    "icloud_cal": "iCloud Calendar",
+    "icloud_notes": "iCloud Notes",
+    "icloud_reminders": "iCloud Reminders",
+    "icloud_calls": "Call log",
+    "local_files": "Documents"
+  },
+  "summary": {
+    "title": "Sync complete",
+    "newEntries": "New entries",
+    "toReview": "To review",
+    "errors": "Errors",
+    "allUpToDate": "Everything already up to date",
+    "noNewData": "No new data:",
+    "reviewButton": "Review {{count}}",
+    "close": "Close",
+    "processed": "{{count}} processed",
+    "errorsCount_one": "{{count}} error",
+    "errorsCount_other": "{{count}} errors"
+  }
+}

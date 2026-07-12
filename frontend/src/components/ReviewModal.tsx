@@ -16,6 +16,7 @@ interface Props {
 
 export function ReviewModal({ onClose, onApproved }: Props) {
   const { t } = useTranslation('review')
+  const { t: tApp } = useTranslation('applications')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const [items, setItems] = useState<PendingMatch[]>([])
   const [loading, setLoading] = useState(true)
@@ -426,7 +427,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
                         >
                           <option value="">{t('selectPlaceholder')}</option>
                           {EVENT_TYPE_OPTIONS.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
+                            <option key={opt} value={opt}>{tApp(`eventType.${opt}`, { defaultValue: opt })}</option>
                           ))}
                         </select>
                       </div>
