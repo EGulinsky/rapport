@@ -178,25 +178,26 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.deploy)
 
     env:
-      GIT_SSH_COMMAND: ssh -i /Users/eugengulinsky/.ssh/id_ed25519_github_runner -o StrictHostKeyChecking=no
+      GIT_SSH_COMMAND: ssh -i ~/.ssh/id_ed25519_github_runner -o StrictHostKeyChecking=no
+      REPO_PATH: ${{ vars.DEPLOY_PATH }}
 
     steps:
       - name: Pull latest code
         run: |
-          git -C /Users/eugengulinsky/code/rapport fetch origin main
-          git -C /Users/eugengulinsky/code/rapport reset --hard origin/main
+          git -C "$REPO_PATH" fetch origin main
+          git -C "$REPO_PATH" reset --hard origin/main
 
       - name: App-Version ermitteln
         id: version
         run: |
-          VERSION=$(grep -m1 "version: '" /Users/eugengulinsky/code/rapport/frontend/src/components/ChangelogModal.tsx | sed "s/.*version: '\([^']*\)'.*/\1/")
+          VERSION=$(grep -m1 "version: '" "$REPO_PATH/frontend/src/components/ChangelogModal.tsx" | sed "s/.*version: '\([^']*\)'.*/\1/")
           echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Rebuild playwright base image if needed
         env:
           DOCKER_BUILDKIT: "1"
         run: |
-          REPO=/Users/eugengulinsky/code/rapport
+          REPO="$REPO_PATH"
           # Hash of files that affect the base image
           CURRENT_HASH=$(cat "$REPO/backend/Dockerfile.playwright-base" "$REPO/backend/requirements.txt" | sha256sum | cut -d' ' -f1)
           HASH_FILE="$REPO/.playwright-base-hash"
@@ -213,7 +214,7 @@ jobs:
         env:
           DOCKER_BUILDKIT: "1"
           BUILD_NUMBER: ${{ github.run_number }}
-        run: docker compose -f /Users/eugengulinsky/code/rapport/docker-compose.yml up -d --build
+        run: docker compose -f "$REPO_PATH/docker-compose.yml" up -d --build
 
       - name: Warte auf Backend
         run: |
