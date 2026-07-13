@@ -6,7 +6,6 @@ Windows equivalent of macOS launchd LaunchAgents.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 from agent.config import app_data_dir
 

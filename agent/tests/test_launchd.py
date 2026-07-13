@@ -22,6 +22,25 @@ class TestIsRegistered:
         assert launchd.is_registered() is True
 
 
+class TestPlistContents:
+    def test_positiv_args_werden_als_eigene_program_arguments_eintraege_gerendert(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(launchd, "app_data_dir", lambda: tmp_path)
+
+        content = launchd._plist_contents("/usr/bin/python3", ["-m", "agent.tray"])
+
+        assert "<string>/usr/bin/python3</string>" in content
+        assert "<string>-m</string>" in content
+        assert "<string>agent.tray</string>" in content
+
+    def test_negativ_ohne_args_nur_command_im_array(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(launchd, "app_data_dir", lambda: tmp_path)
+
+        content = launchd._plist_contents("/Applications/Rapport Agent.app/Contents/MacOS/Rapport Agent", [])
+
+        array_block = content.split("<array>")[1].split("</array>")[0]
+        assert array_block.count("<string>") == 1
+
+
 class TestRegister:
     def test_positiv_schreibt_plist_und_ruft_launchctl_load(self, tmp_path, monkeypatch):
         plist = tmp_path / "com.rapport.agent.plist"

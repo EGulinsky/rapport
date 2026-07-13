@@ -1,7 +1,6 @@
 """Linux FilesProvider — uses zenity or kdialog for native dialogs."""
 from __future__ import annotations
 
-import os
 import subprocess
 
 from agent.providers.base import FilesProvider
@@ -9,8 +8,8 @@ from agent.providers.base import FilesProvider
 
 def _has_command(cmd: str) -> bool:
     try:
-        subprocess.run(["which", cmd], capture_output=True, timeout=5)
-        return True
+        result = subprocess.run(["which", cmd], capture_output=True, timeout=5)
+        return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError):
         return False
 
