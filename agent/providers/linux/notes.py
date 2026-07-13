@@ -12,8 +12,12 @@ from agent.providers.base import NotesProvider
 
 
 class LinuxNotesProvider(NotesProvider):
+    @property
+    def platform_limited(self) -> bool:
+        return True
+
     def list_notes(self) -> list[dict[str, Any]]:
         return []
 
     def health(self) -> dict[str, Any]:
-        return {"ok": False, "error": "Apple Notes not available on Linux"}
+        return {"ok": False, "error": "Apple Notes not available on Linux", "platform_limited": True}

@@ -12,8 +12,12 @@ from agent.providers.base import CallsProvider
 
 
 class LinuxCallsProvider(CallsProvider):
+    @property
+    def platform_limited(self) -> bool:
+        return True
+
     def list_calls(self, since_days: int = 90, source: str = "all") -> list[dict[str, Any]]:
         return []
 
     def health(self) -> dict[str, Any]:
-        return {"ok": False, "error": "Call history not available on Linux"}
+        return {"ok": False, "error": "Call history not available on Linux", "platform_limited": True}

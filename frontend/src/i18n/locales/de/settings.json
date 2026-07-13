@@ -254,7 +254,7 @@
   },
   "agent": {
     "title": "Rapport Agent",
-    "description": "Der Agent läuft auf deinem Mac und ersetzt die früheren separaten Bridges (Dateien, Notizen, Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um die Verbindung herzustellen. Verschlüsselt gespeichert, verlässt den Server nie im Klartext.",
+    "description": "Der Agent läuft auf deinem Computer und ersetzt die früheren separaten Bridges (Dateien, Notizen, Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um die Verbindung herzustellen. Verschlüsselt gespeichert, verlässt den Server nie im Klartext.",
     "requestFailed": "Anfrage fehlgeschlagen",
     "agentReachable": "Agent erreichbar",
     "agentNotReachable": "Agent nicht erreichbar",
@@ -267,7 +267,8 @@
     "tokenPlaceholder": "Beim ersten Start des Agenten angezeigt",
     "deleteToken": "Token löschen",
     "moduleFiles": "Dateien",
-    "moduleNotes": "Notizen",
-    "moduleCalls": "Anrufe"
+    "moduleNotes": "Notizen (nur macOS)",
+    "moduleCalls": "Anrufe (nur macOS)",
+    "platformLimited": "Diese Funktion ist nur unter macOS verfügbar (erfordert Apple Notes / iPhone-Kontinuität)"
   }
 }

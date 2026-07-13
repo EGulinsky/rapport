@@ -12,8 +12,12 @@ from agent.providers.base import CallsProvider
 
 
 class WindowsCallsProvider(CallsProvider):
+    @property
+    def platform_limited(self) -> bool:
+        return True
+
     def list_calls(self, since_days: int = 90, source: str = "all") -> list[dict[str, Any]]:
         return []
 
     def health(self) -> dict[str, Any]:
-        return {"ok": False, "error": "Call history not available on Windows"}
+        return {"ok": False, "error": "Call history not available on Windows", "platform_limited": True}

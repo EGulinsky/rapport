@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw, Upload, FileText } from 'lucide-react'
+import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw, Upload, FileText, AlertTriangle } from 'lucide-react'
 import { api, authFetch } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
 import { useAuth } from '../context/AuthContext'
@@ -2508,13 +2508,20 @@ function AgentPanel() {
                 <span key={key}
                   className={clsx(
                     'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border',
-                    mod.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100',
+                    mod.ok
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                      : mod.platform_limited
+                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                        : 'bg-red-50 text-red-600 border-red-100',
                   )}>
-                  {mod.ok ? <CheckCircle className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
+                  {mod.ok ? <CheckCircle className="h-2.5 w-2.5" /> : mod.platform_limited ? <AlertTriangle className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
                   {t(`agent.module${key.charAt(0).toUpperCase()}${key.slice(1)}`, { defaultValue: key })}
                 </span>
               ))}
             </div>
+            {Object.values(health.modules).some(m => m.platform_limited) && (
+              <p className="text-[10px] text-amber-600 mt-1">{t('agent.platformLimited')}</p>
+            )}
           </>
         )}
         {!health?.reachable && health?.error && (

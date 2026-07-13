@@ -33,6 +33,12 @@ class NotesProvider(ABC):
     @abstractmethod
     def health(self) -> dict[str, Any]: ...
 
+    @property
+    def platform_limited(self) -> bool:
+        """True if this provider is a stub because the feature is only
+        available on a specific platform (e.g. Apple Notes on macOS)."""
+        return False
+
 
 class CallsProvider(ABC):
     @abstractmethod
@@ -40,3 +46,9 @@ class CallsProvider(ABC):
 
     @abstractmethod
     def health(self) -> dict[str, Any]: ...
+
+    @property
+    def platform_limited(self) -> bool:
+        """True if this provider is a stub because the feature is only
+        available on a specific platform (e.g. iPhone calls via Continuity on macOS)."""
+        return False
