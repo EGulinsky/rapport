@@ -87,6 +87,17 @@ neither is present), `xclip` or `xsel` (clipboard).
 > window-close button failed to respond, while the file list and text entry
 > both worked normally) — a real end user clicking with a real mouse isn't
 > expected to hit this.
+>
+> Second follow-up same night: the initial Linux pass above ran in a plain
+> Docker container, which has no real systemd or session bus, so `register()`
+> calling `systemctl --user enable/start` could only be confirmed to "not
+> crash," not to actually work. Re-ran the full build + first-launch +
+> second-launch flow in a genuine Ubuntu VM (an OrbStack machine — real
+> systemd, lingering enabled) and confirmed the whole resiliency story:
+> `systemctl --user is-enabled` reports `enabled`, the unit reaches `active
+> (running)`, `/health` responds, and killing the process gets it
+> auto-restarted by `Restart=always` within seconds (fresh PID, fresh start
+> timestamp).
 
 ## Tests
 

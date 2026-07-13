@@ -19,6 +19,13 @@
 # `import pystray`*, not ImportError, which used to crash the whole agent
 # instead of falling back to headless mode (see run_tray_app() in tray.py).
 #
+# The systemd registration itself was re-verified against a genuine systemd
+# instance (a real Ubuntu VM, not just a Docker container with no init
+# system) — `systemctl --user is-enabled` reports `enabled`, the unit
+# reaches `active (running)`, and killing the process gets it auto-restarted
+# by `Restart=always` within seconds. Docker alone can't prove this since it
+# has no systemd/session-bus to register against.
+#
 # Still environment-dependent, not something this spec can pin at build
 # time: pystray's backend choice (appindicator vs. xorg vs. gtk) depends on
 # what's installed on the target desktop environment — see agent/README.md's
