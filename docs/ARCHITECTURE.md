@@ -811,11 +811,13 @@ File: `.github/workflows/ci.yml` · self-hosted runner on the Mac.
 flowchart LR
     A[backend<br/>ruff + pyright + pytest] --> E[E2E<br/>Playwright, docker-compose.test.yml]
     B[frontend<br/>tsc + vitest + vite build] --> E
+    G["agent (matrix)<br/>ubuntu/windows/macos-latest, pytest"]
     E --> C[docker<br/>Buildx: playwright-base + backend + frontend]
     C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>health/frontend/login+API smoke → macOS notification"]
     D -.->|on failure| F[notify-failure<br/>macOS notification + log]
     A -.->|on failure| F
     B -.->|on failure| F
+    G -.->|on failure| F
     E -.->|on failure| F
     C -.->|on failure| F
 ```
@@ -824,12 +826,13 @@ flowchart LR
 |---|---|---|
 | `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error), `pytest -m "unit or component or api"` (PR gate) + `pytest -m integration` on push to `main`/manual dispatch |
 | `frontend` | push/PR to `main` | `tsc --noEmit`, `vitest run` (unit/component, incl. the i18n key-parity suite), `vite build` |
+| `agent` | push/PR to `main`, matrix `[ubuntu-latest, windows-latest, macos-latest]` | `pytest` over `agent/tests/` — independent of backend/frontend/e2e/docker/deploy, since the native agent ships and updates separately (see §3.5); all three OS legs run the same suite because the Windows/Linux providers are only unit-tested with mocks so far, not hardware-verified |
 | `e2e` | push/PR to `main` or manual dispatch (after backend+frontend) | Build test stack (`docker-compose.test.yml`, own DB/ports), run all 12 Playwright journeys in German; on push to `main`, additionally run a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) in English via the `uiLanguage` fixture |
 | `docker` | push to `main` (after e2e) | Buildx: `Dockerfile.playwright-base`, backend image, frontend image (no push to a registry) |
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1329 tests (385 unit / 241 component / 516 api / 187 integration) — PR-gate coverage 74% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 64 tests. Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1329 tests (385 unit / 241 component / 516 api / 187 integration) — PR-gate coverage 74% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 128 tests, run on all 3 OSes in CI (only macOS is packaged/hardware-verified so far — see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 
