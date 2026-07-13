@@ -47,11 +47,14 @@ picker / tray-menu clipboard action without at least one of these):
 `zenity` or `kdialog` (folder/file picker, falls back to `tkinter` if
 neither is present), `xclip` or `xsel` (clipboard).
 
-> Note: the provider/service/tray split below is mid-port — Windows and
-> Linux providers and service-registration exist, but there's no packaged
-> installer yet for either (only macOS has `packaging/agent.spec` +
-> `build_dmg.sh` today), and neither has been verified on real hardware.
-> Both platforms currently mean "run from source" per the section above.
+> Note: the provider/service/tray split below is mid-port — Windows
+> (`packaging/agent-windows.spec` + `build_windows.ps1`) and Linux
+> (`packaging/agent-linux.spec` + `build_linux.sh`) now have PyInstaller
+> specs and build scripts alongside macOS's `agent.spec` + `build_dmg.sh`,
+> but **neither has been run or verified on real hardware yet** — both
+> scripts must be executed on their target OS (PyInstaller doesn't
+> cross-compile) and are unverified until that happens. Until then, both
+> platforms effectively mean "run from source" per the section above.
 
 ## Tests
 
@@ -62,8 +65,9 @@ python3 -m venv .venv_test
 .venv_test/bin/python3 -m pytest -v
 ```
 
-## Build the installer (.app + .dmg)
+## Build the installer
 
+**macOS** (`.app` + `.dmg`):
 ```bash
 cd agent
 python3 -m venv .venv_build
@@ -71,9 +75,29 @@ python3 -m venv .venv_build
 PATH="$PWD/.venv_build/bin:$PATH" packaging/build_dmg.sh 0.1.0
 ```
 
-Result: `agent/packaging/dist/Rapport-Agent-0.1.0.dmg` (app + Applications
-symlink to drag onto). Verified live: double-clicking the `.app` registers it
-on first start as a `launchd` LaunchAgent
+**Windows** (run on Windows — PyInstaller doesn't cross-compile):
+```powershell
+cd agent
+python -m venv .venv_build
+.venv_build\Scripts\pip install -r packaging\requirements-packaging-windows.txt
+$env:PATH = "$PWD\.venv_build\Scripts;$env:PATH"
+packaging\build_windows.ps1 0.1.0
+```
+
+**Linux** (run on Linux — PyInstaller doesn't cross-compile):
+```bash
+cd agent
+python3 -m venv .venv_build
+.venv_build/bin/pip install -r packaging/requirements-packaging-linux.txt
+PATH="$PWD/.venv_build/bin:$PATH" packaging/build_linux.sh 0.1.0
+```
+
+Windows/Linux results are a `.zip`/`.tar.gz` of the onedir PyInstaller
+bundle — **not yet hardware-verified**, see the note above.
+
+Result (macOS): `agent/packaging/dist/Rapport-Agent-0.1.0.dmg` (app +
+Applications symlink to drag onto). Verified live: double-clicking the
+`.app` registers it on first start as a `launchd` LaunchAgent
 (`~/Library/LaunchAgents/com.rapport.agent.plist`, `RunAtLoad`+`KeepAlive`),
 after which the actual instance runs permanently in the background with a
 menu-bar icon — no second double-click, no open terminal needed.
