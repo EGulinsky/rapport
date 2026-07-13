@@ -1,5 +1,5 @@
 """
-Backup: creates timestamped snapshots on the host Mac via the Rapport Agent.
+Backup: creates timestamped snapshots on the host via the Rapport Agent.
 
 Backups are a zip bundle of the SQLite DB *and* fernet.key — the key lives
 outside the DB (data/fernet.key) and is never itself stored in the DB, so a
@@ -19,6 +19,7 @@ import base64
 import io
 import os
 import sqlite3
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 
@@ -27,14 +28,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.agent_client import agent_get, agent_post
-from app.database import get_db, SessionLocal, set_session_user
+from app.database import DATABASE_URL, get_db, SessionLocal, set_session_user
 from app import models
 from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
-DB_PATH = "/app/data/jobtracker.db"
-FERNET_KEY_PATH = "/app/data/fernet.key"
+_DB_FILE = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+DB_PATH = os.path.abspath(_DB_FILE)
+FERNET_KEY_PATH = os.path.join(os.path.dirname(DB_PATH), "fernet.key")
 DB_ENTRY_NAME = "jobtracker.db"
 KEY_ENTRY_NAME = "fernet.key"
 
@@ -80,7 +82,7 @@ async def do_backup(user_id: int) -> dict:
         tmp = sqlite3.connect(":memory:")
         src.backup(tmp)
         src.close()
-        tmp_path = "/tmp/_jobtracker_backup_tmp.db"
+        tmp_path = os.path.join(tempfile.gettempdir(), "_jobtracker_backup_tmp.db")
         disk = sqlite3.connect(tmp_path)
         tmp.backup(disk)
         disk.close()
@@ -196,7 +198,7 @@ def _apply_restore(data: bytes, filename: str) -> dict:
             if KEY_ENTRY_NAME in zf.namelist():
                 key_bytes = zf.read(KEY_ENTRY_NAME)
 
-    tmp_path = "/tmp/_jobtracker_restore.db"
+    tmp_path = os.path.join(tempfile.gettempdir(), "_jobtracker_restore.db")
     with open(tmp_path, "wb") as f:
         f.write(db_bytes)
 

@@ -42,18 +42,26 @@ SOURCE_LABEL = {
     "icloud_cal": "iCloud Kal.",
 }
 
-# macOS Arial → Linux Liberation Sans (metric-compatible Arial substitute, ships in fonts-liberation)
+# Font selection: macOS Arial → Linux Liberation Sans → Windows Arial
 def _pick_fonts() -> tuple[str, str, str]:
     candidates = [
+        # macOS
         (
             "/System/Library/Fonts/Supplemental/Arial.ttf",
             "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
             "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
         ),
+        # Linux
         (
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+        ),
+        # Windows
+        (
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/arialbd.ttf",
+            "C:/Windows/Fonts/ariali.ttf",
         ),
     ]
     for reg, bold, it in candidates:

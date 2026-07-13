@@ -343,3 +343,67 @@ The ordering is a proposal — a discussion point on whether, e.g., mocking infr
 | 7 | Implementation scope | **Full structure** from L0 to L5 — no stripped-down scaffold, pays off for maintenance effort in the medium term. |
 
 These decisions are binding for implementation from now on (see rollout plan, section 11).
+
+---
+
+## 13. Cross-OS Testing Strategy
+
+With the portability work (feature/portability branch), the Docker containers (backend + frontend) run identically on macOS, Windows, and Linux. The main cross-platform concerns are:
+
+### 13.1 Backend (Docker Container)
+
+The backend runs in a Linux Docker container on all host platforms. **No additional OS-specific testing is needed** because:
+- The container image is identical regardless of host OS
+- SQLite, Python, and all dependencies are Linux-native inside the container
+- The only host-dependent code paths are behind `host.docker.internal` (agent communication)
+
+### 13.2 Agent (Native Host Application)
+
+The agent runs natively on the host (outside Docker). Platform-specific code lives in `agent/providers/`:
+
+| Module | macOS | Windows | Linux |
+|--------|-------|---------|-------|
+| `files.py` | osascript/AppleScript | tkinter filedialog | zenity/kdialog/tkinter |
+| `notes.py` | JXA (Apple Notes) | stub (not available) | stub (not available) |
+| `calls.py` | SQLite (iPhone/WhatsApp) | stub (not available) | stub (not available) |
+| `service.py` | launchd | Task Scheduler | systemd |
+| `tray.py` | rumps | pystray | pystray |
+
+**Testing approach for the agent:**
+
+1. **Unit tests (L0):** Mock platform-specific subprocess calls. Already implemented for macOS in `agent/tests/test_providers_mac.py`. Add equivalent tests for Windows/Linux providers.
+
+2. **Integration tests (L1):** Test factory dispatch (`make_files_provider()`, etc.) returns correct type per platform. Test `service.is_registered()` / `register()` / `unregister()` with mocked subprocess.
+
+3. **Manual testing matrix:** For full validation, test on actual OS instances:
+   - macOS: native (current development environment)
+   - Windows: via GitHub Actions `windows-latest` runner or local VM
+   - Linux: via Docker (already tested) or local VM/GitHub Actions `ubuntu-latest`
+
+### 13.3 CI/CD Pipeline
+
+The CI pipeline (`ci.yml`) already runs on `ubuntu-latest` for backend/frontend tests. The deploy job remains macOS-specific (self-hosted runner) — this is documented as a known limitation, not a gap to close.
+
+**Optional future enhancement:** Add a Windows CI job to validate agent tests on Windows:
+```yaml
+  agent-windows:
+    name: Agent (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r agent/requirements.txt -r agent/requirements-dev.txt
+      - run: pytest agent/tests/ -m "unit"
+```
+
+### 13.4 Key Portability Verification Checklist
+
+- [ ] `docker compose up -d --build` works without pre-created volumes
+- [ ] `host.docker.internal` resolves on Linux Docker (via `extra_hosts`)
+- [ ] Backup path derivation from `DATABASE_URL` works (not hardcoded `/app/data/`)
+- [ ] Temp file paths use `tempfile.gettempdir()` (not `/tmp/`)
+- [ ] Agent providers gracefully handle missing platform tools (zenity, tkinter)
+- [ ] System tray falls back to headless mode when pystray is unavailable
+- [ ] PDF generation finds fonts on all platforms (macOS/Linux/Windows paths)

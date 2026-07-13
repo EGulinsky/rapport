@@ -69,6 +69,7 @@ def create_app(
 
 
 def run():
+    """Run the agent directly (without system tray). Useful for development."""
     import uvicorn
 
     from agent.config import restart_process
