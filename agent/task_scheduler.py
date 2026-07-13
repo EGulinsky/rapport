@@ -6,7 +6,6 @@ Windows equivalent of macOS launchd LaunchAgents.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 from agent.config import app_data_dir
@@ -25,9 +24,10 @@ def is_registered() -> bool:
         return False
 
 
-def _task_xml(executable_path: str) -> str:
+def _task_xml(command: str, args: list[str]) -> str:
     log_dir = app_data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
+    arguments = " ".join(args)
 
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -59,17 +59,21 @@ def _task_xml(executable_path: str) -> str:
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>{sys.executable}</Command>
-      <Arguments>-m agent.main</Arguments>
+      <Command>{command}</Command>
+      <Arguments>{arguments}</Arguments>
     </Exec>
   </Actions>
 </Task>"""
 
 
-def register(executable_path: str) -> None:
-    """Creates or updates the scheduled task."""
+def register(command: str, args: list[str] | None = None) -> None:
+    """Creates or updates the scheduled task.
+
+    `command` is the executable (frozen .exe, or the Python interpreter for
+    dev/source runs); `args` (e.g. ["-m", "agent.main"]) go into the task's
+    separate <Arguments> element rather than being embedded in `command`."""
     xml_path = app_data_dir() / "task.xml"
-    xml_path.write_text(_task_xml(executable_path))
+    xml_path.write_text(_task_xml(command, args or []))
 
     # Delete existing task if present (ignoring errors)
     subprocess.run(

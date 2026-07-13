@@ -29,8 +29,8 @@ def is_registered() -> bool:
     return _get_impl().is_registered()
 
 
-def register(executable_path: str) -> None:
-    _get_impl().register(executable_path)
+def register(command: str, args: list[str] | None = None) -> None:
+    _get_impl().register(command, args)
 
 
 def unregister() -> None:

@@ -1,17 +1,19 @@
-"""Cross-platform system tray entry point.
+"""The single cross-platform entry point (`python -m agent.main` / the
+packaged binary on every OS runs `main()` below).
 
-macOS: rumps (existing, menubar.py)
-Windows: pystray + win32gui
-Linux: pystray + Gtk
+macOS: rumps for the actual menu (menubar.py — pure UI, no bootstrap logic
+       of its own anymore)
+Windows/Linux: pystray + Pillow (clipboard/file-manager actions use stdlib
+       `ctypes.windll`/`xclip`/`xsel` directly, not a separate win32 package)
 
-This module provides a unified interface that works on all platforms.
+Owns service self-registration, the HTTP server thread, and dispatch to the
+right tray/menu-bar UI — menubar.py only builds the rumps menu.
 """
 from __future__ import annotations
 
 import subprocess
 import sys
 import threading
-from typing import Callable
 
 from agent.config import AgentConfig, app_data_dir
 from agent import service
@@ -122,16 +124,23 @@ def bootstrap_or_run() -> bool:
     self-registered as a service and should exit."""
     if service.is_registered():
         return True
-    service.register(executable_path())
+    command, args = executable_command()
+    service.register(command, args)
     return False
 
 
-def executable_path() -> str:
-    """Path the service manager should re-invoke — the frozen binary when
-    packaged, or this script via the current interpreter otherwise."""
+def executable_command() -> tuple[str, list[str]]:
+    """Command + args the service manager should re-invoke — the frozen
+    binary when packaged (no args needed), or this module (`-m agent.tray`,
+    *not* `agent.main` — that's a separate bare-uvicorn dev entry point with
+    no tray/menu or self-registration at all) via the current interpreter
+    otherwise. Kept as a (command, args) pair rather than one embedded
+    string so each service backend (launchd plist array / Task Scheduler
+    <Command>+<Arguments> / systemd ExecStart) gets a correctly split argv
+    instead of a single mangled string."""
     if getattr(sys, "frozen", False):
-        return sys.executable
-    return f"{sys.executable} -m agent.main"
+        return sys.executable, []
+    return sys.executable, ["-m", "agent.tray"]
 
 
 def _start_server_thread(config: AgentConfig) -> None:

@@ -1,43 +1,19 @@
-"""L0 — menubar.py bootstrap logic: decides whether this process should
-self-register-and-exit or continue running as the persistent menu bar app.
-Only the pure logic is tested here — rumps/uvicorn (GUI/server loop) aren't
-touched (they're deferred imports, only reached from main()/run_menubar_app()
-which need an actual GUI session)."""
+"""L0 — menubar.py: pure macOS menu-bar UI helpers. Bootstrap/registration
+logic and the cross-platform entry point live in agent/tray.py now (see
+test_tray.py) — menubar.py only builds the rumps menu and copies to the
+clipboard, both of which need an actual GUI/pasteboard session to exercise
+beyond this."""
 from unittest.mock import patch
 
 from agent import menubar
 
 
-class TestBootstrapOrRun:
-    def test_negativ_nicht_registriert_registriert_und_gibt_false_zurueck(self):
-        with patch("agent.launchd.is_registered", return_value=False), \
-             patch("agent.launchd.register") as mock_register:
-            result = menubar.bootstrap_or_run()
+class TestCopyToClipboard:
+    def test_positiv_ruft_pbcopy_mit_text_auf(self):
+        with patch("subprocess.run") as mock_run:
+            menubar._copy_to_clipboard("mein-token")
 
-        assert result is False
-        mock_register.assert_called_once()
-
-    def test_positiv_bereits_registriert_gibt_true_zurueck_ohne_erneute_registrierung(self):
-        with patch("agent.launchd.is_registered", return_value=True), \
-             patch("agent.launchd.register") as mock_register:
-            result = menubar.bootstrap_or_run()
-
-        assert result is True
-        mock_register.assert_not_called()
-
-
-class TestExecutablePath:
-    def test_positiv_frozen_liefert_sys_executable(self, monkeypatch):
-        import sys
-        monkeypatch.setattr(sys, "frozen", True, raising=False)
-        monkeypatch.setattr(sys, "executable", "/Applications/Rapport Agent.app/Contents/MacOS/Rapport Agent")
-
-        assert menubar.executable_path() == "/Applications/Rapport Agent.app/Contents/MacOS/Rapport Agent"
-
-    def test_negativ_nicht_frozen_liefert_python_modul_aufruf(self, monkeypatch):
-        import sys
-        monkeypatch.setattr(sys, "frozen", False, raising=False)
-
-        path = menubar.executable_path()
-
-        assert "agent.menubar" in path
+        mock_run.assert_called_once()
+        args, kwargs = mock_run.call_args
+        assert args[0] == ["pbcopy"]
+        assert kwargs["input"] == b"mein-token"

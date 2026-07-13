@@ -40,6 +40,19 @@ python3 -m venv .venv
 Runs on port 9996. The Bearer token is generated on first start and lives at
 `~/Library/Application Support/RapportAgent/config.json` (macOS).
 
+**Linux only — non-pip system packages** (not installable via `pip`, needed
+by `providers/linux/files.py`'s folder/file picker and `tray.py`'s clipboard
+copy; both degrade gracefully if missing, but won't have a working file
+picker / tray-menu clipboard action without at least one of these):
+`zenity` or `kdialog` (folder/file picker, falls back to `tkinter` if
+neither is present), `xclip` or `xsel` (clipboard).
+
+> Note: the provider/service/tray split below is mid-port — Windows and
+> Linux providers and service-registration exist, but there's no packaged
+> installer yet for either (only macOS has `packaging/agent.spec` +
+> `build_dmg.sh` today), and neither has been verified on real hardware.
+> Both platforms currently mean "run from source" per the section above.
+
 ## Tests
 
 ```bash

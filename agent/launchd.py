@@ -21,9 +21,10 @@ def is_registered() -> bool:
     return plist_path().exists()
 
 
-def _plist_contents(executable_path: str) -> str:
+def _plist_contents(command: str, args: list[str]) -> str:
     log_dir = app_data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
+    arg_entries = "\n".join(f"        <string>{a}</string>" for a in args)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -32,7 +33,8 @@ def _plist_contents(executable_path: str) -> str:
     <string>{PLIST_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{executable_path}</string>
+        <string>{command}</string>
+{arg_entries}
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -47,13 +49,19 @@ def _plist_contents(executable_path: str) -> str:
 """
 
 
-def register(executable_path: str) -> None:
+def register(command: str, args: list[str] | None = None) -> None:
     """Idempotent: writes the plist and loads it via launchd. Safe to call
     even if already registered (launchctl load on an already-loaded label is
-    a no-op error we can ignore)."""
+    a no-op error we can ignore).
+
+    `command` is the executable to invoke (the frozen .app binary, or a
+    Python interpreter for dev/source runs); `args` are passed to it as
+    separate ProgramArguments array entries (e.g. ["-m", "agent.main"]) —
+    kept as a list rather than embedded in `command` so launchd invokes the
+    right argv, not a single mangled string."""
     path = plist_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_plist_contents(executable_path))
+    path.write_text(_plist_contents(command, args or []))
     subprocess.run(["launchctl", "load", "-w", str(path)], capture_output=True, timeout=15)
 
 
