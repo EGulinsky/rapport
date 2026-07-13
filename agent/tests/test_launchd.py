@@ -7,7 +7,11 @@ from agent import launchd
 class TestPlistPath:
     def test_positiv_liegt_unter_launchagents(self):
         path = launchd.plist_path()
-        assert str(path).endswith("Library/LaunchAgents/com.rapport.agent.plist")
+        # str(path).endswith("Library/LaunchAgents/...") would fail on
+        # Windows CI, where WindowsPath renders with backslashes — compare
+        # path segments instead so this stays OS-independent (launchd.py
+        # itself is macOS-only, but the plain path-join logic here isn't).
+        assert path.parts[-3:] == ("Library", "LaunchAgents", "com.rapport.agent.plist")
 
 
 class TestIsRegistered:
