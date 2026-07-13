@@ -10,7 +10,8 @@ agent/
   menubar.py          # macOS menu-bar entry point (rumps) + launchd self-registration
   launchd.py           # generate/register/remove the LaunchAgent plist
   auth.py             # Bearer-token dependency
-  config.py           # token generation/persistence, per-OS app-data dir
+  config.py           # token generation/persistence, ui_language, per-OS app-data dir
+  strings.py            # i18n table + t(key, ui_language) for menubar/notification text
   text_extract.py      # PDF/DOCX/TXT text extraction (OS-neutral)
   providers/
     base.py           # abstract interfaces: FilesProvider, NotesProvider, CallsProvider
@@ -21,6 +22,7 @@ agent/
     backup.py          # /backup/backups, /backup/backup-write, /backup/backup-read
     notes.py           # /notes
     calls.py           # /calls
+    config.py           # PATCH /agent-api/config {ui_language} — pushed by the backend on profile/language save
   packaging/
     agent.spec          # PyInstaller spec → "Rapport Agent.app"
     build_dmg.sh         # builds the app + packages it into a .dmg (hdiutil)
@@ -73,8 +75,10 @@ pasted into Settings once.
 
 ## Status
 
-Scaffold, packaging, and backend integration are done and tested. Open: the
-three old `*_bridge.py` scripts at the repo root currently still run in
-parallel (as their own `launchd` jobs `com.rapport.files-bridge`,
-`com.rapport.notesbridge`, `com.rapport.calls-bridge`) and will only be
-removed once the new agent has been verified in daily production use.
+Scaffold, packaging, and backend integration are done and tested. The three
+old `*_bridge.py` scripts have been retired — this agent is the only bridge
+process now. The menu bar and its notifications follow the account's UI
+language: the backend pushes `ui_language` to `PATCH /agent-api/config`
+whenever the profile language changes (`config.py` persists it, `strings.py`
+renders the menu text), and the agent process is restarted automatically so
+the change takes effect without a manual relaunch.

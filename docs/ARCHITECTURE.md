@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v3.35.1, 2026-07-08). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v3.78.0, 2026-07-13). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -14,6 +14,7 @@
 6. [Data Model](#6-data-model)
 7. [Authentication & Multi-Tenancy](#7-authentication--multi-tenancy)
 8. [CI/CD](#8-cicd)
+9. [Internationalization (i18n)](#9-internationalization-i18n)
 
 ---
 
@@ -101,7 +102,10 @@ backend/app/
 ├── database.py               SQLAlchemy engine + SessionLocal + get_db + inline migrations
 ├── models.py                  ORM models, status enums, Excel mapping constants
 ├── schemas.py                 Pydantic request/response schemas
-├── audit.py                   add_audit() – audit log helper (level: off/normal/verbose), references Application/Contact/CompanyProfile/Event
+├── audit.py                   add_audit() – audit log helper (level: off/normal/verbose), references Application/Contact/CompanyProfile/Event; reason_key/reason_params resolve a translated reason via i18n_strings.t() in the account's ui_language
+├── error_keys.py              ErrorKey enum + api_error() – stable error keys for HTTP responses, translated frontend-side (see §9)
+├── i18n_strings.py            Server-generated user-facing strings (audit reasons, sync progress) that can't be re-translated client-side — t(key, lang) + resolve_ui_language(db, user_id) (see §9)
+├── agent_client.py             HTTP client for the Rapport Agent (bearer token, base URL from settings/env)
 ├── dedup.py                   norm_firma()/norm_rolle()/dedup_key() – normalization for duplicate detection
 ├── logger.py                  Loguru setup, JSON log + Seq sink (CLEF)
 ├── linkedin_job_description.py  Load job description + company name from a LinkedIn URL (Playwright)
@@ -137,7 +141,8 @@ backend/app/
     ├── sync_linkedin.py         LinkedIn Playwright scraper (own applications) with inline 2FA
     ├── sync_company.py          Company data enrichment (DuckDuckGo → Wikipedia → Clearbit logo)
     ├── review.py                Manual review queue (PendingMatches)
-    └── startup_check.py        Health/bridge connectivity check
+    ├── startup_check.py        Health/bridge connectivity check
+    └── test_e2e.py              E2E-only test-user setup (POST /api/e2e/setup-user), active only when E2E_TESTING=true
 ```
 
 ### Project Structure (Frontend)
@@ -148,8 +153,9 @@ frontend/src/
 ├── AppRoutes.tsx             Routing: /login, /register, /verify-email, /forgot-password, /reset-password, protected root route
 ├── types.ts                 TypeScript types, status labels/colors, constants
 ├── api/client.ts             Fetch wrapper for all backend calls, grouped by namespace; attaches bearer token, handles 401 centrally
-├── context/AuthContext.tsx    Login state, token in localStorage, login()/register()/logout()/…
+├── context/AuthContext.tsx    Login state, token in localStorage, login()/register()/logout()/…, propagates user.ui_language to i18next on login/refresh/logout
 ├── pages/auth/                LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, AuthLayout
+├── i18n/                       react-i18next setup (see §9): index.ts (provider/registration), useLocale.ts, formatDate.ts, errorMessage.ts, statusLabels.ts, locales/{de,en}/*.json per feature area
 └── components/
     ├── RequireAuth.tsx          Route guard: redirects to /login when not signed in
     ├── ApplicationTable.tsx    Sortable table view
@@ -197,6 +203,8 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 | `POST` | `/api/auth/reset-password` | Verify reset code, set new password |
 | `GET` | `/api/auth/me` | Current account (requires login) |
 | `POST` | `/api/auth/change-password` | Change password (requires login) |
+| `PATCH` | `/api/auth/profile` | Update `vorname`/`nachname`/`linkedin_url`/`ui_language` — payload must always send the current `ui_language` alongside any partial update, or it gets overwritten with the default |
+| `POST`/`GET`/`DELETE` | `/api/auth/cv` | Upload/inspect/delete the account's CV file (stored at `{DB_DIR}/user_files/{user_id}/`) |
 
 ### Applications
 
@@ -218,8 +226,10 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 |---|---|---|
 | `GET`/`POST` | `/api/applications/{id}/events` | Read timeline / manually add an event |
 | `PATCH`/`DELETE` | `/api/applications/{id}/events/{eid}` | Edit / delete event |
+| `DELETE` | `/api/applications/{id}/events/bulk` | Delete multiple events at once (`{ids: [...]}`) — registered before `/{eid}` so Starlette doesn't swallow `bulk` as an id |
 | `GET`/`POST` | `/api/applications/{id}/contacts` | Contacts of the application / create+link |
 | `PATCH`/`PUT`/`DELETE` | `/api/applications/{id}/contacts/{cid}` | Edit contact / remove link |
+| `DELETE` | `/api/applications/{id}/contacts/bulk` | Unlink/delete multiple contacts at once (`{ids: [...]}`) |
 
 ### Contacts (Global) & Attachments
 
@@ -274,6 +284,7 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 | `POST` | `/api/sync/targeted/{app_id}/assign` | Manually assign a candidate |
 | `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn login, session, scraper start, 2FA |
 | `GET`/`POST` | `/api/sync/linkedin/people/search` \| `/people/import` | Manual contact import: LinkedIn people search → import selection |
+| `GET`/`POST` | `/api/sync/linkedin/companies/search` \| `/companies/import` | Manual company import: LinkedIn company search → import selection |
 | `GET`/`POST` | `/api/sync/icloud/contacts/search` \| `/contacts/import` | Manual contact import: full-text search in iCloud address book → import selection |
 | `GET`/`POST` | `/api/sync/files/*` | Local documents (Rapport Agent) |
 
@@ -528,6 +539,11 @@ erDiagram
         string email UK
         string password_hash
         bool email_verified
+        string vorname
+        string nachname
+        string linkedin_url
+        string cv_storage_path
+        string ui_language
     }
     EMAIL_VERIFICATION_CODE {
         int id PK
@@ -587,6 +603,7 @@ erDiagram
         int contact_id FK
         int company_profile_id FK
         int event_id FK
+        string entity_type
         string action
         text old_value
         text new_value
@@ -609,6 +626,9 @@ erDiagram
 | `password_hash` | VARCHAR | bcrypt |
 | `email_verified` | BOOLEAN | Only `true` after code confirmation |
 | `created_at` | DATETIME | |
+| `vorname` / `nachname` / `linkedin_url` | VARCHAR NULL | Profile fields (Settings → Account), groundwork for future AI use cases (e.g. auto-generated cover letters) |
+| `cv_filename` / `cv_content_type` / `cv_size_bytes` / `cv_storage_path` | | Optional uploaded CV, stored at `{DB_DIR}/user_files/{user_id}/{filename}` (same pattern as `attachments.py`) |
+| `ui_language` | VARCHAR NOT NULL, default `'de'` | `'de'` \| `'en'` — see [§9](#9-internationalization-i18n). New registrations always send an explicit value (`RegisterPayload` default `'en'`); the column default only protects pre-existing rows from the migration |
 
 #### `email_verification_codes`
 
@@ -695,8 +715,9 @@ erDiagram
 | Column | Type | Description |
 |---|---|---|
 | `app_id` / `contact_id` / `company_profile_id` / `event_id` | INTEGER FK NULL, ON DELETE SET NULL, each indexed | → `applications.id` / `contacts.id` / `company_profiles.id` / `events.id`. Several can be set at the same time (e.g. a contact update in the context of a specific application) |
+| `entity_type` | VARCHAR NULL, indexed | `application` \| `contact` \| `company` \| `event` — explicit, survives even if the referenced row (and thus the FK-inference signal) is later deleted; defaults from the set FKs via the same contact>company>event>application precedence the frontend used to infer client-side, only needs to be passed explicitly when that default doesn't fit |
 | `action` | VARCHAR | `create`, `update`, `delete`, `status_change`, `merge`, `import` |
-| `field`, `old_value`, `new_value`, `reason` | | |
+| `field`, `old_value`, `new_value`, `reason` | | `reason` is either a literal string (genuinely dynamic content, e.g. an email subject) or resolved from `reason_key`/`reason_params` via `i18n_strings.t()` in the acting account's `ui_language` — see [§9](#9-internationalization-i18n) |
 | `source` | VARCHAR | `user` (manual action), `system` (automatic server-side process with no specific sync provider, e.g. a backfill), `sync` (generic sync path with no specific provider), otherwise the respective sync provider (`gmail`, `icloud_mail`, `gcal`, `icloud_cal`, `icloud_calls`, `linkedin`, `local_files`, …), plus `import`, `merge`, `db_trigger` (safety-net trigger on `applications.main_status`, see below) |
 
 Covers creations/changes/deletions across practically every code path that touches one of the four referenced tables — manual CRUD endpoints, merges, cleanup/dedup, and all sync providers. Verbosity is controlled via `sync_settings.audit_log_level` (`off`/`normal`/`verbose`) — at level `normal`, pure field updates (`action="update"`) are suppressed; `create`/`delete`/`status_change`/`merge`/`import` are always logged. In addition to the Python-side `add_audit()` calls, there is a DB trigger (`trg_main_status_change`) that records every change to `applications.main_status` as a safety net regardless of code path (`source="db_trigger"`), deduplicated against identical entries already written by the Python path within 2 seconds.
@@ -788,21 +809,55 @@ File: `.github/workflows/ci.yml` · self-hosted runner on the Mac.
 
 ```mermaid
 flowchart LR
-    A[backend<br/>ruff + pyright] --> C[docker<br/>Buildx: playwright-base + backend + frontend]
-    B[frontend<br/>tsc + vite build] --> C
-    C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>health poll → macOS notification"]
-    D -.->|on failure| E[notify-failure<br/>macOS notification + log]
-    A -.->|on failure| E
-    B -.->|on failure| E
-    C -.->|on failure| E
+    A[backend<br/>ruff + pyright + pytest] --> E[E2E<br/>Playwright, docker-compose.test.yml]
+    B[frontend<br/>tsc + vitest + vite build] --> E
+    E --> C[docker<br/>Buildx: playwright-base + backend + frontend]
+    C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>health/frontend/login+API smoke → macOS notification"]
+    D -.->|on failure| F[notify-failure<br/>macOS notification + log]
+    A -.->|on failure| F
+    B -.->|on failure| F
+    E -.->|on failure| F
+    C -.->|on failure| F
 ```
 
 | Job | Trigger | Steps |
 |---|---|---|
-| `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error) |
-| `frontend` | push/PR to `main` | `tsc --noEmit`, `vite build` |
-| `docker` | push to `main` (after backend+frontend) | Buildx: `Dockerfile.playwright-base`, backend image, frontend image (no push to a registry) |
-| `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → health poll `/health` (60s) → macOS notification + open browser |
+| `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error), `pytest -m "unit or component or api"` (PR gate) + `pytest -m integration` on push to `main`/manual dispatch |
+| `frontend` | push/PR to `main` | `tsc --noEmit`, `vitest run` (unit/component, incl. the i18n key-parity suite), `vite build` |
+| `e2e` | push/PR to `main` or manual dispatch (after backend+frontend) | Build test stack (`docker-compose.test.yml`, own DB/ports), run all 12 Playwright journeys in German; on push to `main`, additionally run a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) in English via the `uiLanguage` fixture |
+| `docker` | push to `main` (after e2e) | Buildx: `Dockerfile.playwright-base`, backend image, frontend image (no push to a registry) |
+| `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1329 tests (385 unit / 241 component / 516 api / 187 integration) — PR-gate coverage 74% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 64 tests. Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
+
+---
+
+## 9. Internationalization (i18n)
+
+The UI supports German and English, selectable at registration (new accounts default to `'en'`) and later in Settings → Account. English was chosen as the new-registration default; existing accounts were migrated to `'de'` since they were all German-speaking at the time. Three independent translation mechanisms cover the three kinds of user-facing text:
+
+### 9.1 Frontend chrome — `react-i18next`
+
+Every static label, button, and message in `frontend/src/` is extracted into per-feature-area namespaces under `frontend/src/i18n/locales/{de,en}/*.json` (`common`, `auth`, `status`, `app`, `settings`, `applications`, `companies`, `contacts`, `calendar`, `analytics`, `auditLog`, `sync`, `merge`, `cleanup`, `review`, `errors`). `AuthContext.tsx` calls `i18n.changeLanguage(user.ui_language)` on login/refresh/logout, making it the single propagation point from server state to UI language. A key-parity test (`frontend/src/i18n/__tests__/locales.test.ts`) asserts every `de`/`en` namespace pair has identical keys, empty-value checks, and matching interpolation placeholders — the hard gate; a heuristic `npm run i18n:check` script flagging leftover German-diacritic JSX text is informational only.
+
+### 9.2 Backend HTTP errors — stable error keys
+
+`app/error_keys.py` defines a flat `ErrorKey` enum plus `api_error(status_code, key, message)`, where `message` is the German fallback (logs + safety net). The frontend's `api/client.ts` reads `detail.error_key` from the response and throws `ApiError`, which every catch site translates via `t(\`errors:${err.errorKey}\`, err.message)` — an error key without a translation just falls back to the German message.
+
+### 9.3 Backend-generated dynamic strings — `app/i18n_strings.py`
+
+Distinct from error keys: audit-log reasons and sync-progress messages are generated once, server-side, at write/stream time — the frontend can't re-translate them later the way a static label can. `app/i18n_strings.py` provides a flat `t(key, lang, **kwargs)` lookup table and `resolve_ui_language(db, user_id)` (DB lookup with `'de'` fallback, for background tasks that only have a `user_id`, not a full `current_user`). Two usage patterns:
+
+- **`add_audit(..., reason_key=..., reason_params=...)`** — preferred when the literal reason lives at the `add_audit()` call site; `add_audit()` resolves `lang` from `user_id` internally.
+- **Threading `lang` through helper functions** — used where the reason/progress text is constructed several calls upstream of `add_audit()`/`update_progress()` (e.g. `sync_common.py`'s deterministic classification, the LinkedIn login/2FA/scraping flow's `_state["step"]`) — `lang` is resolved once near the top of the outermost sync function and passed down, translating inline at the point of construction.
+
+AI assessment (`ai/tasks.py::assess_application()`/`assess_rejected_application()`) follows the same idea via a lighter mechanism: rather than translating the whole prompt template, a single `{lang_note}` interpolation near the end of the prompt instructs the model to write `reasoning`/`next_step` in the account's language — the rest of the prompt (German field labels like "Firma:"/"Stelle:") stays as-is, since LLMs handle mixed-language input correctly.
+
+**Deliberately out of scope:** the legacy PDF/Excel export formats (`export_pdf.py`, `export_excel.py`) and dynamic user-entered data (job titles, comments, scraped descriptions) — only UI chrome and backend-generated system text are translated.
+
+### 9.4 Native macOS agent
+
+`agent/config.py` persists `ui_language` locally; the backend pushes it via `PATCH /agent-api/config` whenever the profile language changes, and restarts the agent process so the menu bar (`agent/strings.py`) picks it up without a manual relaunch.

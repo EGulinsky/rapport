@@ -63,6 +63,8 @@ open http://192.168.117.10        # OrbStack (recommended, no proxy cache)
 | **Audit log** | Traceable change history per application |
 | **Backup** | Configurable local database backups |
 | **Changelog** | Version history available in the app header |
+| **Multi-account** | Self-registration with email confirmation; each account sees only its own data |
+| **Language** | English/German UI, selectable at registration and in Settings — applies to the frontend, backend error messages, emails, AI assessment reasoning, and the native macOS agent's menu bar |
 
 ## Settings
 
@@ -122,7 +124,7 @@ Data is preserved (Docker volume `jobtracker-data`).
 ```bash
 cd backend
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -m "unit or component or api"    # 357 tests, same gate as in CI
+pytest -m "unit or component or api"    # 1142 tests, same gate as in CI
 ```
 
 Details on the test concept: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md)

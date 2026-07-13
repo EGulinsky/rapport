@@ -45,10 +45,11 @@ rapport/
 ├── .github/workflows/ci.yml   # Jobs: backend, frontend, e2e, docker, deploy, notify-failure
 ├── docs/
 │   ├── ARCHITECTURE.md         # Technical architecture incl. Mermaid diagrams
-│   └── TEST_KONZEPT.md         # Test concept (Phase 1–4 complete, Phase 5 E2E started)
+│   └── TEST_KONZEPT.md         # Test concept (Phases 1–6 complete)
 ├── backend/app/
 │   ├── main.py · database.py · models.py · schemas.py
-│   ├── audit.py · dedup.py · logger.py · linkedin_job_description.py
+│   ├── audit.py · dedup.py · logger.py · linkedin_job_description.py · agent_client.py
+│   ├── error_keys.py · i18n_strings.py   # i18n: stable HTTP error keys / server-generated dynamic strings
 │   ├── ai/{provider,tasks}.py
 │   └── routers/  applications · contacts · companies · merge · cleanup · test_e2e ·
 │                 import_excel · export_excel · export_pdf · attachments ·
@@ -138,7 +139,7 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner on the Mac.
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 1122 tests) → `frontend` (tsc + vite build) → `e2e` (Playwright via docker-compose.test.yml, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 184 L3 integration tests run on push to `main` (`pytest -m integration`).
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 1142 tests) → `frontend` (tsc + vitest + vite build) → `e2e` (Playwright via docker-compose.test.yml, all 12 journeys in German every push + an English subset on push to `main`, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 187 L3 integration tests run on push to `main` (`pytest -m integration`).
 Deploy: `git pull` → Docker Buildx builds new images on the runner → `docker compose up -d --build` → health poll → macOS notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (test concept, all phases 1–6 complete).
 A push to `main` always triggers test+deploy. Manually (e.g. on a feature branch) via `gh workflow run ci.yml --ref <branch>` to only test, or with `-f deploy=true` to also deploy (this always deploys the `main` head, regardless of the chosen `--ref`).
 
@@ -183,7 +184,33 @@ deliberately not read via `docker cp`, since `docker compose run` ignores the se
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`
 Sheet: `Tracking`, 17 columns — mapping in `models.py` under `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
 
-## Work State (Session v3.55.12 – 2026-07-11)
+## Work State (Session v3.78.0 – 2026-07-13)
+
+Picks up right after the v3.55.12 session documented below (kept as historical reference). Between v3.55.12 and this session, a full 13-phase i18n rollout shipped across many sessions (P1–P13, not individually logged here): DB migration + `ui_language` on `users` (registration default `en`, existing accounts migrated to `de`), `react-i18next` frontend scaffolding with per-feature-area namespaces, `error_keys.py` stable backend error keys, email translation, the full auth flow, `AccountPanel` language selector, a `types.ts` status-label hook conversion, locale-aware date/collation, every feature view (Companies/Contacts/Calendar/Analytics/ApplicationModal/SettingsModal's 11 panels), the native macOS agent (`agent/strings.py` + config push endpoint), E2E `data-testid` refactor + `uiLanguage` fixture, and the correctness test suite (`locales.test.ts`). Several gap-fix passes followed (AuditLogModal, ApplicationTable, AnalyticsView, SyncButton, ReviewModal, changelog history retranslation — v3.72.0–v3.77.0).
+
+### Completed in This Session
+
+User-reported, still-German gaps after the above rollout: *"the sync progress dialog is still in German (both individual and batch), the AI judgement should adhere to the selected language, some columns in the audit log are still in German."* All three fixed:
+
+**AI assessment language:** `assess_application()`/`assess_rejected_application()` (`ai/tasks.py`) gained a `ui_language` parameter; a `_RESPONSE_LANGUAGE_NOTE` dict interpolates a single `{lang_note}` line near the end of the prompt template instead of translating the whole prompt (LLMs handle the German field labels + an explicit "respond in English" instruction correctly). Wired from `applications.py` (`current_user.ui_language`) and `sync_targeted.py`'s background `_do_sync` (`resolve_ui_language(db, user_id)`, since background tasks only have a `user_id`).
+
+**Audit-log reasons (~50 call sites):** new `app/i18n_strings.py` — a flat `t(key, lang, **kwargs)` table plus the canonical `resolve_ui_language(db, user_id)` — and an `add_audit()` extension (`reason_key`/`reason_params`, resolves `lang` from `user_id` internally). Converted every static German `reason=` literal across `sync_common.py`, `sync_targeted.py`, `sync_icloud.py`, `sync_company.py`, `sync_linkedin.py`, `merge.py`, `review.py`, `companies.py`, `cleanup.py`, `sync_files.py`, `applications.py`. Two patterns depending on where the literal originates: `reason_key=` at the `add_audit()` call site itself, or threading a `lang` parameter through upstream helper functions (e.g. `_classify_deterministic`) when the reason is constructed before reaching `add_audit()`.
+
+**Sync progress dialog (individual + batch), the largest piece (~150+ call sites):** `SyncProgress`/`init_progress()`/`update_progress()`/`finish_progress()` (`sync_common.py`) gained an optional `lang` parameter (default `de`, backward compatible). Every step message across Gmail, Google Calendar, iCloud Mail/Notes/Calendar/Reminders/Contacts/Calls, local-file sync, and LinkedIn (`_state["step"]` — separate mechanism, own `_login()`/`_handle_2fa_checkpoint()`/`_scrape_category()`/`_scrape_messages()` signatures gained `lang`) now resolves through the account's UI language, `lang` typically computed once near the top of each sync's outer function and threaded down. Source labels shown in the sync dropdown (`SyncProgress.label`, rendered raw by `SyncButton.tsx`) were also translated — previously only the frontend's own `sourceLabel.*` keys were translated, not the backend's `init_progress(source, label, ...)` argument itself.
+
+All 1329 backend tests pass (1142 PR-gate + 187 integration), ruff clean. Full documentation refresh followed in the same session: `docs/ARCHITECTURE.md` (new §9 Internationalization section, updated CI/CD §8 to include the `e2e` job which was previously missing entirely, `error_keys.py`/`i18n_strings.py` in the project structure, `User`/`AuditLog` schema fields, profile/CV endpoints, bulk-delete endpoints), `docs/TEST_KONZEPT.md` (current test counts), `README.md` (test count, multi-account/language features), `agent/README.md` (`strings.py`/`routers/config.py`, removed the stale "old bridge scripts still run in parallel" note — they've been retired).
+
+### Open / Next Steps
+- None specific to this session — the three user-reported gaps are closed and CI is green on `main`.
+
+### Commits (this session, newest first)
+```
+0123674 i18n: sync progress dialog, AI assessment language, audit-log reasons (v3.78.0)
+```
+
+---
+
+## Work State (Session v3.55.12 – 2026-07-11) — historical
 
 Picks up right after the v3.55.0 session documented below (kept as historical reference).
 
