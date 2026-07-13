@@ -1,7 +1,7 @@
 """Cross-platform service registration — start at login, restart on crash.
 
 macOS: launchd LaunchAgent (existing launchd.py)
-Windows: Task Scheduler
+Windows: HKCU Run registry key (registry_run.py)
 Linux: systemd user service
 
 All three follow the same interface: is_registered(), register(), unregister().
@@ -17,8 +17,8 @@ def _get_impl():
         from agent import launchd
         return launchd
     elif system == "Windows":
-        from agent import task_scheduler
-        return task_scheduler
+        from agent import registry_run
+        return registry_run
     elif system == "Linux":
         from agent import systemd_service
         return systemd_service

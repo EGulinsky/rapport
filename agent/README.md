@@ -2,13 +2,19 @@
 
 Replaces `files_bridge.py`, `notes_bridge.py`, and `calls_bridge.py`: a single
 background process instead of three, with Bearer-token auth instead of open
-ports, and an OS-adapter boundary for the planned Windows port.
+ports. Runs on macOS, Windows, and Linux — hardware-verified on all three
+(see "Build the installer" below).
 
 ```
 agent/
   main.py            # FastAPI app, create_app() factory, /health
-  menubar.py          # macOS menu-bar entry point (rumps) + launchd self-registration
-  launchd.py           # generate/register/remove the LaunchAgent plist
+  tray.py             # single cross-platform entry point: service self-registration,
+                       # HTTP server thread, dispatch to the right tray/menu-bar UI
+  menubar.py          # macOS menu-bar UI (rumps) — pure UI, tray.py owns the bootstrap
+  service.py           # dispatches is_registered()/register()/unregister() by OS
+  launchd.py           # macOS: generate/register/remove the LaunchAgent plist
+  registry_run.py       # Windows: HKCU Run registry key (no elevation needed)
+  systemd_service.py    # Linux: systemd user service (systemctl --user, no elevation needed)
   auth.py             # Bearer-token dependency
   config.py           # token generation/persistence, ui_language, per-OS app-data dir
   strings.py            # i18n table + t(key, ui_language) for menubar/notification text
@@ -16,7 +22,9 @@ agent/
   providers/
     base.py           # abstract interfaces: FilesProvider, NotesProvider, CallsProvider
     factory.py         # picks the provider set based on platform.system()
-    mac/               # current implementation (ported 1:1 from the old bridges)
+    mac/               # full implementation (ported 1:1 from the old bridges)
+    windows/            # files via tkinter/os.startfile; notes/calls are platform_limited stubs
+    linux/              # files via zenity/kdialog/tkinter + xdg-open; notes/calls are stubs
   routers/
     files.py           # /files, /files/browse, /files/file, /files/open, /files/pick-*
     backup.py          # /backup/backups, /backup/backup-write, /backup/backup-read
@@ -24,8 +32,9 @@ agent/
     calls.py           # /calls
     config.py           # PATCH /agent-api/config {ui_language} — pushed by the backend on profile/language save
   packaging/
-    agent.spec          # PyInstaller spec → "Rapport Agent.app"
-    build_dmg.sh         # builds the app + packages it into a .dmg (hdiutil)
+    agent.spec / build_dmg.sh              # macOS: PyInstaller spec → "Rapport Agent.app" + .dmg
+    agent-windows.spec / build_windows.ps1  # Windows: PyInstaller spec + build script
+    agent-linux.spec / build_linux.sh       # Linux: PyInstaller spec + build script
 ```
 
 ## Run locally (development, no packaging)
@@ -47,14 +56,26 @@ picker / tray-menu clipboard action without at least one of these):
 `zenity` or `kdialog` (folder/file picker, falls back to `tkinter` if
 neither is present), `xclip` or `xsel` (clipboard).
 
-> Note: the provider/service/tray split below is mid-port — Windows
-> (`packaging/agent-windows.spec` + `build_windows.ps1`) and Linux
-> (`packaging/agent-linux.spec` + `build_linux.sh`) now have PyInstaller
-> specs and build scripts alongside macOS's `agent.spec` + `build_dmg.sh`,
-> but **neither has been run or verified on real hardware yet** — both
-> scripts must be executed on their target OS (PyInstaller doesn't
-> cross-compile) and are unverified until that happens. Until then, both
-> platforms effectively mean "run from source" per the section above.
+> Windows and Linux packaging (`packaging/agent-windows.spec`/`build_windows.ps1`
+> and `packaging/agent-linux.spec`/`build_linux.sh`) is hardware-verified as of
+> 2026-07-13 — build, first-launch self-registration, server startup, and
+> `/health` were all walked end-to-end on real Windows 11 and on Linux. Two
+> real bugs only showed up on that real hardware and are now fixed: Windows'
+> service registration used to silently fail under a normal (non-elevated)
+> user token (`schtasks /create` returns Access Denied even for a task that
+> only runs at the current user's own logon — replaced with the HKCU `Run`
+> key, see `registry_run.py`), and the packaged windowed Windows build used
+> to crash its server thread silently because a `console=False` build has no
+> usable `sys.stdout`/`sys.stderr` (fixed by redirecting stdio to a log file,
+> see `tray.py`'s `_redirect_stdio_if_headless()`). On Linux, a machine with
+> no X11 display used to crash the whole agent instead of falling back to
+> headless mode (pystray's backend selection raises during `import pystray`
+> itself on a missing display, not with `ImportError` — see `tray.py`'s
+> `run_tray_app()`). Still open: the packaged Windows build's `tkinter` file
+> dialogs (folder/file pickers) haven't been click-tested interactively —
+> PyInstaller's Tcl/Tk data bundling is a known footgun (see the comment in
+> `agent-windows.spec`) and this needs a real interactive session to confirm,
+> not just a headless run.
 
 ## Tests
 
@@ -93,7 +114,7 @@ PATH="$PWD/.venv_build/bin:$PATH" packaging/build_linux.sh 0.1.0
 ```
 
 Windows/Linux results are a `.zip`/`.tar.gz` of the onedir PyInstaller
-bundle — **not yet hardware-verified**, see the note above.
+bundle — hardware-verified, see the note above.
 
 Result (macOS): `agent/packaging/dist/Rapport-Agent-0.1.0.dmg` (app +
 Applications symlink to drag onto). Verified live: double-clicking the

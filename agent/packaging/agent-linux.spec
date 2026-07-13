@@ -11,10 +11,18 @@
 # console=False means no terminal window; tray.py's own logging goes to
 # app_data_dir()/logs instead.
 #
-# NOT YET HARDWARE-VERIFIED (see docs/ARCHITECTURE.md's portability section):
-# pystray's backend choice (appindicator vs. xorg vs. gtk) depends on what's
-# installed on the target desktop environment and isn't something this spec
-# can pin at build time — see agent/README.md's Linux system-package notes.
+# Hardware-verified (see docs/ARCHITECTURE.md's portability section): build
+# succeeds, first-launch self-registration writes a working systemd user
+# unit, and the packaged binary's server starts and serves /health. Also
+# caught and fixed a real bug this way — on a machine with no X11 display,
+# pystray's backend selection raises `Xlib.error.DisplayNameError` *during
+# `import pystray`*, not ImportError, which used to crash the whole agent
+# instead of falling back to headless mode (see run_tray_app() in tray.py).
+#
+# Still environment-dependent, not something this spec can pin at build
+# time: pystray's backend choice (appindicator vs. xorg vs. gtk) depends on
+# what's installed on the target desktop environment — see agent/README.md's
+# Linux system-package notes.
 import os
 
 REPO_ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))

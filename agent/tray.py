@@ -57,11 +57,20 @@ def _open_logs() -> None:
 
 
 def run_tray_app(config: AgentConfig) -> None:
-    """Run system tray app. Tries pystray first, falls back to headless."""
+    """Run system tray app. Tries pystray first, falls back to headless.
+
+    Catches more than ImportError: hardware-verified on real Linux (a
+    container/server with no X11 display) that pystray's backend selection
+    connects to the display *at import time* (`pystray/__init__.py`'s
+    `backend` picks and imports `_xorg`/`_gtk`/`_appindicator` eagerly), and
+    a missing display raises `Xlib.error.DisplayNameError` — a module
+    successfully found and imported, just unable to do its job. Any such
+    failure should fall back headless rather than crash the whole agent,
+    since the FastAPI server doesn't need a tray icon to function."""
     try:
         import pystray
         from PIL import Image, ImageDraw
-    except ImportError:
+    except Exception:
         _run_headless(config)
         return
 
@@ -119,6 +128,24 @@ def _run_headless(config: AgentConfig) -> None:
         time.sleep(3600)
 
 
+def _redirect_stdio_if_headless() -> None:
+    """PyInstaller's windowed (console=False) Windows build has no console,
+    so sys.stdout/sys.stderr don't behave like real streams — any library
+    that logs through them (uvicorn's default logging setup, in particular)
+    raises, which silently kills the server thread since a daemon thread's
+    unhandled exception has no console to print to. Hardware-verified: the
+    packaged .exe's server never started until this redirect was added
+    (isolated by comparing against a console=True debug build, which worked
+    fine using the same code). Dev runs (a real sys.stdout) are unaffected."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    log_dir = app_data_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = open(log_dir / "agent.log", "a", buffering=1, encoding="utf-8")
+    sys.stdout = log_file
+    sys.stderr = log_file
+
+
 def bootstrap_or_run() -> bool:
     """True: continue and run the tray app. False: this process just
     self-registered as a service and should exit."""
@@ -169,6 +196,7 @@ def main() -> None:
     if not bootstrap_or_run():
         return
 
+    _redirect_stdio_if_headless()
     config = AgentConfig.load_or_create()
     _start_server_thread(config)
 

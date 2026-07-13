@@ -4,12 +4,18 @@
 # requirements-packaging-windows.txt installed:
 #   pyinstaller agent/packaging/agent-windows.spec --distpath agent/packaging/dist --workpath agent/packaging/build
 #
-# tray.py is the entry point — self-registers via Task Scheduler on first
-# launch (task_scheduler.py), then shows the pystray tray icon (no rumps on
-# Windows, see tray.py's OS branch). console=False means no terminal window;
-# tray.py's own logging goes to app_data_dir()/logs instead.
+# tray.py is the entry point — self-registers via the HKCU Run registry key
+# on first launch (registry_run.py; Task Scheduler was tried first but
+# schtasks /create requires an elevated token even for a task that only runs
+# at the current user's own logon — confirmed on real hardware), then shows
+# the pystray tray icon (no rumps on Windows, see tray.py's OS branch).
+# console=False means no terminal window; tray.py's own logging goes to
+# app_data_dir()/logs instead.
 #
-# NOT YET HARDWARE-VERIFIED (see docs/ARCHITECTURE.md's portability section):
+# Hardware-verified on real Windows 11 (see docs/ARCHITECTURE.md's
+# portability section): build succeeds and first-launch self-registration
+# works under a normal (non-elevated) user.
+#
 # tkinter's Tcl/Tk data files are a known PyInstaller footgun on Windows — if
 # WindowsFilesProvider's native dialogs fail to open in the built .exe (but
 # work when run from source), add `--collect-all tkinter` to the pyinstaller

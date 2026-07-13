@@ -1,5 +1,5 @@
 """L0 — service.py: the only logic is picking which OS-specific backend
-(launchd/task_scheduler/systemd_service) to delegate to, based on
+(launchd/registry_run/systemd_service) to delegate to, based on
 platform.system(). Verifies is_registered()/register()/unregister() forward
 to the right module with the right arguments, and that an unsupported
 platform raises rather than silently picking one."""
@@ -17,9 +17,9 @@ class TestGetImplDispatch:
             assert service.is_registered() is True
         mock_is_reg.assert_called_once()
 
-    def test_positiv_windows_delegiert_an_task_scheduler(self):
+    def test_positiv_windows_delegiert_an_registry_run(self):
         with patch("platform.system", return_value="Windows"), \
-             patch("agent.task_scheduler.is_registered", return_value=False) as mock_is_reg:
+             patch("agent.registry_run.is_registered", return_value=False) as mock_is_reg:
             assert service.is_registered() is False
         mock_is_reg.assert_called_once()
 
@@ -50,8 +50,8 @@ class TestRegisterDelegation:
 
 
 class TestUnregisterDelegation:
-    def test_positiv_windows_delegiert_an_task_scheduler(self):
+    def test_positiv_windows_delegiert_an_registry_run(self):
         with patch("platform.system", return_value="Windows"), \
-             patch("agent.task_scheduler.unregister") as mock_unregister:
+             patch("agent.registry_run.unregister") as mock_unregister:
             service.unregister()
         mock_unregister.assert_called_once()
