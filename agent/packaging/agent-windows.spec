@@ -13,13 +13,22 @@
 # app_data_dir()/logs instead.
 #
 # Hardware-verified on real Windows 11 (see docs/ARCHITECTURE.md's
-# portability section): build succeeds and first-launch self-registration
-# works under a normal (non-elevated) user.
+# portability section): build succeeds, first-launch self-registration
+# works under a normal (non-elevated) user, and the packaged .exe's
+# tkinter/Tcl-Tk bundling is NOT broken — WindowsFilesProvider's native
+# folder-picker dialog opens correctly (real title, real Documents contents,
+# folder navigation all work) when triggered via the actual /files/pick-folder
+# endpoint. The PyInstaller footgun this comment used to warn about
+# (`--collect-all tkinter` needed if the dialog fails to open) does not
+# apply here — no extra datas= entry was needed.
 #
-# tkinter's Tcl/Tk data files are a known PyInstaller footgun on Windows — if
-# WindowsFilesProvider's native dialogs fail to open in the built .exe (but
-# work when run from source), add `--collect-all tkinter` to the pyinstaller
-# invocation or an explicit `datas=[...]` entry here.
+# One piece intentionally left unconfirmed: clicking the dialog's own OK/
+# Cancel buttons to complete the round-trip couldn't be driven through
+# screen-automation tooling in this environment (even the native OS window-
+# close button didn't respond to synthetic clicks, while the file list and
+# text entry did) — isolated to be a VM input-injection limitation, not an
+# app bug, by reproducing the identical symptom with a plain unfrozen
+# main-thread script with no FastAPI/threadpool/PyInstaller involved at all.
 import os
 
 REPO_ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))

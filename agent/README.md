@@ -71,11 +71,22 @@ neither is present), `xclip` or `xsel` (clipboard).
 > no X11 display used to crash the whole agent instead of falling back to
 > headless mode (pystray's backend selection raises during `import pystray`
 > itself on a missing display, not with `ImportError` — see `tray.py`'s
-> `run_tray_app()`). Still open: the packaged Windows build's `tkinter` file
-> dialogs (folder/file pickers) haven't been click-tested interactively —
-> PyInstaller's Tcl/Tk data bundling is a known footgun (see the comment in
-> `agent-windows.spec`) and this needs a real interactive session to confirm,
-> not just a headless run.
+> `run_tray_app()`).
+>
+> Follow-up same night: drove the packaged Windows build's `tkinter` folder
+> picker interactively (via the VM's own screen, triggering the real
+> `/files/pick-folder` endpoint). The dialog opens correctly — real title,
+> real Documents contents, folder navigation all work — so PyInstaller's
+> Tcl/Tk-data-bundling footgun this file used to warn about does not apply;
+> no `--collect-all tkinter` was needed. Completing the click-through (OK/
+> Cancel) couldn't be driven through screen-automation tooling in this
+> particular VM setup — isolated to be a synthetic-input-delivery limitation
+> of the automation, not an app bug, by reproducing the identical
+> unresponsive-button symptom with a bare unfrozen main-thread script that
+> has no FastAPI/threadpool/PyInstaller involved at all (even the native OS
+> window-close button failed to respond, while the file list and text entry
+> both worked normally) — a real end user clicking with a real mouse isn't
+> expected to hit this.
 
 ## Tests
 
