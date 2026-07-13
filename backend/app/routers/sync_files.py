@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.agent_client import agent_get, agent_post
 from app.audit import add_audit
+from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db, SessionLocal, set_session_user
 from app import models
 from app.auth.dependencies import get_current_user
@@ -84,23 +85,24 @@ def reset_files_sync(db: Session = Depends(get_db), current_user: models.User = 
 async def _do_local_files(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.FilesConfig).first()
         if not cfg or not cfg.enabled:
-            finish_progress("local_files")
+            finish_progress("local_files", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": []}
         if not cfg.folder_path:
-            finish_progress("local_files")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Kein Ordner konfiguriert."]}
+            finish_progress("local_files", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_folder_configured", lang)]}
 
         _, term_to_apps = build_firm_index(db)
         if not term_to_apps:
-            finish_progress("local_files")
+            finish_progress("local_files", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": []}
 
-        update_progress("local_files", 0, 0, "Dokumente werden geladen…")
+        update_progress("local_files", 0, 0, t("loading_documents", lang))
         params: dict = {"folder": cfg.folder_path}
         if cfg.last_sync:
             params["since"] = str(cfg.last_sync.timestamp())
@@ -109,13 +111,13 @@ async def _do_local_files(user_id: int) -> dict:
             resp = await agent_get(db, "/files", params=params, timeout=60)
             if resp.status_code != 200:
                 err = resp.json().get("error", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
-                finish_progress("local_files")
-                return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Agent-Fehler: {err}"]}
+                finish_progress("local_files", lang=lang)
+                return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("agent_error", lang, error=err)]}
             files = resp.json()
         except Exception as e:
-            finish_progress("local_files")
+            finish_progress("local_files", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [
-                f"Rapport Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
+                t("agent_unreachable", lang, error=e)
             ]}
 
         # Group files by first-level subfolder under root
@@ -127,10 +129,10 @@ async def _do_local_files(user_id: int) -> dict:
                 by_subfolder[sf].append(file_info)
 
         total = len(by_subfolder)
-        update_progress("local_files", 0, total, f"{total} Ordner gefunden")
+        update_progress("local_files", 0, total, t("folders_found", lang, count=total))
 
         for folder_idx, (subfolder_name, subfolder_files) in enumerate(by_subfolder.items()):
-            update_progress("local_files", folder_idx, total, f"Ordner {folder_idx + 1}/{total}: {subfolder_name}")
+            update_progress("local_files", folder_idx, total, t("folder_progress", lang, current=folder_idx + 1, total=total, name=subfolder_name))
 
             # Match subfolder name against firm index
             hint_apps = find_hint_apps(subfolder_name, term_to_apps)
@@ -188,10 +190,10 @@ async def _do_local_files(user_id: int) -> dict:
         if created > 0:
             cfg.last_sync = datetime.now(timezone.utc)
             db.commit()
-        finish_progress("local_files")
+        finish_progress("local_files", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("local_files")
+        finish_progress("local_files", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -208,7 +210,7 @@ async def sync_files(
         return {"processed": 0, "created": 0, "skipped": 0, "errors": []}
 
     set_batch_result("local_files", {"done": False})
-    init_progress("local_files", "Dokumente", "Starte…")
+    init_progress("local_files", t("label_documents", current_user.ui_language), lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_local_files(current_user.id)
@@ -291,7 +293,7 @@ async def attach_file(
             db.add(file_event)
             db.flush()
             add_audit(db, "create", "user", app_id=req.app_id, event_id=file_event.id,
-                      new_value=fname, reason="Datei manuell angehängt", user_id=current_user.id)
+                      new_value=fname, reason_key="file_attached_manually", user_id=current_user.id)
             mark_synced(db, "local_files", file_id, current_user.id)
             created += 1
         db.commit()
@@ -311,7 +313,7 @@ async def attach_file(
     db.add(ev)
     db.flush()
     add_audit(db, "create", "user", app_id=req.app_id, event_id=ev.id,
-              new_value=name, reason="Datei manuell angehängt", user_id=current_user.id)
+              new_value=name, reason_key="file_attached_manually", user_id=current_user.id)
     mark_synced(db, "local_files", file_id, current_user.id)
     db.commit()
     db.refresh(ev)

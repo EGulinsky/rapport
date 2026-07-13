@@ -5,6 +5,7 @@ All tasks return typed dicts; the caller decides what to persist.
 from __future__ import annotations
 from sqlalchemy.orm import Session
 from app.ai.provider import complete, AINotConfigured, AIRateLimited
+from app.i18n_strings import resolve_ui_language  # noqa: F401 — re-exported for existing call sites/tests
 
 _SYSTEM = """\
 Du bist ein KI-Assistent für einen aktiven Bewerber.
@@ -295,13 +296,23 @@ _STATUS_LABELS = {
     "rejected": "Absage",
 }
 
+# The response-language instruction is the one thing that must actually change per
+# account — the German field labels above (Firma/Stelle/Status/…) stay as prompt
+# scaffolding regardless, since LLMs handle a German-labeled data block fine even
+# when told to answer in English.
+_RESPONSE_LANGUAGE_NOTE = {
+    "de": 'Schreibe "reasoning" und "next_step" auf Deutsch.',
+    "en": 'Write "reasoning" and "next_step" in English.',
+}
 
-async def assess_application(db: Session, app) -> dict:
+
+async def assess_application(db: Session, app, ui_language: str = "de") -> dict:
     """
     Generate AI assessment for a single application based on ALL available data.
     Returns: {"color": "green"|"yellow"|"red", "next_step": str}
     """
     from datetime import date as _date
+    lang_note = _RESPONSE_LANGUAGE_NOTE.get(ui_language, _RESPONSE_LANGUAGE_NOTE["de"])
     firma = getattr(app, 'company_name_display', None) or app.firma
     status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
     today = _date.today()
@@ -371,17 +382,19 @@ Gib ein JSON-Objekt mit genau drei Feldern zurück:
    - "yellow": mittel (30–60%) — laufend, unklar, normale Wartezeit nach 1–2 Gesprächen
    - "red": niedrig (<30%) — keine Reaktion seit >3 Wochen, Ghosting, frühe Phase ohne Signal, Absage
 
-2. "reasoning" — Warum diese Einschätzung? (2–3 Sätze auf Deutsch)
+2. "reasoning" — Warum diese Einschätzung? (2–3 Sätze)
    - Nenne konkrete Fakten aus der Timeline: Anzahl Gespräche, Tage seit letztem Kontakt, letzte Signale
    - Erkläre was für und was gegen eine Zusage spricht
    - Keine Floskeln, nur faktenbezogene Begründung
 
-3. "next_step" — Was soll der Bewerber konkret tun? (1–2 Sätze auf Deutsch, Imperativ)
+3. "next_step" — Was soll der Bewerber konkret tun? (1–2 Sätze, Imperativ)
    STRIKT VERBOTEN:
    - Daten oder Deadlines erfinden die NICHT in der Timeline stehen
    - Wochentage nennen
    - Status-Labels wiederholen ("Warten auf Entscheidung")
    - E-Mail-Betreff wörtlich kopieren
+
+{lang_note}
 
 {{"color": "green"|"yellow"|"red", "reasoning": "...", "next_step": "..."}}"""
 
@@ -403,13 +416,14 @@ Gib ein JSON-Objekt mit genau drei Feldern zurück:
     }
 
 
-async def assess_rejected_application(db: Session, app) -> dict:
+async def assess_rejected_application(db: Session, app, ui_language: str = "de") -> dict:
     """
     Analyse a rejected application: find likely rejection reasons and derive
     optimization suggestions for future applications.
     Returns: {"color": "red", "reasoning": str, "next_step": str}
     """
     from datetime import date as _date
+    lang_note = _RESPONSE_LANGUAGE_NOTE.get(ui_language, _RESPONSE_LANGUAGE_NOTE["de"])
     firma = getattr(app, 'company_name_display', None) or app.firma
     status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
     today = _date.today()
@@ -461,14 +475,16 @@ Diese Bewerbung endete mit einer Absage. Analysiere die Timeline und gib ein JSO
 
 1. "color": immer "red"
 
-2. "reasoning" — Wahrscheinliche Absagegründe (2–3 Sätze auf Deutsch):
+2. "reasoning" — Wahrscheinliche Absagegründe (2–3 Sätze):
    - Leite die Gründe aus der Timeline ab (Zeitpunkt der Absage, wie weit der Prozess kam, Signale aus E-Mails)
    - Unterscheide: Prozesstiefe (frühe/späte Absage), mögliche inhaltliche Gründe, externe Faktoren
    - Wenn keine klaren Gründe erkennbar: sage das ehrlich
 
-3. "next_step" — Konkrete Optimierungsvorschläge für zukünftige Bewerbungen (2–3 Sätze auf Deutsch):
+3. "next_step" — Konkrete Optimierungsvorschläge für zukünftige Bewerbungen (2–3 Sätze):
    - Was hätte anders laufen können? Was kann der Bewerber beim nächsten Mal besser machen?
    - Bezug auf den spezifischen Fall (Branche, Rolle, Prozess)
+
+{lang_note}
 
 {{"color": "red", "reasoning": "...", "next_step": "..."}}"""
 

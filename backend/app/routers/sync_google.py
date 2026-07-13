@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
+from app.i18n_strings import resolve_ui_language, t
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
 from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
@@ -279,6 +280,7 @@ async def _do_gmail(user_id: int) -> dict:
     import time as _time
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
 
@@ -290,8 +292,8 @@ async def _do_gmail(user_id: int) -> dict:
     try:
         cfg = db.query(models.GoogleSync).first()
         if not cfg or not cfg.refresh_token_enc:
-            finish_progress("gmail")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Nicht mit Google verbunden."]}
+            finish_progress("gmail", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("not_connected_google", lang)]}
 
         from googleapiclient.discovery import build
         creds = _refresh_if_needed(cfg, db)
@@ -319,7 +321,7 @@ async def _do_gmail(user_id: int) -> dict:
         # Global cutoff: skip mails older than the earliest application submission date
         global_cutoff = earliest_bewerbung_date(db)
 
-        update_progress("gmail", 0, 0, "Nachrichten werden geladen…")
+        update_progress("gmail", 0, 0, t("loading_messages", lang))
         messages = []
         page_token = None
         _t0 = _time.perf_counter()
@@ -334,12 +336,12 @@ async def _do_gmail(user_id: int) -> dict:
                 if not page_token:
                     break
         except Exception as e:
-            finish_progress("gmail")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Gmail API Fehler: {e}"]}
+            finish_progress("gmail", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("gmail_api_error", lang, error=e)]}
         t_list = _time.perf_counter() - _t0
 
         total = len(messages)
-        update_progress("gmail", 0, total, f"{total} Nachrichten gefunden")
+        update_progress("gmail", 0, total, t("messages_found", lang, count=total))
         synced_ids = load_synced_ids(db, "gmail")
         n_already_synced = sum(1 for m in messages if m["id"] in synced_ids)
         unsynced = [m["id"] for m in messages if m["id"] not in synced_ids]
@@ -362,7 +364,7 @@ async def _do_gmail(user_id: int) -> dict:
         for batch_start in range(0, len(unsynced), BATCH_META):
             chunk = unsynced[batch_start:batch_start + BATCH_META]
             update_progress("gmail", batch_start, total,
-                            f"Metadaten {batch_start + 1}–{batch_start + len(chunk)}/{total}")
+                            t("metadata_progress", lang, from_=batch_start + 1, to=batch_start + len(chunk), total=total))
             batch_req = service.new_batch_http_request(callback=_meta_cb)
             for msg_id in chunk:
                 batch_req.add(
@@ -422,7 +424,7 @@ async def _do_gmail(user_id: int) -> dict:
         for batch_start in range(0, len(phase2_ids), BATCH_FULL):
             chunk = phase2_ids[batch_start:batch_start + BATCH_FULL]
             update_progress("gmail", len(unsynced), total,
-                            f"Volltext {batch_start + 1}–{batch_start + len(chunk)}/{len(phase2_ids)} Treffer")
+                            t("fulltext_progress", lang, from_=batch_start + 1, to=batch_start + len(chunk), total=len(phase2_ids)))
             batch_req = service.new_batch_http_request(callback=_full_cb)
             for msg_id in chunk:
                 batch_req.add(
@@ -447,10 +449,10 @@ async def _do_gmail(user_id: int) -> dict:
             try:
                 ok = await process_item(db, "gmail", msg_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
-                finish_progress("gmail")
+                finish_progress("gmail", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
             except AIRateLimited as e:
-                finish_progress("gmail")
+                finish_progress("gmail", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
             except Exception as e:
                 errors.append(f"{subject}: {e}")
@@ -466,7 +468,7 @@ async def _do_gmail(user_id: int) -> dict:
         db.commit()
         cfg.gmail_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("gmail")
+        finish_progress("gmail", lang=lang)
 
         t_total = _time.perf_counter() - t_start
         perf = {
@@ -487,7 +489,7 @@ async def _do_gmail(user_id: int) -> dict:
         }
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors, "perf": perf}
     except Exception as e:
-        finish_progress("gmail")
+        finish_progress("gmail", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -513,7 +515,7 @@ async def sync_gmail(
         raise HTTPException(400, "Nicht mit Google verbunden.")
 
     set_batch_result("gmail", {"done": False})
-    init_progress("gmail", "Gmail", "Starte…")
+    init_progress("gmail", "Gmail", lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_gmail(current_user.id)
@@ -539,13 +541,14 @@ async def sync_gmail(
 async def _do_gcal(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.GoogleSync).first()
         if not cfg or not cfg.refresh_token_enc:
-            finish_progress("gcal")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Nicht mit Google verbunden."]}
+            finish_progress("gcal", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("not_connected_google", lang)]}
 
         from googleapiclient.discovery import build
         creds = _refresh_if_needed(cfg, db)
@@ -555,7 +558,7 @@ async def _do_gcal(user_id: int) -> dict:
         time_min = (now - timedelta(days=180)).isoformat()
         time_max = (now + timedelta(days=90)).isoformat()
 
-        update_progress("gcal", 0, 0, "Termine werden geladen…")
+        update_progress("gcal", 0, 0, t("loading_appointments", lang))
         try:
             events_result = service.events().list(
                 calendarId="primary",
@@ -566,21 +569,21 @@ async def _do_gcal(user_id: int) -> dict:
                 maxResults=200,
             ).execute()
         except Exception as e:
-            finish_progress("gcal")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Calendar API Fehler: {e}"]}
+            finish_progress("gcal", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("calendar_api_error", lang, error=e)]}
 
         cal_events = events_result.get("items", [])
         contact_domain_index = build_contact_domain_index(db)
         contact_email_index  = build_contact_email_index(db)
 
         total = len(cal_events)
-        update_progress("gcal", 0, total, f"{total} Termine gefunden")
+        update_progress("gcal", 0, total, t("appointments_found", lang, count=total))
         synced_ids = load_synced_ids(db, "gcal")
 
         uid_set: set[str] = set()
         for i, ev in enumerate(cal_events):
             if i % 10 == 0:
-                update_progress("gcal", i, total, f"Termin {i + 1}/{total}")
+                update_progress("gcal", i, total, t("appointment_progress", lang, current=i + 1, total=total))
             ev_id   = ev.get("id", "")
             if not ev_id:
                 continue
@@ -639,10 +642,10 @@ async def _do_gcal(user_id: int) -> dict:
             try:
                 ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
-                finish_progress("gcal")
+                finish_progress("gcal", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
             except AIRateLimited as e:
-                finish_progress("gcal")
+                finish_progress("gcal", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
             except Exception as e:
                 errors.append(f"{summary or ev_id}: {e}")
@@ -681,10 +684,10 @@ async def _do_gcal(user_id: int) -> dict:
 
         cfg.gcal_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("gcal")
+        finish_progress("gcal", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("gcal")
+        finish_progress("gcal", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -739,7 +742,7 @@ async def sync_calendar(
         raise HTTPException(400, "Nicht mit Google verbunden.")
 
     set_batch_result("gcal", {"done": False})
-    init_progress("gcal", "Google Calendar", "Starte…")
+    init_progress("gcal", "Google Calendar", lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_gcal(current_user.id)

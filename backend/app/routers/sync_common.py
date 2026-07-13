@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.audit import add_audit
+from app.i18n_strings import resolve_ui_language, t
 from app.logger import get_logger
 
 log = get_logger("sync", source="targeted")
@@ -305,7 +306,7 @@ def _upsert_contact(
     db.flush()  # get contact.id
     db.execute(_LINK_SQL, {"cid": contact.id, "aid": app_id})
     add_audit(db, "create", "sync", contact_id=contact.id, app_id=app_id,
-              new_value=contact.name, reason="automatisch aus E-Mail-Sync erstellt", user_id=user_id)
+              new_value=contact.name, reason_key="contact_from_email_sync", user_id=user_id)
 
 
 def upsert_contact_from_sender(
@@ -341,8 +342,8 @@ _progress: dict[str, SyncProgress] = {}
 _batch_results: dict[str, dict] = {}
 
 
-def init_progress(source: str, label: str, step: str = "Starte…") -> None:
-    _progress[source] = SyncProgress(label=label, step=step)
+def init_progress(source: str, label: str, step: Optional[str] = None, lang: str = "de") -> None:
+    _progress[source] = SyncProgress(label=label, step=step or t("starting", lang))
 
 
 def update_progress(source: str, current: int, total: int, step: str = "") -> None:
@@ -354,11 +355,11 @@ def update_progress(source: str, current: int, total: int, step: str = "") -> No
             p.step = step
 
 
-def finish_progress(source: str, step: str = "Fertig") -> None:
+def finish_progress(source: str, step: Optional[str] = None, lang: str = "de") -> None:
     p = _progress.get(source)
     if p:
         p.done = True
-        p.step = step
+        p.step = step or t("done", lang)
 
 
 def get_batch_results() -> dict:
@@ -677,17 +678,17 @@ def find_hint_apps(
 
 # ── Deterministic classification helpers ─────────────────────────────────────
 
-def _classify_type_from_text(text: str) -> tuple[str, Optional[str], str]:
+def _classify_type_from_text(text: str, lang: str = "de") -> tuple[str, Optional[str], str]:
     """Returns (event_typ, suggested_main_status|None, reason) using keyword patterns."""
     if _RE_REJECTION.search(text):
-        return 'status', 'rejected', 'Absage-Keyword'
+        return 'status', 'rejected', t("rejection_keyword", lang)
     if _RE_OFFER.search(text):
-        return 'status', 'negotiating', 'Angebot-Keyword'
+        return 'status', 'negotiating', t("offer_keyword", lang)
     if _RE_INVITATION.search(text):
-        return 'gespräch', None, 'Einladungs-Keyword'
+        return 'gespräch', None, t("invitation_keyword", lang)
     if _RE_ACK.search(text):
-        return 'status', None, 'Eingangsbestätigung-Keyword'
-    return 'notiz', None, 'kein Keyword → Notiz'
+        return 'status', None, t("ack_keyword", lang)
+    return 'notiz', None, t("no_keyword_note", lang)
 
 
 def _extract_title_from_raw(raw_text: str) -> str:
@@ -722,6 +723,7 @@ def _classify_deterministic(
     raw_text: str,
     date_hint: Optional[datetime],
     hint_apps: list[dict],
+    lang: str = "de",
 ) -> Optional[dict]:
     """
     Classify an item without AI.
@@ -737,7 +739,7 @@ def _classify_deterministic(
             'titel': _extract_title_from_raw(raw_text) or 'Termin',
             'status': None,
             'notiz': None,
-            'reason': 'Kalendertermin → immer Gespräch',
+            'reason': t("calendar_always_interview", lang),
         }
 
     # Local documents: firm from filename/folder name, always notiz
@@ -749,13 +751,13 @@ def _classify_deterministic(
                 'titel': _extract_title_from_raw(raw_text) or 'Dokument',
                 'status': None,
                 'notiz': None,
-                'reason': 'Lokale Datei → Notiz',
+                'reason': t("local_file_note", lang),
             }
         return None  # multiple matches for a file → skip
 
     # Single firm match: classify event type by keywords
     if len(hint_apps) == 1:
-        typ, status, reason = _classify_type_from_text(raw_text)
+        typ, status, reason = _classify_type_from_text(raw_text, lang)
         notiz: Optional[str] = None
         if source == 'icloud_notes':
             notiz = _extract_body_preview(raw_text, max_len=300)
@@ -770,7 +772,7 @@ def _classify_deterministic(
 
     # Multiple firm matches → pick first app
     first_app = hint_apps[0]
-    typ, status, reason = _classify_type_from_text(raw_text)
+    typ, status, reason = _classify_type_from_text(raw_text, lang)
     notiz: Optional[str] = None
     if source == 'icloud_notes':
         notiz = _extract_body_preview(raw_text, max_len=300)
@@ -780,7 +782,7 @@ def _classify_deterministic(
         'titel': _extract_title_from_raw(raw_text) or source,
         'status': status,
         'notiz': notiz,
-        'reason': f"{reason} (von {len(hint_apps)} Matches)",
+        'reason': t("reason_with_match_count", lang, reason=reason, count=len(hint_apps)),
     }
 
 
@@ -910,7 +912,8 @@ async def process_item(
         mark_synced(db, source, external_id, user_id)
         return False
 
-    det = _classify_deterministic(source, raw_text, date_hint, hint_apps)
+    lang = resolve_ui_language(db, user_id)
+    det = _classify_deterministic(source, raw_text, date_hint, hint_apps, lang)
     if det is not None:
         return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint, user_id)
 
@@ -983,7 +986,11 @@ def save_classified_event(
     )
     db.add(new_event)
     db.flush()
-    ai_reason = f"KI erkannt: {ai_extract} (Konfidenz {confidence:.0%})" if ai_extract else f"KI-Klassifizierung (Konfidenz {confidence:.0%})"
+    lang = resolve_ui_language(db, user_id)
+    if ai_extract:
+        ai_reason = t("ai_recognized_with_confidence", lang, extract=ai_extract, confidence=f"{confidence:.0%}")
+    else:
+        ai_reason = t("ai_classification_with_confidence", lang, confidence=f"{confidence:.0%}")
     add_audit(db, "create", source, app_id=target_app["id"], event_id=new_event.id,
               new_value=new_event.titel, reason=ai_reason, user_id=user_id)
     mark_synced(db, source, external_id, user_id)

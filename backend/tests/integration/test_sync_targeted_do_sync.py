@@ -107,7 +107,7 @@ class TestDoSync:
         ))
         db_session.commit()
 
-        async def _boom(db, a):
+        async def _boom(db, a, lang="de"):
             raise ValueError("unerwarteter Fehler")
 
         monkeypatch.setattr("app.ai.tasks.assess_application", _boom)

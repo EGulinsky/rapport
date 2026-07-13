@@ -62,7 +62,7 @@ def merge_applications(
             is_status = field == "main_status"
             add_audit(db, "status_change" if is_status else "update", "user", app_id=winner.id,
                       field=field, old_value=old_v, new_value=new_v,
-                      reason="Zusammenführen: Status übernommen" if is_status else "Zusammenführen: Feld übernommen",
+                      reason_key="merge_status_taken" if is_status else "merge_field_taken",
                       user_id=current_user.id)
 
     for loser in losers:
@@ -102,7 +102,7 @@ def merge_applications(
         add_audit(db, "merge", "user", app_id=winner.id,
                   old_value=f"{loser.firma} – {loser.rolle} (#{loser.id})",
                   new_value=f"{winner.firma} – {winner.rolle} (#{winner.id})",
-                  reason="Zusammengeführt", user_id=current_user.id)
+                  reason_key="merged", user_id=current_user.id)
         db.delete(loser)
 
     db.commit()
@@ -152,7 +152,7 @@ def merge_companies(
         if str(old_v or "") != str(new_v or ""):
             add_audit(db, "update", "user", company_profile_id=winner.id,
                       field=field, old_value=old_v, new_value=new_v,
-                      reason="Zusammenführen: Feld übernommen", user_id=current_user.id)
+                      reason_key="merge_field_taken", user_id=current_user.id)
 
     winner_name = winner.name_display or winner.name_norm
 
@@ -170,7 +170,7 @@ def merge_companies(
             if str(old_firma or "") != str(winner_name or ""):
                 add_audit(db, "update", "user", app_id=app.id,
                           field="firma", old_value=old_firma, new_value=winner_name,
-                          reason="Firmen zusammengeführt", user_id=current_user.id)
+                          reason_key="companies_merged", user_id=current_user.id)
         for app in list(loser.hh_applications):
             old_ziel = app.zielfirma_bei_hh
             app.target_company_profile = winner
@@ -179,7 +179,7 @@ def merge_companies(
                 if str(old_ziel or "") != str(winner_name or ""):
                     add_audit(db, "update", "user", app_id=app.id,
                               field="zielfirma_bei_hh", old_value=old_ziel, new_value=winner_name,
-                              reason="Firmen zusammengeführt", user_id=current_user.id)
+                              reason_key="companies_merged", user_id=current_user.id)
         for contact in list(loser.direct_contacts):
             old_firma = contact.firma
             contact.company_profile = winner
@@ -187,13 +187,13 @@ def merge_companies(
             if str(old_firma or "") != str(winner_name or ""):
                 add_audit(db, "update", "user", contact_id=contact.id,
                           field="firma", old_value=old_firma, new_value=winner_name,
-                          reason="Firmen zusammengeführt", user_id=current_user.id)
+                          reason_key="companies_merged", user_id=current_user.id)
         db.flush()
 
         add_audit(db, "merge", "user", company_profile_id=winner.id,
                   old_value=f"{loser.name_display or loser.name_norm} (#{loser.id})",
                   new_value=f"{winner.name_display or winner.name_norm} (#{winner.id})",
-                  reason="Firmen zusammengeführt", user_id=current_user.id)
+                  reason_key="companies_merged", user_id=current_user.id)
         db.delete(loser)
 
     db.commit()
@@ -232,7 +232,7 @@ def merge_contacts(
         if str(old_v or "") != str(new_v or ""):
             add_audit(db, "update", "user", contact_id=winner.id,
                       field=field, old_value=old_v, new_value=new_v,
-                      reason="Zusammenführen: Feld übernommen", user_id=current_user.id)
+                      reason_key="merge_field_taken", user_id=current_user.id)
 
     for loser in losers:
         db.add(models.MergeAlias(
@@ -251,7 +251,7 @@ def merge_contacts(
         add_audit(db, "merge", "user", contact_id=winner.id,
                   old_value=f"{loser.name} (#{loser.id})",
                   new_value=f"{winner.name} (#{winner.id})",
-                  reason="Zusammengeführt", user_id=current_user.id)
+                  reason_key="merged", user_id=current_user.id)
         db.delete(loser)
 
     db.commit()

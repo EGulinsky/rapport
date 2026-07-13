@@ -10,6 +10,7 @@ from app.models import PendingMatch, Event, Application, Contact, User
 from app.routers.applications import _status_label
 from app.schemas import PendingMatchRead, ApproveMatch
 from app.audit import add_audit
+from app.i18n_strings import t
 from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/review", tags=["review"])
@@ -98,7 +99,7 @@ async def approve_match(
                 db.flush()
                 add_audit(db, "delete", "system", contact_id=keeper.id,
                           old_value=f"{dup.name} (#{dup.id})",
-                          reason=f"Duplikat automatisch bereinigt, zusammengeführt in #{keeper.id}",
+                          reason_key="duplicate_cleaned_merged_into", reason_params={"id": keeper.id},
                           user_id=current_user.id)
                 db.delete(dup)
         match.review_status = "approved"
@@ -119,7 +120,7 @@ async def approve_match(
             ev = db.query(Event).filter_by(id=dup_event_id, user_id=current_user.id).first()
             if ev:
                 add_audit(db, "delete", "user", app_id=app.id, event_id=ev.id,
-                          old_value=ev.titel, reason="Duplikat manuell bereinigt", user_id=current_user.id)
+                          old_value=ev.titel, reason_key="duplicate_cleaned_manually", user_id=current_user.id)
                 db.delete(ev)
         match.review_status = "approved"
         db.commit()
@@ -149,7 +150,10 @@ async def approve_match(
             )
             db.add(status_event)
             db.flush()
-            approve_reason = f"PendingMatch genehmigt (Konfidenz {match.confidence}%): {match.extract[:150]}" if match.extract else f"PendingMatch genehmigt (Konfidenz {match.confidence}%)"
+            approve_reason = (
+                t("pending_match_approved_with_extract", current_user.ui_language, confidence=match.confidence, extract=match.extract[:150])
+                if match.extract else t("pending_match_approved", current_user.ui_language, confidence=match.confidence)
+            )
             add_audit(db, "status_change", match.source or "user",
                       app_id=app.id, field="main_status",
                       old_value=old_main, new_value=new_main,
@@ -174,7 +178,10 @@ async def approve_match(
     )
     db.add(event)
     db.flush()
-    approve_reason = f"PendingMatch genehmigt (Konfidenz {match.confidence}%): {match.extract[:150]}" if match.extract else f"PendingMatch genehmigt (Konfidenz {match.confidence}%)"
+    approve_reason = (
+        t("pending_match_approved_with_extract", current_user.ui_language, confidence=match.confidence, extract=match.extract[:150])
+        if match.extract else t("pending_match_approved", current_user.ui_language, confidence=match.confidence)
+    )
     add_audit(db, "create", match.source or "user", app_id=body.application_id, event_id=event.id,
               new_value=event.titel, reason=approve_reason, user_id=current_user.id)
     match.review_status = "approved"

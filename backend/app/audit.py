@@ -7,8 +7,10 @@ Log levels (stored in SyncSettings.audit_log_level):
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy.orm import Session
+
+from app.i18n_strings import resolve_ui_language, t as _t
 
 
 def _log_level(db: Session) -> str:
@@ -48,6 +50,8 @@ def add_audit(
     old_value: Optional[str] = None,
     new_value: Optional[str] = None,
     reason: Optional[str] = None,
+    reason_key: Optional[str] = None,
+    reason_params: Optional[dict[str, Any]] = None,
     user_id: Optional[int] = None,
 ) -> None:
     """Append one audit entry if the current log level permits it.
@@ -62,15 +66,24 @@ def add_audit(
     Wird bei fehlender Angabe aus den gesetzten FKs abgeleitet (siehe
     _infer_entity_type), muss also nur explizit gesetzt werden, wenn die
     Ableitung für den konkreten Aufruf nicht passt.
+    reason: freier, bereits fertiger Text (für echte dynamische Inhalte wie
+    E-Mail-Betreffs, die nicht übersetzbar sind). reason_key/reason_params:
+    bevorzugter Weg für feste, wiederkehrende Gründe — wird über i18n_strings.t()
+    in der Sprache des Kontos (user_id) übersetzt. Ist reason_key gesetzt, hat
+    er Vorrang vor reason.
     user_id: das anlegende Konto bei Anfragen aus einem HTTP-Request (current_user.id) —
     bei Hintergrund-Sync-Quellen (gmail/icloud_mail/linkedin/…) None, sofern kein
-    ausführendes Konto bekannt ist.
+    ausführendes Konto bekannt ist. Auch die Quelle für reason_key's Zielsprache.
     """
     level = _log_level(db)
     if level == "off":
         return
     if level == "normal" and action == "update":
         return  # field-level edits only in verbose mode
+
+    if reason_key is not None:
+        lang = resolve_ui_language(db, user_id)
+        reason = _t(reason_key, lang, **(reason_params or {}))
 
     from app import models
     db.add(models.AuditLog(

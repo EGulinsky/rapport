@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit
+from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, AIRateLimited
@@ -206,20 +207,21 @@ def reset_mail_sync(db: Session = Depends(get_db), current_user: models.User = D
 async def _do_icloud_mail(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     imap = None
     try:
         cfg = db.query(models.ICloudSync).first()
         if not cfg:
-            finish_progress("icloud_mail")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Keine iCloud-Credentials gespeichert."]}
+            finish_progress("icloud_mail", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_icloud_credentials", lang)]}
 
         _, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
         global_cutoff = earliest_bewerbung_date(db)
 
-        update_progress("icloud_mail", 0, 0, "IMAP wird verbunden…")
+        update_progress("icloud_mail", 0, 0, t("connecting_imap", lang))
         try:
             imap = _imap_connect(cfg)
             imap.select("INBOX")
@@ -227,19 +229,19 @@ async def _do_icloud_mail(user_id: int) -> dict:
             _, msg_ids = imap.search(None, f'SINCE "{since}"')
             ids = msg_ids[0].split() if msg_ids[0] else []
         except Exception as e:
-            finish_progress("icloud_mail")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"IMAP-Fehler: {e}"]}
+            finish_progress("icloud_mail", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("imap_error", lang, error=e)]}
 
         batch = ids[-100:]
         total = len(batch)
-        update_progress("icloud_mail", 0, total, f"{total} Nachrichten gefunden")
+        update_progress("icloud_mail", 0, total, t("messages_found", lang, count=total))
         synced_ids = load_synced_ids(db, "icloud_mail")
 
         from email.utils import parsedate_to_datetime as _parse_date_hdr
 
         for i, msg_id_bytes in enumerate(batch):
             if i % 10 == 0:
-                update_progress("icloud_mail", i, total, f"E-Mail {i + 1}/{total}")
+                update_progress("icloud_mail", i, total, t("email_progress", lang, current=i + 1, total=total))
             msg_id = msg_id_bytes.decode()
 
             if msg_id in synced_ids:
@@ -293,10 +295,10 @@ async def _do_icloud_mail(user_id: int) -> dict:
             try:
                 ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
-                finish_progress("icloud_mail")
+                finish_progress("icloud_mail", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
             except AIRateLimited as e:
-                finish_progress("icloud_mail")
+                finish_progress("icloud_mail", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
             except Exception as e:
                 errors.append(f"{subject}: {e}")
@@ -309,10 +311,10 @@ async def _do_icloud_mail(user_id: int) -> dict:
         db.commit()
         cfg.mail_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_mail")
+        finish_progress("icloud_mail", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("icloud_mail")
+        finish_progress("icloud_mail", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         if imap:
@@ -334,7 +336,7 @@ async def sync_mail(
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
     set_batch_result("icloud_mail", {"done": False})
-    init_progress("icloud_mail", "iCloud Mail", "Starte…")
+    init_progress("icloud_mail", "iCloud Mail", lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_icloud_mail(current_user.id)
@@ -394,10 +396,11 @@ async def _sync_notes_with_api(
     api: Any, cfg: models.ICloudSync, db: Session, user_id: Optional[int] = None
 ) -> schemas.SyncResult:
     _, term_to_apps = build_firm_index(db)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
 
-    init_progress("icloud_notes", "iCloud Notizen", "Notizen werden geladen…")
+    init_progress("icloud_notes", t("label_icloud_notes", lang), lang=lang)
     try:
         notes_service = api.notes
         # pyicloud Notes API: service may expose .notes dict, .get_all(), or be iterable
@@ -408,10 +411,10 @@ async def _sync_notes_with_api(
         else:
             raw_notes = list(notes_service)
     except Exception as e:
-        finish_progress("icloud_notes")
+        finish_progress("icloud_notes", lang=lang)
         return schemas.SyncResult(
             processed=0, created=0, skipped=0,
-            errors=[f"Notizen-Zugriff fehlgeschlagen: {e}"]
+            errors=[t("notes_access_failed", lang, error=e)]
         )
 
     # Normalise to list
@@ -419,10 +422,10 @@ async def _sync_notes_with_api(
         raw_notes = list(raw_notes.values())
 
     total = len(raw_notes)
-    update_progress("icloud_notes", 0, total, f"{total} Notizen gefunden")
+    update_progress("icloud_notes", 0, total, t("notes_found", lang, count=total))
 
     for i, note in enumerate(raw_notes):
-        update_progress("icloud_notes", i, total, f"Notiz {i + 1}/{total}")
+        update_progress("icloud_notes", i, total, t("note_progress", lang, current=i + 1, total=total))
         try:
             if isinstance(note, dict):
                 title = note.get("title") or note.get("subject") or ""
@@ -454,10 +457,10 @@ async def _sync_notes_with_api(
         try:
             ok = await process_item(db, "icloud_notes", note_key, raw, None, hint_apps=hint_apps, user_id=user_id)
         except AINotConfigured as e:
-            finish_progress("icloud_notes")
+            finish_progress("icloud_notes", lang=lang)
             raise HTTPException(400, str(e))
         except AIRateLimited as e:
-            finish_progress("icloud_notes")
+            finish_progress("icloud_notes", lang=lang)
             raise HTTPException(429, f"AI-Tageslimit erreicht: {e}")
         except Exception as e:
             errors.append(f"{title or uid}: {e}")
@@ -470,7 +473,7 @@ async def _sync_notes_with_api(
     db.commit()
     cfg.notes_last_sync = datetime.now(timezone.utc)
     db.commit()
-    finish_progress("icloud_notes")
+    finish_progress("icloud_notes", lang=lang)
     return schemas.SyncResult(processed=processed, created=created, skipped=skipped, errors=errors)
 
 
@@ -514,32 +517,33 @@ async def _do_icloud_notes(user_id: int) -> dict:
 
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.ICloudSync).first()
         if not cfg:
-            finish_progress("icloud_notes")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Keine iCloud-Credentials gespeichert."]}
+            finish_progress("icloud_notes", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_icloud_credentials", lang)]}
 
         _, term_to_apps = build_firm_index(db)
 
-        update_progress("icloud_notes", 0, 0, "Agent wird abgefragt…")
+        update_progress("icloud_notes", 0, 0, t("querying_agent", lang))
         try:
             resp = await agent_get(db, "/notes", timeout=30)
             if resp.status_code != 200:
                 err = resp.json().get('error', resp.text)
-                finish_progress("icloud_notes")
-                return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Agent-Fehler (Notizen): {err}"]}
+                finish_progress("icloud_notes", lang=lang)
+                return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("agent_error_notes", lang, error=err)]}
             notes = resp.json()
         except Exception as e:
-            finish_progress("icloud_notes")
+            finish_progress("icloud_notes", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [
-                f"Rapport Agent nicht erreichbar ({e}). Läuft der Agent auf deinem Mac?"
+                t("agent_unreachable", lang, error=e)
             ]}
 
         total = len(notes)
-        update_progress("icloud_notes", 0, total, f"{total} Notizen gefunden")
+        update_progress("icloud_notes", 0, total, t("notes_found", lang, count=total))
         synced_ids = load_synced_ids(db, "icloud_notes")
 
         # ── Phase 1: pre-filter (no AI) ────────────────────────────────────
@@ -581,10 +585,10 @@ async def _do_icloud_notes(user_id: int) -> dict:
 
         BATCH = 5
         n_pending = len(pending)
-        update_progress("icloud_notes", 0, n_pending, f"{n_pending} Notizen mit Firmenbezug werden klassifiziert…")
+        update_progress("icloud_notes", 0, n_pending, t("notes_classifying", lang, count=n_pending))
 
         async def _process_one(idx: int, note_key: str, raw: str, date_hint, hint_apps):
-            update_progress("icloud_notes", idx, n_pending, f"Notiz {idx + 1}/{n_pending}")
+            update_progress("icloud_notes", idx, n_pending, t("note_progress", lang, current=idx + 1, total=n_pending))
             return await process_item(db, "icloud_notes", note_key, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
 
         for batch_start in range(0, n_pending, BATCH):
@@ -595,16 +599,16 @@ async def _do_icloud_notes(user_id: int) -> dict:
                     return_exceptions=True,
                 )
             except AINotConfigured as e:
-                finish_progress("icloud_notes")
+                finish_progress("icloud_notes", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
 
             for (note_key, raw, _, _), result in zip(batch, results):
                 if isinstance(result, AINotConfigured):
-                    finish_progress("icloud_notes")
+                    finish_progress("icloud_notes", lang=lang)
                     return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(result)]}
                 if isinstance(result, AIRateLimited):
-                    finish_progress("icloud_notes")
-                    return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {result}"]}
+                    finish_progress("icloud_notes", lang=lang)
+                    return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [t("ai_daily_limit", lang, error=result)]}
                 if isinstance(result, Exception):
                     errors.append(str(result))
                     continue
@@ -615,10 +619,10 @@ async def _do_icloud_notes(user_id: int) -> dict:
         db.commit()
         cfg.notes_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_notes")
+        finish_progress("icloud_notes", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("icloud_notes")
+        finish_progress("icloud_notes", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -635,7 +639,7 @@ async def sync_notes(
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
     set_batch_result("icloud_notes", {"done": False})
-    init_progress("icloud_notes", "iCloud Notizen", "Starte…")
+    init_progress("icloud_notes", t("label_icloud_notes", current_user.ui_language), lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_icloud_notes(current_user.id)
@@ -775,19 +779,20 @@ def reset_calendar_sync(db: Session = Depends(get_db), current_user: models.User
 async def _do_icloud_cal(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.ICloudSync).first()
         if not cfg:
-            finish_progress("icloud_cal")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Keine iCloud-Credentials gespeichert."]}
+            finish_progress("icloud_cal", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_icloud_credentials", lang)]}
 
         try:
             import caldav
         except ImportError:
-            finish_progress("icloud_cal")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["caldav-Bibliothek nicht installiert."]}
+            finish_progress("icloud_cal", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_lib_missing", lang)]}
 
         _, term_to_apps = build_firm_index(db)
 
@@ -800,8 +805,8 @@ async def _do_icloud_cal(user_id: int) -> dict:
             principal = client.principal()
             calendars = principal.calendars()
         except Exception as e:
-            finish_progress("icloud_cal")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"CalDAV-Fehler: {e}"]}
+            finish_progress("icloud_cal", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_error", lang, error=e)]}
 
         now = datetime.now(timezone.utc)
         start = now - timedelta(days=180)
@@ -813,7 +818,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
         }
         firm_terms_lower = {t.lower() for t in term_to_apps}
 
-        update_progress("icloud_cal", 0, 0, "Termine werden geladen…")
+        update_progress("icloud_cal", 0, 0, t("loading_appointments", lang))
         all_events: list[tuple] = []
         for cal in calendars:
             try:
@@ -823,13 +828,13 @@ async def _do_icloud_cal(user_id: int) -> dict:
                 errors.append(f"Kalender {cal.name}: {e}")
 
         total = len(all_events)
-        update_progress("icloud_cal", 0, total, f"{total} Termine gefunden")
+        update_progress("icloud_cal", 0, total, t("appointments_found", lang, count=total))
         synced_ids = load_synced_ids(db, "icloud_cal")
 
         uid_set: set[str] = set()
         for i, ev in enumerate(all_events):
             if i % 10 == 0:
-                update_progress("icloud_cal", i, total, f"Termin {i + 1}/{total}")
+                update_progress("icloud_cal", i, total, t("appointment_progress", lang, current=i + 1, total=total))
             try:
                 vevent = ev.vobject_instance.vevent
                 summary = vobj_str(vevent, "summary")
@@ -875,11 +880,11 @@ async def _do_icloud_cal(user_id: int) -> dict:
             try:
                 ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
-                finish_progress("icloud_cal")
+                finish_progress("icloud_cal", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
             except AIRateLimited as e:
-                finish_progress("icloud_cal")
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
+                finish_progress("icloud_cal", lang=lang)
+                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [t("ai_daily_limit", lang, error=e)]}
             except Exception as e:
                 errors.append(f"{summary or uid}: {e}")
                 continue
@@ -917,10 +922,10 @@ async def _do_icloud_cal(user_id: int) -> dict:
 
         cfg.calendar_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_cal")
+        finish_progress("icloud_cal", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("icloud_cal")
+        finish_progress("icloud_cal", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -937,7 +942,7 @@ async def sync_calendar(
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
     set_batch_result("icloud_cal", {"done": False})
-    init_progress("icloud_cal", "iCloud Kalender", "Starte…")
+    init_progress("icloud_cal", t("label_icloud_calendar", current_user.ui_language), lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_icloud_cal(current_user.id)
@@ -961,19 +966,20 @@ def reset_reminders_sync(db: Session = Depends(get_db), current_user: models.Use
 async def _do_icloud_reminders(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.ICloudSync).first()
         if not cfg:
-            finish_progress("icloud_reminders")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Keine iCloud-Credentials gespeichert."]}
+            finish_progress("icloud_reminders", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_icloud_credentials", lang)]}
 
         try:
             import caldav
         except ImportError:
-            finish_progress("icloud_reminders")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["caldav-Bibliothek nicht installiert."]}
+            finish_progress("icloud_reminders", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_lib_missing", lang)]}
 
         _, term_to_apps = build_firm_index(db)
 
@@ -986,12 +992,12 @@ async def _do_icloud_reminders(user_id: int) -> dict:
             principal = client.principal()
             calendars = principal.calendars()
         except Exception as e:
-            finish_progress("icloud_reminders")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"CalDAV-Fehler: {e}"]}
+            finish_progress("icloud_reminders", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_error", lang, error=e)]}
 
         firm_terms_lower = {t.lower() for t in term_to_apps}
 
-        update_progress("icloud_reminders", 0, 0, "Erinnerungen werden geladen…")
+        update_progress("icloud_reminders", 0, 0, t("loading_reminders", lang))
         all_todos = []
         for cal in calendars:
             try:
@@ -1000,12 +1006,12 @@ async def _do_icloud_reminders(user_id: int) -> dict:
                 pass
 
         total = len(all_todos)
-        update_progress("icloud_reminders", 0, total, f"{total} Erinnerungen gefunden")
+        update_progress("icloud_reminders", 0, total, t("reminders_found", lang, count=total))
         synced_ids = load_synced_ids(db, "icloud_todo")
 
         for i, todo in enumerate(all_todos):
             if i % 10 == 0:
-                update_progress("icloud_reminders", i, total, f"Erinnerung {i + 1}/{total}")
+                update_progress("icloud_reminders", i, total, t("reminder_progress", lang, current=i + 1, total=total))
             try:
                 vtodo = todo.vobject_instance.vtodo
                 summary = vobj_str(vtodo, "summary")
@@ -1041,11 +1047,11 @@ async def _do_icloud_reminders(user_id: int) -> dict:
             try:
                 ok = await process_item(db, "icloud_todo", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
-                finish_progress("icloud_reminders")
+                finish_progress("icloud_reminders", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
             except AIRateLimited as e:
-                finish_progress("icloud_reminders")
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
+                finish_progress("icloud_reminders", lang=lang)
+                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [t("ai_daily_limit", lang, error=e)]}
             except Exception as e:
                 errors.append(f"{summary or uid}: {e}")
                 continue
@@ -1057,10 +1063,10 @@ async def _do_icloud_reminders(user_id: int) -> dict:
         db.commit()
         cfg.reminders_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_reminders")
+        finish_progress("icloud_reminders", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("icloud_reminders")
+        finish_progress("icloud_reminders", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -1077,7 +1083,7 @@ async def sync_reminders(
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
     set_batch_result("icloud_reminders", {"done": False})
-    init_progress("icloud_reminders", "iCloud Erinnerungen", "Starte…")
+    init_progress("icloud_reminders", t("label_icloud_reminders", current_user.ui_language), lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_icloud_reminders(current_user.id)
@@ -1208,11 +1214,11 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
-    init_progress("icloud_contacts", "iCloud Kontakte", "Kontakte werden geladen…")
+    init_progress("icloud_contacts", t("label_icloud_contacts", current_user.ui_language), t("loading_contacts", current_user.ui_language), lang=current_user.ui_language)
     created, errors = await _sync_contacts_http(cfg, db, current_user.id)
 
     # Backfill missing application links for already-imported contacts (mention-based)
-    update_progress("icloud_contacts", 0, 1, "Verlinkungen werden aktualisiert…")
+    update_progress("icloud_contacts", 0, 1, t("updating_links", current_user.ui_language))
     all_contacts = db.query(models.Contact).all()
     backfilled = 0
     for c in all_contacts:
@@ -1228,7 +1234,7 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
     db.commit()
     cfg.contacts_last_sync = datetime.now(timezone.utc)
     db.commit()
-    finish_progress("icloud_contacts")
+    finish_progress("icloud_contacts", lang=current_user.ui_language)
 
     return schemas.SyncResult(
         processed=created,
@@ -1416,11 +1422,12 @@ async def _sync_contacts_http(
     if not vcards_raw:
         return 0, ["Keine vCards gefunden (CardDAV)"]
 
+    lang = resolve_ui_language(db, user_id)
     total_vcards = len(vcards_raw)
-    update_progress("icloud_contacts", 0, total_vcards, f"{total_vcards} Kontakte gefunden")
+    update_progress("icloud_contacts", 0, total_vcards, t("contacts_found", lang, count=total_vcards))
 
     for idx, raw_vcard in enumerate(vcards_raw):
-        update_progress("icloud_contacts", idx, total_vcards, f"Kontakt {idx + 1}/{total_vcards}")
+        update_progress("icloud_contacts", idx, total_vcards, t("contact_progress", lang, current=idx + 1, total=total_vcards))
         parsed = _parse_vcard(raw_vcard)
         if not parsed:
             continue
@@ -1449,22 +1456,22 @@ async def _sync_contacts_http(
                 if linkedin_url and not existing.linkedin_url:
                     add_audit(db, "update", "sync", contact_id=existing.id,
                               field="linkedin_url", old_value=None, new_value=linkedin_url,
-                              reason="automatisch aus iCloud-Adressbuch ergänzt", user_id=user_id)
+                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
                     existing.linkedin_url = linkedin_url
                 if tel_val and not existing.telefon:
                     add_audit(db, "update", "sync", contact_id=existing.id,
                               field="telefon", old_value=None, new_value=tel_val,
-                              reason="automatisch aus iCloud-Adressbuch ergänzt", user_id=user_id)
+                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
                     existing.telefon = tel_val
                 if org_val and not existing.firma:
                     add_audit(db, "update", "sync", contact_id=existing.id,
                               field="firma", old_value=None, new_value=org_val,
-                              reason="automatisch aus iCloud-Adressbuch ergänzt", user_id=user_id)
+                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
                     existing.firma = org_val
                 if title_val and not existing.rolle:
                     add_audit(db, "update", "sync", contact_id=existing.id,
                               field="rolle", old_value=None, new_value=title_val,
-                              reason="automatisch aus iCloud-Adressbuch ergänzt", user_id=user_id)
+                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
                     existing.rolle = title_val
                 if vorname_val and not existing.vorname:
                     # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
@@ -1526,14 +1533,14 @@ async def _sync_contacts_http(
             db.add(contact)
             db.flush()
             if mention_app_ids:
-                match_reason = "in Bewerbungstext/E-Mail erwähnt"
+                match_reason = t("mentioned_in_app_text_or_email", lang)
             elif firma_app_ids:
-                match_reason = f"Firma {org_val!r} passt zu bestehender Bewerbung"
+                match_reason = t("company_matches_existing_application", lang, org=org_val)
             else:
-                match_reason = f"E-Mail-Domain passt zu Firma {org_val!r}"
+                match_reason = t("email_domain_matches_company", lang, org=org_val)
             add_audit(db, "create", "sync", contact_id=contact.id,
                       new_value=contact.name,
-                      reason=f"automatisch aus iCloud-Adressbuch importiert ({match_reason})",
+                      reason_key="contact_imported_icloud_addressbook", reason_params={"match_reason": match_reason},
                       user_id=user_id)
             linked_ids = list({*mention_app_ids, *firma_app_ids})
             for aid in linked_ids:
@@ -1665,7 +1672,7 @@ def import_contacts(
             contact.applications.append(app_obj)
         add_audit(db, "create", "user", contact_id=contact.id,
                   app_id=app_obj.id if app_obj else None,
-                  new_value=contact.name, reason="Import aus iCloud-Kontaktsuche",
+                  new_value=contact.name, reason_key="import_from_icloud_contact_search",
                   user_id=current_user.id)
         imported += 1
 
@@ -1781,7 +1788,7 @@ def reset_calls_sync(db: Session = Depends(get_db), current_user: models.User = 
     deleted = db.query(models.Event).filter_by(source="icloud_calls", user_id=current_user.id).delete()
     if deleted:
         add_audit(db, "delete", "user", old_value=f"{deleted} synchronisierte Anrufe",
-                  reason="Anruf-Sync manuell zurückgesetzt", user_id=current_user.id)
+                  reason_key="call_sync_reset_manually", user_id=current_user.id)
     db.commit()
 
 
@@ -1790,30 +1797,31 @@ async def _do_icloud_calls(user_id: int) -> dict:
 
     db = SessionLocal()
     set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
     processed = created = skipped = 0
     errors: list[str] = []
     try:
         calls_cfg = _get_calls_cfg(db, user_id)
         if not calls_cfg.enabled:
-            finish_progress("icloud_calls")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": ["Anrufliste-Sync deaktiviert"]}
+            finish_progress("icloud_calls", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("calls_sync_disabled", lang)]}
 
-        update_progress("icloud_calls", 0, 0, "Anrufe werden geladen…")
+        update_progress("icloud_calls", 0, 0, t("loading_calls", lang))
         try:
             resp = await agent_get(db, "/calls", timeout=30)
             resp.raise_for_status()
             calls: list[dict] = resp.json()
         except Exception as e:
-            finish_progress("icloud_calls")
-            return {"processed": 0, "created": 0, "skipped": 0, "errors": [f"Rapport Agent nicht erreichbar: {e}"]}
+            finish_progress("icloud_calls", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("agent_unreachable_short", lang, error=e)]}
 
         total = len(calls)
-        update_progress("icloud_calls", 0, total, f"{total} Anrufe gefunden")
+        update_progress("icloud_calls", 0, total, t("calls_found", lang, count=total))
 
         all_contacts = db.query(models.Contact).filter(models.Contact.telefon != None).all()  # noqa
 
         for i, call in enumerate(calls):
-            update_progress("icloud_calls", i, total, f"Anruf {i + 1}/{total}")
+            update_progress("icloud_calls", i, total, t("call_progress", lang, current=i + 1, total=total))
 
             call_id = str(call.get("id", ""))
             source_key = f"icloud_calls:{call_id}"
@@ -1894,10 +1902,10 @@ async def _do_icloud_calls(user_id: int) -> dict:
         db.commit()
         calls_cfg.last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_calls")
+        finish_progress("icloud_calls", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
-        finish_progress("icloud_calls")
+        finish_progress("icloud_calls", lang=lang)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
     finally:
         db.close()
@@ -1911,10 +1919,10 @@ async def sync_calls(
 ):
     calls_cfg = _get_calls_cfg(db, current_user.id)
     if not calls_cfg.enabled:
-        return schemas.SyncResult(processed=0, created=0, skipped=0, errors=["Anrufliste-Sync deaktiviert"])
+        return schemas.SyncResult(processed=0, created=0, skipped=0, errors=[t("calls_sync_disabled", current_user.ui_language)])
 
     set_batch_result("icloud_calls", {"done": False})
-    init_progress("icloud_calls", "Anrufliste", "Starte…")
+    init_progress("icloud_calls", t("label_call_list", current_user.ui_language), lang=current_user.ui_language)
 
     async def _bg():
         result = await _do_icloud_calls(current_user.id)

@@ -419,7 +419,7 @@ async def cleanup_run(
                 db.flush()
                 add_audit(db, "delete", "system", app_id=keeper_id,
                           old_value=f"{dup.firma} – {dup.rolle} (#{dup.id})",
-                          reason=f"Duplikat automatisch bereinigt, zusammengeführt in #{keeper_id}",
+                          reason_key="duplicate_cleaned_merged_into", reason_params={"id": keeper_id},
                           user_id=current_user.id)
                 db.delete(dup)
                 deleted_apps += 1
@@ -490,7 +490,7 @@ async def cleanup_run(
                 if ev:
                     add_audit(db, "delete", "system", app_id=ev.application_id, event_id=ev.id,
                               old_value=ev.titel,
-                              reason=f"Duplikat automatisch bereinigt, entspricht #{keeper_id}",
+                              reason_key="duplicate_cleaned_matches", reason_params={"id": keeper_id},
                               user_id=current_user.id)
                     db.delete(ev)
                     deleted_events += 1

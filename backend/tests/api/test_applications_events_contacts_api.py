@@ -54,7 +54,7 @@ class TestAiAssessAll:
         application_factory(db_session, main_status="applied")
         db_session.commit()
 
-        async def _fake_assess(db, app):
+        async def _fake_assess(db, app, lang="de"):
             return {"color": "green", "reasoning": "gut", "next_step": "abwarten"}
 
         with patch("app.ai.tasks.assess_application", new=_fake_assess):
@@ -70,7 +70,7 @@ class TestAiAssessAll:
         application_factory(db_session, main_status="applied")
         db_session.commit()
 
-        async def _fake_assess(db, app):
+        async def _fake_assess(db, app, lang="de"):
             raise AINotConfigured("kein Provider konfiguriert")
 
         with patch("app.ai.tasks.assess_application", new=_fake_assess):
@@ -140,7 +140,7 @@ class TestAiAssessSingle:
         app = application_factory(db_session, main_status="applied")
         db_session.commit()
 
-        async def _fake_assess(db, a):
+        async def _fake_assess(db, a, lang="de"):
             return {"color": "green", "reasoning": "gut", "next_step": "abwarten"}
 
         with patch("app.ai.tasks.assess_application", new=_fake_assess):
@@ -155,7 +155,7 @@ class TestAiAssessSingle:
         app = application_factory(db_session, main_status="rejected")
         db_session.commit()
 
-        async def _fake_assess_rejected(db, a):
+        async def _fake_assess_rejected(db, a, lang="de"):
             return {"color": "red", "reasoning": "abgesagt", "next_step": "weiter bewerben"}
 
         with patch("app.ai.tasks.assess_rejected_application", new=_fake_assess_rejected):
@@ -170,7 +170,7 @@ class TestAiAssessSingle:
         app = application_factory(db_session, main_status="applied")
         db_session.commit()
 
-        async def _fake_assess(db, a):
+        async def _fake_assess(db, a, lang="de"):
             raise AINotConfigured("nicht konfiguriert")
 
         with patch("app.ai.tasks.assess_application", new=_fake_assess):
@@ -184,7 +184,7 @@ class TestAiAssessSingle:
         app = application_factory(db_session, main_status="applied")
         db_session.commit()
 
-        async def _fake_assess(db, a):
+        async def _fake_assess(db, a, lang="de"):
             raise AIBadRequest("kaputte Antwort")
 
         with patch("app.ai.tasks.assess_application", new=_fake_assess):

@@ -487,7 +487,7 @@ async def resolve_company_candidate(
         profile.last_synced_at = now
         add_audit(db, "update", "user", company_profile_id=profile.id,
                   field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
-                  reason=f"manuell aufgelöst → LinkedIn {linkedin_url}", user_id=user_id)
+                  reason_key="company_resolved_linkedin", reason_params={"url": linkedin_url}, user_id=user_id)
         log.info("'{}': manuell aufgelöst → LinkedIn {}", name, linkedin_url)
         return
 
@@ -501,7 +501,7 @@ async def resolve_company_candidate(
         profile.last_synced_at = now
         add_audit(db, "update", "user", company_profile_id=profile.id,
                   field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
-                  reason="manuell aufgelöst → 'keiner davon', auch kein Wikidata-Treffer", user_id=user_id)
+                  reason_key="company_resolved_none_no_wikidata", user_id=user_id)
         log.info("'{}': manuell aufgelöst → 'keiner davon', auch kein Wikidata-Treffer", name)
         return
 
@@ -514,7 +514,7 @@ async def resolve_company_candidate(
         profile.last_synced_at = now
         add_audit(db, "update", "user", company_profile_id=profile.id,
                   field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
-                  reason="manuell aufgelöst → Wikidata-SPARQL-Fehler", user_id=user_id)
+                  reason_key="company_resolved_wikidata_sparql_error", user_id=user_id)
         return
 
     data = sparql_data.get(qid, {})
@@ -533,7 +533,7 @@ async def resolve_company_candidate(
     profile.last_synced_at = now
     add_audit(db, "update", "user", company_profile_id=profile.id,
               field="sync_status", old_value=old_sync_status, new_value=profile.sync_status,
-              reason=f"manuell aufgelöst → 'keiner davon', Wikidata {profile.sync_source}", user_id=user_id)
+              reason_key="company_resolved_none_wikidata_source", reason_params={"source": profile.sync_source}, user_id=user_id)
     log.info("'{}': manuell aufgelöst → 'keiner davon', Wikidata {}", name, profile.sync_source)
 
 
@@ -645,7 +645,7 @@ def reset_failed(db: Session = Depends(get_db), current_user: models.User = Depe
         p.sync_error = None
         add_audit(db, "update", "user", company_profile_id=p.id,
                   field="sync_status", old_value="failed", new_value="pending",
-                  reason="Massen-Reset fehlgeschlagener Syncs", user_id=current_user.id)
+                  reason_key="bulk_reset_failed_syncs", user_id=current_user.id)
     db.commit()
     return {"reset": len(updated)}
 
@@ -667,7 +667,7 @@ def reset_profile(
     profile.sync_error = None
     add_audit(db, "update", "user", company_profile_id=profile.id,
               field="sync_status", old_value=old_status, new_value="pending",
-              reason="manuell zurückgesetzt", user_id=current_user.id)
+              reason_key="reset_manually", user_id=current_user.id)
     db.commit()
     return {"ok": True, "id": profile_id}
 
@@ -872,7 +872,7 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.last_synced_at = now
                 add_audit(db, "update", "system", company_profile_id=p.id,
                           field="sync_status", old_value=old_status, new_value=p.sync_status,
-                          reason="mehrere LinkedIn-Treffer, manuelle Auswahl nötig", user_id=user_id)
+                          reason_key="multiple_linkedin_matches_manual_choice_needed", user_id=user_id)
                 continue
 
             if pid in wikidata_fallback_pids and pid not in wikidata_attempted_pids:
@@ -903,7 +903,8 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 li_url = data.get("linkedin_company_url")
                 add_audit(db, "update", "system", company_profile_id=p.id,
                           field="sync_status", old_value=old_status, new_value=p.sync_status,
-                          reason=f"automatisch via LinkedIn synchronisiert ({li_url})" if li_url else "automatisch via LinkedIn synchronisiert",
+                          reason_key="company_synced_linkedin_with_url" if li_url else "company_synced_linkedin",
+                          reason_params={"url": li_url} if li_url else None,
                           user_id=user_id)
 
             elif pid in qid_map:
@@ -930,7 +931,8 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                 p.last_synced_at = now
                 add_audit(db, "update", "system", company_profile_id=p.id,
                           field="sync_status", old_value=old_status, new_value=p.sync_status,
-                          reason=f"automatisch via Wikidata synchronisiert ({qid})" if data else "automatisch via Wikidata synchronisiert (nur Basistreffer, kein Datensatz)",
+                          reason_key="company_synced_wikidata_with_qid" if data else "company_synced_wikidata_basic_only",
+                          reason_params={"qid": qid} if data else None,
                           user_id=user_id)
 
             else:

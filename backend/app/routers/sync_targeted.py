@@ -22,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit
+from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.ai.provider import decrypt_api_key
@@ -192,13 +193,14 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         return 0, 0, [f"Gmail API: {e}"]
 
     log.debug("{} {} Nachrichten gefunden", pfx, len(messages))
+    lang = resolve_ui_language(db, user_id)
     created = skipped = 0
     errors: list[str] = []
     total = len(messages)
 
     pending: list[dict] = []
     for i, msg_ref in enumerate(messages):
-        update_progress("targeted_gmail", i, total, f"Gmail laden {i+1}/{total}")
+        update_progress("targeted_gmail", i, total, t("gmail_loading_progress", lang, current=i + 1, total=total))
         msg_id = msg_ref["id"]
         if is_synced(db, "gmail", msg_id):
             log.debug("{} {} → SKIP bereits synced", pfx, msg_id)
@@ -227,7 +229,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
     for i, item in enumerate(pending):
-        update_progress("targeted_gmail", i, len(pending), f"Gmail {i+1}/{len(pending)}")
+        update_progress("targeted_gmail", i, len(pending), t("gmail_progress", lang, current=i + 1, total=len(pending)))
         try:
             ok = await process_item(db, "gmail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict], user_id=user_id)
             if ok:
@@ -420,10 +422,11 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
 
     total = len(ids)
     log.debug("{} {} Nachrichten gefunden", pfx, total)
+    lang = resolve_ui_language(db, user_id)
 
     pending: list[dict] = []
     for i, msg_id_bytes in enumerate(ids):
-        update_progress("targeted_icloud_mail", i, total, f"iCloud Mail laden {i+1}/{total}")
+        update_progress("targeted_icloud_mail", i, total, t("icloud_mail_loading_progress", lang, current=i + 1, total=total))
         msg_id = msg_id_bytes.decode()
         if is_synced(db, "icloud_mail", msg_id):
             log.debug("{} {} → SKIP bereits synced", pfx, msg_id)
@@ -456,7 +459,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         pass
 
     for i, item in enumerate(pending):
-        update_progress("targeted_icloud_mail", i, len(pending), f"iCloud Mail {i+1}/{len(pending)}")
+        update_progress("targeted_icloud_mail", i, len(pending), t("icloud_mail_progress", lang, current=i + 1, total=len(pending)))
         try:
             ok = await process_item(db, "icloud_mail", item["id"], item["raw"], item["date_hint"], hint_apps=[app_dict], user_id=user_id)
             if ok:
@@ -719,6 +722,7 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
     if not vcards_raw:
         return 0, 0, []
 
+    lang = resolve_ui_language(db, user_id)
     created = skipped = 0
     errors: list[str] = []
 
@@ -772,28 +776,28 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
             if not existing:
                 existing = db.query(models.Contact).filter_by(name=name).first()
 
-            match_reason = "in Bewerbungstext/E-Mail erwähnt" if name_in_app_text else f"Firma {org_val!r} passt zu Bewerbung {app.firma!r}"
+            match_reason = t("mentioned_in_app_text_or_email", lang) if name_in_app_text else t("company_matches_application", lang, org=org_val, app=app.firma)
 
             if existing:
                 if linkedin_url and not existing.linkedin_url:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
                               field="linkedin_url", old_value=None, new_value=linkedin_url,
-                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
+                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
                     existing.linkedin_url = linkedin_url
                 if tel_val and not existing.telefon:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
                               field="telefon", old_value=None, new_value=tel_val,
-                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
+                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
                     existing.telefon = tel_val
                 if org_val and not existing.firma:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
                               field="firma", old_value=None, new_value=org_val,
-                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
+                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
                     existing.firma = org_val
                 if title_val and not existing.rolle:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
                               field="rolle", old_value=None, new_value=title_val,
-                              reason=f"automatisch aus gezieltem iCloud-Sync ergänzt ({match_reason})", user_id=user_id)
+                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
                     existing.rolle = title_val
                 if name_in_app_text:
                     db.execute(text(
@@ -809,7 +813,7 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 db.flush()
                 add_audit(db, "create", "sync", contact_id=contact.id, app_id=app.id,
                           new_value=contact.name,
-                          reason=f"automatisch aus gezieltem iCloud-Sync erstellt ({match_reason})",
+                          reason_key="contact_created_targeted_icloud_sync", reason_params={"match_reason": match_reason},
                           user_id=user_id)
                 if name_in_app_text:
                     db.execute(text(
@@ -1065,7 +1069,7 @@ def reset_targeted_sync(
     if deleted_events:
         add_audit(db, "delete", "user", app_id=app_id,
                   old_value=f"{deleted_events} synchronisierte Termine",
-                  reason="Gezielter Sync manuell zurückgesetzt", user_id=current_user.id)
+                  reason_key="targeted_sync_reset_manually", user_id=current_user.id)
     db.commit()
     return {"deleted_events": deleted_events, "deleted_items": deleted_items}
 
@@ -1082,6 +1086,7 @@ async def _do_sync(app_id: int) -> dict:
         user_id = app.user_id
         if user_id is not None:
             set_session_user(db, user_id)
+        lang = resolve_ui_language(db, user_id)
 
         terms = _search_terms(app, db)
         app_dict = _app_dict(app)
@@ -1099,20 +1104,20 @@ async def _do_sync(app_id: int) -> dict:
             ("Gmail",               "targeted_gmail",             _sync_gmail_for_app),
             ("Google Calendar",     "targeted_gcal",              _sync_gcal_for_app),
             ("iCloud Mail",         "targeted_icloud_mail",       _sync_icloud_mail_for_app),
-            ("iCloud Kalender",     "targeted_icloud_cal",        _sync_icloud_cal_for_app),
-            ("iCloud Notizen",      "targeted_icloud_notes",      _sync_icloud_notes_for_app),
-            ("iCloud Erinnerungen", "targeted_icloud_reminders",  _sync_icloud_reminders_for_app),
+            (t("label_icloud_calendar", lang),  "targeted_icloud_cal",        _sync_icloud_cal_for_app),
+            (t("label_icloud_notes", lang),     "targeted_icloud_notes",      _sync_icloud_notes_for_app),
+            (t("label_icloud_reminders", lang), "targeted_icloud_reminders",  _sync_icloud_reminders_for_app),
         ]
         for _, pk, _ in sources:
-            init_progress(pk, pk.replace("targeted_", "").replace("_", " ").title(), "Starte…")
+            init_progress(pk, pk.replace("targeted_", "").replace("_", " ").title(), lang=lang)
 
         async def _run_source(label: str, prog_key: str, fn) -> tuple[int, int, list[str]]:
             try:
                 c, p, errs = await fn(app, app_dict, terms, db, user_id)
-                finish_progress(prog_key)
+                finish_progress(prog_key, lang=lang)
                 return c, p, errs
             except Exception as e:
-                finish_progress(prog_key)
+                finish_progress(prog_key, lang=lang)
                 return 0, 0, [f"{label}: {e}"]
 
         ai_results = await asyncio.gather(
@@ -1130,7 +1135,7 @@ async def _do_sync(app_id: int) -> dict:
         db.commit()
 
         # 2. Contacts — after events exist, _contact_mentioned_in_app finds names in them
-        init_progress("targeted_contacts", "iCloud Kontakte", "Starte…")
+        init_progress("targeted_contacts", t("label_icloud_contacts", lang), lang=lang)
         try:
             # Refresh app so SQLAlchemy sees the newly committed events
             db.refresh(app)
@@ -1139,20 +1144,20 @@ async def _do_sync(app_id: int) -> dict:
             total_processed += p
             all_errors.extend(errs)
         except Exception as e:
-            all_errors.append(f"Kontakte: {e}")
-        finish_progress("targeted_contacts")
+            all_errors.append(t("contacts_error", lang, error=e))
+        finish_progress("targeted_contacts", lang=lang)
         db.commit()
 
         # 3. Calls (no AI)
-        init_progress("targeted_calls", "Anrufliste", "Starte…")
+        init_progress("targeted_calls", t("label_call_list", lang), lang=lang)
         try:
             c, p, errs = await _sync_calls_for_app(app, app_dict, db, user_id)
             total_created += c
             total_processed += p
             all_errors.extend(errs)
         except Exception as e:
-            all_errors.append(f"Anrufliste: {e}")
-        finish_progress("targeted_calls")
+            all_errors.append(t("call_list_error", lang, error=e))
+        finish_progress("targeted_calls", lang=lang)
 
         db.commit()
         log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} geprüft, {} Fehler ━━━",
@@ -1171,7 +1176,7 @@ async def _do_sync(app_id: int) -> dict:
                 .first()
             )
             if app_with_events:
-                result = await assess_application(db, app_with_events)
+                result = await assess_application(db, app_with_events, lang)
                 app_with_events.ai_color = result["color"]
                 app_with_events.ai_next_step = result["next_step"]
                 app_with_events.ai_reasoning = result.get("reasoning", "")
@@ -1201,7 +1206,7 @@ async def sync_for_app(
         raise HTTPException(400, "Keine Suchbegriffe für diese Bewerbung ableitbar.")
 
     _task_results.pop(str(app_id), None)
-    init_progress(f"targeted_{app_id}", f"Sync: {app.firma}", "Startet…")
+    init_progress(f"targeted_{app_id}", t("sync_label", current_user.ui_language, firma=app.firma), lang=current_user.ui_language)
 
     async def _bg():
         try:
@@ -1210,7 +1215,7 @@ async def sync_for_app(
             result = {"created": 0, "processed": 0, "errors": [str(e)]}
         result["done"] = True
         _task_results[str(app_id)] = result
-        finish_progress(f"targeted_{app_id}")
+        finish_progress(f"targeted_{app_id}", lang=current_user.ui_language)
 
     background_tasks.add_task(_bg)
     return schemas.SyncResult(processed=0, created=0, skipped=0, errors=[])
@@ -1804,7 +1809,7 @@ def manual_assign(
         db.add(ev)
         db.flush()
         add_audit(db, "create", "user", app_id=app_id, event_id=ev.id,
-                  new_value=ev.titel, reason="manuell zugewiesen", user_id=current_user.id)
+                  new_value=ev.titel, reason_key="assigned_manually", user_id=current_user.id)
         mark_synced(db, src, ext_id, current_user.id)
         db.commit()
         db.refresh(ev)
@@ -1842,7 +1847,7 @@ def manual_assign(
                 pass
         add_audit(db, "update", "user", app_id=app_id, event_id=src_event.id,
                   field="application_id", old_value=old_app_id, new_value=app_id,
-                  reason="manuell umgehängt", user_id=current_user.id)
+                  reason_key="reassigned_manually", user_id=current_user.id)
         db.commit()
         db.refresh(src_event)
         return {"conflict": False, "event_id": src_event.id}
@@ -1878,7 +1883,7 @@ def manual_assign(
 
     if conflict_event and body.remove_from_other:
         add_audit(db, "delete", "user", app_id=app_id, event_id=conflict_event.id,
-                  old_value=conflict_event.titel, reason="Konflikt bei manueller Zuweisung entfernt",
+                  old_value=conflict_event.titel, reason_key="conflict_removed_manual_assign",
                   user_id=current_user.id)
         db.delete(conflict_event)
 
@@ -1899,7 +1904,7 @@ def manual_assign(
     db.add(ev)
     db.flush()
     add_audit(db, "create", "user", app_id=app_id, event_id=ev.id,
-              new_value=ev.titel, reason="PendingMatch manuell zugewiesen", user_id=current_user.id)
+              new_value=ev.titel, reason_key="pending_match_assigned_manually", user_id=current_user.id)
     pm.review_status = "approved"
     db.commit()
     db.refresh(ev)

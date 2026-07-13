@@ -134,6 +134,26 @@ class TestAssessApplication:
         with pytest.raises(AIBadRequest):
             await assess_application(db_session, app)
 
+    async def test_positiv_default_sprache_ist_deutsch(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session)
+        fake_ai_provider.queue_content(load_fixture("assess_green.json"))
+
+        await assess_application(db_session, app)
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert 'auf Deutsch' in prompt
+        assert 'in English' not in prompt
+
+    async def test_positiv_ui_language_en_steuert_die_prompt_sprachanweisung(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session)
+        fake_ai_provider.queue_content(load_fixture("assess_green.json"))
+
+        await assess_application(db_session, app, ui_language="en")
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert 'in English' in prompt
+        assert 'auf Deutsch' not in prompt
+
 
 class TestMatchAndClassify:
     async def test_positiv_liefert_alle_erwarteten_felder(self, db_session, ai_settings, fake_ai_provider):
@@ -357,6 +377,16 @@ class TestAssessRejectedApplication:
         assert result["color"] == "red"
         assert result["reasoning"] == ""
         assert result["next_step"] == ""
+
+    async def test_positiv_ui_language_en_steuert_die_prompt_sprachanweisung(self, db_session, ai_settings, fake_ai_provider):
+        app = application_factory(db_session, main_status="rejected")
+        fake_ai_provider.queue_content('{"color": "red", "reasoning": "x", "next_step": "y"}')
+
+        await assess_rejected_application(db_session, app, ui_language="en")
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert 'in English' in prompt
+        assert 'auf Deutsch' not in prompt
 
 
 class TestExtractApplicationFromText:

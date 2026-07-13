@@ -217,7 +217,7 @@ def list_applications(
                     fixed_any = True
                     add_audit(db, "update", "system", app_id=app.id,
                               field="datum_bewerbung", old_value=None, new_value=str(eb),
-                              reason="automatisch aus frühestem Bewerbungs-Ereignis ergänzt",
+                              reason_key="date_from_earliest_event",
                               user_id=current_user.id)
             # Compute ghosting from DB letztes_update BEFORE overwriting it in-memory.
             # A "Bewerbung eingereicht" event with datum=today (set by sync) would
@@ -304,7 +304,7 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
                 await asyncio.sleep(delay_s)
             try:
                 old_color = app.ai_color
-                result = await assess_application(db, app)
+                result = await assess_application(db, app, current_user.ui_language)
                 app.ai_color = result["color"]
                 app.ai_next_step = result["next_step"]
                 app.ai_reasoning = result.get("reasoning", "")
@@ -312,7 +312,8 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
                 if str(old_color or "") != str(app.ai_color or ""):
                     add_audit(db, "update", "user", app_id=app.id,
                               field="ai_color", old_value=old_color, new_value=app.ai_color,
-                              reason=f"KI-Bewertung: {app.ai_reasoning[:200]}" if app.ai_reasoning else "KI-Bewertung",
+                              reason_key="ai_assessment_with_reason" if app.ai_reasoning else "ai_assessment",
+                              reason_params={"reasoning": app.ai_reasoning[:200]} if app.ai_reasoning else None,
                               user_id=current_user.id)
                 db.commit()
                 updated += 1
@@ -483,7 +484,7 @@ def update_application(
             if str(old_firma or "") != str(app.firma or ""):
                 add_audit(db, "update", "user", app_id=app_id,
                           field="firma", old_value=old_firma, new_value=app.firma,
-                          reason="Firmenzuordnung geändert", user_id=current_user.id)
+                          reason_key="company_assignment_changed", user_id=current_user.id)
         firma_changed = False  # profile already set, no need to re-derive
     elif firma_changed:
         _ensure_company_profile(db, app)
@@ -497,7 +498,7 @@ def update_application(
             if str(old_ziel or "") != str(app.zielfirma_bei_hh or ""):
                 add_audit(db, "update", "user", app_id=app_id,
                           field="zielfirma_bei_hh", old_value=old_ziel, new_value=app.zielfirma_bei_hh,
-                          reason="Firmenzuordnung geändert", user_id=current_user.id)
+                          reason_key="company_assignment_changed", user_id=current_user.id)
 
     new_main = app.main_status
     new_sub  = app.sub_status
@@ -516,11 +517,11 @@ def update_application(
         if new_main != old_main:
             add_audit(db, "status_change", "user", app_id=app_id,
                       field="main_status", old_value=old_main, new_value=new_main,
-                      reason="manuell geändert", user_id=current_user.id)
+                      reason_key="changed_manually", user_id=current_user.id)
         if new_sub != old_sub:
             add_audit(db, "status_change", "user", app_id=app_id,
                       field="sub_status", old_value=old_sub, new_value=new_sub,
-                      reason="manuell geändert", user_id=current_user.id)
+                      reason_key="changed_manually", user_id=current_user.id)
 
     db.commit()
     db.refresh(app)
@@ -561,9 +562,9 @@ async def ai_assess_single(
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
     try:
         if app.abgesagt:
-            result = await assess_rejected_application(db, app)
+            result = await assess_rejected_application(db, app, current_user.ui_language)
         else:
-            result = await assess_application(db, app)
+            result = await assess_application(db, app, current_user.ui_language)
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     except AIRateLimited:
@@ -578,7 +579,8 @@ async def ai_assess_single(
     if str(old_color or "") != str(app.ai_color or ""):
         add_audit(db, "update", "user", app_id=app.id,
                   field="ai_color", old_value=old_color, new_value=app.ai_color,
-                  reason=f"KI-Bewertung: {app.ai_reasoning[:200]}" if app.ai_reasoning else "KI-Bewertung",
+                  reason_key="ai_assessment_with_reason" if app.ai_reasoning else "ai_assessment",
+                  reason_params={"reasoning": app.ai_reasoning[:200]} if app.ai_reasoning else None,
                   user_id=current_user.id)
     db.commit()
     return result

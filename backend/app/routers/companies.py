@@ -453,14 +453,14 @@ def _run_link_contacts(user_id: int, allowed_norms: set[str] | None = None):
                 created += 1
                 add_audit(db, "create", "system", company_profile_id=profile.id,
                           new_value=profile.name_display,
-                          reason="automatisch aus Kontakt-Firmenname erstellt", user_id=user_id)
+                          reason_key="company_from_contact_name", user_id=user_id)
             if c.company_profile_id != profile.id:
                 old_cp = c.company_profile_id
                 c.company_profile_id = profile.id
                 linked += 1
                 add_audit(db, "update", "system", contact_id=c.id,
                           field="company_profile_id", old_value=old_cp, new_value=profile.id,
-                          reason="automatisch verknüpft", user_id=user_id)
+                          reason_key="linked_automatically", user_id=user_id)
             _LINK_PROGRESS["linked"] = linked
             _LINK_PROGRESS["created"] = created
         db.commit()
@@ -505,7 +505,7 @@ def delete_company_logo(
         raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
     profile.logo_data = None
     add_audit(db, "update", "user", company_profile_id=profile.id,
-              field="logo_data", new_value=None, reason="Logo entfernt", user_id=current_user.id)
+              field="logo_data", new_value=None, reason_key="logo_removed", user_id=current_user.id)
     db.commit()
     return {"ok": True}
 

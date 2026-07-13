@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.78.0',
+    date: '2026-07-13',
+    changes: [
+      'Fixed three remaining i18n gaps in backend-generated content: the sync progress dialog (both per-application and full-account sync) was entirely German regardless of account language — every step message across Gmail, Google Calendar, iCloud Mail/Notes/Calendar/Reminders/Contacts/Calls, local-file sync, and LinkedIn (including the login/2FA flow) is now generated in the account\'s UI language via a shared translation table, mirroring the pattern already used for backend error keys.',
+      'AI assessment (traffic-light reasoning and next-step suggestion) now writes its reasoning in the account\'s selected language instead of always German — the prompt sent to the AI provider now carries an explicit language instruction derived from account settings.',
+      'The audit log\'s "reason" column had ~50 call sites across sync, merge, review, and company-matching code that always wrote German text regardless of account language; all now resolve to the account\'s language the same way error messages already did.',
+    ],
+  },
+  {
     version: '3.77.0',
     date: '2026-07-12',
     changes: [
