@@ -23,8 +23,7 @@ cd /Users/eugengulinsky/code/rapport
 docker compose up -d --build
 
 # 3. Open the browser
-open http://192.168.117.10        # OrbStack (recommended, no proxy cache)
-# or: open http://localhost:3000
+open http://localhost:3000
 ```
 
 ## Features

@@ -30,9 +30,10 @@ docker compose logs -f frontend
 ```
 
 **URLs:**
-- App: `http://192.168.117.10` (OrbStack static IP — no nginx cache issue)
+- App: `http://localhost:3000`
 - API/Swagger: `http://localhost:8000/docs`
-- Alternative: `http://localhost:3000`
+
+Note: `docker-compose.yml` no longer pins static container IPs (removed 2026-07-13 for Windows/Linux Docker portability — see the portability work in git history) — containers now get whatever IP OrbStack's default bridge network auto-assigns, which can change across rebuilds. Direct-IP access (e.g. the old `192.168.117.10`) is no longer a reliable way to reach the app; always use `localhost` + the published port.
 
 ## Project Structure
 
@@ -146,7 +147,7 @@ A push to `main` always triggers test+deploy. Manually (e.g. on a feature branch
 ## Important Constants
 
 - `CURRENT_VERSION` in `frontend/src/components/ChangelogModal.tsx` — bump on every content change
-- OrbStack IPs: backend `192.168.117.10`, frontend `192.168.117.11`
+- Container IPs are no longer static (auto-assigned by Docker's default bridge network since 2026-07-13) — always use `localhost` + published port, never a hardcoded container IP
 - Fernet key file: `backend/data/fernet.key` (auto-generated on first startup)
 
 ## Rapport Agent (`agent/`)

@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v3.78.0, 2026-07-13). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v4.1.1, 2026-07-14). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -24,7 +24,7 @@
 
 ```mermaid
 flowchart TB
-    subgraph Docker["Docker Compose (subnet 192.168.117.0/24)"]
+    subgraph Docker["Docker Compose (auto-assigned bridge network)"]
         FE["frontend<br/>nginx:alpine · Port 3000<br/>React 18 + TypeScript + Vite"]
         BE["backend<br/>Python 3.11 / uvicorn · Port 8000<br/>FastAPI"]
         DB[("SQLite (WAL)<br/>jobtracker.db<br/>Volume: jobtracker-data")]
@@ -84,15 +84,15 @@ flowchart TB
 
 **`docker-compose.yml`** defines three services:
 
-| Service | Image / Build | Port | Volume | Static IP |
-|---|---|---|---|---|
-| `backend` | `./backend` Dockerfile | `8000:8000` | `jobtracker-data:/app/data` | `192.168.117.10` |
-| `frontend` | `./frontend` Dockerfile (build arg `BUILD_NUMBER`) | `3000:80` | – | `192.168.117.11` |
-| `seq` | `datalust/seq:latest` | `8088:80`, `5341:5341` | `seq-data:/data` | `192.168.117.13` |
+| Service | Image / Build | Port | Volume |
+|---|---|---|---|
+| `backend` | `./backend` Dockerfile | `8000:8000` | `jobtracker-data:/app/data` |
+| `frontend` | `./frontend` Dockerfile (build arg `BUILD_NUMBER`) | `3000:80` | – |
+| `seq` | `datalust/seq:latest` | `8088:80`, `5341:5341` | `seq-data:/data` |
 
-Both app containers get `TZ=Europe/Berlin`. Backend additionally gets `SEQ_URL=http://seq:5341` and `LOG_LEVEL=INFO`.
+Both app containers get `TZ=Europe/Berlin`. Backend additionally gets `SEQ_URL=http://seq:5341` and `LOG_LEVEL=INFO`. Backend also gets `extra_hosts: host.docker.internal:host-gateway` (added for Linux Docker compatibility — macOS/Windows Docker already resolve `host.docker.internal` natively). As of 2026-07-13 (the cross-platform portability work), container IPs are no longer statically pinned — always reach the app via `localhost` + the published port, never a hardcoded container IP (see CLAUDE.md's "Important Constants").
 
-The SQLite file lives in the named volume `jobtracker-data` at `/app/data/jobtracker.db`. The schema is created/extended at startup via SQLAlchemy `create_all()` plus additive inline migrations in `database.py` — no Alembic.
+The SQLite file lives in the named volume `jobtracker-data` (pinned via `name: jobtracker_jobtracker-data` in `docker-compose.yml` — a relic of the app's pre-rename name, kept explicit deliberately: an unpinned/auto-named volume swap on 2026-07-14 caused Docker Compose to attach a brand-new, empty volume on redeploy) at `/app/data/jobtracker.db`. The schema is created/extended at startup via SQLAlchemy `create_all()` plus additive inline migrations in `database.py` — no Alembic.
 
 ### Project Structure (Backend)
 
@@ -835,7 +835,7 @@ flowchart LR
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1329 tests (385 unit / 241 component / 516 api / 187 integration) — PR-gate coverage 74% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1359 tests (405 unit / 244 component / 522 api / 188 integration) — PR-gate coverage 75% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 
