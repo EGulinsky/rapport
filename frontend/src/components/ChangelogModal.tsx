@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.79.1',
+    date: '2026-07-14',
+    changes: [
+      'Fixed a deploy-time data-loss risk introduced by the portability work: docker-compose.yml had dropped the explicit volume names (to auto-create the database volume on a fresh install), but on an existing deployment that made Docker Compose create a brand-new, empty volume instead of reusing the real one — silently swapping in an empty database with no accounts. Restored the explicit volume name so it both reuses an existing deployment\'s data and still auto-creates cleanly on a first install.',
+    ],
+  },
+  {
     version: '3.79.0',
     date: '2026-07-13',
     changes: [

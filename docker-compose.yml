@@ -55,4 +55,6 @@ services:
 
 volumes:
   jobtracker-data:
+    name: jobtracker_jobtracker-data
   seq-data:
+    name: jobtracker_seq-data
