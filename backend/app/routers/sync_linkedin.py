@@ -1644,3 +1644,69 @@ def import_companies(
 
     db.commit()
     return {"imported": imported, "skipped": skipped}
+
+
+MAX_PROFILE_TEXT_CHARS = 4000
+
+
+async def scrape_own_profile(context, profile_url: str) -> Optional[str]:
+    """Navigates to the user's own LinkedIn profile page and extracts visible
+    text from the main content area (headline, about, experience, etc.).
+    Deliberately extracts broad visible text rather than targeting specific
+    section selectors — unlike job/people/company scraping above, there's no
+    established selector set for profile pages in this codebase yet, and
+    LinkedIn's profile DOM/class names change often; broad text extraction
+    degrades gracefully (less structured, still useful) instead of breaking
+    outright when the layout shifts. Best-effort: any failure returns None
+    instead of raising, consistent with the rest of this module's scraping."""
+    page = await context.new_page()
+    try:
+        await page.goto(profile_url, wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(1500)
+        main = page.locator("main")
+        if await main.count() == 0:
+            return None
+        text = (await main.inner_text()).strip()
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text[:MAX_PROFILE_TEXT_CHARS] or None
+    except Exception as e:
+        log.debug("LinkedIn-Profil-Scrape Fehler für '{}': {}", profile_url, e)
+        return None
+    finally:
+        await page.close()
+
+
+@router.post("/profile")
+async def sync_own_profile(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Scrapes the current user's own LinkedIn profile (from their stored
+    linkedin_url) and caches the extracted text for the AI assessment prompt
+    (ai/tasks.py). Cached rather than scraped live per assessment — a live
+    scrape would add a real browser launch to every "Reassess" click and hit
+    LinkedIn far more often than an occasional manual sync does."""
+    from app.routers.sync_company import _get_linkedin_context
+
+    if not current_user.linkedin_url:
+        raise HTTPException(status_code=400, detail="Kein LinkedIn-Profil-Link im Konto hinterlegt")
+
+    li_ctx = None
+    try:
+        li_ctx = await _get_linkedin_context(current_user.id)
+    except Exception as e:
+        log.warning("Profil-Sync: LinkedIn-Browser-Start fehlgeschlagen: {}", e)
+    if not li_ctx:
+        raise HTTPException(status_code=400, detail="Keine gültige LinkedIn-Session konfiguriert")
+
+    playwright, browser, context = li_ctx
+    try:
+        text = await scrape_own_profile(context, current_user.linkedin_url)
+    finally:
+        await browser.close()
+        await playwright.stop()
+
+    if not text:
+        raise HTTPException(status_code=502, detail="Profil konnte nicht gelesen werden")
+
+    current_user.linkedin_profile_text = text
+    current_user.linkedin_profile_synced_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"synced_at": current_user.linkedin_profile_synced_at, "chars": len(text)}

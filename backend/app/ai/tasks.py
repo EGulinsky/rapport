@@ -3,6 +3,7 @@ AI tasks for intelligent event matching and classification.
 All tasks return typed dicts; the caller decides what to persist.
 """
 from __future__ import annotations
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.ai.provider import complete, AINotConfigured, AIRateLimited
 from app.i18n_strings import resolve_ui_language  # noqa: F401 — re-exported for existing call sites/tests
@@ -306,13 +307,38 @@ _RESPONSE_LANGUAGE_NOTE = {
 }
 
 
-async def assess_application(db: Session, app, ui_language: str = "de") -> dict:
+def _build_profile_block(cv_text: Optional[str], linkedin_text: Optional[str]) -> str:
+    """Optional '=== BEWERBERPROFIL ===' prompt section — CV text (backend
+    app/cv_extract.py) and/or cached LinkedIn profile text (routers/
+    sync_linkedin.py's scrape_own_profile()), when available. Returns an
+    empty string when neither is present, so the prompt looks exactly like
+    it did before this data existed for users who haven't uploaded a CV or
+    synced a LinkedIn profile yet."""
+    parts = []
+    if cv_text:
+        parts.append(f"Lebenslauf (Auszug):\n{cv_text}")
+    if linkedin_text:
+        parts.append(f"LinkedIn-Profil (Auszug):\n{linkedin_text}")
+    if not parts:
+        return ""
+    return "=== BEWERBERPROFIL ===\n" + "\n\n".join(parts) + "\n\n"
+
+
+async def assess_application(
+    db: Session, app, ui_language: str = "de",
+    cv_text: Optional[str] = None, linkedin_text: Optional[str] = None,
+) -> dict:
     """
     Generate AI assessment for a single application based on ALL available data.
     Returns: {"color": "green"|"yellow"|"red", "next_step": str}
     """
     from datetime import date as _date
     lang_note = _RESPONSE_LANGUAGE_NOTE.get(ui_language, _RESPONSE_LANGUAGE_NOTE["de"])
+    profile_block = _build_profile_block(cv_text, linkedin_text)
+    profile_reasoning_note = (
+        "\n   - Falls oben ein Lebenslauf/LinkedIn-Profil vorhanden ist: beziehe ein, wie gut es zur Rolle passt"
+        if profile_block else ""
+    )
     firma = getattr(app, 'company_name_display', None) or app.firma
     status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
     today = _date.today()
@@ -368,7 +394,7 @@ async def assess_application(db: Session, app, ui_language: str = "de") -> dict:
     prompt = f"""=== BEWERBUNG ===
 {meta_text}
 
-=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
+{profile_block}=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
 {timeline_text}
 
 === HEUTE ===
@@ -384,7 +410,7 @@ Gib ein JSON-Objekt mit genau drei Feldern zurück:
 
 2. "reasoning" — Warum diese Einschätzung? (2–3 Sätze)
    - Nenne konkrete Fakten aus der Timeline: Anzahl Gespräche, Tage seit letztem Kontakt, letzte Signale
-   - Erkläre was für und was gegen eine Zusage spricht
+   - Erkläre was für und was gegen eine Zusage spricht{profile_reasoning_note}
    - Keine Floskeln, nur faktenbezogene Begründung
 
 3. "next_step" — Was soll der Bewerber konkret tun? (1–2 Sätze, Imperativ)
@@ -416,7 +442,10 @@ Gib ein JSON-Objekt mit genau drei Feldern zurück:
     }
 
 
-async def assess_rejected_application(db: Session, app, ui_language: str = "de") -> dict:
+async def assess_rejected_application(
+    db: Session, app, ui_language: str = "de",
+    cv_text: Optional[str] = None, linkedin_text: Optional[str] = None,
+) -> dict:
     """
     Analyse a rejected application: find likely rejection reasons and derive
     optimization suggestions for future applications.
@@ -424,6 +453,11 @@ async def assess_rejected_application(db: Session, app, ui_language: str = "de")
     """
     from datetime import date as _date
     lang_note = _RESPONSE_LANGUAGE_NOTE.get(ui_language, _RESPONSE_LANGUAGE_NOTE["de"])
+    profile_block = _build_profile_block(cv_text, linkedin_text)
+    profile_next_step_note = (
+        "\n   - Falls oben ein Lebenslauf/LinkedIn-Profil vorhanden ist: beziehe ein, ob das Profil zur Rolle passte"
+        if profile_block else ""
+    )
     firma = getattr(app, 'company_name_display', None) or app.firma
     status_label = _STATUS_LABELS.get(app.main_status, app.main_status)
     today = _date.today()
@@ -464,7 +498,7 @@ async def assess_rejected_application(db: Session, app, ui_language: str = "de")
     prompt = f"""=== ABGESAGTE BEWERBUNG ===
 {meta_text}
 
-=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
+{profile_block}=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
 {timeline_text}
 
 === HEUTE ===
@@ -482,7 +516,7 @@ Diese Bewerbung endete mit einer Absage. Analysiere die Timeline und gib ein JSO
 
 3. "next_step" — Konkrete Optimierungsvorschläge für zukünftige Bewerbungen (2–3 Sätze):
    - Was hätte anders laufen können? Was kann der Bewerber beim nächsten Mal besser machen?
-   - Bezug auf den spezifischen Fall (Branche, Rolle, Prozess)
+   - Bezug auf den spezifischen Fall (Branche, Rolle, Prozess){profile_next_step_note}
 
 {lang_note}
 

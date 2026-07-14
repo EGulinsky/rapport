@@ -1,4 +1,5 @@
 import json
+import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -282,11 +283,19 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
     from app.models import AiSettings
     from app.ai.tasks import assess_application
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
+    from app.cv_extract import extract_cv_text
+    from app.routers.auth import CV_ROOT
 
     cfg = db.query(AiSettings).first()
     # Throttle: Gemini free tier = 15 RPM, Groq = 30 RPM — use 5s gap to stay safe
     provider_id = (cfg.provider if cfg else "") or ""
     delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
+
+    # Same for every application in the batch — extracted once, not per application.
+    cv_text = None
+    if current_user.cv_storage_path:
+        cv_text = extract_cv_text(os.path.join(CV_ROOT, current_user.cv_storage_path))
+    linkedin_text = current_user.linkedin_profile_text
 
     async def _stream():
         apps = (
@@ -304,7 +313,7 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
                 await asyncio.sleep(delay_s)
             try:
                 old_color = app.ai_color
-                result = await assess_application(db, app, current_user.ui_language)
+                result = await assess_application(db, app, current_user.ui_language, cv_text, linkedin_text)
                 app.ai_color = result["color"]
                 app.ai_next_step = result["next_step"]
                 app.ai_reasoning = result.get("reasoning", "")
@@ -560,11 +569,17 @@ async def ai_assess_single(
         raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     from app.ai.tasks import assess_application, assess_rejected_application
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
+    from app.cv_extract import extract_cv_text
+    from app.routers.auth import CV_ROOT
+    cv_text = None
+    if current_user.cv_storage_path:
+        cv_text = extract_cv_text(os.path.join(CV_ROOT, current_user.cv_storage_path))
+    linkedin_text = current_user.linkedin_profile_text
     try:
         if app.abgesagt:
-            result = await assess_rejected_application(db, app, current_user.ui_language)
+            result = await assess_rejected_application(db, app, current_user.ui_language, cv_text, linkedin_text)
         else:
-            result = await assess_application(db, app, current_user.ui_language)
+            result = await assess_application(db, app, current_user.ui_language, cv_text, linkedin_text)
     except AINotConfigured as e:
         raise HTTPException(400, str(e))
     except AIRateLimited:

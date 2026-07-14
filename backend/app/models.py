@@ -559,6 +559,13 @@ class User(Base):
     cv_size_bytes    = Column(Integer, nullable=True)
     cv_storage_path  = Column(String, nullable=True)
 
+    # Cached extracted text from linkedin_url's profile page (headline/about/
+    # experience, scraped once on demand via the existing LinkedIn session
+    # rather than live per assessment — see routers/sync_linkedin.py's
+    # scrape_own_profile()). NULL until the user syncs at least once.
+    linkedin_profile_text       = Column(Text, nullable=True)
+    linkedin_profile_synced_at  = Column(DateTime(timezone=True), nullable=True)
+
     # UI-Sprache des Kontos ('de' | 'en', erweiterbar). Default 'de' schützt nur
     # bestehende Zeilen bei der Migration — neue Registrierungen setzen den Wert
     # immer explizit über RegisterPayload.ui_language (Default dort: 'en').

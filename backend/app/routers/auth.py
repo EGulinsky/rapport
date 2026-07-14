@@ -93,6 +93,7 @@ class UserResponse(BaseModel):
     linkedin_url: Optional[str] = None
     cv_filename: Optional[str] = None
     cv_size_bytes: Optional[int] = None
+    linkedin_profile_synced_at: Optional[datetime] = None
     ui_language: str = "de"
 
 
@@ -117,6 +118,7 @@ def _user_response(user: models.User) -> UserResponse:
         linkedin_url=user.linkedin_url,
         cv_filename=user.cv_filename,
         cv_size_bytes=user.cv_size_bytes,
+        linkedin_profile_synced_at=user.linkedin_profile_synced_at,
         ui_language=user.ui_language,
     )
 

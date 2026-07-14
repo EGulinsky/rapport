@@ -174,6 +174,88 @@ class TestSearchPeople:
         fake_playwright.stop.assert_awaited_once()
 
 
+class TestSyncOwnProfile:
+    """POST /profile — caches scraped LinkedIn-profile text on the user row
+    for ai/tasks.py's assessment prompt. Needs a real, DB-tracked user (the
+    endpoint persists linkedin_profile_text via current_user), unlike the
+    other tests in this file which use the plain `client` fixture's
+    detached fake user — so this uses `real_auth_client` with a directly
+    created+committed row and a real bearer token instead."""
+
+    def _authed(self, db_session, real_auth_client, linkedin_url="https://linkedin.com/in/jane-doe"):
+        from app.auth.security import create_access_token
+
+        user = models.User(
+            email="profile-sync@example.com", password_hash="x", email_verified=True,
+            linkedin_url=linkedin_url,
+        )
+        db_session.add(user)
+        db_session.commit()
+        token = create_access_token(user.id)
+        return user, {"Authorization": f"Bearer {token}"}
+
+    def test_negativ_ohne_linkedin_url_liefert_400(self, real_auth_client, db_session):
+        _, headers = self._authed(db_session, real_auth_client, linkedin_url=None)
+
+        resp = real_auth_client.post("/api/sync/linkedin/profile", headers=headers)
+
+        assert resp.status_code == 400
+
+    def test_negativ_ohne_linkedin_session_liefert_400(self, real_auth_client, db_session, monkeypatch):
+        _, headers = self._authed(db_session, real_auth_client)
+
+        async def _fake_ctx(user_id):
+            return None
+
+        monkeypatch.setattr("app.routers.sync_company._get_linkedin_context", _fake_ctx)
+
+        resp = real_auth_client.post("/api/sync/linkedin/profile", headers=headers)
+
+        assert resp.status_code == 400
+
+    def test_negativ_leeres_scrape_ergebnis_liefert_502(self, real_auth_client, db_session, monkeypatch):
+        fake_browser = AsyncMock()
+        fake_playwright = AsyncMock()
+        _, headers = self._authed(db_session, real_auth_client)
+
+        async def _fake_ctx(user_id):
+            return (fake_playwright, fake_browser, object())
+
+        async def _fake_scrape(context, url):
+            return None
+
+        monkeypatch.setattr("app.routers.sync_company._get_linkedin_context", _fake_ctx)
+        monkeypatch.setattr(sync_linkedin_module, "scrape_own_profile", _fake_scrape)
+
+        resp = real_auth_client.post("/api/sync/linkedin/profile", headers=headers)
+
+        assert resp.status_code == 502
+        fake_browser.close.assert_awaited_once()
+        fake_playwright.stop.assert_awaited_once()
+
+    def test_positiv_cached_profiltext_und_zeitstempel(self, real_auth_client, db_session, monkeypatch):
+        fake_browser = AsyncMock()
+        fake_playwright = AsyncMock()
+        user, headers = self._authed(db_session, real_auth_client)
+
+        async def _fake_ctx(user_id):
+            return (fake_playwright, fake_browser, object())
+
+        async def _fake_scrape(context, url):
+            return "Senior Engineer at Contoso. 10 years experience."
+
+        monkeypatch.setattr("app.routers.sync_company._get_linkedin_context", _fake_ctx)
+        monkeypatch.setattr(sync_linkedin_module, "scrape_own_profile", _fake_scrape)
+
+        resp = real_auth_client.post("/api/sync/linkedin/profile", headers=headers)
+
+        assert resp.status_code == 200
+        assert resp.json()["chars"] == len("Senior Engineer at Contoso. 10 years experience.")
+        db_session.refresh(user)
+        assert user.linkedin_profile_text == "Senior Engineer at Contoso. 10 years experience."
+        assert user.linkedin_profile_synced_at is not None
+
+
 class TestImportPeople:
     def test_positiv_importiert_neue_person(self, client, db_session):
         resp = client.post("/api/sync/linkedin/people/import", json={

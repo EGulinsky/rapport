@@ -1970,6 +1970,7 @@ function BackupPanel() {
 
 function AccountPanel() {
   const { t } = useTranslation(['settings', 'common'])
+  const locale = useLocale()
   const { user, logout, refreshUser } = useAuth()
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -1986,6 +1987,8 @@ function AccountPanel() {
   const [profileSaved, setProfileSaved] = useState(false)
   const [cvUploading, setCvUploading] = useState(false)
   const [cvError, setCvError] = useState<string | null>(null)
+  const [profileSyncing, setProfileSyncing] = useState(false)
+  const [profileSyncError, setProfileSyncError] = useState<string | null>(null)
 
   const [uiLanguage, setUiLanguage] = useState<SupportedLanguage>('en')
   const [languageError, setLanguageError] = useState<string | null>(null)
@@ -2011,6 +2014,19 @@ function AccountPanel() {
       setProfileError(e instanceof Error ? e.message : String(e))
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  async function syncLinkedinProfile() {
+    setProfileSyncError(null)
+    setProfileSyncing(true)
+    try {
+      await api.linkedin.syncOwnProfile()
+      await refreshUser()
+    } catch (e: unknown) {
+      setProfileSyncError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setProfileSyncing(false)
     }
   }
 
@@ -2120,6 +2136,33 @@ function AccountPanel() {
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+        {user?.linkedin_url && (
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Linkedin className="h-4 w-4 text-gray-400 shrink-0" />
+              <p className="text-xs text-gray-500 truncate">
+                {user.linkedin_profile_synced_at
+                  ? t('account.linkedinProfileSynced', { date: formatDateTime(new Date(user.linkedin_profile_synced_at), locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) })
+                  : t('account.linkedinProfileNotSynced')}
+              </p>
+            </div>
+            <button
+              onClick={syncLinkedinProfile}
+              disabled={profileSyncing}
+              title={t('account.linkedinProfileSyncButton')}
+              className="flex items-center gap-1.5 shrink-0 rounded-lg text-xs font-medium px-2.5 py-1.5 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {profileSyncing ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {t('account.linkedinProfileSyncButton')}
+            </button>
+          </div>
+        )}
+        {profileSyncError && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {profileSyncError}
+          </div>
+        )}
         <button
           onClick={saveProfile}
           disabled={profileSaving}

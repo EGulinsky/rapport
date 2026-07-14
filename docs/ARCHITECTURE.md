@@ -352,7 +352,7 @@ Both use the same login/2FA/consent helpers. Session cookies are cached in `link
 - **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Ollama (local)
 - **Use cases** (`ai/tasks.py`):
   - `match_and_classify()` — assign raw data (mail/calendar/note) to an application, determine event type
-  - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead
+  - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead. Optionally folds in the account's own CV text (extracted on the fly from the stored upload via `app/cv_extract.py` — `pdfplumber`/`python-docx`, `.doc` unsupported) and a cached LinkedIn profile text snapshot (`User.linkedin_profile_text`, scraped on demand via `POST /api/sync/linkedin/profile` reusing the existing LinkedIn session — see §2 Sync) as an optional `=== BEWERBERPROFIL ===` prompt section, so the model can weigh candidate/role fit alongside the timeline. Absent for accounts with no CV/synced profile — the prompt looks exactly as before for them.
   - `extract_application_from_text()` — extract company/role/source/headhunter flag from job posting text (LinkedIn import)
 - **Fallback:** on `AINotConfigured` / `AIRateLimited` / `AIBadRequest`, degrades gracefully instead of crashing
 
@@ -628,8 +628,9 @@ erDiagram
 | `password_hash` | VARCHAR | bcrypt |
 | `email_verified` | BOOLEAN | Only `true` after code confirmation |
 | `created_at` | DATETIME | |
-| `vorname` / `nachname` / `linkedin_url` | VARCHAR NULL | Profile fields (Settings → Account), groundwork for future AI use cases (e.g. auto-generated cover letters) |
-| `cv_filename` / `cv_content_type` / `cv_size_bytes` / `cv_storage_path` | | Optional uploaded CV, stored at `{DB_DIR}/user_files/{user_id}/{filename}` (same pattern as `attachments.py`) |
+| `vorname` / `nachname` / `linkedin_url` | VARCHAR NULL | Profile fields (Settings → Account) |
+| `cv_filename` / `cv_content_type` / `cv_size_bytes` / `cv_storage_path` | | Optional uploaded CV, stored at `{DB_DIR}/user_files/{user_id}/{filename}` (same pattern as `attachments.py`); text fed into AI assessment (§3.6) |
+| `linkedin_profile_text` / `linkedin_profile_synced_at` | TEXT NULL / DATETIME NULL | Cached scrape of `linkedin_url`'s own profile page (`POST /api/sync/linkedin/profile`), also fed into AI assessment (§3.6) |
 | `ui_language` | VARCHAR NOT NULL, default `'de'` | `'de'` \| `'en'` — see [§9](#9-internationalization-i18n). New registrations always send an explicit value (`RegisterPayload` default `'en'`); the column default only protects pre-existing rows from the migration |
 
 #### `email_verification_codes`

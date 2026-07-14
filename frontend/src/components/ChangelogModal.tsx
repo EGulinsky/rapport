@@ -10,6 +10,20 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.1.0',
+    date: '2026-07-14',
+    changes: [
+      'AI assessment now considers your CV and LinkedIn profile, not just the application timeline. If you\'ve uploaded a CV (Settings → Account), its text is automatically included; a new "Sync profile" button next to your LinkedIn URL lets you cache your profile text (reusing your existing LinkedIn session) for the assessment to weigh candidate/role fit alongside the usual timeline signals. Both are optional — assessments look exactly as before if you haven\'t set either up.',
+    ],
+  },
+  {
+    version: '4.0.0',
+    date: '2026-07-14',
+    changes: [
+      'Major version: rapport is now cross-platform. The native Rapport Agent (local file access, notes, calls) runs on macOS, Windows, and Linux, each hardware-verified end to end — not just unit-tested with mocks. Windows and Linux packaging ships as a self-contained installer with the same self-registration-at-login behavior macOS has had all along.',
+    ],
+  },
+  {
     version: '3.79.1',
     date: '2026-07-14',
     changes: [

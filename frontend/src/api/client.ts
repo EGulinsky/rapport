@@ -372,6 +372,11 @@ export const api = {
     status: () => request<LinkedInSyncStatus>('/sync/linkedin/status'),
     clearSession: () => request('/sync/linkedin/clear-session', { method: 'POST' }),
     submitTwoFa: (code: string) => request('/sync/linkedin/submit-2fa', { method: 'POST', body: JSON.stringify({ code }) }),
+    // Scrapes and caches the account's own LinkedIn profile text (headline/
+    // about/experience) — fed into the AI assessment prompt alongside the
+    // CV. Reuses the existing LinkedIn session cookies (getConfig/saveConfig
+    // above), not a separate login.
+    syncOwnProfile: () => request<{ synced_at: string; chars: number }>('/sync/linkedin/profile', { method: 'POST' }),
   },
 
   attachments: {
@@ -592,6 +597,7 @@ export interface AuthUser {
   linkedin_url: string | null
   cv_filename: string | null
   cv_size_bytes: number | null
+  linkedin_profile_synced_at: string | null
   ui_language: string
 }
 

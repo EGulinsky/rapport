@@ -114,6 +114,7 @@ class TestNoFreshDbGuard:
         "_migrate_contact_company_profile", "_migrate_company_logo",
         "_migrate_company_parent", "_migrate_contact_vorname", "_migrate_ai_assessment",
         "_migrate_application_ort", "_migrate_add_user_id_columns", "_migrate_user_profile",
+        "_migrate_linkedin_profile_cache",
         "_migrate_audit_log_entity_type", "_backfill_events",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
@@ -488,6 +489,25 @@ class TestMigrateUserProfile:
         cols = _cols(db_path, "users")
         assert {"vorname", "nachname", "linkedin_url", "cv_filename",
                 "cv_content_type", "cv_size_bytes", "cv_storage_path"} <= cols
+
+
+class TestMigrateLinkedinProfileCache:
+    def test_positiv_fuegt_beide_spalten_hinzu(self, db_path):
+        _drop_columns(db_path, "users", "linkedin_profile_text", "linkedin_profile_synced_at")
+
+        db_module._migrate_linkedin_profile_cache()
+
+        cols = _cols(db_path, "users")
+        assert {"linkedin_profile_text", "linkedin_profile_synced_at"} <= cols
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        _drop_columns(db_path, "users", "linkedin_profile_text", "linkedin_profile_synced_at")
+
+        db_module._migrate_linkedin_profile_cache()
+        db_module._migrate_linkedin_profile_cache()  # must not raise ("duplicate column")
+
+        cols = _cols(db_path, "users")
+        assert {"linkedin_profile_text", "linkedin_profile_synced_at"} <= cols
 
 
 class TestMigrateAuditLogEntityType:

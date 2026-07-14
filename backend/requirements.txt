@@ -18,6 +18,8 @@ vobject==0.9.6.1
 icloudpy
 playwright==1.49.0
 fpdf2==2.8.3
+pdfplumber==0.11.4
+python-docx==1.1.2
 loguru==0.7.2
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1

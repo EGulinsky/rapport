@@ -876,6 +876,27 @@ def _migrate_user_profile():
     conn.close()
 
 
+def _migrate_linkedin_profile_cache():
+    """Cached extracted text from the user's LinkedIn profile page (see
+    routers/sync_linkedin.py's scrape_own_profile()), used by the AI
+    assessment prompt in ai/tasks.py alongside CV text."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    for col, coltype in [
+        ("linkedin_profile_text", "TEXT"), ("linkedin_profile_synced_at", "TIMESTAMP"),
+    ]:
+        if col not in cols:
+            cur.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_ui_language():
     """UI-Sprache je Konto — Default 'de' für bestehende Nutzer (aktuell alle
     deutschsprachig); 'en' ist der Default nur für NEUE Registrierungen (siehe
@@ -990,6 +1011,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
     _migrate_user_profile()
+    _migrate_linkedin_profile_cache()
     _migrate_ui_language()
     _migrate_company_profiles()
     _backfill_company_profiles()

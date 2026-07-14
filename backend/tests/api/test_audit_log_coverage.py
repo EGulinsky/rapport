@@ -69,7 +69,7 @@ class TestAiAssessAudit:
         app = application_factory(db_session, ai_color="yellow")
         db_session.commit()
 
-        async def fake_assess(db, application, lang="de"):
+        async def fake_assess(db, application, lang="de", cv_text=None, linkedin_text=None):
             return {"color": "green", "next_step": "Nachfassen", "reasoning": "..."}
 
         monkeypatch.setattr("app.ai.tasks.assess_application", fake_assess)
@@ -87,7 +87,7 @@ class TestAiAssessAudit:
         app = application_factory(db_session, ai_color="green")
         db_session.commit()
 
-        async def fake_assess(db, application, lang="de"):
+        async def fake_assess(db, application, lang="de", cv_text=None, linkedin_text=None):
             return {"color": "green", "next_step": "Warten", "reasoning": "..."}
 
         monkeypatch.setattr("app.ai.tasks.assess_application", fake_assess)
