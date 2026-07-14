@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.1.1',
+    date: '2026-07-14',
+    changes: [
+      'Fixed a bug where a slow response from Apple\'s iCloud servers during the automatic Mail/Calendar/Reminders sync could freeze the entire app for everyone, not just that sync — a real ~20-minute outage caused by this. The iCloud sync now runs those network calls off the main thread instead of blocking it.',
+    ],
+  },
+  {
     version: '4.1.0',
     date: '2026-07-14',
     changes: [

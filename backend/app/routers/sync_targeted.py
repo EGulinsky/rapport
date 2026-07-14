@@ -25,7 +25,6 @@ from app.audit import add_audit
 from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
-from app.ai.provider import decrypt_api_key
 from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
     is_synced, mark_synced, strip_html,
@@ -384,7 +383,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
 # ── iCloud Mail ───────────────────────────────────────────────────────────────
 
 async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
-    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _imap_connect, _imap_body
+    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _imap_body, _imap_connect_select
     cfg = _get_icloud_cfg(db)
     if not cfg:
         return 0, 0, []
@@ -413,9 +412,8 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     errors: list[str] = []
 
     try:
-        imap = _imap_connect(cfg)
-        imap.select("INBOX")
-        _, msg_ids = imap.search(None, imap_query)
+        imap = await asyncio.to_thread(_imap_connect_select, cfg)
+        _, msg_ids = await asyncio.to_thread(imap.search, None, imap_query)
         ids = msg_ids[0].split() if msg_ids[0] else []
     except Exception as e:
         return 0, 0, [f"iCloud Mail IMAP: {e}"]
@@ -433,7 +431,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
             skipped += 1
             continue
         try:
-            _, data = imap.fetch(msg_id_bytes, "(RFC822)")
+            _, data = await asyncio.to_thread(imap.fetch, msg_id_bytes, "(RFC822)")
             raw_email = data[0][1]
             msg = email_lib.message_from_bytes(raw_email)
         except Exception as e:
@@ -454,7 +452,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
 
     try:
-        imap.logout()
+        await asyncio.to_thread(imap.logout)
     except Exception:
         pass
 
@@ -479,13 +477,13 @@ _vobj_str = vobj_str  # lokaler Alias, historisch unter diesem Namen hier verwen
 # ── iCloud Calendar ───────────────────────────────────────────────────────────
 
 async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
-    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, CALDAV_URL
+    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _caldav_calendars
     cfg = _get_icloud_cfg(db)
     if not cfg:
         return 0, 0, []
 
     try:
-        import caldav
+        import caldav  # noqa: F401 -- import-only check for the friendlier "not installed" message below
     except ImportError:
         return 0, 0, ["caldav nicht installiert"]
 
@@ -518,26 +516,36 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     errors: list[str] = []
 
     try:
-        client = caldav.DAVClient(url=CALDAV_URL, username=cfg.apple_id, password=decrypt_api_key(cfg.app_password_enc))
-        calendars = client.principal().calendars()
+        calendars = await asyncio.to_thread(_caldav_calendars, cfg)
     except Exception as e:
         return 0, 0, [f"iCloud CalDAV: {e}"]
 
     log.debug("{} domains: {}", pfx, app_domains)
-    all_cal_events: list = []
-    matched_events: list = []
-    for cal in calendars:
-        try:
-            for ev in cal.date_search(start=start_dt, end=now + timedelta(days=90), expand=True):
-                try:
-                    vevent = ev.vobject_instance.vevent
-                    all_cal_events.append(ev)
-                    if _ev_matches_domain_icloud(vevent):
-                        matched_events.append(ev)
-                except Exception:
-                    continue
-        except Exception as e:
-            errors.append(f"Kalender {cal.name}: {e}")
+
+    def _collect_and_match(calendars) -> tuple[list, list, list[str]]:
+        """Synchronous per-calendar date_search + domain-match, run via
+        asyncio.to_thread() below — see _caldav_calendars()' docstring in
+        sync_icloud.py for why. A local closure (not a shared helper) since
+        it captures _ev_matches_domain_icloud/app_domains."""
+        all_events: list = []
+        matched: list = []
+        errs: list[str] = []
+        for cal in calendars:
+            try:
+                for ev in cal.date_search(start=start_dt, end=now + timedelta(days=90), expand=True):
+                    try:
+                        vevent = ev.vobject_instance.vevent
+                        all_events.append(ev)
+                        if _ev_matches_domain_icloud(vevent):
+                            matched.append(ev)
+                    except Exception:
+                        continue
+            except Exception as e:
+                errs.append(f"Kalender {cal.name}: {e}")
+        return all_events, matched, errs
+
+    all_cal_events, matched_events, collect_errors = await asyncio.to_thread(_collect_and_match, calendars)
+    errors.extend(collect_errors)
 
     log.debug("{} {} Termine gesamt, {} Domain-Match", pfx, len(all_cal_events), len(matched_events))
 
@@ -851,14 +859,14 @@ def _contact_mentioned_in_app(name: str, email: Optional[str], app: models.Appli
 # ── iCloud Reminders ─────────────────────────────────────────────────────────
 
 async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
-    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, CALDAV_URL
+    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _caldav_calendars
     pfx = f"[SYNC #{app.id} icloud_todo]"
     cfg = _get_icloud_cfg(db)
     if not cfg:
         return 0, 0, []
 
     try:
-        import caldav
+        import caldav  # noqa: F401 -- import-only check for the friendlier "not installed" message below
     except ImportError:
         return 0, 0, ["caldav nicht installiert"]
 
@@ -866,27 +874,34 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
     errors: list[str] = []
 
     try:
-        client = caldav.DAVClient(url=CALDAV_URL, username=cfg.apple_id, password=decrypt_api_key(cfg.app_password_enc))
-        calendars = client.principal().calendars()
+        calendars = await asyncio.to_thread(_caldav_calendars, cfg)
     except Exception as e:
         return 0, 0, [f"iCloud Reminders CalDAV: {e}"]
 
-    matched_todos: list = []
-    all_todos: list = []
-    for cal in calendars:
-        try:
-            for todo in cal.todos():
-                try:
-                    vtodo = todo.vobject_instance.vtodo
-                    summary = vobj_str(vtodo, "summary")
-                    desc = vobj_str(vtodo, "description")
-                    all_todos.append(todo)
-                    if _text_matches(summary + " " + desc, terms):
-                        matched_todos.append(todo)
-                except Exception:
-                    continue
-        except Exception:
-            pass
+    def _collect_and_match_todos(calendars) -> tuple[list, list]:
+        """Synchronous per-calendar todos() + text-match, run via
+        asyncio.to_thread() below — see _caldav_calendars()' docstring in
+        sync_icloud.py for why. A local closure since it captures
+        _text_matches/terms."""
+        all_t: list = []
+        matched: list = []
+        for cal in calendars:
+            try:
+                for todo in cal.todos():
+                    try:
+                        vtodo = todo.vobject_instance.vtodo
+                        summary = vobj_str(vtodo, "summary")
+                        desc = vobj_str(vtodo, "description")
+                        all_t.append(todo)
+                        if _text_matches(summary + " " + desc, terms):
+                            matched.append(todo)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+        return all_t, matched
+
+    all_todos, matched_todos = await asyncio.to_thread(_collect_and_match_todos, calendars)
 
     log.debug("{} text-Match-Begriffe: {}", pfx, terms)
     log.debug("{} {} Todos gesamt, {} text-Match", pfx, len(all_todos), len(matched_todos))

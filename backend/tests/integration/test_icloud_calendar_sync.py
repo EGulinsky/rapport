@@ -11,7 +11,9 @@ Anders als beim Google-Calendar-Sync gibt es hier kein Kontakt-Matching,
 sondern Keyword- (JOB_KEYWORDS) bzw. Firmenname-Textmatching auf Titel+
 Beschreibung.
 """
+import asyncio
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
@@ -271,3 +273,56 @@ class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
 
         assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is None
         assert db_session.query(models.SyncedItem).filter_by(source="icloud_cal", external_id="evt-orphan").first() is None
+
+
+class TestDoIcloudCalDoesNotBlockEventLoop:
+    """Regression test for a real production incident (2026-07-14):
+    _do_icloud_cal() used to call the synchronous caldav library directly
+    inside an `async def`, which froze the WHOLE app's single event loop —
+    not just this sync — for ~20 minutes when Apple's CalDAV server was
+    slow to respond. Fixed by offloading the blocking calls to a thread via
+    asyncio.to_thread() (see _caldav_calendars()/_caldav_collect_events()
+    in sync_icloud.py).
+
+    A normal mocked test can't catch this class of bug — the function
+    returns the same RESULT whether or not the blocking call is offloaded,
+    just at very different cost to the rest of the app while it runs. This
+    test proves concurrency directly: a sibling coroutine's asyncio.sleep()
+    must complete on schedule while the "slow" CalDAV call is in flight, not
+    get delayed until it finishes."""
+
+    async def test_positiv_langsamer_caldav_aufruf_blockiert_event_loop_nicht(
+        self, db_session, icloud_sync, monkeypatch
+    ):
+        import caldav
+
+        class _SlowPrincipal:
+            def calendars(self):
+                time.sleep(0.2)  # simulates a slow/hanging Apple CalDAV response
+                return []
+
+        class _SlowClient:
+            def principal(self):
+                return _SlowPrincipal()
+
+        monkeypatch.setattr(caldav, "DAVClient", lambda url, username=None, password=None: _SlowClient())
+
+        # Measured from BEFORE gather() starts, not from inside _heartbeat()
+        # itself — if _heartbeat() timed its own start, that start would
+        # already be delayed past the blocking call, making the elapsed
+        # duration look fine regardless of whether the event loop was ever
+        # actually blocked (this is exactly the mistake an earlier version
+        # of this test made, and it passed even with the fix reverted).
+        t0 = time.monotonic()
+
+        async def _heartbeat() -> float:
+            await asyncio.sleep(0.03)
+            return time.monotonic() - t0
+
+        _, heartbeat_elapsed = await asyncio.gather(_do_icloud_cal(1), _heartbeat())
+
+        # If the blocking caldav call weren't offloaded to a thread, the event
+        # loop couldn't even start _heartbeat()'s task until the 0.2s
+        # synchronous call returned — heartbeat_elapsed would be ~0.2s instead
+        # of ~0.03s. Generous margin against CI timing jitter either way.
+        assert heartbeat_elapsed < 0.1

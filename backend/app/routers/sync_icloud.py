@@ -13,6 +13,7 @@ Protocols:
 """
 from __future__ import annotations
 
+import asyncio
 import email as email_lib
 import hashlib
 import imaplib
@@ -65,10 +66,78 @@ def _imap_user(cfg: models.ICloudSync) -> str:
     return cfg.icloud_email or cfg.apple_id
 
 
+def _caldav_calendars(cfg: models.ICloudSync) -> list:
+    """Synchronous CalDAV connect + calendar list, run via asyncio.to_thread()
+    by callers — caldav has no async variant, and calling it directly from an
+    `async def` would freeze the whole app's single event loop until Apple's
+    CalDAV server responds (hardware-verified: a slow/hanging response here
+    took the entire app down for ~20 minutes in production, not just this
+    sync). Shared by the periodic sync (_do_icloud_cal/_do_icloud_reminders
+    below) and the targeted per-application sync (sync_targeted.py)."""
+    import caldav
+    client = caldav.DAVClient(
+        url=CALDAV_URL,
+        username=cfg.apple_id,
+        password=decrypt_api_key(cfg.app_password_enc),
+    )
+    return client.principal().calendars()
+
+
+def _caldav_collect_events(calendars: list, start: datetime, end: datetime) -> tuple[list, list[str]]:
+    """Synchronous per-calendar date_search + materialization, run via
+    asyncio.to_thread() by callers — same reasoning as _caldav_calendars()
+    above. Returns (events, per-calendar error messages) rather than raising,
+    matching the existing "skip broken calendars, keep the rest" behavior."""
+    all_events: list = []
+    errors: list[str] = []
+    for cal in calendars:
+        try:
+            for ev in cal.date_search(start=start, end=end, expand=True):
+                all_events.append(ev)
+        except Exception as e:
+            errors.append(f"Kalender {cal.name}: {e}")
+    return all_events, errors
+
+
+def _caldav_collect_todos(calendars: list) -> list:
+    """Synchronous per-calendar todos() fetch, run via asyncio.to_thread() by
+    callers — same reasoning as _caldav_calendars() above. Silently skips a
+    calendar that errors, matching the existing behavior."""
+    all_todos: list = []
+    for cal in calendars:
+        try:
+            all_todos.extend(cal.todos())
+        except Exception:
+            pass
+    return all_todos
+
+
 def _imap_connect(cfg: models.ICloudSync) -> imaplib.IMAP4_SSL:
     imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
     imap.login(_imap_user(cfg), decrypt_api_key(cfg.app_password_enc))
     return imap
+
+
+def _imap_connect_select(cfg: models.ICloudSync) -> imaplib.IMAP4_SSL:
+    """Synchronous connect+select, run via asyncio.to_thread() by callers —
+    imaplib is a blocking library with no async variant, and calling it
+    directly from an `async def` would freeze the whole app's single event
+    loop for every request until Apple's IMAP server responds (hardware-
+    verified: a slow/hanging response here took the entire app down for
+    ~20 minutes in production, not just this sync). Shared by the periodic
+    sync (_do_icloud_mail below) and the targeted per-application sync
+    (sync_targeted.py), which each need a different SEARCH query."""
+    imap = _imap_connect(cfg)
+    imap.select("INBOX")
+    return imap
+
+
+def _imap_connect_select_search(cfg: models.ICloudSync, since: str):
+    """As _imap_connect_select(), plus a SINCE search — the query
+    _do_icloud_mail() below always uses."""
+    imap = _imap_connect_select(cfg)
+    _, msg_ids = imap.search(None, f'SINCE "{since}"')
+    return imap, msg_ids
 
 
 def _imap_body(msg) -> str:
@@ -224,10 +293,8 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
         update_progress("icloud_mail", 0, 0, t("connecting_imap", lang))
         try:
-            imap = _imap_connect(cfg)
-            imap.select("INBOX")
             since = _since_date(cfg.mail_last_sync)
-            _, msg_ids = imap.search(None, f'SINCE "{since}"')
+            imap, msg_ids = await asyncio.to_thread(_imap_connect_select_search, cfg, since)
             ids = msg_ids[0].split() if msg_ids[0] else []
         except Exception as e:
             finish_progress("icloud_mail", lang=lang)
@@ -251,7 +318,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
             # ── Phase 1: headers only (FETCH RFC822.HEADER is much faster than full RFC822) ──
             try:
-                _, hdr_data = imap.fetch(msg_id_bytes, "(RFC822.HEADER)")
+                _, hdr_data = await asyncio.to_thread(imap.fetch, msg_id_bytes, "(RFC822.HEADER)")
                 hdr_msg = email_lib.message_from_bytes(hdr_data[0][1])
             except Exception as e:
                 errors.append(f"Nachricht {msg_id}: {e}")
@@ -282,7 +349,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
             # ── Phase 2: full message (only for relevant mails) ────────────
             try:
-                _, data = imap.fetch(msg_id_bytes, "(RFC822)")
+                _, data = await asyncio.to_thread(imap.fetch, msg_id_bytes, "(RFC822)")
                 raw_email = data[0][1]
                 msg = email_lib.message_from_bytes(raw_email)
             except Exception as e:
@@ -320,7 +387,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
     finally:
         if imap:
             try:
-                imap.logout()
+                await asyncio.to_thread(imap.logout)
             except Exception:
                 pass
         db.close()
@@ -790,7 +857,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_icloud_credentials", lang)]}
 
         try:
-            import caldav
+            import caldav  # noqa: F401 -- import-only check for the friendlier "not installed" message below
         except ImportError:
             finish_progress("icloud_cal", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_lib_missing", lang)]}
@@ -798,13 +865,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
         _, term_to_apps = build_firm_index(db)
 
         try:
-            client = caldav.DAVClient(
-                url=CALDAV_URL,
-                username=cfg.apple_id,
-                password=decrypt_api_key(cfg.app_password_enc),
-            )
-            principal = client.principal()
-            calendars = principal.calendars()
+            calendars = await asyncio.to_thread(_caldav_calendars, cfg)
         except Exception as e:
             finish_progress("icloud_cal", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_error", lang, error=e)]}
@@ -820,13 +881,8 @@ async def _do_icloud_cal(user_id: int) -> dict:
         firm_terms_lower = {t.lower() for t in term_to_apps}
 
         update_progress("icloud_cal", 0, 0, t("loading_appointments", lang))
-        all_events: list[tuple] = []
-        for cal in calendars:
-            try:
-                for ev in cal.date_search(start=start, end=end, expand=True):
-                    all_events.append(ev)
-            except Exception as e:
-                errors.append(f"Kalender {cal.name}: {e}")
+        all_events, collect_errors = await asyncio.to_thread(_caldav_collect_events, calendars, start, end)
+        errors.extend(collect_errors)
 
         total = len(all_events)
         update_progress("icloud_cal", 0, total, t("appointments_found", lang, count=total))
@@ -977,7 +1033,7 @@ async def _do_icloud_reminders(user_id: int) -> dict:
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("no_icloud_credentials", lang)]}
 
         try:
-            import caldav
+            import caldav  # noqa: F401 -- import-only check for the friendlier "not installed" message below
         except ImportError:
             finish_progress("icloud_reminders", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_lib_missing", lang)]}
@@ -985,13 +1041,7 @@ async def _do_icloud_reminders(user_id: int) -> dict:
         _, term_to_apps = build_firm_index(db)
 
         try:
-            client = caldav.DAVClient(
-                url=CALDAV_URL,
-                username=cfg.apple_id,
-                password=decrypt_api_key(cfg.app_password_enc),
-            )
-            principal = client.principal()
-            calendars = principal.calendars()
+            calendars = await asyncio.to_thread(_caldav_calendars, cfg)
         except Exception as e:
             finish_progress("icloud_reminders", lang=lang)
             return {"processed": 0, "created": 0, "skipped": 0, "errors": [t("caldav_error", lang, error=e)]}
@@ -999,12 +1049,7 @@ async def _do_icloud_reminders(user_id: int) -> dict:
         firm_terms_lower = {t.lower() for t in term_to_apps}
 
         update_progress("icloud_reminders", 0, 0, t("loading_reminders", lang))
-        all_todos = []
-        for cal in calendars:
-            try:
-                all_todos.extend(cal.todos())
-            except Exception:
-                pass
+        all_todos = await asyncio.to_thread(_caldav_collect_todos, calendars)
 
         total = len(all_todos)
         update_progress("icloud_reminders", 0, total, t("reminders_found", lang, count=total))
