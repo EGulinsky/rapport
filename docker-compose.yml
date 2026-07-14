@@ -20,9 +20,8 @@ services:
       - jobtracker-data:/app/data
     ports:
       - "8000:8000"
-    networks:
-      default:
-        ipv4_address: 192.168.117.10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -41,9 +40,6 @@ services:
     ports:
       - "8088:80"
       - "5341:5341"
-    networks:
-      default:
-        ipv4_address: 192.168.117.13
 
   frontend:
     build:
@@ -54,22 +50,9 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"
-    networks:
-      default:
-        ipv4_address: 192.168.117.11
     depends_on:
       - backend
 
 volumes:
   jobtracker-data:
-    name: jobtracker_jobtracker-data
-    external: true
   seq-data:
-    name: jobtracker_seq-data
-    external: true
-
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 192.168.117.0/24

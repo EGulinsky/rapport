@@ -113,7 +113,7 @@
     "requiresAgent": "Erfordert den Rapport Agent (siehe „Agent“-Tab) — läuft automatisch im Hintergrund, kein manueller Start nötig.",
     "agent": "Agent",
     "folderPath": "Ordnerpfad (absolut)",
-    "folderPathPlaceholder": "/Users/dein-name/Documents/Bewerbungen",
+    "folderPathPlaceholder": "~/Dokumente/Bewerbungen",
     "folderPathHint": "Unterordner-Namen (z.B. „Contoso\", „Fabrikam\") werden als Firmenname erkannt.",
     "syncEnabled": "Sync aktiviert",
     "lastSync": "Letzter Sync: {{date}}",
@@ -183,10 +183,10 @@
   },
   "backup": {
     "title": "Datenbank-Backup",
-    "description": "Erstellt regelmäßige Kopien der SQLite-Datenbank (enthält alle Bewerbungen und Einstellungen) in einem konfigurierbaren Ordner auf deinem Mac.",
+    "description": "Erstellt regelmäßige Kopien der SQLite-Datenbank (enthält alle Bewerbungen und Einstellungen) in einem konfigurierbaren Ordner.",
     "autoBackup": "Automatisches Backup",
     "backupFolder": "Backup-Ordner",
-    "backupFolderPlaceholder": "/Users/…/Backups/Rapport",
+    "backupFolderPlaceholder": "~/Backups/Rapport",
     "chooseFolderTitle": "Ordner auswählen",
     "choose": "Wählen",
     "frequency": "Frequenz",
@@ -254,7 +254,7 @@
   },
   "agent": {
     "title": "Rapport Agent",
-    "description": "Der Agent läuft auf deinem Mac und ersetzt die früheren separaten Bridges (Dateien, Notizen, Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um die Verbindung herzustellen. Verschlüsselt gespeichert, verlässt den Server nie im Klartext.",
+    "description": "Der Agent läuft auf deinem Computer und ersetzt die früheren separaten Bridges (Dateien, Notizen, Anrufe). Der Token wird beim ersten Start des Agenten einmalig angezeigt — hier einfügen, um die Verbindung herzustellen. Verschlüsselt gespeichert, verlässt den Server nie im Klartext.",
     "requestFailed": "Anfrage fehlgeschlagen",
     "agentReachable": "Agent erreichbar",
     "agentNotReachable": "Agent nicht erreichbar",
@@ -267,7 +267,8 @@
     "tokenPlaceholder": "Beim ersten Start des Agenten angezeigt",
     "deleteToken": "Token löschen",
     "moduleFiles": "Dateien",
-    "moduleNotes": "Notizen",
-    "moduleCalls": "Anrufe"
+    "moduleNotes": "Notizen (nur macOS)",
+    "moduleCalls": "Anrufe (nur macOS)",
+    "platformLimited": "Diese Funktion ist nur unter macOS verfügbar (erfordert Apple Notes / iPhone-Kontinuität)"
   }
 }

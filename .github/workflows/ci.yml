@@ -96,6 +96,39 @@ jobs:
       - name: Build
         run: npm run build
 
+  agent:
+    name: Agent (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: agent
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: agent/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest httpx
+
+      - name: Tests
+        run: python -m pytest -v --junitxml=test-results.xml
+
+      - name: Test summary
+        if: always()
+        run: python ../.github/scripts/junit_summary.py test-results.xml "Agent (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
@@ -284,7 +317,7 @@ jobs:
   notify-failure:
     name: Fehler-Benachrichtigung
     runs-on: self-hosted
-    needs: [backend, frontend, docker, deploy, e2e]
+    needs: [backend, frontend, agent, docker, deploy, e2e]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && always() && contains(needs.*.result, 'failure')
     steps:
       - name: macOS-Notification + Claude-Signal
@@ -292,6 +325,7 @@ jobs:
           FAILED=""
           [ "${{ needs.backend.result }}"  = "failure" ] && FAILED="${FAILED} Backend"
           [ "${{ needs.frontend.result }}" = "failure" ] && FAILED="${FAILED} Frontend"
+          [ "${{ needs.agent.result }}"    = "failure" ] && FAILED="${FAILED} Agent"
           [ "${{ needs.e2e.result }}"      = "failure" ] && FAILED="${FAILED} E2E"
           [ "${{ needs.docker.result }}"   = "failure" ] && FAILED="${FAILED} Docker"
           [ "${{ needs.deploy.result }}"   = "failure" ] && FAILED="${FAILED} Deploy"

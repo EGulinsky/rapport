@@ -240,6 +240,7 @@ export interface AgentSettings {
 export interface AgentHealthModule {
   ok: boolean
   error?: string
+  platform_limited?: boolean
   phone_accessible?: boolean
   whatsapp_accessible?: boolean
 }

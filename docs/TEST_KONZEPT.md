@@ -2,7 +2,7 @@
 
 > Status: **Phases 1–6 complete** (see rollout plan, section 11) — the PR gate with L0/L1/L2 tests runs in CI, L3 integration tests (AI provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) run on push to `main` and on the nightly cron. `linkedin_job_description.py` sits at 82% line coverage (see the marker-bug note in section 0 — it silently didn't run in CI at all until 2026-07-11). All 12 E2E user journeys implemented, each run once in German (every push) and a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) additionally in English on push to `main`, via the `uiLanguage` E2E fixture introduced alongside the account i18n work. L5 smoke job active after deploy (backend health, frontend, login + API). The decisions listed in section 12 remain binding guardrails for further implementation.
 >
-> **Current scale (2026-07-13):** 1329 backend tests (385 unit / 241 component / 516 api / 187 integration) + 93 frontend tests (up from 11 — the bulk of the growth is the i18n project: per-component language-switch tests plus the `locales.test.ts` key-parity/interpolation-placeholder suite) + 64 agent tests. PR-gate coverage (`unit or component or api`) 74% of `app/` (9968 statements — grew from 9833 with the addition of `error_keys.py`/`i18n_strings.py`, percentage unchanged); including integration tests, 87%. See section 10 for the 2026-07-11 per-module breakdown (still representative — the i18n work since then added test files rather than shifting existing router coverage meaningfully).
+> **Current scale (2026-07-13):** 1329 backend tests (385 unit / 241 component / 516 api / 187 integration) + 93 frontend tests (up from 11 — the bulk of the growth is the i18n project: per-component language-switch tests plus the `locales.test.ts` key-parity/interpolation-placeholder suite) + 128 agent tests (up from 64 — the portability effort's factory/service/Windows/Linux-provider coverage, see section 13), run in CI on a `[ubuntu-latest, windows-latest, macos-latest]` matrix. PR-gate coverage (`unit or component or api`) 74% of `app/` (9968 statements — grew from 9833 with the addition of `error_keys.py`/`i18n_strings.py`, percentage unchanged); including integration tests, 87%. See section 10 for the 2026-07-11 per-module breakdown (still representative — the i18n work since then added test files rather than shifting existing router coverage meaningfully).
 
 ## 0. Starting Point (as of concept creation, 2026-07-01)
 
@@ -343,3 +343,50 @@ The ordering is a proposal — a discussion point on whether, e.g., mocking infr
 | 7 | Implementation scope | **Full structure** from L0 to L5 — no stripped-down scaffold, pays off for maintenance effort in the medium term. |
 
 These decisions are binding for implementation from now on (see rollout plan, section 11).
+
+---
+
+## 13. Cross-OS Testing Strategy
+
+With the portability work (feature/portability branch), the Docker containers (backend + frontend) run identically on macOS, Windows, and Linux. The main cross-platform concerns are:
+
+### 13.1 Backend (Docker Container)
+
+The backend runs in a Linux Docker container on all host platforms. **No additional OS-specific testing is needed** because:
+- The container image is identical regardless of host OS
+- SQLite, Python, and all dependencies are Linux-native inside the container
+- The only host-dependent code paths are behind `host.docker.internal` (agent communication)
+
+### 13.2 Agent (Native Host Application)
+
+The agent runs natively on the host (outside Docker). Platform-specific code lives in `agent/providers/`:
+
+| Module | macOS | Windows | Linux |
+|--------|-------|---------|-------|
+| `files.py` | osascript/AppleScript | tkinter filedialog | zenity/kdialog/tkinter |
+| `notes.py` | JXA (Apple Notes) | stub (not available) | stub (not available) |
+| `calls.py` | SQLite (iPhone/WhatsApp) | stub (not available) | stub (not available) |
+| `service.py` | launchd | Task Scheduler | systemd |
+| `tray.py` | rumps | pystray | pystray |
+
+**Testing approach for the agent:**
+
+1. **Unit tests (L0):** Mock platform-specific subprocess calls. Implemented for macOS (`test_providers_mac.py`), Windows (`test_providers_windows.py`), and Linux (`test_providers_linux.py`) — 128 tests total, up from the original 64 macOS-only tests.
+
+2. **Integration tests (L1):** Factory dispatch (`make_files_provider()`/`make_notes_provider()`/`make_calls_provider()` returns the correct type per platform, raises `NotImplementedError` otherwise) covered in `test_providers_factory.py`. `service.is_registered()`/`register()`/`unregister()` dispatch covered in `test_service.py`, both with mocked `subprocess`/`platform.system()`. `_plist_contents()`/`_command_line()`/`_service_content()`'s generated config content (the command/args split each service backend needs) covered in `test_launchd.py`/`test_registry_run.py`/`test_systemd_service.py`.
+
+3. **Manual testing matrix:** Still needed for full validation on real hardware — CI running the test suite on `windows-latest`/`ubuntu-latest` proves the *mocked* logic is correct, not that the real OS APIs (Task Scheduler, systemd, pystray's backend auto-detection, tkinter's bundled Tcl/Tk in the PyInstaller build) actually work. Tracked separately as the portability effort's hardware-verification phase.
+
+### 13.3 CI/CD Pipeline
+
+`ci.yml`'s `agent` job runs the full `agent/tests/` suite on a `[ubuntu-latest, windows-latest, macos-latest]` matrix on every push/PR, independent of (not gating) backend/frontend/e2e/docker/deploy — the native agent ships and updates separately from the Docker stack. The `deploy` job itself remains macOS-specific (self-hosted runner), which is a documented, permanent limitation, not a gap to close — the agent isn't part of what `deploy` deploys either way (see `CLAUDE.md`).
+
+### 13.4 Key Portability Verification Checklist
+
+- [ ] `docker compose up -d --build` works without pre-created volumes
+- [ ] `host.docker.internal` resolves on Linux Docker (via `extra_hosts`)
+- [ ] Backup path derivation from `DATABASE_URL` works (not hardcoded `/app/data/`)
+- [ ] Temp file paths use `tempfile.gettempdir()` (not `/tmp/`)
+- [x] Agent providers gracefully handle missing platform tools (zenity, tkinter) — `test_providers_linux.py`'s cascade tests
+- [ ] System tray falls back to headless mode when pystray is unavailable
+- [ ] PDF generation finds fonts on all platforms (macOS/Linux/Windows paths)

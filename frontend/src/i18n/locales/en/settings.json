@@ -113,7 +113,7 @@
     "requiresAgent": "Requires the Rapport Agent (see the \"Agent\" tab) — runs automatically in the background, no manual start needed.",
     "agent": "Agent",
     "folderPath": "Folder path (absolute)",
-    "folderPathPlaceholder": "/Users/your-name/Documents/Applications",
+    "folderPathPlaceholder": "~/Documents/Applications",
     "folderPathHint": "Subfolder names (e.g. \"Contoso\", \"Fabrikam\") are recognized as company names.",
     "syncEnabled": "Sync enabled",
     "lastSync": "Last sync: {{date}}",
@@ -183,10 +183,10 @@
   },
   "backup": {
     "title": "Database backup",
-    "description": "Creates regular copies of the SQLite database (contains all applications and settings) in a configurable folder on your Mac.",
+    "description": "Creates regular copies of the SQLite database (contains all applications and settings) in a configurable folder.",
     "autoBackup": "Automatic backup",
     "backupFolder": "Backup folder",
-    "backupFolderPlaceholder": "/Users/…/Backups/Rapport",
+    "backupFolderPlaceholder": "~/Backups/Rapport",
     "chooseFolderTitle": "Choose folder",
     "choose": "Choose",
     "frequency": "Frequency",
@@ -254,7 +254,7 @@
   },
   "agent": {
     "title": "Rapport Agent",
-    "description": "The agent runs on your Mac and replaces the former separate bridges (files, notes, calls). The token is shown once when the agent first starts — paste it here to establish the connection. Stored encrypted, never leaves the server in plain text.",
+    "description": "The agent runs on your computer and replaces the former separate bridges (files, notes, calls). The token is shown once when the agent first starts — paste it here to establish the connection. Stored encrypted, never leaves the server in plain text.",
     "requestFailed": "Request failed",
     "agentReachable": "Agent reachable",
     "agentNotReachable": "Agent not reachable",
@@ -267,7 +267,8 @@
     "tokenPlaceholder": "Shown when the agent first starts",
     "deleteToken": "Delete token",
     "moduleFiles": "Files",
-    "moduleNotes": "Notes",
-    "moduleCalls": "Calls"
+    "moduleNotes": "Notes (macOS only)",
+    "moduleCalls": "Calls (macOS only)",
+    "platformLimited": "This feature is only available on macOS (requires Apple Notes / iPhone Continuity)"
   }
 }

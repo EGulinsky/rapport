@@ -4,8 +4,9 @@
 #   pyinstaller agent/packaging/agent.spec --distpath agent/packaging/dist --workpath agent/packaging/build
 #
 # LSUIElement=True means no Dock icon — the app only shows up as a menu bar
-# icon (see menubar.py), matching the "installer + menu-bar-app in one"
-# design (first launch self-registers as a LaunchAgent, see launchd.py).
+# icon (see menubar.py for the actual rumps menu; tray.py is the entry point
+# script — it self-registers as a LaunchAgent on first launch via launchd.py,
+# then dispatches to menubar.py's UI on macOS).
 import os
 
 REPO_ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
@@ -14,7 +15,7 @@ AGENT_DIR = os.path.join(REPO_ROOT, "agent")
 block_cipher = None
 
 a = Analysis(
-    [os.path.join(AGENT_DIR, "menubar.py")],
+    [os.path.join(AGENT_DIR, "tray.py")],
     pathex=[REPO_ROOT],
     binaries=[],
     datas=[],

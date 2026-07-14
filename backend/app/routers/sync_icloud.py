@@ -19,6 +19,7 @@ import imaplib
 import os
 import re
 import html
+import tempfile
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -373,7 +374,7 @@ def _get_pyicloud_api(cfg: models.ICloudSync, force_new: bool = False):
 
     apple_id = cfg.apple_id
     web_pw = decrypt_api_key(cfg.web_password_enc)
-    session_dir = f"/tmp/pyicloud_{hashlib.md5(apple_id.encode()).hexdigest()[:12]}"
+    session_dir = os.path.join(tempfile.gettempdir(), f"pyicloud_{hashlib.md5(apple_id.encode()).hexdigest()[:12]}")
     os.makedirs(session_dir, exist_ok=True)
 
     if force_new or apple_id not in _ICLOUD_SESSIONS:

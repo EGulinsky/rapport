@@ -7,7 +7,11 @@ from agent import launchd
 class TestPlistPath:
     def test_positiv_liegt_unter_launchagents(self):
         path = launchd.plist_path()
-        assert str(path).endswith("Library/LaunchAgents/com.rapport.agent.plist")
+        # str(path).endswith("Library/LaunchAgents/...") would fail on
+        # Windows CI, where WindowsPath renders with backslashes — compare
+        # path segments instead so this stays OS-independent (launchd.py
+        # itself is macOS-only, but the plain path-join logic here isn't).
+        assert path.parts[-3:] == ("Library", "LaunchAgents", "com.rapport.agent.plist")
 
 
 class TestIsRegistered:
@@ -20,6 +24,25 @@ class TestIsRegistered:
         p.write_text("<plist></plist>")
         monkeypatch.setattr(launchd, "plist_path", lambda: p)
         assert launchd.is_registered() is True
+
+
+class TestPlistContents:
+    def test_positiv_args_werden_als_eigene_program_arguments_eintraege_gerendert(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(launchd, "app_data_dir", lambda: tmp_path)
+
+        content = launchd._plist_contents("/usr/bin/python3", ["-m", "agent.tray"])
+
+        assert "<string>/usr/bin/python3</string>" in content
+        assert "<string>-m</string>" in content
+        assert "<string>agent.tray</string>" in content
+
+    def test_negativ_ohne_args_nur_command_im_array(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(launchd, "app_data_dir", lambda: tmp_path)
+
+        content = launchd._plist_contents("/Applications/Rapport Agent.app/Contents/MacOS/Rapport Agent", [])
+
+        array_block = content.split("<array>")[1].split("</array>")[0]
+        assert array_block.count("<string>") == 1
 
 
 class TestRegister:

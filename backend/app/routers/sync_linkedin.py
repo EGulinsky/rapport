@@ -605,7 +605,8 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     try:
         html = await page.content()
         import pathlib
-        pathlib.Path(f"/tmp/linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
+        import tempfile
+        pathlib.Path(tempfile.gettempdir(), f"linkedin_capture_{card_type}.html").write_text(html, encoding="utf-8")
     except Exception:
         pass
 

@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '3.79.0',
+    date: '2026-07-13',
+    changes: [
+      'Agent portability: real hardware verification of the Windows and Linux packaged builds (previously only unit-tested with mocks), which surfaced and fixed three genuine bugs invisible to CI. Windows service self-registration used Task Scheduler, but `schtasks /create` returns Access Denied under a normal (non-elevated) user token even for a task that only runs at that user\'s own logon — replaced with the HKCU `Run` registry key, the same no-elevation approach already used on macOS (launchd) and Linux (systemd --user).',
+      'The packaged Windows agent\'s server silently failed to start: a windowed (no-console) build has no usable standard output/error streams, which crashed the logging setup invisibly. Fixed by redirecting to a log file whenever a real console isn\'t available.',
+      'The packaged Linux agent crashed outright on any machine without a graphical display (a server, an SSH session) instead of degrading to headless mode as intended, because the display library raises a different error than the one the fallback was watching for. Now caught, so it degrades gracefully like it always should have.',
+    ],
+  },
+  {
     version: '3.78.0',
     date: '2026-07-13',
     changes: [

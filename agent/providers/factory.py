@@ -1,5 +1,5 @@
 """Picks the provider set for the current platform. This is the only place
-that needs to change when a Windows implementation is added — everything
+that needs to change when a new platform is added — everything
 above (routers, auth, main.py) stays untouched."""
 from __future__ import annotations
 
@@ -8,21 +8,42 @@ from agent.providers.base import CallsProvider, FilesProvider, NotesProvider
 
 
 def make_files_provider() -> FilesProvider:
-    if platform_name() == "Darwin":
+    system = platform_name()
+    if system == "Darwin":
         from agent.providers.mac.files import MacFilesProvider
         return MacFilesProvider()
-    raise NotImplementedError(f"Kein FilesProvider für {platform_name()}")
+    elif system == "Windows":
+        from agent.providers.windows.files import WindowsFilesProvider
+        return WindowsFilesProvider()
+    elif system == "Linux":
+        from agent.providers.linux.files import LinuxFilesProvider
+        return LinuxFilesProvider()
+    raise NotImplementedError(f"No FilesProvider for {system}")
 
 
 def make_notes_provider() -> NotesProvider:
-    if platform_name() == "Darwin":
+    system = platform_name()
+    if system == "Darwin":
         from agent.providers.mac.notes import MacNotesProvider
         return MacNotesProvider()
-    raise NotImplementedError(f"Kein NotesProvider für {platform_name()}")
+    elif system == "Windows":
+        from agent.providers.windows.notes import WindowsNotesProvider
+        return WindowsNotesProvider()
+    elif system == "Linux":
+        from agent.providers.linux.notes import LinuxNotesProvider
+        return LinuxNotesProvider()
+    raise NotImplementedError(f"No NotesProvider for {system}")
 
 
 def make_calls_provider() -> CallsProvider:
-    if platform_name() == "Darwin":
+    system = platform_name()
+    if system == "Darwin":
         from agent.providers.mac.calls import MacCallsProvider
         return MacCallsProvider()
-    raise NotImplementedError(f"Kein CallsProvider für {platform_name()}")
+    elif system == "Windows":
+        from agent.providers.windows.calls import WindowsCallsProvider
+        return WindowsCallsProvider()
+    elif system == "Linux":
+        from agent.providers.linux.calls import LinuxCallsProvider
+        return LinuxCallsProvider()
+    raise NotImplementedError(f"No CallsProvider for {system}")

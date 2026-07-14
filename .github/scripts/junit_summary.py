@@ -8,6 +8,10 @@ Usage: junit_summary.py <report.xml> <Titel>
 import sys
 import xml.etree.ElementTree as ET
 
+# Windows' default console codepage (cp1252) can't encode the ✅/❌ below and
+# raises UnicodeEncodeError — force UTF-8 regardless of platform/locale.
+sys.stdout.reconfigure(encoding="utf-8")
+
 path, title = sys.argv[1], sys.argv[2]
 
 try:

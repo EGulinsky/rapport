@@ -54,7 +54,10 @@ def create_app(
         modules = {}
         for name, provider in (("files", files_provider), ("notes", notes_provider), ("calls", calls_provider)):
             try:
-                modules[name] = provider.health() if hasattr(provider, "health") else {"ok": True}
+                info = provider.health() if hasattr(provider, "health") else {"ok": True}
+                if hasattr(provider, "platform_limited") and provider.platform_limited:
+                    info["platform_limited"] = True
+                modules[name] = info
             except Exception as e:
                 modules[name] = {"ok": False, "error": str(e)}
 
@@ -69,6 +72,7 @@ def create_app(
 
 
 def run():
+    """Run the agent directly (without system tray). Useful for development."""
     import uvicorn
 
     from agent.config import restart_process

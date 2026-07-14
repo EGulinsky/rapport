@@ -2,3 +2,9 @@ fastapi==0.111.0
 uvicorn[standard]==0.29.0
 pdfplumber==0.11.4
 python-docx==1.1.2
+
+# System tray icon (Windows/Linux only — macOS uses rumps, see
+# packaging/requirements-packaging.txt). tray.py falls back to a headless
+# mode if these aren't installed, but they're needed for the actual tray UI.
+pystray==0.19.5; sys_platform != "darwin"
+Pillow==12.2.0; sys_platform != "darwin"

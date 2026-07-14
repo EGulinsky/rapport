@@ -27,9 +27,8 @@ services:
       - ./backend/requirements-dev.txt:/app/requirements-dev.txt
     ports:
       - "8001:8000"
-    networks:
-      default:
-        ipv4_address: 192.168.118.10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   e2e-runner:
     build:
@@ -46,9 +45,6 @@ services:
       # therefore always miss. Writing straight to a bind-mounted host
       # directory sidesteps the container-name guessing game entirely.
       - ./e2e-report:/app/e2e/e2e-report
-    networks:
-      default:
-        ipv4_address: 192.168.118.12
     depends_on:
       - backend-test
       - frontend-test
@@ -69,9 +65,6 @@ services:
     command: ["npx", "playwright", "test", "--config", "e2e/playwright.config.ts", "application-lifecycle", "company-sync", "backup-restore"]
     volumes:
       - ./e2e-report:/app/e2e/e2e-report
-    networks:
-      default:
-        ipv4_address: 192.168.118.13
     depends_on:
       - backend-test
       - frontend-test
@@ -85,17 +78,8 @@ services:
     container_name: rapport-frontend-test
     ports:
       - "3001:80"
-    networks:
-      default:
-        ipv4_address: 192.168.118.11
     depends_on:
       - backend-test
 
 volumes:
   rapport-test-data:
-
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 192.168.118.0/24

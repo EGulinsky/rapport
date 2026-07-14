@@ -339,11 +339,13 @@ Both use the same login/2FA/consent helpers. Session cookies are cached in `link
 
 ### 3.5 Local Documents, Notes & Calls (Rapport Agent)
 
-- **`agent/`** (port 9996, runs on the Mac as a `.app`/`launchd` service, not in Docker) — a single process replaces the previous three separate bridge scripts (`files_bridge.py`, `notes_bridge.py`, `calls_bridge.py`), with bearer-token auth instead of open ports
+- **`agent/`** (port 9996, runs as a native background process — `.app`/launchd on macOS, a PyInstaller `.exe`/HKCU Run-key entry on Windows, a PyInstaller binary/systemd user service on Linux — never in Docker) — a single process replaces the previous three separate bridge scripts (`files_bridge.py`, `notes_bridge.py`, `calls_bridge.py`), with bearer-token auth instead of open ports
 - **Files module** — serves file contents from a configured folder, native folder/file pickers, backup read/write
-- **Notes module** — iCloud Notes via AppleScript (JXA)
-- **Calls module** — iPhone call history (CallHistoryDB) + WhatsApp via AppleScript/SQLite
-- **Architecture:** OS-neutral provider interfaces (`agent/providers/base.py`) with only one macOS implementation today — deliberately designed this way to add a Windows adapter behind the same interface later without touching backend/frontend
+- **Notes module** — iCloud Notes via AppleScript (JXA) on macOS; stub (`platform_limited`) on Windows/Linux
+- **Calls module** — iPhone call history (CallHistoryDB) + WhatsApp via AppleScript/SQLite on macOS; stub (`platform_limited`) on Windows/Linux
+- **Architecture:** OS-neutral provider interfaces (`agent/providers/base.py`) with one implementation per OS (`providers/mac`, `providers/windows`, `providers/linux`), selected via `providers/factory.py`'s `platform.system()` dispatch — same pattern for service self-registration (`agent/service.py` dispatching to `launchd.py` / `registry_run.py` / `systemd_service.py`, all exposing `is_registered()`/`register()`/`unregister()`)
+- **Packaging:** PyInstaller onedir bundles built per-OS from `agent/packaging/agent-{mac,windows,linux}.spec` (PyInstaller doesn't cross-compile — each must run on its own OS); `tray.py` is the single cross-platform entry point (pystray tray icon on Windows/Linux, rumps menu bar via `menubar.py` on macOS), self-registering the OS service on first launch, then starting the FastAPI server in a background thread
+- **Hardware verification (2026-07-13):** build → first-launch self-registration → server startup → `/health` walked end-to-end on real Windows 11 (Parallels VM) and on Linux (Debian container with GTK/AppIndicator libs) — not just unit-tested with mocks. Two bugs only visible on real Windows: (1) `schtasks /create` returns Access Denied under a normal (UAC-filtered) user token even for a task that only runs at the current user's own logon, so the original Task-Scheduler-based registration silently never worked outside an elevated shell — replaced with the HKCU `Run` registry key (`registry_run.py`), the same no-elevation approach macOS's launchd LaunchAgent and Linux's `systemctl --user` already used; (2) a packaged windowed (`console=False`) build has no usable `sys.stdout`/`sys.stderr`, which crashed uvicorn's logging setup and silently killed the server thread — fixed by redirecting stdio to `app_data_dir()/logs/agent.log` whenever a real console isn't present (`tray.py`'s `_redirect_stdio_if_headless()`). One bug only visible on real Linux: pystray's backend selection connects to X11 *at import time*, and a missing display raises `Xlib.error.DisplayNameError` rather than `ImportError` — the existing "fall back to headless" logic only caught `ImportError`, so the whole agent crashed on any display-less Linux machine (server, SSH session, container) instead of degrading gracefully; broadened to catch any exception (`tray.py`'s `run_tray_app()`). Same-night follow-up #1: drove the packaged Windows build's `tkinter` folder-picker dialog interactively via the VM's own screen (real `/files/pick-folder` call) — it opens correctly (real title, real folder contents, navigation all work), so the PyInstaller Tcl/Tk-data-bundling footgun `agent-windows.spec` used to warn about does not apply. Completing the OK/Cancel click-through couldn't be driven through screen-automation tooling in this VM — isolated to a synthetic-input-delivery limitation of the automation itself (not an app bug) by reproducing the identical unresponsive-button symptom with a bare unfrozen main-thread script with no FastAPI/threadpool/PyInstaller involved at all, where even the native OS window-close button failed to respond while the file list and text entry worked normally. Same-night follow-up #2: the initial Linux pass ran in a plain Docker container, which has no real systemd/session-bus, so `systemctl --user enable/start` inside `register()` couldn't be confirmed beyond "doesn't crash." Re-ran the full build + first-launch + second-launch flow in a genuine Ubuntu VM (OrbStack machine, real systemd with lingering enabled) and confirmed the unit actually reaches `enabled` + `active (running)`, `/health` responds, and killing the process gets it auto-restarted by systemd's `Restart=always` within seconds (new PID, fresh start timestamp) — the full resiliency story, not just "the file got written."
 
 ### 3.6 AI Classification & Assessment (litellm)
 
@@ -811,11 +813,13 @@ File: `.github/workflows/ci.yml` · self-hosted runner on the Mac.
 flowchart LR
     A[backend<br/>ruff + pyright + pytest] --> E[E2E<br/>Playwright, docker-compose.test.yml]
     B[frontend<br/>tsc + vitest + vite build] --> E
+    G["agent (matrix)<br/>ubuntu/windows/macos-latest, pytest"]
     E --> C[docker<br/>Buildx: playwright-base + backend + frontend]
     C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>health/frontend/login+API smoke → macOS notification"]
     D -.->|on failure| F[notify-failure<br/>macOS notification + log]
     A -.->|on failure| F
     B -.->|on failure| F
+    G -.->|on failure| F
     E -.->|on failure| F
     C -.->|on failure| F
 ```
@@ -824,12 +828,13 @@ flowchart LR
 |---|---|---|
 | `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error), `pytest -m "unit or component or api"` (PR gate) + `pytest -m integration` on push to `main`/manual dispatch |
 | `frontend` | push/PR to `main` | `tsc --noEmit`, `vitest run` (unit/component, incl. the i18n key-parity suite), `vite build` |
+| `agent` | push/PR to `main`, matrix `[ubuntu-latest, windows-latest, macos-latest]` | `pytest` over `agent/tests/` — independent of backend/frontend/e2e/docker/deploy, since the native agent ships and updates separately (see §3.5); all three OS legs run the same suite (mocked providers/service registration) — real-hardware verification of the packaged builds themselves is a separate, manual, non-CI pass (see §3.5) |
 | `e2e` | push/PR to `main` or manual dispatch (after backend+frontend) | Build test stack (`docker-compose.test.yml`, own DB/ports), run all 12 Playwright journeys in German; on push to `main`, additionally run a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) in English via the `uiLanguage` fixture |
 | `docker` | push to `main` (after e2e) | Buildx: `Dockerfile.playwright-base`, backend image, frontend image (no push to a registry) |
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1329 tests (385 unit / 241 component / 516 api / 187 integration) — PR-gate coverage 74% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 64 tests. Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1329 tests (385 unit / 241 component / 516 api / 187 integration) — PR-gate coverage 74% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 

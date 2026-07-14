@@ -1,5 +1,5 @@
 """
-Local-files sync: indexes documents from a configured folder on the host Mac.
+Local-files sync: indexes documents from a configured folder on the host.
 
 Requires the Rapport Agent running on the host (see agent/README.md).
 
