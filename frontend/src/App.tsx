@@ -904,6 +904,10 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
         zielfirma_bei_hh: form.zielfirma_bei_hh || undefined,
         kommentar: form.kommentar || undefined,
         stellenanzeige_url: form.stellenanzeige_url || undefined,
+        // initial is only ever set from LinkedInImportModal's prefill (see
+        // App.tsx's onExtracted handler) — skips the automatic post-create
+        // LinkedIn sync since this data was just pulled from LinkedIn.
+        created_from_linkedin: initial != null,
       })
       onSaved()
     } finally {

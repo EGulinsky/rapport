@@ -1207,6 +1207,31 @@ async def _do_sync(app_id: int) -> dict:
         db.close()
 
 
+async def _do_post_create_sync(app_id: int, skip_linkedin: bool = False) -> None:
+    """Runs automatically right after a new Application is created — from
+    manual creation, the LinkedIn single-link import (extract_from_linkedin_url
+    → NewApplicationModal save), or the periodic bulk LinkedIn scrape. See
+    applications.py's create_application() and sync_linkedin.py's _async_sync()
+    for call sites.
+
+    skip_linkedin=True when the application itself was just sourced from
+    LinkedIn (single-link import or bulk scrape) — re-running the per-app
+    LinkedIn category search immediately afterward would just re-find the
+    listing we already have. Best-effort throughout: a failure here must
+    never surface to whatever created the application."""
+    try:
+        await _do_sync(app_id)
+    except Exception as e:
+        log.warning("Post-create targeted sync fehlgeschlagen für App #{}: {}", app_id, e)
+    if skip_linkedin:
+        return
+    try:
+        from app.routers.sync_linkedin import run_individual_sync_if_idle
+        await run_individual_sync_if_idle(app_id)
+    except Exception as e:
+        log.warning("Post-create LinkedIn-Sync fehlgeschlagen für App #{}: {}", app_id, e)
+
+
 @router.post("/{app_id}", response_model=schemas.SyncResult)
 async def sync_for_app(
     app_id: int,

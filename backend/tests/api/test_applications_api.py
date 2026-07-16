@@ -9,6 +9,49 @@ from app import models
 pytestmark = pytest.mark.api
 
 
+class TestCreateApplicationSchedulesPostCreateSync:
+    """create_application() schedules _do_post_create_sync() as a background
+    task (see applications.py) — TestClient runs background tasks
+    synchronously in-process, so we can assert on the call directly rather
+    than polling. skip_linkedin is driven by the request's
+    created_from_linkedin field (see schemas.ApplicationCreate's docstring
+    for why: LinkedInImportModal-prefilled saves set it True, everything
+    else defaults to False)."""
+
+    def test_positiv_default_ruft_post_create_sync_mit_skip_linkedin_false_auf(self, client, monkeypatch):
+        calls = []
+
+        async def fake_post_create_sync(app_id, skip_linkedin):
+            calls.append((app_id, skip_linkedin))
+
+        monkeypatch.setattr("app.routers.sync_targeted._do_post_create_sync", fake_post_create_sync)
+
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Software Engineer", "main_status": "applied",
+        })
+
+        assert resp.status_code == 201
+        assert len(calls) == 1
+        assert calls[0] == (resp.json()["id"], False)
+
+    def test_positiv_created_from_linkedin_ruft_mit_skip_linkedin_true_auf(self, client, monkeypatch):
+        calls = []
+
+        async def fake_post_create_sync(app_id, skip_linkedin):
+            calls.append((app_id, skip_linkedin))
+
+        monkeypatch.setattr("app.routers.sync_targeted._do_post_create_sync", fake_post_create_sync)
+
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Software Engineer", "main_status": "applied",
+            "created_from_linkedin": True,
+        })
+
+        assert resp.status_code == 201
+        assert len(calls) == 1
+        assert calls[0] == (resp.json()["id"], True)
+
+
 class TestCreateApplication:
     def test_positiv_bewerbung_anlegen(self, client):
         resp = client.post("/api/applications/", json={

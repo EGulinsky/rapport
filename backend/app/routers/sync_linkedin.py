@@ -190,6 +190,49 @@ def run_sync(
     return dict(_state)
 
 
+async def run_individual_sync_if_idle(app_id: int) -> None:
+    """Best-effort per-app LinkedIn category search, run automatically right
+    after a new (non-LinkedIn-sourced) application is created — see
+    sync_targeted._do_post_create_sync(). _state is a process-wide singleton
+    (only one LinkedIn sync — batch or per-app — can run at a time), so this
+    silently no-ops rather than queuing or raising if one is already running
+    or LinkedIn isn't configured: this is a nice-to-have last step, not worth
+    contending with a real sync the user is watching."""
+    if _state["status"] == "running":
+        return
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        cfg = db.query(models.LinkedInSync).first()
+    finally:
+        db.close()
+    if not cfg:
+        return
+    _reset_state()
+    _state["status"] = "running"
+    _state["started_at"] = datetime.now(timezone.utc).isoformat()
+    await _async_sync(cfg.id, app_id)
+
+
+async def _sync_newly_created_apps(app_ids: list[int]) -> None:
+    """Post-create targeted sync (Gmail/GCal/iCloud/contacts/calls/AI) for
+    every application a LinkedIn scrape run just created — skip_linkedin
+    implicit since these were literally just sourced from LinkedIn, so
+    re-running the per-app LinkedIn category search would just re-find the
+    same listing. Extracted out of _async_sync()'s batch-sync closure for
+    testability without a real Playwright session, same rationale as
+    _process_linkedin_job(). Best-effort: never let a failure here affect
+    the sync run's own result."""
+    from app.routers.sync_targeted import _do_sync
+
+    for app_id in app_ids:
+        try:
+            await _do_sync(app_id)
+        except Exception as e:
+            log.warning("[LI] Post-create Sync fehlgeschlagen für App #{}: {}", app_id, e)
+
+
 @router.post("/clear-session")
 def clear_session(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.LinkedInSync).first()
@@ -1267,6 +1310,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
             created = updated = skipped = 0
             errors: list[str] = []
+            newly_created_app_ids: list[int] = []
 
             def _process(job: dict) -> None:
                 nonlocal created, updated, skipped
@@ -1274,6 +1318,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                     outcome = _process_linkedin_job(db, job, user_id)
                     if outcome["result"] == "created":
                         created += 1
+                        newly_created_app_ids.append(outcome["app_id"])
                     elif outcome["result"] == "updated":
                         updated += 1
                     else:
@@ -1362,6 +1407,10 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
         cfg.last_sync = datetime.now(timezone.utc)
         _commit_with_retry(db)
+
+        # Runs after the commit above so _do_sync's own fresh DB session can
+        # see the new rows.
+        await _sync_newly_created_apps(newly_created_app_ids)
 
         log.info("[LI sync] fertig: {} neu, {} aktualisiert, {} unverändert, {} fehler",
                  created, updated, skipped, len(errors))

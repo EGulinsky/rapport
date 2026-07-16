@@ -126,7 +126,13 @@ class ApplicationBase(BaseModel):
 
 
 class ApplicationCreate(ApplicationBase):
-    pass
+    # Not persisted — tells create_application() whether to skip the
+    # automatic post-create LinkedIn sync (see applications.py). True when
+    # the frontend prefilled this form from LinkedInImportModal; the AI
+    # extraction that produced the prefill already pulled fresh LinkedIn
+    # data, so re-running the per-app LinkedIn category search immediately
+    # afterward would just re-find the same listing.
+    created_from_linkedin: bool = False
 
 
 class ApplicationUpdate(BaseModel):

@@ -406,10 +406,12 @@ def get_application(app_id: int, db: Session = Depends(get_db), current_user: mo
 @router.post("/", response_model=schemas.ApplicationRead, status_code=201)
 def create_application(
     payload: schemas.ApplicationCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     data = payload.model_dump()
+    skip_linkedin_sync = data.pop("created_from_linkedin")
     app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
     db.add(app)
@@ -430,6 +432,10 @@ def create_application(
               new_value=event.titel, user_id=current_user.id)
     db.commit()
     db.refresh(app)
+
+    from app.routers.sync_targeted import _do_post_create_sync
+    background_tasks.add_task(_do_post_create_sync, app.id, skip_linkedin_sync)
+
     return app
 
 

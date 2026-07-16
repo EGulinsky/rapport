@@ -84,7 +84,7 @@ export const api = {
 
     get: (id: number) => request<Application>(`/applications/${id}`),
 
-    create: (data: Partial<Application>) =>
+    create: (data: Partial<Application> & { created_from_linkedin?: boolean }) =>
       request<Application>('/applications/', {
         method: 'POST',
         body: JSON.stringify(data),

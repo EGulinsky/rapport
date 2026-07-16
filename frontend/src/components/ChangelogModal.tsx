@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.2.0',
+    date: '2026-07-16',
+    changes: [
+      'New applications now automatically get a per-application sync as their last setup step — Gmail, Google Calendar, iCloud Mail/Calendar/Notes/Reminders, contacts, calls, and an initial AI assessment, plus a LinkedIn search for the matching listing. Applies whether the application was created manually, imported from a LinkedIn job link, or picked up by the periodic LinkedIn sync. The LinkedIn search step is skipped when the application itself was just sourced from LinkedIn, since re-running it would just re-find the same listing. Runs in the background — no change to how creating an application feels.',
+    ],
+  },
+  {
     version: '4.1.3',
     date: '2026-07-16',
     changes: [
