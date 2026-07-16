@@ -31,6 +31,7 @@ from app.routers.sync_common import (
     term_variants, process_item, process_item_for_app,
     init_progress, update_progress, finish_progress,
     upsert_contact_from_sender, vobj_str, _GENERIC_ROLE_TERMS,
+    effective_bewerbung_floor, _predates_bewerbung,
 )
 from app.logger import get_logger
 
@@ -309,7 +310,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
         return 0, 0, []
 
-    since = app.datum_bewerbung or (datetime.now(timezone.utc) - timedelta(days=365)).date()
+    since = effective_bewerbung_floor(app) or (datetime.now(timezone.utc) - timedelta(days=365)).date()
     now = datetime.now(timezone.utc)
     try:
         events_result = service.events().list(
@@ -381,6 +382,12 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
                     time_info += " Uhr"
         except Exception:
             pass
+
+        if date_hint and _predates_bewerbung(date_hint.date(), app):
+            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Bewerbungsdatum)", pfx, ev_id, summary, date_hint.date())
+            mark_synced(db, "gcal", ev_id, user_id)
+            skipped += 1
+            continue
 
         # Calendar events that match the company name are directly relevant — no AI needed.
         notiz_parts = []
@@ -458,9 +465,12 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     # name without a known company domain would otherwise never match.
     search_criteria = (app_domains + text_terms)[:15]
     imap_query = _imap_or(search_criteria)
-    since = app.datum_bewerbung
-    if since:
-        imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
+    # Without a SINCE bound (i.e. no floor at all), this searches the entire
+    # mailbox with no date restriction whatsoever — even looser than the
+    # 365-day fallback used elsewhere. effective_bewerbung_floor() falls
+    # back to letztes_update (defaults to the creation date) before giving up.
+    since = effective_bewerbung_floor(app) or (datetime.now(timezone.utc) - timedelta(days=365)).date()
+    imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
     log.debug("{} domains: {} terms: {}  query: {}", pfx, app_domains, text_terms, imap_query)
 
     created = skipped = 0
@@ -580,7 +590,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             for e in emails
         )
 
-    since = app.datum_bewerbung
+    since = effective_bewerbung_floor(app)
     now = datetime.now(timezone.utc)
     start_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc) if since else now - timedelta(days=365)
 
@@ -660,6 +670,12 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
                 date_hint = datetime(dtstart.year, dtstart.month, dtstart.day, tzinfo=timezone.utc)
         except Exception:
             pass
+
+        if date_hint and _predates_bewerbung(date_hint.date(), app):
+            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Bewerbungsdatum)", pfx, uid[:16], summary, date_hint.date())
+            mark_synced(db, "icloud_cal", uid, user_id)
+            skipped += 1
+            continue
 
         location = _vobj_str(vevent, "location")
 
@@ -1090,6 +1106,15 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
                 time_str = dt.astimezone().strftime("%H:%M")
             except Exception:
                 pass
+
+        # Calls sync previously had NO date filtering at all — matched any
+        # call, ever, to/from a contact's phone number. A real incident
+        # (2026-07-16, application #230): a coincidental phone-number match
+        # attributed an unrelated personal call to the wrong application.
+        if date_hint and _predates_bewerbung(date_hint.date(), app):
+            skipped += 1
+            mark_synced(db, "icloud_calls", call_key, user_id)
+            continue
 
         if not answered:
             titel = f"↗ Verpasst: {call_name}" if direction == "outgoing" else f"↙ Verpasst: {call_name}"

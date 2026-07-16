@@ -4,6 +4,7 @@ lokalen Rapport-Agenten (`app.agent_client.agent_get`) — dieselbe Mocking-
 Grenze wie in tests/unit/test_agent_client.py (httpx.AsyncClient.get direkt
 patchen, keine IMAP/CalDAV-Infrastruktur nötig).
 """
+from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
@@ -108,7 +109,11 @@ class TestSyncCallsForApp:
         assert called is False
 
     async def test_positiv_anruf_von_bekannter_telefonnummer_wird_angelegt(self, db_session, monkeypatch):
-        app = application_factory(db_session)
+        # datum_bewerbung pinned explicitly, safely before the call's own
+        # date below — application_factory()'s random default (0-60 days
+        # back) could otherwise land after it and make this test flaky now
+        # that calls sync is date-filtered (see _predates_bewerbung).
+        app = application_factory(db_session, datum_bewerbung=date(2026, 1, 1))
         contact = contact_factory(db_session, telefon="0151 2345678", name="Erika Musterfrau")
         app.contacts.append(contact)
         db_session.commit()
@@ -130,6 +135,34 @@ class TestSyncCallsForApp:
         db_session.flush()
         ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
         assert "Erika Musterfrau" in ev.titel
+
+    async def test_negativ_anruf_vor_bewerbungsdatum_wird_ausgefiltert(self, db_session, monkeypatch):
+        # Regression test for the #230 incident (2026-07-16): calls sync had
+        # NO date filtering at all before this — any call, ever, to/from a
+        # matched contact's phone number got attributed. datum_bewerbung is
+        # left unset here (a real, reachable state — see
+        # create_application()'s docstring) and letztes_update is the
+        # fallback floor: a call from well before it must be excluded.
+        app = application_factory(db_session, datum_bewerbung=None, letztes_update=date(2026, 6, 1))
+        contact = contact_factory(db_session, telefon="0151 2345678", name="Erika Musterfrau")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        calls = [{
+            "id": "call-old", "phone": "+491512345678", "direction": "incoming",
+            "answered": True, "duration_s": 60, "date": "2026-01-01T10:00:00+00:00",
+        }]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(calls)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+
+        assert errors == []
+        assert created == 0
+        assert db_session.query(models.Event).filter_by(source="icloud_calls").first() is None
 
     async def test_negativ_anruf_von_unbekannter_nummer_wird_uebersprungen(self, db_session, monkeypatch):
         app = application_factory(db_session)

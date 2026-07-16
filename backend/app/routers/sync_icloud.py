@@ -40,7 +40,7 @@ from app.routers.sync_common import (
     is_synced, load_synced_ids, purge_source,
     build_firm_index, build_contact_domain_index, build_contact_email_index,
     find_hint_apps, find_matching_apps,
-    process_item, strip_html, earliest_bewerbung_date,
+    process_item, strip_html, earliest_bewerbung_date, _predates_bewerbung,
     init_progress, update_progress, finish_progress,
     set_batch_result, vobj_str,
 )
@@ -1911,11 +1911,25 @@ async def _do_icloud_calls(user_id: int) -> dict:
             if not call_name and matched_contacts:
                 call_name = matched_contacts[0].name
 
-            app_ids: set[int] = set()
+            apps_by_id: dict[int, models.Application] = {}
             for c in matched_contacts:
                 for a in c.applications:
-                    app_ids.add(a.id)
+                    apps_by_id[a.id] = a
 
+            if not apps_by_id:
+                skipped += 1
+                continue
+
+            # Calls sync previously had NO date filtering at all here — any
+            # call, ever, to/from a matched contact's phone number/name got
+            # attributed to every application that contact is linked to. A
+            # real incident (2026-07-16, application #230): a coincidental
+            # phone match attributed an unrelated personal call. Filter per
+            # application since each has its own effective date floor.
+            app_ids = {
+                app_id for app_id, app_obj in apps_by_id.items()
+                if not (call_date and _predates_bewerbung(call_date, app_obj))
+            }
             if not app_ids:
                 skipped += 1
                 continue

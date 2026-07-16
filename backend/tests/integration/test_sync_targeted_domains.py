@@ -296,6 +296,34 @@ class TestSyncGcalForApp:
         event = db_session.query(models.Event).filter_by(source="gcal", external_id="evt-1").one()
         assert event.application_id == app.id
 
+    async def test_negativ_termin_vor_bewerbungsdatum_wird_ausgefiltert(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        # Regression test for the #230 incident (2026-07-16): datum_bewerbung
+        # was never set (a real, reachable state — see create_application()'s
+        # docstring), and calendar sync had no date filter at all beyond the
+        # query window, so a domain-matching event from many months earlier
+        # got wrongly linked. letztes_update (set here explicitly to a value
+        # in the past, as it would be from application creation) is now the
+        # fallback floor — this event, dated before it, must be excluded.
+        profile = company_profile_factory(db_session, website="https://www.contoso.de/")
+        app = application_factory(
+            db_session, firma="Contoso AG", company_profile_id=profile.id,
+            datum_bewerbung=None, letztes_update=date.today() - timedelta(days=30),
+        )
+        db_session.commit()
+        fake_google_calendar([
+            _cal_event("evt-old", "Altes Gespräch", "recruiterin@contoso.de", days_from_now=-60),
+        ])
+
+        created, total, errors = await _sync_gcal_for_app(
+            app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
+        )
+
+        assert errors == []
+        assert created == 0
+        assert db_session.query(models.Event).filter_by(source="gcal", external_id="evt-old").first() is None
+
     async def test_negativ_domain_snapshot_in_app_dict_hat_vorrang_vor_live_kontakten(
         self, db_session, google_sync, fake_google_calendar
     ):

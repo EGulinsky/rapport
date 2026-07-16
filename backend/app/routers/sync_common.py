@@ -27,11 +27,29 @@ log = get_logger("sync", source="targeted")
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 
+def effective_bewerbung_floor(app: models.Application) -> Optional[date]:
+    """Best available 'don't consider anything before this' floor for this
+    application — datum_bewerbung if set, else letztes_update (which
+    defaults to the creation date even when datum_bewerbung is left blank,
+    see create_application()'s docstring in applications.py — that gap is
+    exactly how application #230's mail/calendar/call sync incident
+    (2026-07-16) spanned many months of unrelated history: datum_bewerbung
+    was never set, so _predates_bewerbung() below never filtered anything).
+    None if both are unset too — a genuinely rare case (e.g. a LinkedIn-
+    scraped application with no discoverable applied date at all); callers
+    fall back to their own loose window in that case."""
+    return app.datum_bewerbung or app.letztes_update
+
+
 def _predates_bewerbung(datum: Optional[date], app: models.Application) -> bool:
-    """True if datum is set and lies strictly before the application submission date."""
-    if datum is None or app.datum_bewerbung is None:
+    """True if datum is set and lies strictly before this application's
+    effective floor date (see effective_bewerbung_floor) — i.e. from before
+    you even started tracking this application, so it can't be a reaction
+    to it. Used uniformly by mail, calendar, and call-log sync."""
+    floor = effective_bewerbung_floor(app)
+    if datum is None or floor is None:
         return False
-    return datum < app.datum_bewerbung
+    return datum < floor
 
 
 def earliest_bewerbung_date(db: Session) -> Optional[date]:

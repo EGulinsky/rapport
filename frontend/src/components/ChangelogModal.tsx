@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.3',
+    date: '2026-07-16',
+    changes: [
+      'Mail/calendar/call sync now consistently ignores anything dated before an application\'s applied date (or, if that was never set, its creation date) across every sync source and both the bulk and per-application variants — previously this floor was only enforced for mail, and calendar sync, call-log sync, and several targeted-sync paths had no date check at all, so an old, unrelated item could still get wrongly linked. Automated sender addresses (e.g. from an ATS/HR tool) are still eligible to match, same as before — the fix is the date floor plus existing company/role/domain matching, not a new sender-based exclusion.',
+    ],
+  },
+  {
     version: '4.3.2',
     date: '2026-07-16',
     changes: [
