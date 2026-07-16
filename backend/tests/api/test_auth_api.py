@@ -547,3 +547,35 @@ class TestProfileAndCv:
 
         me_resp = real_auth_client.get("/api/auth/me", headers=headers)
         assert me_resp.json()["cv_filename"] is None
+
+    def test_positiv_cv_upload_extrahiert_und_cached_text(self, real_auth_client, captured_email, db_session, monkeypatch):
+        """Extraction happens once at upload time, not per AI assessment —
+        see User.cv_extracted_text's docstring in models.py for why."""
+        from app import models
+        monkeypatch.setattr("app.cv_extract.extract_cv_text", lambda path: "Extracted résumé text")
+        token = self._token(real_auth_client, captured_email)
+
+        resp = real_auth_client.post(
+            "/api/auth/cv",
+            files={"file": ("lebenslauf.pdf", b"%PDF-1.4 fake cv content", "application/pdf")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 201
+        user = db_session.query(models.User).filter_by(email="test@example.com").one()
+        assert user.cv_extracted_text == "Extracted résumé text"
+
+    def test_positiv_cv_loeschen_leert_extrahierten_text(self, real_auth_client, captured_email, db_session):
+        from app import models
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.post("/api/auth/cv", files={"file": ("lebenslauf.pdf", b"cv inhalt", "application/pdf")}, headers=headers)
+        user = db_session.query(models.User).filter_by(email="test@example.com").one()
+        user.cv_extracted_text = "some cached text"
+        db_session.commit()
+
+        resp = real_auth_client.delete("/api/auth/cv", headers=headers)
+
+        assert resp.status_code == 204
+        db_session.refresh(user)
+        assert user.cv_extracted_text is None

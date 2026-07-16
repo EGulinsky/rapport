@@ -491,6 +491,72 @@ class TestMigrateUserProfile:
                 "cv_content_type", "cv_size_bytes", "cv_storage_path"} <= cols
 
 
+class TestMigrateCvExtractedTextCache:
+    def test_positiv_fuegt_spalte_hinzu(self, db_path):
+        _drop_columns(db_path, "users", "cv_extracted_text")
+
+        db_module._migrate_cv_extracted_text_cache()
+
+        assert "cv_extracted_text" in _cols(db_path, "users")
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        _drop_columns(db_path, "users", "cv_extracted_text")
+
+        db_module._migrate_cv_extracted_text_cache()
+        db_module._migrate_cv_extracted_text_cache()  # must not raise ("duplicate column")
+
+        assert "cv_extracted_text" in _cols(db_path, "users")
+
+    def test_positiv_backfillt_bestehende_uploads(self, db_path, tmp_path, monkeypatch):
+        """Users who uploaded a CV before this fix existed (cv_storage_path
+        already set, cv_extracted_text never populated) must get it
+        backfilled on the first run after upgrading — see
+        _migrate_cv_extracted_text_cache()'s docstring."""
+        _drop_columns(db_path, "users", "cv_extracted_text")
+        # Explicit id: _drop_columns rebuilds the table via "CREATE TABLE ...
+        # AS SELECT", which drops the id column's PRIMARY KEY/autoincrement
+        # behavior — an insert without an explicit id would silently store
+        # NULL, and the migration's per-row UPDATE ... WHERE id = ? would
+        # never match.
+        _exec(
+            db_path,
+            "INSERT INTO users (id, email, password_hash, email_verified, cv_storage_path) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (1, "cv-backfill@example.com", "x", 1, "1/lebenslauf.pdf"),
+        )
+        cv_dir = tmp_path / "user_files" / "1"
+        cv_dir.mkdir(parents=True)
+        (cv_dir / "lebenslauf.pdf").write_text("placeholder")  # content irrelevant, extraction is mocked below
+
+        monkeypatch.setattr("app.cv_extract.extract_cv_text", lambda path: "Backfilled CV text")
+
+        db_module._migrate_cv_extracted_text_cache()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT cv_extracted_text FROM users WHERE email = ?", ("cv-backfill@example.com",)
+        ).fetchone()
+        conn.close()
+        assert row[0] == "Backfilled CV text"
+
+    def test_negativ_user_ohne_cv_wird_nicht_angefasst(self, db_path):
+        _drop_columns(db_path, "users", "cv_extracted_text")
+        _exec(
+            db_path,
+            "INSERT INTO users (email, password_hash, email_verified) VALUES (?, ?, ?)",
+            ("no-cv@example.com", "x", 1),
+        )
+
+        db_module._migrate_cv_extracted_text_cache()  # must not raise despite no cv_storage_path
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT cv_extracted_text FROM users WHERE email = ?", ("no-cv@example.com",)
+        ).fetchone()
+        conn.close()
+        assert row[0] is None
+
+
 class TestMigrateLinkedinProfileCache:
     def test_positiv_fuegt_beide_spalten_hinzu(self, db_path):
         _drop_columns(db_path, "users", "linkedin_profile_text", "linkedin_profile_synced_at")

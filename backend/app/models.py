@@ -559,6 +559,16 @@ class User(Base):
     cv_size_bytes    = Column(Integer, nullable=True)
     cv_storage_path  = Column(String, nullable=True)
 
+    # Cached extraction of cv_storage_path's text (app/cv_extract.py), fed
+    # into the AI assessment prompt. Extracted once at upload time — a
+    # per-assessment re-extraction (the original implementation) both
+    # re-parsed the PDF/DOCX on every single "Reassess" click (slow: real
+    # measured cost, not free) and did so synchronously inside an `async
+    # def` endpoint, blocking the whole app's event loop for the duration
+    # for every user, not just the one being assessed — the same class of
+    # bug just fixed for the iCloud sync, self-inflicted here.
+    cv_extracted_text = Column(Text, nullable=True)
+
     # Cached extracted text from linkedin_url's profile page (headline/about/
     # experience, scraped once on demand via the existing LinkedIn session
     # rather than live per assessment — see routers/sync_linkedin.py's

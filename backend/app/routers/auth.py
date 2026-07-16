@@ -13,6 +13,7 @@ POST /api/auth/change-password   — Passwort ändern (erfordert Login)
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -321,6 +322,14 @@ async def upload_cv(
     current_user.cv_content_type = file.content_type
     current_user.cv_size_bytes = len(data)
     current_user.cv_storage_path = os.path.join(str(current_user.id), safe_name)
+
+    # Extracted once here, at upload time, rather than per AI assessment —
+    # see User.cv_extracted_text's docstring in models.py for why. Offloaded
+    # to a thread since PDF/DOCX parsing is real, measurable CPU+I/O work
+    # that would otherwise block this async endpoint's event loop.
+    from app.cv_extract import extract_cv_text
+    current_user.cv_extracted_text = await asyncio.to_thread(extract_cv_text, target_path)
+
     db.commit()
     db.refresh(current_user)
     return _user_response(current_user)
@@ -353,4 +362,5 @@ def delete_cv(
     current_user.cv_content_type = None
     current_user.cv_size_bytes = None
     current_user.cv_storage_path = None
+    current_user.cv_extracted_text = None
     db.commit()

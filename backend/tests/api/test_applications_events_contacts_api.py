@@ -194,14 +194,19 @@ class TestAiAssessSingle:
 
 
 class TestAiAssessProfileDataWiring:
-    """Verifies applications.py's own glue code — extracting CV text via
-    app.cv_extract.extract_cv_text() and reading the cached
-    linkedin_profile_text column — actually reaches assess_application()/
-    assess_rejected_application(). The prompt-building side of this (does
-    the text show up in the LLM prompt) is covered separately in
-    tests/unit/test_ai_assess_profile_block.py. Uses real_auth_client
-    (not the plain `client` fixture) since it needs a real, DB-tracked user
-    row to set cv_storage_path/linkedin_profile_text on."""
+    """Verifies applications.py's own glue code — reading the cached
+    cv_extracted_text and linkedin_profile_text columns — actually reaches
+    assess_application()/assess_rejected_application(). Both are read
+    directly from the user row, not re-extracted/re-scraped per assessment
+    (see User.cv_extracted_text's docstring in models.py for why: the
+    original implementation re-parsed the CV's PDF/DOCX on every single
+    "Reassess" click, both slow and — since it ran synchronously inside an
+    `async def` endpoint — blocking the whole app's event loop for everyone
+    while it did). The prompt-building side of this (does the text show up
+    in the LLM prompt) is covered separately in
+    tests/unit/test_ai_assess_profile_block.py. Uses real_auth_client (not
+    the plain `client` fixture) since it needs a real, DB-tracked user row
+    to set cv_extracted_text/linkedin_profile_text on."""
 
     def _authed_with_app(self, db_session, **user_overrides):
         from app.auth.security import create_access_token
@@ -219,7 +224,7 @@ class TestAiAssessProfileDataWiring:
 
     def test_positiv_cv_und_linkedin_werden_an_assess_uebergeben(self, real_auth_client, db_session):
         app, headers = self._authed_with_app(
-            db_session, linkedin_profile_text="LinkedIn summary text", cv_storage_path="1/cv.pdf",
+            db_session, linkedin_profile_text="LinkedIn summary text", cv_extracted_text="Cached CV content",
         )
         captured = {}
 
@@ -228,12 +233,11 @@ class TestAiAssessProfileDataWiring:
             captured["linkedin_text"] = linkedin_text
             return {"color": "green", "reasoning": "ok", "next_step": "abwarten"}
 
-        with patch("app.ai.tasks.assess_application", new=_fake_assess), \
-             patch("app.cv_extract.extract_cv_text", return_value="Extracted CV content"):
+        with patch("app.ai.tasks.assess_application", new=_fake_assess):
             resp = real_auth_client.post(f"/api/applications/{app.id}/ai-assess", headers=headers)
 
         assert resp.status_code == 200
-        assert captured["cv_text"] == "Extracted CV content"
+        assert captured["cv_text"] == "Cached CV content"
         assert captured["linkedin_text"] == "LinkedIn summary text"
 
     def test_negativ_ohne_cv_und_linkedin_wird_none_uebergeben(self, real_auth_client, db_session):

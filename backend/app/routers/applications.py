@@ -1,5 +1,4 @@
 import json
-import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -283,18 +282,16 @@ async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User
     from app.models import AiSettings
     from app.ai.tasks import assess_application
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
-    from app.cv_extract import extract_cv_text
-    from app.routers.auth import CV_ROOT
 
     cfg = db.query(AiSettings).first()
     # Throttle: Gemini free tier = 15 RPM, Groq = 30 RPM — use 5s gap to stay safe
     provider_id = (cfg.provider if cfg else "") or ""
     delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
 
-    # Same for every application in the batch — extracted once, not per application.
-    cv_text = None
-    if current_user.cv_storage_path:
-        cv_text = extract_cv_text(os.path.join(CV_ROOT, current_user.cv_storage_path))
+    # Both cached on the user row (extracted/scraped once at upload/sync
+    # time, not per assessment) — see User.cv_extracted_text's docstring in
+    # models.py for why re-extracting per assessment was a real problem.
+    cv_text = current_user.cv_extracted_text
     linkedin_text = current_user.linkedin_profile_text
 
     async def _stream():
@@ -569,11 +566,7 @@ async def ai_assess_single(
         raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
     from app.ai.tasks import assess_application, assess_rejected_application
     from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
-    from app.cv_extract import extract_cv_text
-    from app.routers.auth import CV_ROOT
-    cv_text = None
-    if current_user.cv_storage_path:
-        cv_text = extract_cv_text(os.path.join(CV_ROOT, current_user.cv_storage_path))
+    cv_text = current_user.cv_extracted_text
     linkedin_text = current_user.linkedin_profile_text
     try:
         if app.abgesagt:

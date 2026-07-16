@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.1.2',
+    date: '2026-07-16',
+    changes: [
+      'Fixed the AI assessment (v4.1.0) taking a very long time to run. It was re-parsing your CV file (PDF/DOCX text extraction) synchronously on every single assessment, and doing so inside the request handler blocked the whole app for everyone while it ran — the same class of bug just fixed for iCloud sync (v4.1.1), reintroduced by that CV/LinkedIn feature itself. CV text is now extracted once when you upload the file and reused from then on; existing uploads are backfilled automatically on next startup.',
+    ],
+  },
+  {
     version: '4.1.1',
     date: '2026-07-14',
     changes: [

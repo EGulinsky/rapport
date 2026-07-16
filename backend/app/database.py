@@ -876,6 +876,40 @@ def _migrate_user_profile():
     conn.close()
 
 
+def _migrate_cv_extracted_text_cache():
+    """Cached extraction of the user's CV (see app/cv_extract.py), used by
+    the AI assessment prompt alongside the LinkedIn profile cache — see
+    User.cv_extracted_text's docstring in models.py for why this needs to
+    be cached rather than re-extracted per assessment. Backfills existing
+    uploads (cv_storage_path already set) so users who uploaded a CV before
+    this fix benefit immediately without re-uploading."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    is_new_column = "cv_extracted_text" not in cols
+    if is_new_column:
+        cur.execute("ALTER TABLE users ADD COLUMN cv_extracted_text TEXT")
+
+    if is_new_column:
+        cur.execute("SELECT id, cv_storage_path FROM users WHERE cv_storage_path IS NOT NULL")
+        rows = cur.fetchall()
+        if rows:
+            from app.cv_extract import extract_cv_text
+            cv_root = os.path.join(os.path.dirname(db_path), "user_files")
+            for user_id, storage_path in rows:
+                text = extract_cv_text(os.path.join(cv_root, storage_path))
+                if text:
+                    cur.execute("UPDATE users SET cv_extracted_text = ? WHERE id = ?", (text, user_id))
+
+    conn.commit()
+    conn.close()
+
+
 def _migrate_linkedin_profile_cache():
     """Cached extracted text from the user's LinkedIn profile page (see
     routers/sync_linkedin.py's scrape_own_profile()), used by the AI
@@ -1011,6 +1045,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
     _migrate_user_profile()
+    _migrate_cv_extracted_text_cache()
     _migrate_linkedin_profile_cache()
     _migrate_ui_language()
     _migrate_company_profiles()
