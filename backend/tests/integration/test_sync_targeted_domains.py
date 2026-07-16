@@ -296,6 +296,33 @@ class TestSyncGcalForApp:
         event = db_session.query(models.Event).filter_by(source="gcal", external_id="evt-1").one()
         assert event.application_id == app.id
 
+    async def test_negativ_domain_snapshot_in_app_dict_hat_vorrang_vor_live_kontakten(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        # Regression test for the #230 followup incident: a sibling source
+        # (e.g. mail, running concurrently in the same _do_sync() gather)
+        # can add a contact to app.contacts moments before this function
+        # computes its own domain list — without app_dict["_domain_snapshot"]
+        # (computed once in _do_sync(), before any source runs), that
+        # brand-new, unverified contact's domain would get treated as
+        # trustworthy. Here the live contact's domain ("sideeffect.example")
+        # is NOT in the snapshot (empty list, as _do_sync() would compute
+        # before any contact existed) — a calendar event from that domain
+        # must not match.
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=None)
+        contact = contact_factory(db_session, email="recruiterin@sideeffect.example")
+        app.contacts.append(contact)
+        db_session.commit()
+        fake_google_calendar([_cal_event("evt-snapshot", "Interview", "recruiterin@sideeffect.example")])
+
+        created, total, errors = await _sync_gcal_for_app(
+            app, {"id": app.id, "firma": app.firma, "is_headhunter": False, "_domain_snapshot": []}, [], db_session,
+        )
+
+        assert errors == []
+        assert created == 0
+        assert db_session.query(models.Event).filter_by(source="gcal", external_id="evt-snapshot").first() is None
+
     async def test_negativ_termin_von_fremder_domain_wird_ausgefiltert(self, db_session, google_sync, fake_google_calendar):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)

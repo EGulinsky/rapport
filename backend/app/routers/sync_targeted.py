@@ -109,18 +109,31 @@ def _domain_from_website(website: Optional[str]) -> Optional[str]:
         return None
 
 
-def _company_domains_for_app(app: models.Application, terms: list[str], db: Session) -> list[str]:
+def _company_domains_for_app(
+    app: models.Application, terms: list[str], db: Session, contacts: Optional[list] = None,
+) -> list[str]:
     """Email domains for this application, derived from linked CompanyProfile websites
     AND from already-confirmed contact email addresses.
 
     - Direct application: domain from app.company_profile.website
     - HH application: domain from app.target_company_profile.website (the actual employer),
       plus app.company_profile.website (the HH firm) so HH mails are also captured.
-    - Contact emails (app.contacts) are added too — these are manually verified/confirmed
-      addresses and take precedence over web-enrichment guesses, which can point to the
-      wrong domain (e.g. a similarly-named company with a different TLD).
+    - Contact emails are added too — these are manually verified/confirmed addresses and
+      take precedence over web-enrichment guesses, which can point to the wrong domain
+      (e.g. a similarly-named company with a different TLD).
     Personal/freemail domains are excluded.
-    """
+
+    `contacts` defaults to the live `app.contacts` relationship, but callers running
+    several sources in the same sync pass a pre-sync snapshot instead — see
+    _do_sync()'s docstring/comment for why: within one asyncio.gather() call sharing
+    one DB session, a contact one source (e.g. mail) creates from a false-positive
+    match becomes visible to app.contacts immediately (flushed, not yet committed),
+    so another source computing its own domain list moments later would otherwise
+    treat that brand-new, unverified contact's domain as trustworthy — this is
+    exactly how application #230's mail false-positive flood (2026-07-16) cascaded
+    into wrongly-matched calendar events: the domains involved (e.g. exxeta.com,
+    ipg-automotive's domain) all came from contacts mail sync had just created
+    moments earlier in the same run, not from any real Qorix-related signal."""
     domains: set[str] = set()
 
     def _add_profile(profile) -> None:
@@ -135,7 +148,7 @@ def _company_domains_for_app(app: models.Application, terms: list[str], db: Sess
     else:
         _add_profile(app.company_profile)
 
-    for contact in app.contacts:
+    for contact in (contacts if contacts is not None else app.contacts):
         if not contact.email or "@" not in contact.email:
             continue
         d = contact.email.split("@", 1)[1].strip().lower()
@@ -173,7 +186,9 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
 
     app_id = app.id
     pfx = f"[SYNC #{app_id} gmail]"
-    app_domains = _company_domains_for_app(app, terms, db)
+    app_domains = app_dict.get("_domain_snapshot")
+    if app_domains is None:
+        app_domains = _company_domains_for_app(app, terms, db)
     text_terms = [w for w in (_query_safe(term) for term in terms) if w]
     if not app_domains and not text_terms:
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
@@ -287,7 +302,9 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
 
     app_id = app.id
     pfx = f"[SYNC #{app_id} gcal]"
-    app_domains = _company_domains_for_app(app, terms, db)
+    app_domains = app_dict.get("_domain_snapshot")
+    if app_domains is None:
+        app_domains = _company_domains_for_app(app, terms, db)
     if not app_domains:
         log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
         return 0, 0, []
@@ -421,7 +438,9 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
 
     app_id = app.id
     pfx = f"[SYNC #{app_id} icloud_mail]"
-    app_domains = _company_domains_for_app(app, terms, db)
+    app_domains = app_dict.get("_domain_snapshot")
+    if app_domains is None:
+        app_domains = _company_domains_for_app(app, terms, db)
     text_terms = [w for w in (_query_safe(term) for term in terms) if w]
     if not app_domains and not text_terms:
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
@@ -540,7 +559,9 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
 
     app_id = app.id
     pfx = f"[SYNC #{app_id} icloud_cal]"
-    app_domains = _company_domains_for_app(app, terms, db)
+    app_domains = app_dict.get("_domain_snapshot")
+    if app_domains is None:
+        app_domains = _company_domains_for_app(app, terms, db)
     if not app_domains:
         log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
         return 0, 0, []
@@ -1156,6 +1177,17 @@ async def _do_sync(app_id: int) -> dict:
 
         terms = _search_terms(app, db)
         app_dict = _app_dict(app)
+        # Snapshot the domain list ONCE, before any source runs — Gmail/GCal/
+        # iCloud Mail/iCloud Calendar all run concurrently below in the same
+        # asyncio.gather() call, sharing one DB session. Without this, a
+        # false-positive contact one source creates becomes visible via the
+        # live app.contacts relationship (flushed, not yet committed) to
+        # another source computing its own domain list moments later — see
+        # _company_domains_for_app()'s docstring for the #230 incident this
+        # fixes (a mail false-positive cascaded into wrongly-matched
+        # calendar events and call-log entries through exactly this path).
+        # Stashed on app_dict since every source already receives it uniformly.
+        app_dict["_domain_snapshot"] = _company_domains_for_app(app, terms, db)
         total_created = 0
         total_processed = 0
         all_errors: list[str] = []

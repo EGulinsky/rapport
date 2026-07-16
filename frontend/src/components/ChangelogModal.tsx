@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.2',
+    date: '2026-07-16',
+    changes: [
+      'Fixed the same v4.3.0 false-positive issue also cascading into calendar events and call-log entries: a wrongly-matched email could create a wrong contact, and per-application sync ran mail, calendar, and other sources together in one batch, so a same-batch source could pick up that fresh contact\'s company domain as if it were a trusted signal and wrongly link its own calendar/call items too. The list of trusted domains for a sync run is now fixed at the start, before any source runs, so nothing a sync creates partway through can influence what the rest of that same run matches.',
+    ],
+  },
+  {
     version: '4.3.1',
     date: '2026-07-16',
     changes: [

@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v4.3.1, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v4.3.2, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -458,6 +458,8 @@ sequenceDiagram
 
 **Role/company search terms are whole phrases, never split into words — and targeted sync re-verifies before saving.** A real incident (2026-07-16): a role title ("Senior SW Projektleiter BMW") got word-split into standalone search terms including "Senior" — generic enough to match hundreds of unrelated emails, all wrongly attributed to that one application (328 junk timeline events from a single sync run), since targeted sync hardcodes `hint_apps` to the one application being synced with no independent check. Fixed with three layers, all in `sync_targeted.py`/`sync_common.py`: (1) `_search_terms()`/`build_firm_index()` use the role as one whole phrase, never split into words; (2) a role that's *just* one generic word ("Manager", "Senior" — see `_GENERIC_ROLE_TERMS`) is excluded entirely rather than used as a term; (3) targeted sync re-verifies each fetched message actually contains one of the real terms/domains before attributing it to the application, instead of trusting the query result blindly; (4) a circuit breaker (`_MAX_TARGETED_MAIL_MATCHES` = 30) aborts a targeted-sync run without saving anything if it would otherwise create an anomalous number of events — a safety net independent of matching precision.
 
+**The same incident cascaded into calendar events and call-log entries — fixed by snapshotting the domain list before any source runs.** `_do_sync()` runs Gmail, Google Calendar, iCloud Mail, and iCloud Calendar concurrently in one `asyncio.gather()` call sharing a single DB session. `_company_domains_for_app()` (used by all four to decide which email domains count as "this company") reads the *live* `app.contacts` relationship — so a false-positive contact one source creates (flushed, not yet committed) becomes visible to a sibling source computing its own domain list moments later, even mid-run. This is exactly how #230's mail flood cascaded further: bogus contacts mail sync created (recruiters/companies unrelated to the actual application) contributed their domains to Google Calendar's own matching, wrongly linking real calendar events and call-log entries from those *other* companies to this application too. Fixed by computing the domain list **once**, in `_do_sync()`, before any source starts, and passing it down via `app_dict["_domain_snapshot"]` (already passed uniformly to every source) — `_company_domains_for_app()` gained an optional `contacts` override parameter for this, defaulting to the live relationship for direct/test call sites that don't provide a snapshot.
+
 ### 5.2 LinkedIn Import of a Job Posting
 
 ```mermaid
@@ -843,7 +845,7 @@ flowchart LR
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1388 tests (415 unit / 251 component / 526 api / 196 integration) — PR-gate coverage 75% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1391 tests (417 unit / 251 component / 526 api / 197 integration) — PR-gate coverage 75% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 

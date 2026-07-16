@@ -141,6 +141,29 @@ class TestCompanyDomainsForApp:
         app = application_factory(db_session, is_headhunter=False, company_profile_id=None)
         assert _company_domains_for_app(app, [], db_session) == []
 
+    def test_positiv_contacts_override_ignoriert_live_app_contacts(self, db_session):
+        # Regression test for the #230 followup incident: a contact created
+        # by one sync source mid-run (e.g. mail) becomes visible via the
+        # live app.contacts relationship to a sibling source (e.g. GCal)
+        # running in the same asyncio.gather() call moments later, even
+        # before anything is committed. Passing a pre-sync `contacts`
+        # snapshot must make the live, newly-added contact's domain
+        # invisible — only the snapshot's contacts count.
+        app = application_factory(db_session, is_headhunter=False, company_profile_id=None)
+        live_only_contact = contact_factory(db_session, email="justcreated@newcompany.com")
+        app.contacts.append(live_only_contact)
+        db_session.commit()
+
+        assert _company_domains_for_app(app, [], db_session, contacts=[]) == []
+        assert _company_domains_for_app(app, [], db_session) == ["newcompany.com"]
+
+    def test_positiv_contacts_override_nutzt_uebergebene_liste(self, db_session):
+        app = application_factory(db_session, is_headhunter=False, company_profile_id=None)
+        snapshot_contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        db_session.commit()
+
+        assert _company_domains_for_app(app, [], db_session, contacts=[snapshot_contact]) == ["contoso.com"]
+
 
 class TestTextMatches:
     def test_positiv_case_insensitiv(self):
