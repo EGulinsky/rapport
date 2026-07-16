@@ -1925,10 +1925,13 @@ async def _do_icloud_calls(user_id: int) -> dict:
             # attributed to every application that contact is linked to. A
             # real incident (2026-07-16, application #230): a coincidental
             # phone match attributed an unrelated personal call. Filter per
-            # application since each has its own effective date floor.
+            # application since each has its own effective date floor. A
+            # call with no parseable date at all is excluded too — see
+            # _predates_bewerbung(): with nothing to compare, there's no
+            # way to judge whether it's a genuine reaction to this application.
             app_ids = {
                 app_id for app_id, app_obj in apps_by_id.items()
-                if not (call_date and _predates_bewerbung(call_date, app_obj))
+                if not _predates_bewerbung(call_date, app_obj)
             }
             if not app_ids:
                 skipped += 1

@@ -4,13 +4,13 @@ Wie bei Gmail (siehe test_sync_targeted_domains.py) matcht der gezielte Sync
 über die Firmen-Domain, nicht wie der globale iCloud-Mail-Sync über Kontakt-
 /Firmennamen-Text-Matching. Nutzt dieselbe IMAP-Fake wie test_icloud_mail_sync.py.
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
 from app import models
 from app.routers.sync_targeted import _sync_icloud_mail_for_app
-from tests.factories import application_factory, company_profile_factory
+from tests.factories import application_factory, company_profile_factory, seed_floor
 from tests.integration.conftest import icloud_email
 
 pytestmark = pytest.mark.integration
@@ -23,10 +23,8 @@ def _now_rfc2822() -> str:
 class TestSyncIcloudMailForApp:
     async def test_positiv_treffer_von_firmendomain_wird_angelegt(self, db_session, icloud_sync, fake_icloud_imap):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
-        app = application_factory(
-            db_session, firma="Contoso AG", company_profile_id=profile.id,
-            datum_bewerbung=date.today() - timedelta(days=30),
-        )
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
 
         msg_id, msg = icloud_email(
@@ -66,6 +64,7 @@ class TestSyncIcloudMailForApp:
         # incident documented in _search_terms()'s docstring. A word-split
         # "Backend"/"Engineer" would each be far too generic to search alone.
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=None, rolle="Backend Engineer")
+        seed_floor(db_session, app)
         db_session.commit()
         conn = fake_icloud_imap([])
 
@@ -93,6 +92,7 @@ class TestSyncIcloudMailForApp:
     async def test_negativ_imap_fehler_liefert_sauberen_fehler(self, db_session, icloud_sync, monkeypatch):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
 
         def _raise(host, port):

@@ -140,7 +140,7 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner on the Mac.
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 1205 tests) → `frontend` (tsc + vitest + vite build) → `e2e` (Playwright via docker-compose.test.yml, all 12 journeys in German every push + an English subset on push to `main`, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 200 L3 integration tests run on push to `main` (`pytest -m integration`).
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 1206 tests) → `frontend` (tsc + vitest + vite build) → `e2e` (Playwright via docker-compose.test.yml, all 12 journeys in German every push + an English subset on push to `main`, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 200 L3 integration tests run on push to `main` (`pytest -m integration`).
 Deploy: `git pull` → Docker Buildx builds new images on the runner → `docker compose up -d --build` → health poll → macOS notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (test concept, all phases 1–6 complete).
 A push to `main` always triggers test+deploy. Manually (e.g. on a feature branch) via `gh workflow run ci.yml --ref <branch>` to only test, or with `-f deploy=true` to also deploy (this always deploys the `main` head, regardless of the chosen `--ref`).
 

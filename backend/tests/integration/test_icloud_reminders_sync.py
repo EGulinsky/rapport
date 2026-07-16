@@ -14,7 +14,7 @@ import pytest
 from app import models
 from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_reminders
-from tests.factories import application_factory
+from tests.factories import application_factory, seed_floor
 from tests.integration.conftest import FakeCaldavCalendar, FakeCaldavEvent, icloud_reminder
 
 pytestmark = pytest.mark.integration
@@ -29,7 +29,8 @@ class TestDoIcloudRemindersNichtVerbunden:
 
 class TestDoIcloudRemindersNeueErinnerungen:
     async def test_positiv_erinnerung_mit_firmenname_wird_angelegt(self, db_session, icloud_sync, fake_caldav):
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         todo = icloud_reminder("todo-1", "Unterlagen für Contoso AG vorbereiten", due_dt=datetime.now(timezone.utc) + timedelta(days=1))
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
@@ -90,9 +91,10 @@ class TestDoIcloudRemindersNeueErinnerungen:
         # todos() fehlt auf VTODO-Ebene ein Fehler-Sammelmechanismus wie beim
         # Kalender-Sync (date_search) — ein einzelner kaputter Kalender wird
         # stillschweigend übersprungen, statt den gesamten Sync abzubrechen.
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
-        good_todo = icloud_reminder("todo-ok", "Unterlagen für Contoso AG vorbereiten")
+        good_todo = icloud_reminder("todo-ok", "Unterlagen für Contoso AG vorbereiten", due_dt=datetime.now(timezone.utc))
         broken_cal = FakeCaldavCalendar("Kaputt")
 
         def _raise_todos():
@@ -110,7 +112,8 @@ class TestDoIcloudRemindersNeueErinnerungen:
     async def test_positiv_erinnerung_mit_reinem_datumswert_wird_verarbeitet(self, db_session, icloud_sync, fake_caldav):
         # DUE;VALUE=DATE (ohne Uhrzeit) liefert ein `datetime.date`-Objekt statt
         # `datetime.datetime` — eigener Zweig in der due-Typprüfung.
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         due = date.today() + timedelta(days=2)
         ics = (
@@ -173,14 +176,15 @@ class TestDoIcloudRemindersNeueErinnerungen:
     async def test_negativ_kaputte_erinnerung_ohne_vtodo_wird_still_uebersprungen(
         self, db_session, icloud_sync, fake_caldav
     ):
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
 
         class _BrokenTodo:
             url = "https://caldav.icloud.com/broken.ics"
             vobject_instance = object()  # kein .vtodo-Attribut -> AttributeError
 
-        good_todo = icloud_reminder("todo-good", "Unterlagen für Contoso AG vorbereiten")
+        good_todo = icloud_reminder("todo-good", "Unterlagen für Contoso AG vorbereiten", due_dt=datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[_BrokenTodo(), good_todo])])
 
         result = await _do_icloud_reminders(1)

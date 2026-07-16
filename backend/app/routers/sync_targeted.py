@@ -196,6 +196,12 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         return 0, 0, []
 
     since = effective_bewerbung_floor(app)
+    if since is None:
+        # No dated event anywhere in this application's timeline yet — no
+        # anchor to judge relevance against, so don't sync at all rather
+        # than guess with an arbitrary lookback window.
+        log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
+        return 0, 0, []
     after_ts = int(datetime(since.year, since.month, since.day, tzinfo=timezone.utc).timestamp())
     # Domain clause (from:/to:) plus company-name/role phrase clause — a mail
     # mentioning the company or role by name from a sender with no known
@@ -311,6 +317,9 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         return 0, 0, []
 
     since = effective_bewerbung_floor(app)
+    if since is None:
+        log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
+        return 0, 0, []
     now = datetime.now(timezone.utc)
     try:
         events_result = service.events().list(
@@ -383,8 +392,9 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         except Exception:
             pass
 
-        if date_hint and _predates_bewerbung(date_hint.date(), app):
-            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Floor)", pfx, ev_id, summary, date_hint.date())
+        datum = date_hint.date() if date_hint else None
+        if _predates_bewerbung(datum, app):
+            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt/datumlos ({} < Floor)", pfx, ev_id, summary, datum)
             mark_synced(db, "gcal", ev_id, user_id)
             skipped += 1
             continue
@@ -465,11 +475,14 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     # name without a known company domain would otherwise never match.
     search_criteria = (app_domains + text_terms)[:15]
     imap_query = _imap_or(search_criteria)
-    # Without a SINCE bound (i.e. no floor at all), this searches the entire
-    # mailbox with no date restriction whatsoever. effective_bewerbung_floor()
-    # always returns a concrete date — the earliest event already in this
-    # application's timeline, or a loose fallback window if it has none yet.
+    # effective_bewerbung_floor() returns the earliest dated event already
+    # in this application's timeline — with none yet, there's no anchor to
+    # judge relevance against, so don't sync at all rather than search the
+    # entire mailbox with no date restriction whatsoever.
     since = effective_bewerbung_floor(app)
+    if since is None:
+        log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
+        return 0, 0, []
     imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
     log.debug("{} domains: {} terms: {}  query: {}", pfx, app_domains, text_terms, imap_query)
 
@@ -591,6 +604,9 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
         )
 
     since = effective_bewerbung_floor(app)
+    if since is None:
+        log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
+        return 0, 0, []
     now = datetime.now(timezone.utc)
     start_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
 
@@ -671,8 +687,9 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
         except Exception:
             pass
 
-        if date_hint and _predates_bewerbung(date_hint.date(), app):
-            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Floor)", pfx, uid[:16], summary, date_hint.date())
+        datum = date_hint.date() if date_hint else None
+        if _predates_bewerbung(datum, app):
+            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt/datumlos ({} < Floor)", pfx, uid[:16], summary, datum)
             mark_synced(db, "icloud_cal", uid, user_id)
             skipped += 1
             continue
@@ -1111,7 +1128,11 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         # call, ever, to/from a contact's phone number. A real incident
         # (2026-07-16, application #230): a coincidental phone-number match
         # attributed an unrelated personal call to the wrong application.
-        if date_hint and _predates_bewerbung(date_hint.date(), app):
+        # A call with no parseable date at all is skipped too — see
+        # _predates_bewerbung(): with nothing to compare, there's no way to
+        # judge whether it's a genuine reaction to this application.
+        datum = date_hint.date() if date_hint else None
+        if _predates_bewerbung(datum, app):
             skipped += 1
             mark_synced(db, "icloud_calls", call_key, user_id)
             continue
@@ -1130,7 +1151,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         call_event = models.Event(
             application_id=app.id,
             typ="notiz",
-            datum=date_hint.date() if date_hint else None,
+            datum=datum,
             titel=titel,
             notiz=notiz or None,
             source="icloud_calls",

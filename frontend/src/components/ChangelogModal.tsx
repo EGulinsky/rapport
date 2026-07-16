@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.5',
+    date: '2026-07-16',
+    changes: [
+      'Mail/calendar/call sync now requires a real date on both sides before considering an item — an application with no dated history yet is no longer synced at all (v4.3.4\'s fallback window is gone), and an individual mail/calendar item/call whose own date can\'t be determined is skipped instead of being saved without one. If there\'s truly no date to judge relevance by, nothing gets synced rather than guessed at.',
+    ],
+  },
+  {
     version: '4.3.4',
     date: '2026-07-16',
     changes: [

@@ -22,7 +22,7 @@ import pytest
 from app import models
 from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_cal
-from tests.factories import application_factory
+from tests.factories import application_factory, seed_floor
 from tests.integration.conftest import FakeCaldavCalendar, FakeCaldavEvent, icloud_calendar_event
 
 pytestmark = pytest.mark.integration
@@ -40,7 +40,8 @@ class TestDoIcloudCalNeueTermine:
         # find_hint_apps() matcht rein über den Firmennamen im Text (kein Kontakt-
         # Matching bei icloud_cal) — das Job-Keyword allein bestimmt nur, ob der
         # has_keyword/has_firm-Skip-Check passiert wird, nicht die App-Zuordnung.
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         ev = icloud_calendar_event("evt-1", "Interview Runde 1 bei Contoso AG", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
@@ -69,7 +70,8 @@ class TestDoIcloudCalNeueTermine:
         assert db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-2").first() is None
 
     async def test_positiv_termin_mit_firmenname_wird_erkannt(self, db_session, icloud_sync, fake_caldav):
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         ev = icloud_calendar_event("evt-3", "Meeting bei Contoso AG", datetime.now(timezone.utc))
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
@@ -79,7 +81,8 @@ class TestDoIcloudCalNeueTermine:
         assert result["created"] == 1
 
     async def test_negativ_kalender_fehler_bei_date_search_wird_gesammelt_kein_abbruch(self, db_session, icloud_sync, fake_caldav):
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         good_ev = icloud_calendar_event("evt-ok", "Interview bei Contoso AG", datetime.now(timezone.utc))
         broken_cal = FakeCaldavCalendar("Kaputt", date_search_error=RuntimeError("500 Server Error"))
@@ -112,7 +115,8 @@ class TestDoIcloudCalNeueTermine:
     ):
         # DTSTART;VALUE=DATE (ohne Uhrzeit) liefert ein `datetime.date`-Objekt
         # statt `datetime.datetime` — eigener Zweig in der dtstart-Typprüfung.
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         allday = date.today()
         ics = (
@@ -177,7 +181,8 @@ class TestDoIcloudCalNeueTermine:
     async def test_negativ_kaputtes_event_ohne_vevent_wird_still_uebersprungen(
         self, db_session, icloud_sync, fake_caldav
     ):
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
 
         class _BrokenEvent:
@@ -192,10 +197,15 @@ class TestDoIcloudCalNeueTermine:
         assert result["created"] == 1
         assert result["errors"] == []
 
-    async def test_negativ_event_ohne_dtstart_wird_ohne_datum_verarbeitet(
+    async def test_negativ_event_ohne_dtstart_wird_uebersprungen(
         self, db_session, icloud_sync, fake_caldav
     ):
-        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        # No DTSTART means no date_hint at all — "if there is absolutely no
+        # date available, do not sync timed events at all" (2026-07-16):
+        # excluded even with a floor present, since the item itself has
+        # nothing to compare against.
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         ics = (
             "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nBEGIN:VEVENT\n"
@@ -208,9 +218,8 @@ class TestDoIcloudCalNeueTermine:
         result = await _do_icloud_cal(1)
 
         assert result["errors"] == []
-        assert result["created"] == 1
-        event = db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-no-dtstart").one()
-        assert event.datum is None
+        assert result["created"] == 0
+        assert db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-no-dtstart").first() is None
 
     async def test_negativ_unerwarteter_fehler_bei_process_item_stoppt_nicht_den_gesamten_sync(
         self, db_session, icloud_sync, fake_caldav, monkeypatch

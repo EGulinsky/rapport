@@ -13,7 +13,7 @@ import pytest
 
 from app import models
 from app.routers.sync_google import _do_gcal
-from tests.factories import application_factory, contact_factory
+from tests.factories import application_factory, contact_factory, seed_floor
 
 pytestmark = pytest.mark.integration
 
@@ -52,7 +52,8 @@ class TestDoGcalNeueTermine:
     async def test_positiv_termin_mit_bekanntem_kontakt_wird_als_gespraech_angelegt(
         self, db_session, google_sync, fake_google_calendar
     ):
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
         db_session.commit()

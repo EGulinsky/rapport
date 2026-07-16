@@ -52,6 +52,8 @@ class TestDoIcloudCallsNeueAnrufe:
     async def test_positiv_anruf_matcht_kontakt_per_telefonnummer_und_wird_angelegt(self, db_session, monkeypatch):
         _calls_cfg(db_session)
         app = application_factory(db_session, firma="Contoso AG")
+        # Anchor predates the hardcoded call date below (2026-07-01).
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()
@@ -108,6 +110,7 @@ class TestDoIcloudCallsNeueAnrufe:
     async def test_positiv_ausgehender_verpasster_anruf_hat_eigenen_titel(self, db_session, monkeypatch):
         _calls_cfg(db_session)
         app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()
@@ -132,6 +135,7 @@ class TestDoIcloudCallsNeueAnrufe:
     async def test_positiv_anruf_ohne_telefon_match_faellt_auf_namens_match_zurueck(self, db_session, monkeypatch):
         _calls_cfg(db_session)
         app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon=None)
         app.contacts.append(contact)
         db_session.commit()
@@ -213,9 +217,13 @@ class TestDoIcloudCallsNeueAnrufe:
         assert result["created"] == 0
         assert result["skipped"] == 1
 
-    async def test_corner_case_ungueltiges_datum_wird_ohne_absturz_ignoriert(self, db_session, monkeypatch):
+    async def test_corner_case_ungueltiges_datum_wird_ohne_absturz_uebersprungen(self, db_session, monkeypatch):
+        # An unparseable date string means no date at all — "if there is
+        # absolutely no date available, do not sync timed events at all"
+        # (2026-07-16) — excluded even with a floor present, no crash either.
         _calls_cfg(db_session)
         app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()
@@ -233,14 +241,14 @@ class TestDoIcloudCallsNeueAnrufe:
         result = await _do_icloud_calls(1)
 
         assert result["errors"] == []
-        assert result["created"] == 1
-        event = db_session.query(models.Event).filter_by(source="icloud_calls").one()
-        assert event.datum is None
+        assert result["created"] == 0
+        assert db_session.query(models.Event).filter_by(source="icloud_calls").first() is None
 
 
     async def test_negativ_unerwarteter_fehler_wird_gesammelt_statt_absturz(self, db_session, monkeypatch):
         _calls_cfg(db_session)
         app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()

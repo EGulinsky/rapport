@@ -11,6 +11,7 @@ Alt-Code (Frontend ruft nur noch /sync/icloud/notes auf) und bleibt bewusst
 ungetestet.
 """
 import hashlib
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,7 +19,7 @@ import pytest
 from app import models
 from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_notes
-from tests.factories import application_factory
+from tests.factories import application_factory, seed_floor
 
 pytestmark = pytest.mark.integration
 
@@ -40,9 +41,13 @@ class TestDoIcloudNotesNichtVerbunden:
 
 class TestDoIcloudNotesNeueNotizen:
     async def test_positiv_notiz_mit_firmenbezug_wird_angelegt(self, db_session, icloud_sync, monkeypatch):
-        application_factory(db_session, firma="Contoso AG")
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
-        notes = [{"id": "note-1", "name": "Contoso Vorbereitung", "body": "Fragen für das Interview bei Contoso AG."}]
+        notes = [{
+            "id": "note-1", "name": "Contoso Vorbereitung", "body": "Fragen für das Interview bei Contoso AG.",
+            "creationDate": date.today().isoformat(),
+        }]
 
         async def fake_get(self, url, **kw):
             return _mock_response(notes)
@@ -86,12 +91,16 @@ class TestDoIcloudNotesNeueNotizen:
         assert result["skipped"] == 1
 
     async def test_positiv_mehrere_notizen_ueber_batch_grenze_werden_alle_verarbeitet(self, db_session, icloud_sync, monkeypatch):
-        application_factory(db_session, firma="Contoso AG")
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         # BATCH-Größe in _do_icloud_notes() ist 5 — 7 Notizen decken einen
         # vollständigen + einen Teil-Batch ab.
         notes = [
-            {"id": f"note-{i}", "name": f"Contoso Notiz {i}", "body": f"Interview-Vorbereitung Contoso AG #{i}"}
+            {
+                "id": f"note-{i}", "name": f"Contoso Notiz {i}", "body": f"Interview-Vorbereitung Contoso AG #{i}",
+                "creationDate": date.today().isoformat(),
+            }
             for i in range(7)
         ]
 
@@ -122,8 +131,12 @@ class TestDoIcloudNotesNeueNotizen:
         assert result["created"] == 0
         assert result["skipped"] == 1
 
-    async def test_corner_case_kaputtes_datumsfeld_wird_ignoriert_statt_absturz(self, db_session, icloud_sync, monkeypatch):
-        application_factory(db_session, firma="Contoso AG")
+    async def test_corner_case_kaputtes_datumsfeld_wird_ohne_absturz_uebersprungen(self, db_session, icloud_sync, monkeypatch):
+        # An unparseable creationDate means no date at all — "if there is
+        # absolutely no date available, do not sync timed events at all"
+        # (2026-07-16) — excluded even with a floor present, no crash either.
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
         notes = [{
             "id": "note-baddate", "name": "Contoso Vorbereitung",
@@ -138,7 +151,8 @@ class TestDoIcloudNotesNeueNotizen:
         result = await _do_icloud_notes(1)
 
         assert result["errors"] == []
-        assert result["created"] == 1
+        assert result["created"] == 0
+        assert db_session.query(models.Event).filter_by(source="icloud_notes").count() == 0
 
     async def test_negativ_ai_not_configured_innerhalb_batch_beendet_sync_sauber(
         self, db_session, icloud_sync, monkeypatch

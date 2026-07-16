@@ -27,7 +27,12 @@ def _mock_response(json_data, status=200, text=""):
 class TestSyncIcloudNotesForApp:
     async def test_positiv_textmatch_note_wird_angelegt(self, db_session, monkeypatch):
         app = application_factory(db_session, firma="Contoso AG")
-        notes = [{"id": "note-1", "name": "Contoso Vorbereitung", "body": "Fragen für das Interview bei Contoso."}]
+        event_factory(db_session, app, datum=date.today() - timedelta(days=10), source="icloud_mail")
+        db_session.commit()
+        notes = [{
+            "id": "note-1", "name": "Contoso Vorbereitung", "body": "Fragen für das Interview bei Contoso.",
+            "creationDate": date.today().isoformat(),
+        }]
 
         async def fake_get(self, url, **kw):
             return _mock_response(notes)
@@ -110,6 +115,8 @@ class TestSyncCallsForApp:
 
     async def test_positiv_anruf_von_bekannter_telefonnummer_wird_angelegt(self, db_session, monkeypatch):
         app = application_factory(db_session)
+        # Anchor predates the hardcoded call date below (2026-07-01).
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
         contact = contact_factory(db_session, telefon="0151 2345678", name="Erika Musterfrau")
         app.contacts.append(contact)
         db_session.commit()

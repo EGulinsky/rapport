@@ -14,7 +14,7 @@ import pytest
 from app import models
 from app.ai.provider import AINotConfigured, AIRateLimited
 from app.routers.sync_icloud import _do_icloud_mail
-from tests.factories import application_factory, contact_factory
+from tests.factories import application_factory, contact_factory, seed_floor
 from tests.integration.conftest import icloud_email
 
 pytestmark = pytest.mark.integration
@@ -35,7 +35,8 @@ class TestDoIcloudMailNeueNachrichten:
     async def test_positiv_einladung_mit_bekanntem_kontakt_wird_als_gespraech_angelegt(
         self, db_session, icloud_sync, fake_icloud_imap
     ):
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
         db_session.commit()
@@ -74,10 +75,8 @@ class TestDoIcloudMailNeueNachrichten:
     ):
         # Role titles weren't indexed at all before this — only company name
         # and domain. Company name doesn't appear anywhere here.
-        app = application_factory(
-            db_session, firma="Contoso AG", rolle="Senior Backend Engineer",
-            datum_bewerbung=date.today() - timedelta(days=30),
-        )
+        app = application_factory(db_session, firma="Contoso AG", rolle="Senior Backend Engineer")
+        seed_floor(db_session, app)
         db_session.commit()
 
         msg_id, msg = icloud_email(
@@ -93,26 +92,26 @@ class TestDoIcloudMailNeueNachrichten:
         event = db_session.query(models.Event).filter_by(source="icloud_mail", external_id="role-1").one()
         assert event.application_id == app.id
 
-    async def test_negativ_mail_vor_globalem_cutoff_wird_uebersprungen(self, db_session, icloud_sync, fake_icloud_imap):
+    async def test_negativ_mail_ohne_floor_wird_uebersprungen(self, db_session, icloud_sync, fake_icloud_imap):
+        # The application has no dated events yet, so effective_bewerbung_floor()
+        # is None — "if there is absolutely no date available, do not sync
+        # timed events at all" (2026-07-16) — nothing gets created regardless
+        # of the mail's own date.
         app = application_factory(db_session, firma="Contoso AG")
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
         db_session.commit()
 
-        # Well outside the loose fallback window (see effective_bewerbung_floor/
-        # earliest_bewerbung_date) — the app has no events yet, so its floor
-        # defaults to "365 days ago"; comfortably clearing that margin here
-        # avoids a same-day boundary flake.
-        old_date = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%a, %d %b %Y %H:%M:%S +0000")
         msg_id, msg = icloud_email(
-            "3", "Recruiterin <recruiterin@contoso.com>", "Altes Interview", "Einladung zum Interview letztes Jahr.", old_date,
+            "3", "Recruiterin <recruiterin@contoso.com>", "Interview", "Einladung zum Interview.", _now_rfc2822(),
         )
         fake_icloud_imap(["3"], {msg_id: msg})
 
         result = await _do_icloud_mail(1)
 
+        assert result["errors"] == []
         assert result["created"] == 0
-        assert result["skipped"] == 1
+        assert db_session.query(models.Event).filter_by(source="icloud_mail", external_id="3").first() is None
 
     async def test_negativ_bereits_synctes_liefert_skip_ohne_erneute_verarbeitung(
         self, db_session, icloud_sync, fake_icloud_imap
@@ -132,10 +131,14 @@ class TestDoIcloudMailNeueNachrichten:
         assert result["created"] == 0
         assert result["skipped"] == 1
 
-    async def test_corner_case_kaputtes_date_header_wird_ignoriert_statt_absturz(
+    async def test_corner_case_kaputtes_date_header_wird_ohne_absturz_uebersprungen(
         self, db_session, icloud_sync, fake_icloud_imap
     ):
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        # A malformed Date header means no date_hint at all — "if there is
+        # absolutely no date available, do not sync timed events at all"
+        # (2026-07-16) — excluded even with a floor present, no crash either.
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
         db_session.commit()
@@ -149,7 +152,8 @@ class TestDoIcloudMailNeueNachrichten:
         result = await _do_icloud_mail(1)
 
         assert result["errors"] == []
-        assert result["created"] == 1
+        assert result["created"] == 0
+        assert db_session.query(models.Event).filter_by(source="icloud_mail", external_id="5").first() is None
 
 
 class TestDoIcloudMailFehler:
@@ -167,7 +171,8 @@ class TestDoIcloudMailFehler:
     async def test_negativ_einzelner_fetch_fehler_stoppt_nicht_den_gesamten_sync(
         self, db_session, icloud_sync, fake_icloud_imap
     ):
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
         db_session.commit()

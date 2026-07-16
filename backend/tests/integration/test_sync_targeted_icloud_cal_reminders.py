@@ -10,7 +10,7 @@ import pytest
 
 from app import models
 from app.routers.sync_targeted import _sync_icloud_cal_for_app, _sync_icloud_reminders_for_app
-from tests.factories import application_factory, company_profile_factory
+from tests.factories import application_factory, company_profile_factory, seed_floor
 from tests.integration.conftest import FakeCaldavCalendar, icloud_calendar_event, icloud_reminder
 
 pytestmark = pytest.mark.integration
@@ -20,6 +20,7 @@ class TestSyncIcloudCalForApp:
     async def test_positiv_termin_von_firmendomain_wird_angelegt(self, db_session, icloud_sync, fake_caldav):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
         ev = icloud_calendar_event(
             "evt-1", "Interview Runde 1", datetime.now(timezone.utc), organizer_email="recruiterin@contoso.de",
@@ -79,6 +80,7 @@ class TestSyncIcloudCalForApp:
     async def test_negativ_caldav_fehler_liefert_sauberen_fehler(self, db_session, icloud_sync, fake_caldav):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
         fake_caldav(error=RuntimeError("401 Unauthorized"))
 
@@ -93,8 +95,11 @@ class TestSyncIcloudCalForApp:
 class TestSyncIcloudRemindersForApp:
     async def test_positiv_erinnerung_mit_suchbegriff_wird_angelegt(self, db_session, icloud_sync, fake_caldav):
         app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
         db_session.commit()
-        todo = icloud_reminder("todo-1", "Unterlagen für Contoso AG vorbereiten")
+        todo = icloud_reminder(
+            "todo-1", "Unterlagen für Contoso AG vorbereiten", due_dt=datetime.now(timezone.utc),
+        )
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
 
         created, total, errors = await _sync_icloud_reminders_for_app(

@@ -121,3 +121,14 @@ def event_factory(db: Session, application: models.Application, **overrides) -> 
     db.add(event)
     db.flush()
     return event
+
+
+def seed_floor(db: Session, application: models.Application, days_ago: int = 90) -> models.Event:
+    """Anchor event establishing effective_bewerbung_floor() (sync_common.py) for
+    tests exercising date-gated mail/calendar/call sync. An application with no
+    dated events yet has no floor at all — "if there is absolutely no date
+    available, do not sync timed events at all" (2026-07-16) — so any test whose
+    application starts with zero events needs one of these before asserting a
+    sync hit. Defaults to 90 days back, safely before same-day/near-term test
+    dates; pass days_ago explicitly when a test uses an older fixed date."""
+    return event_factory(db, application, datum=date.today() - timedelta(days=days_ago), source="icloud_mail")

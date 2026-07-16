@@ -21,7 +21,7 @@ import pytest
 
 from app import models
 from app.routers.sync_targeted import _sync_gcal_for_app, _sync_gmail_for_app
-from tests.factories import application_factory, company_profile_factory, contact_factory, event_factory
+from tests.factories import application_factory, company_profile_factory, contact_factory, event_factory, seed_floor
 
 pytestmark = pytest.mark.integration
 
@@ -118,10 +118,8 @@ def _cal_event(event_id: str, summary: str, organizer_email: str, days_from_now:
 class TestSyncGmailForApp:
     async def test_positiv_treffer_von_firmendomain_wird_angelegt(self, db_session, google_sync, fake_gmail_direct):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
-        app = application_factory(
-            db_session, firma="Contoso AG", company_profile_id=profile.id,
-            datum_bewerbung=date.today() - timedelta(days=30),
-        )
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
 
         msg = _gmail_full_message(
@@ -159,6 +157,7 @@ class TestSyncGmailForApp:
         # incident documented in _search_terms()'s docstring. A word-split
         # "Backend"/"Engineer" would each be far too generic to search alone.
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=None, rolle="Backend Engineer")
+        seed_floor(db_session, app)
         db_session.commit()
         service = fake_gmail_direct([])
 
@@ -183,10 +182,8 @@ class TestSyncGmailForApp:
         from app.routers.sync_targeted import _MAX_TARGETED_MAIL_MATCHES
 
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
-        app = application_factory(
-            db_session, firma="Contoso AG", company_profile_id=profile.id,
-            datum_bewerbung=date.today() - timedelta(days=30),
-        )
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
 
         n = _MAX_TARGETED_MAIL_MATCHES + 1
@@ -249,6 +246,7 @@ class TestSyncGmailForApp:
     async def test_negativ_gmail_api_fehler_bei_list_liefert_sauberen_fehler(self, db_session, google_sync, fake_gmail_direct):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
         fake_gmail_direct([], list_error=RuntimeError("500 Internal Server Error"))
 
@@ -262,6 +260,7 @@ class TestSyncGmailForApp:
         # eine Domain, die zu keinem der beiden gehört, taucht nicht in q auf.
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         contact = contact_factory(db_session, email="recruiterin@contoso-agentur.de")
         app.contacts.append(contact)
         db_session.commit()
@@ -279,6 +278,7 @@ class TestSyncGcalForApp:
     async def test_positiv_termin_von_firmendomain_wird_angelegt(self, db_session, google_sync, fake_google_calendar):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        seed_floor(db_session, app)
         db_session.commit()
         fake_google_calendar([_cal_event("evt-1", "Interview Runde 1", "recruiterin@contoso.de")])
 
@@ -408,6 +408,7 @@ class TestSyncGcalForApp:
             db_session, firma="Headhunter GmbH", is_headhunter=True,
             company_profile_id=hh.id, target_company_profile_id=target.id,
         )
+        seed_floor(db_session, app)
         db_session.commit()
         fake_google_calendar([_cal_event("evt-4", "Interview", "recruiterin@headhunter-gmbh.de")])
 
