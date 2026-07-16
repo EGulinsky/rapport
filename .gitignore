@@ -47,10 +47,12 @@ e2e-report/
 # Playwright base image build tracking (runner-local, not for versioning)
 .playwright-base-hash
 
-# Agent packaging build artifacts (built via agent/packaging/build_dmg.sh)
+# Agent/installer packaging build artifacts (built via */packaging/build_*.sh)
 .venv_test/
+.venv_build/
 *.dmg
 agent/packaging/dmg_staging/
+installer/packaging/dmg_staging/
 backup/
 backend/jobtracker.db
 .claude/

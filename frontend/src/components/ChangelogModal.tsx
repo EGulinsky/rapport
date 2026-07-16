@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.6',
+    date: '2026-07-16',
+    changes: [
+      'Added downloadable installers for both the Rapport Agent and now also the backend/frontend app itself, for macOS, Windows, and Linux — download, run once, and rapport is running locally with no manual Docker install or terminal use. The installer silently installs Docker if it\'s missing, pulls the prebuilt app images, starts them, and opens the browser once ready. Available from the GitHub Releases page.',
+    ],
+  },
+  {
     version: '4.3.5',
     date: '2026-07-16',
     changes: [

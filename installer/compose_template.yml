@@ -1,0 +1,46 @@
+name: rapport
+
+# Bundled inside the installer app. __VERSION__ is resolved at runtime by
+# compose_writer.py to this installer's own build version, so a v4.3.6
+# installer always pulls v4.3.6 images — not a possibly-drifted `latest`.
+#
+# Deliberately slimmer than the developer docker-compose.yml at the repo
+# root: no Seq (structured-log viewer, a developer/ops convenience not
+# needed to run the app — backend/app/logger.py already treats it as
+# optional and fails silently if unreachable) and images are pulled
+# prebuilt from GHCR instead of built locally (no Playwright/Chromium
+# build step on the end user's machine).
+
+services:
+  backend:
+    image: ghcr.io/egulinsky/rapport-backend:__VERSION__
+    container_name: rapport-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=sqlite:////app/data/jobtracker.db
+      - TZ=Europe/Berlin
+      - LOG_LEVEL=INFO
+    volumes:
+      - rapport-data:/app/data
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    image: ghcr.io/egulinsky/rapport-frontend:__VERSION__
+    container_name: rapport-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  rapport-data:
+    name: rapport-data

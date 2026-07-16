@@ -9,7 +9,21 @@ Runs locally in OrbStack / Docker Compose. Current status: see the in-app change
 
 Technical architecture with diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-## Requirements
+## Download (recommended for non-developers)
+
+Prebuilt installers for macOS, Windows, and Linux are attached to each
+[GitHub Release](https://github.com/EGulinsky/rapport/releases) — download
+`Rapport-Installer-<version>.{dmg,zip,tar.gz}` for your OS and run it once.
+It installs Docker automatically if it's missing, pulls the prebuilt app
+images, starts them, and opens the app in your browser — no manual Docker
+setup or terminal commands needed. See [installer/README.md](installer/README.md)
+for details on what it does under the hood.
+
+The same releases also include `Rapport-Agent-<version>.{dmg,zip,tar.gz}` —
+the separate native helper for local file/notes/calls access, see
+[agent/README.md](agent/README.md).
+
+## Requirements (developer setup)
 
 - [OrbStack](https://orbstack.dev/) or Docker Desktop (Mac / Linux / Windows)
 
