@@ -195,7 +195,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
         return 0, 0, []
 
-    since = app.datum_bewerbung or (datetime.now(timezone.utc) - timedelta(days=365)).date()
+    since = effective_bewerbung_floor(app)
     after_ts = int(datetime(since.year, since.month, since.day, tzinfo=timezone.utc).timestamp())
     # Domain clause (from:/to:) plus company-name/role phrase clause — a mail
     # mentioning the company or role by name from a sender with no known
@@ -310,7 +310,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
         return 0, 0, []
 
-    since = effective_bewerbung_floor(app) or (datetime.now(timezone.utc) - timedelta(days=365)).date()
+    since = effective_bewerbung_floor(app)
     now = datetime.now(timezone.utc)
     try:
         events_result = service.events().list(
@@ -384,7 +384,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
             pass
 
         if date_hint and _predates_bewerbung(date_hint.date(), app):
-            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Bewerbungsdatum)", pfx, ev_id, summary, date_hint.date())
+            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Floor)", pfx, ev_id, summary, date_hint.date())
             mark_synced(db, "gcal", ev_id, user_id)
             skipped += 1
             continue
@@ -466,10 +466,10 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     search_criteria = (app_domains + text_terms)[:15]
     imap_query = _imap_or(search_criteria)
     # Without a SINCE bound (i.e. no floor at all), this searches the entire
-    # mailbox with no date restriction whatsoever — even looser than the
-    # 365-day fallback used elsewhere. effective_bewerbung_floor() falls
-    # back to letztes_update (defaults to the creation date) before giving up.
-    since = effective_bewerbung_floor(app) or (datetime.now(timezone.utc) - timedelta(days=365)).date()
+    # mailbox with no date restriction whatsoever. effective_bewerbung_floor()
+    # always returns a concrete date — the earliest event already in this
+    # application's timeline, or a loose fallback window if it has none yet.
+    since = effective_bewerbung_floor(app)
     imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
     log.debug("{} domains: {} terms: {}  query: {}", pfx, app_domains, text_terms, imap_query)
 
@@ -592,7 +592,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
 
     since = effective_bewerbung_floor(app)
     now = datetime.now(timezone.utc)
-    start_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc) if since else now - timedelta(days=365)
+    start_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
 
     created = skipped = 0
     errors: list[str] = []
@@ -672,7 +672,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             pass
 
         if date_hint and _predates_bewerbung(date_hint.date(), app):
-            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Bewerbungsdatum)", pfx, uid[:16], summary, date_hint.date())
+            log.debug("{} {} SUMMARY:{!r} → SKIP zu alt ({} < Floor)", pfx, uid[:16], summary, date_hint.date())
             mark_synced(db, "icloud_cal", uid, user_id)
             skipped += 1
             continue

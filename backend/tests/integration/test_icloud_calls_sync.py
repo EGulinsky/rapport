@@ -7,14 +7,14 @@ Mocking-Grenze. Ein Anruf wird nur übernommen, wenn er sich per Telefonnummer
 oder (Fallback) per Namens-Tokens einem bestehenden Kontakt zuordnen lässt,
 UND dieser Kontakt an mindestens eine Bewerbung verlinkt ist.
 """
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 
 from app import models
 from app.routers.sync_icloud import _do_icloud_calls
-from tests.factories import application_factory, contact_factory
+from tests.factories import application_factory, contact_factory, event_factory
 
 pytestmark = pytest.mark.integration
 
@@ -51,11 +51,7 @@ class TestDoIcloudCallsDeaktiviert:
 class TestDoIcloudCallsNeueAnrufe:
     async def test_positiv_anruf_matcht_kontakt_per_telefonnummer_und_wird_angelegt(self, db_session, monkeypatch):
         _calls_cfg(db_session)
-        # datum_bewerbung pinned explicitly, safely before the call's own
-        # date below — application_factory()'s random default (0-60 days
-        # back) could otherwise land after it and make this test flaky now
-        # that calls sync is date-filtered (see _predates_bewerbung).
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date(2026, 1, 1))
+        app = application_factory(db_session, firma="Contoso AG")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()
@@ -79,21 +75,22 @@ class TestDoIcloudCallsNeueAnrufe:
         assert "Erika Musterfrau" in event.titel
         assert "2:05 min" in event.notiz
 
-    async def test_negativ_anruf_vor_bewerbungsdatum_wird_ausgefiltert(self, db_session, monkeypatch):
+    async def test_negativ_anruf_vor_fruehestem_ereignis_wird_ausgefiltert(self, db_session, monkeypatch):
         # Regression test for the #230 incident (2026-07-16): bulk calls
-        # sync had NO date filtering at all before this — any call, ever,
-        # matching a contact's phone/name got attributed to every
-        # application that contact links to. datum_bewerbung is left unset
-        # here (a real, reachable state — see create_application()'s
-        # docstring) and letztes_update is the fallback floor.
+        # sync had NO date filtering at all before this. Revised the same
+        # day: the floor is now the earliest DATED EVENT already in the
+        # timeline (not datum_bewerbung) — an existing event establishes
+        # it, and a call from well before that must be excluded.
         _calls_cfg(db_session)
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=None, letztes_update=date(2026, 6, 1))
+        app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, datum=date.today() - timedelta(days=10), source="icloud_mail")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()
 
+        old_call_date = date.today() - timedelta(days=60)
         calls = [{
-            "id": "call-old", "phone": "0172 1234567", "name": "", "date": "2026-01-01T10:00:00",
+            "id": "call-old", "phone": "0172 1234567", "name": "", "date": f"{old_call_date.isoformat()}T10:00:00",
             "duration_s": 60, "direction": "incoming", "answered": True,
         }]
 
@@ -110,7 +107,7 @@ class TestDoIcloudCallsNeueAnrufe:
 
     async def test_positiv_ausgehender_verpasster_anruf_hat_eigenen_titel(self, db_session, monkeypatch):
         _calls_cfg(db_session)
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date(2026, 1, 1))
+        app = application_factory(db_session, firma="Contoso AG")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()
@@ -134,7 +131,7 @@ class TestDoIcloudCallsNeueAnrufe:
 
     async def test_positiv_anruf_ohne_telefon_match_faellt_auf_namens_match_zurueck(self, db_session, monkeypatch):
         _calls_cfg(db_session)
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date(2026, 1, 1))
+        app = application_factory(db_session, firma="Contoso AG")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon=None)
         app.contacts.append(contact)
         db_session.commit()
@@ -243,7 +240,7 @@ class TestDoIcloudCallsNeueAnrufe:
 
     async def test_negativ_unerwarteter_fehler_wird_gesammelt_statt_absturz(self, db_session, monkeypatch):
         _calls_cfg(db_session)
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date(2026, 1, 1))
+        app = application_factory(db_session, firma="Contoso AG")
         contact = contact_factory(db_session, name="Erika Musterfrau", telefon="+49 172 1234567")
         app.contacts.append(contact)
         db_session.commit()

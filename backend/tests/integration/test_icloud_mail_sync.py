@@ -94,12 +94,16 @@ class TestDoIcloudMailNeueNachrichten:
         assert event.application_id == app.id
 
     async def test_negativ_mail_vor_globalem_cutoff_wird_uebersprungen(self, db_session, icloud_sync, fake_icloud_imap):
-        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today())
+        app = application_factory(db_session, firma="Contoso AG")
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
         db_session.commit()
 
-        old_date = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%a, %d %b %Y %H:%M:%S +0000")
+        # Well outside the loose fallback window (see effective_bewerbung_floor/
+        # earliest_bewerbung_date) — the app has no events yet, so its floor
+        # defaults to "365 days ago"; comfortably clearing that margin here
+        # avoids a same-day boundary flake.
+        old_date = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%a, %d %b %Y %H:%M:%S +0000")
         msg_id, msg = icloud_email(
             "3", "Recruiterin <recruiterin@contoso.com>", "Altes Interview", "Einladung zum Interview letztes Jahr.", old_date,
         )

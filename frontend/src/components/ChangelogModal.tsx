@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.4',
+    date: '2026-07-16',
+    changes: [
+      'Revised v4.3.3\'s mail/calendar/call sync date filter: instead of comparing against the application\'s applied date, it now compares against the earliest dated item already in that application\'s own history — so preparation communication (an early recruiter call, an informal outreach email) that genuinely predates the day the formal application was submitted is no longer wrongly excluded. Applications with no history yet still get a sensible fallback window, so brand-new applications remain protected the same as before.',
+    ],
+  },
+  {
     version: '4.3.3',
     date: '2026-07-16',
     changes: [

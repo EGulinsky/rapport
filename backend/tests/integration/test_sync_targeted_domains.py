@@ -21,7 +21,7 @@ import pytest
 
 from app import models
 from app.routers.sync_targeted import _sync_gcal_for_app, _sync_gmail_for_app
-from tests.factories import application_factory, company_profile_factory, contact_factory
+from tests.factories import application_factory, company_profile_factory, contact_factory, event_factory
 
 pytestmark = pytest.mark.integration
 
@@ -296,21 +296,20 @@ class TestSyncGcalForApp:
         event = db_session.query(models.Event).filter_by(source="gcal", external_id="evt-1").one()
         assert event.application_id == app.id
 
-    async def test_negativ_termin_vor_bewerbungsdatum_wird_ausgefiltert(
+    async def test_negativ_termin_vor_fruehestem_ereignis_wird_ausgefiltert(
         self, db_session, google_sync, fake_google_calendar
     ):
-        # Regression test for the #230 incident (2026-07-16): datum_bewerbung
-        # was never set (a real, reachable state — see create_application()'s
-        # docstring), and calendar sync had no date filter at all beyond the
-        # query window, so a domain-matching event from many months earlier
-        # got wrongly linked. letztes_update (set here explicitly to a value
-        # in the past, as it would be from application creation) is now the
-        # fallback floor — this event, dated before it, must be excluded.
+        # Regression test for the #230 incident (2026-07-16), revised the
+        # same day: the floor is now the earliest DATED EVENT already in
+        # the application's timeline, not datum_bewerbung (which can be
+        # later than when real preparation communication actually started,
+        # and previously — before this whole date-floor mechanism existed —
+        # was simply left unset, so nothing was ever filtered at all). An
+        # existing event establishes the floor; a calendar event well
+        # before it must still be excluded.
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
-        app = application_factory(
-            db_session, firma="Contoso AG", company_profile_id=profile.id,
-            datum_bewerbung=None, letztes_update=date.today() - timedelta(days=30),
-        )
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=profile.id)
+        event_factory(db_session, app, datum=date.today() - timedelta(days=10), source="icloud_mail")
         db_session.commit()
         fake_google_calendar([
             _cal_event("evt-old", "Altes Gespräch", "recruiterin@contoso.de", days_from_now=-60),
@@ -323,6 +322,32 @@ class TestSyncGcalForApp:
         assert errors == []
         assert created == 0
         assert db_session.query(models.Event).filter_by(source="gcal", external_id="evt-old").first() is None
+
+    async def test_positiv_termin_vor_datum_bewerbung_aber_nach_fruehestem_ereignis_wird_akzeptiert(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        # The concrete scenario the 2026-07-16 revision was requested for:
+        # preparation communication (here, an earlier mail event) predating
+        # the formal application date must not block a calendar event from
+        # that same earlier period.
+        profile = company_profile_factory(db_session, website="https://www.contoso.de/")
+        app = application_factory(
+            db_session, firma="Contoso AG", company_profile_id=profile.id,
+            datum_bewerbung=date.today() - timedelta(days=5),
+        )
+        event_factory(db_session, app, datum=date.today() - timedelta(days=40), source="icloud_mail")
+        db_session.commit()
+        fake_google_calendar([
+            _cal_event("evt-prep", "Vorbereitungsgespräch", "recruiterin@contoso.de", days_from_now=-35),
+        ])
+
+        created, total, errors = await _sync_gcal_for_app(
+            app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
+        )
+
+        assert errors == []
+        assert created == 1
+        assert db_session.query(models.Event).filter_by(source="gcal", external_id="evt-prep").first() is not None
 
     async def test_negativ_domain_snapshot_in_app_dict_hat_vorrang_vor_live_kontakten(
         self, db_session, google_sync, fake_google_calendar

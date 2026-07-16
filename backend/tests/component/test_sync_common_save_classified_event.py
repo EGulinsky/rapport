@@ -4,7 +4,7 @@ Persists an AI-pre-classified sync result (mail/note) as an Event. Previously
 entirely uncovered (0% — never called in the test suite before), despite
 being the core persistence path for every AI-classified sync source.
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -102,13 +102,18 @@ class TestSaveClassifiedEvent:
         ev = db_session.query(models.Event).one()
         assert "Einladung zum Gespräch" in (ev.notiz or "")
 
-    def test_negativ_event_vor_bewerbungsdatum_wird_uebersprungen(self, db_session):
-        app = application_factory(db_session, datum_bewerbung=date(2026, 6, 1))
+    def test_negativ_event_vor_floor_wird_uebersprungen(self, db_session):
+        # The floor is the earliest dated event already in the timeline —
+        # with none yet, a brand-new application falls back to a loose
+        # 365-day lookback (see effective_bewerbung_floor()); an item from
+        # well outside that window must still be skipped.
+        app = application_factory(db_session)
         db_session.commit()
+        old_datum = (date.today() - timedelta(days=400)).isoformat()
 
         created = save_classified_event(
             db_session, "gmail", "ext_5",
-            {"confidence": 0.9, "relevant": True, "datum": "2026-01-01", "extract": "Alt"},
+            {"confidence": 0.9, "relevant": True, "datum": old_datum, "extract": "Alt"},
             "Betreff: Alt\n\nInhalt", None, _target_app(app),
         )
 

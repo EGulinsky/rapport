@@ -10,7 +10,7 @@ import base64
 import html
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.utils import parseaddr
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -27,35 +27,59 @@ log = get_logger("sync", source="targeted")
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 
-def effective_bewerbung_floor(app: models.Application) -> Optional[date]:
+_LOOSE_FLOOR_FALLBACK_DAYS = 365
+
+
+def effective_bewerbung_floor(app: models.Application) -> date:
     """Best available 'don't consider anything before this' floor for this
-    application — datum_bewerbung if set, else letztes_update (which
-    defaults to the creation date even when datum_bewerbung is left blank,
-    see create_application()'s docstring in applications.py — that gap is
-    exactly how application #230's mail/calendar/call sync incident
-    (2026-07-16) spanned many months of unrelated history: datum_bewerbung
-    was never set, so _predates_bewerbung() below never filtered anything).
-    None if both are unset too — a genuinely rare case (e.g. a LinkedIn-
-    scraped application with no discoverable applied date at all); callers
-    fall back to their own loose window in that case."""
-    return app.datum_bewerbung or app.letztes_update
+    application: the EARLIEST DATED EVENT already in its timeline — not the
+    user-entered application date (datum_bewerbung). A recruiter call or an
+    informal prep email can genuinely predate the day the formal
+    application was submitted; keying the floor off datum_bewerbung would
+    wrongly exclude exactly that kind of legitimate early activity, so this
+    deliberately ignores it (2026-07-16 revision, simplifying the original
+    #230-incident fix below).
+
+    Falls back to a loose N-day lookback from today when the application
+    has no dated events yet at all (brand new, or nothing has matched so
+    far) — always returns a concrete date, never None, so callers never
+    need their own separate fallback. That fallback matters most for calls
+    sync, which has no query-level date bound of its own and previously
+    (application #230, 2026-07-16) had NO date filtering whatsoever — a
+    coincidental phone-number match could attribute an arbitrarily old,
+    unrelated personal call."""
+    dated = [e.datum for e in app.events if e.datum is not None]
+    if dated:
+        return min(dated)
+    return date.today() - timedelta(days=_LOOSE_FLOOR_FALLBACK_DAYS)
 
 
 def _predates_bewerbung(datum: Optional[date], app: models.Application) -> bool:
     """True if datum is set and lies strictly before this application's
     effective floor date (see effective_bewerbung_floor) — i.e. from before
-    you even started tracking this application, so it can't be a reaction
-    to it. Used uniformly by mail, calendar, and call-log sync."""
-    floor = effective_bewerbung_floor(app)
-    if datum is None or floor is None:
+    any activity already known to relate to it, so it's unlikely to be
+    relevant either. Used uniformly by mail, calendar, and call-log sync."""
+    if datum is None:
         return False
-    return datum < floor
+    return datum < effective_bewerbung_floor(app)
 
 
-def earliest_bewerbung_date(db: Session) -> Optional[date]:
-    """Return the oldest datum_bewerbung across all applications (used as global sync cutoff)."""
+def earliest_bewerbung_date(db: Session) -> date:
+    """Global lower bound across every application's own floor (see
+    effective_bewerbung_floor) — used only as a coarse, cheap pre-filter to
+    skip messages before per-application matching even starts; the actual
+    per-application decision still goes through effective_bewerbung_floor()/
+    _predates_bewerbung() below. Must never be LATER than any single
+    application's own floor, or a genuinely relevant early item could get
+    skipped here before ever reaching that per-app check — so this takes
+    the minimum of every event's own date (the same signal
+    effective_bewerbung_floor() uses per application) and the same loose
+    N-day fallback every event-less application is entitled to, not
+    datum_bewerbung."""
     from sqlalchemy import func as _func
-    return db.query(_func.min(models.Application.datum_bewerbung)).scalar()
+    event_min = db.query(_func.min(models.Event.datum)).scalar()
+    fallback = date.today() - timedelta(days=_LOOSE_FLOOR_FALLBACK_DAYS)
+    return min(event_min, fallback) if event_min else fallback
 
 
 def _time_prefix(date_hint: Optional[datetime]) -> str:
@@ -899,7 +923,7 @@ def _save_deterministic_event(
     datum = date_hint.date() if date_hint else None
     pfx = f"[SYNC #{det['app_id']} {source}]"
     if _predates_bewerbung(datum, app):
-        log.debug("{} {} → SKIP zu alt ({}  <  Bewerbungsdatum {})", pfx, external_id[:20], datum, app.datum_bewerbung)
+        log.debug("{} {} → SKIP zu alt ({}  <  Floor {})", pfx, external_id[:20], datum, effective_bewerbung_floor(app))
         mark_synced(db, source, external_id, user_id)
         return False
 

@@ -4,14 +4,14 @@ lokalen Rapport-Agenten (`app.agent_client.agent_get`) — dieselbe Mocking-
 Grenze wie in tests/unit/test_agent_client.py (httpx.AsyncClient.get direkt
 patchen, keine IMAP/CalDAV-Infrastruktur nötig).
 """
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 
 from app import models
 from app.routers.sync_targeted import _sync_calls_for_app, _sync_icloud_notes_for_app
-from tests.factories import application_factory, contact_factory
+from tests.factories import application_factory, contact_factory, event_factory
 
 pytestmark = pytest.mark.component
 
@@ -109,11 +109,7 @@ class TestSyncCallsForApp:
         assert called is False
 
     async def test_positiv_anruf_von_bekannter_telefonnummer_wird_angelegt(self, db_session, monkeypatch):
-        # datum_bewerbung pinned explicitly, safely before the call's own
-        # date below — application_factory()'s random default (0-60 days
-        # back) could otherwise land after it and make this test flaky now
-        # that calls sync is date-filtered (see _predates_bewerbung).
-        app = application_factory(db_session, datum_bewerbung=date(2026, 1, 1))
+        app = application_factory(db_session)
         contact = contact_factory(db_session, telefon="0151 2345678", name="Erika Musterfrau")
         app.contacts.append(contact)
         db_session.commit()
@@ -136,21 +132,22 @@ class TestSyncCallsForApp:
         ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
         assert "Erika Musterfrau" in ev.titel
 
-    async def test_negativ_anruf_vor_bewerbungsdatum_wird_ausgefiltert(self, db_session, monkeypatch):
+    async def test_negativ_anruf_vor_fruehestem_ereignis_wird_ausgefiltert(self, db_session, monkeypatch):
         # Regression test for the #230 incident (2026-07-16): calls sync had
-        # NO date filtering at all before this — any call, ever, to/from a
-        # matched contact's phone number got attributed. datum_bewerbung is
-        # left unset here (a real, reachable state — see
-        # create_application()'s docstring) and letztes_update is the
-        # fallback floor: a call from well before it must be excluded.
-        app = application_factory(db_session, datum_bewerbung=None, letztes_update=date(2026, 6, 1))
+        # NO date filtering at all before this. Revised the same day: the
+        # floor is now the earliest DATED EVENT already in the timeline
+        # (not datum_bewerbung) — an existing event establishes it, and a
+        # call from well before that must be excluded.
+        app = application_factory(db_session)
+        event_factory(db_session, app, datum=date.today() - timedelta(days=10), source="icloud_mail")
         contact = contact_factory(db_session, telefon="0151 2345678", name="Erika Musterfrau")
         app.contacts.append(contact)
         db_session.commit()
 
+        old_call_date = date.today() - timedelta(days=60)
         calls = [{
             "id": "call-old", "phone": "+491512345678", "direction": "incoming",
-            "answered": True, "duration_s": 60, "date": "2026-01-01T10:00:00+00:00",
+            "answered": True, "duration_s": 60, "date": f"{old_call_date.isoformat()}T10:00:00+00:00",
         }]
 
         async def fake_get(self, url, **kw):
