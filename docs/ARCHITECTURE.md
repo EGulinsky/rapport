@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v4.1.1, 2026-07-14). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v4.2.0, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -279,7 +279,7 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 |---|---|---|
 | `POST`/`GET`/`DELETE` | `/api/sync/google/*` | OAuth credentials, status, Gmail/GCal sync |
 | `POST`/`GET`/`DELETE` | `/api/sync/icloud/*` | Mail/calendar/notes/reminders/contacts/calls |
-| `POST` | `/api/sync/targeted/{app_id}` | Sync all sources for one application |
+| `POST` | `/api/sync/targeted/{app_id}` | Sync all sources for one application — also auto-triggered as a background task right after an application is created (manual, LinkedIn import, or bulk LinkedIn scrape), see §5.2 |
 | `GET` | `/api/sync/targeted/{app_id}/candidates` | Candidates for manual assignment (full-text search across all sources) |
 | `POST` | `/api/sync/targeted/{app_id}/assign` | Manually assign a candidate |
 | `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn login, session, scraper start, 2FA |
@@ -352,7 +352,7 @@ Both use the same login/2FA/consent helpers. Session cookies are cached in `link
 - **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Ollama (local)
 - **Use cases** (`ai/tasks.py`):
   - `match_and_classify()` — assign raw data (mail/calendar/note) to an application, determine event type
-  - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead. Optionally folds in the account's own CV text (extracted on the fly from the stored upload via `app/cv_extract.py` — `pdfplumber`/`python-docx`, `.doc` unsupported) and a cached LinkedIn profile text snapshot (`User.linkedin_profile_text`, scraped on demand via `POST /api/sync/linkedin/profile` reusing the existing LinkedIn session — see §2 Sync) as an optional `=== BEWERBERPROFIL ===` prompt section, so the model can weigh candidate/role fit alongside the timeline. Absent for accounts with no CV/synced profile — the prompt looks exactly as before for them.
+  - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead. Optionally folds in the account's own CV text and a cached LinkedIn profile text snapshot as an optional `=== BEWERBERPROFIL ===` prompt section, so the model can weigh candidate/role fit alongside the timeline. Absent for accounts with no CV/synced profile — the prompt looks exactly as before for them. Both are extracted/scraped once and cached, not redone per assessment: CV text is extracted at upload time (`POST /api/auth/cv`) into `User.cv_extracted_text` via `app/cv_extract.py` (`pdfplumber`/`python-docx`, `.doc` unsupported), and the LinkedIn profile snapshot into `User.linkedin_profile_text` via `POST /api/sync/linkedin/profile` (reusing the existing LinkedIn session — see §2 Sync). CV extraction runs in a subprocess bounded to a 20s timeout — some real-world PDFs make `pdfplumber` spin at ~100% CPU for minutes without returning, which once blocked the whole app's startup via the backfill migration for pre-existing uploads (production incident, 2026-07-16); a file that's too slow to parse is now just skipped (no CV text for that assessment) rather than blocking anything.
   - `extract_application_from_text()` — extract company/role/source/headhunter flag from job posting text (LinkedIn import)
 - **Fallback:** on `AINotConfigured` / `AIRateLimited` / `AIBadRequest`, degrades gracefully instead of crashing
 
@@ -475,6 +475,8 @@ sequenceDiagram
     BE-->>FE: pre-filled form
     FE->>U: review form → "Create"
 ```
+
+**Post-create sync (all creation paths):** manual creation, this LinkedIn-import flow, and applications newly created by the periodic bulk LinkedIn scrape all schedule `sync_targeted._do_post_create_sync(app_id, skip_linkedin)` as a fire-and-forget background task right after the row is committed — a targeted sync (Gmail/GCal/iCloud/contacts/calls) plus an initial AI assessment, and (unless `skip_linkedin`) a per-app LinkedIn category search for the matching listing. `skip_linkedin` is `True` whenever the application was itself just sourced from LinkedIn (this import flow, or the bulk scrape) — re-running the LinkedIn search immediately afterward would just re-find the same listing. Best-effort throughout: a failure in either half is logged and never surfaces to the user. The LinkedIn search step also self-limits — `sync_linkedin.py`'s sync state is a process-wide singleton, so it silently no-ops if a sync is already running rather than queuing or erroring.
 
 ### 5.3 AI Assessment (Success Chance)
 
@@ -835,7 +837,7 @@ flowchart LR
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1359 tests (405 unit / 244 component / 522 api / 188 integration) — PR-gate coverage 75% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1380 tests (415 unit / 251 component / 526 api / 188 integration) — PR-gate coverage 76% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 

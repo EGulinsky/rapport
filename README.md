@@ -123,7 +123,7 @@ Data is preserved (Docker volume `jobtracker-data`).
 ```bash
 cd backend
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -m "unit or component or api"    # 1142 tests, same gate as in CI
+pytest -m "unit or component or api"    # 1192 tests, same gate as in CI
 ```
 
 Details on the test concept: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md)
