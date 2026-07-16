@@ -181,6 +181,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "gmail_progress": "Gmail {current}/{total}",
         "icloud_mail_loading_progress": "iCloud Mail laden {current}/{total}",
         "icloud_mail_progress": "iCloud Mail {current}/{total}",
+        "targeted_mail_too_many_matches": "{count} Treffer (Limit: {limit}) — Suchbegriffe vermutlich zu allgemein, Lauf abgebrochen ohne etwas zu speichern. Firma/Rolle prüfen und ggf. präzisieren.",
     },
     "en": {
         "ai_assessment": "AI assessment",
@@ -337,6 +338,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "gmail_progress": "Gmail {current}/{total}",
         "icloud_mail_loading_progress": "Loading iCloud Mail {current}/{total}",
         "icloud_mail_progress": "iCloud Mail {current}/{total}",
+        "targeted_mail_too_many_matches": "{count} matches (limit: {limit}) — search terms are probably too generic; run aborted without saving anything. Check the company/role and narrow them if needed.",
     },
 }
 

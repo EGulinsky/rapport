@@ -13,7 +13,6 @@ from app.routers.sync_targeted import (
     _domain_from_website,
     _make_live_candidate,
     _query_safe,
-    _role_query_words,
     _search_terms,
     _text_matches,
     _vobj_str,
@@ -46,13 +45,36 @@ class TestSearchTerms:
         assert "Alte Schreibweise AG" in terms
 
     def test_negativ_zu_kurze_firma_wird_ausgeschlossen(self, db_session):
-        app = application_factory(db_session, firma="AB", zielfirma_bei_hh=None, wurde_besetzt_von=None)
+        # rolle="" (not the factory's random fake.job() default) — the role
+        # is included in _search_terms() too now, see the tests below, and
+        # would otherwise randomly pollute this "nothing at all" assertion.
+        app = application_factory(db_session, firma="AB", zielfirma_bei_hh=None, wurde_besetzt_von=None, rolle="")
         assert _search_terms(app, db_session) == []
 
     def test_corner_case_keine_doppelten_varianten(self, db_session):
         app = application_factory(db_session, firma="Contoso AG", zielfirma_bei_hh="Contoso AG", wurde_besetzt_von=None)
         terms = _search_terms(app, db_session)
         assert terms.count("Contoso AG") == 1
+
+    def test_positiv_rolle_wird_als_ganze_phrase_einbezogen(self, db_session):
+        app = application_factory(
+            db_session, firma="Qorix", zielfirma_bei_hh=None, wurde_besetzt_von=None,
+            rolle="Senior SW Projektleiter BMW",
+        )
+        terms = _search_terms(app, db_session)
+        assert "Senior SW Projektleiter BMW" in terms
+        # Not split into words — see the #230 false-positive incident this
+        # whole-phrase design fixes (documented in this function's docstring).
+        assert "Senior" not in terms
+        assert "Projektleiter" not in terms
+
+    def test_negativ_generisches_einzelwort_als_rolle_wird_ausgeschlossen(self, db_session):
+        app = application_factory(db_session, firma="AB", zielfirma_bei_hh=None, wurde_besetzt_von=None, rolle="Manager")
+        assert _search_terms(app, db_session) == []
+
+    def test_negativ_generisches_einzelwort_gross_klein_wird_auch_ausgeschlossen(self, db_session):
+        app = application_factory(db_session, firma="AB", zielfirma_bei_hh=None, wurde_besetzt_von=None, rolle="SENIOR")
+        assert _search_terms(app, db_session) == []
 
 
 class TestAppDict:
@@ -134,17 +156,6 @@ class TestQuerySafe:
 
     def test_positiv_klammern_werden_entfernt(self):
         assert _query_safe("Backend (Senior) [DE]") == "Backend Senior DE"
-
-
-class TestRoleQueryWords:
-    def test_positiv_kurze_woerter_werden_ausgefiltert(self):
-        assert _role_query_words("Senior Backend Engineer im HR") == ["Senior", "Backend", "Engineer"]
-
-    def test_positiv_satzzeichen_werden_gestrippt(self):
-        assert _role_query_words("Engineer, (Remote)") == ["Engineer", "Remote"]
-
-    def test_corner_case_keine_duplikate(self):
-        assert _role_query_words("Engineer Engineer") == ["Engineer"]
 
 
 class TestVobjStr:

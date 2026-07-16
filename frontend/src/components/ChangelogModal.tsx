@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.1',
+    date: '2026-07-16',
+    changes: [
+      'Fixed a false-positive flood introduced by v4.3.0\'s targeted per-application sync: a multi-word role title got split into individual search words, and a generic word among them (e.g. "Senior") matched hundreds of unrelated emails, all wrongly linked to that one application. Role titles are now searched as one whole phrase instead of being split into words, a role that\'s just one generic word is no longer used as a search term at all, and targeted sync now double-checks that a fetched email genuinely contains one of the real search terms before linking it — plus a safety limit that aborts a sync run without saving anything if it would otherwise create an unusually large number of new items.',
+    ],
+  },
+  {
     version: '4.3.0',
     date: '2026-07-16',
     changes: [

@@ -30,16 +30,30 @@ from app.routers.sync_common import (
     is_synced, mark_synced, strip_html,
     term_variants, process_item, process_item_for_app,
     init_progress, update_progress, finish_progress,
-    upsert_contact_from_sender, vobj_str,
+    upsert_contact_from_sender, vobj_str, _GENERIC_ROLE_TERMS,
 )
 from app.logger import get_logger
 
 log = get_logger("sync", source="targeted")
 router = APIRouter(prefix="/api/sync/targeted", tags=["sync"])
 
+# Circuit breaker: a targeted-sync run for one application matching more mail
+# than this is treated as a sign the search terms turned out too generic
+# rather than a genuinely large number of relevant messages — see #230's
+# incident (328 unrelated emails from one run) in _search_terms()'s
+# docstring. The run is aborted (nothing saved) rather than silently
+# flooding the timeline; the error surfaces in the sync result for the user
+# to notice and investigate (e.g. edit the role/company name).
+_MAX_TARGETED_MAIL_MATCHES = 30
+
 
 def _search_terms(app: models.Application, db: Session) -> list[str]:
-    """All unique search terms for this application (firm + zielfirma variants).
+    """All unique search terms for this application (firm + zielfirma variants,
+    plus the role title as one whole phrase — not split into words, see
+    _GENERIC_ROLE_TERMS's docstring in sync_common.py for why: word-splitting
+    a role like "Senior SW Projektleiter BMW" into standalone terms "Senior"/
+    "Projektleiter" caused a real false-positive flood, 328 unrelated emails
+    wrongly attributed to one application in a single sync run).
 
     Also includes alias_firma names from merged duplicates so that e-mails
     referencing the old company name are still found after a merge.
@@ -60,6 +74,11 @@ def _search_terms(app: models.Application, db: Session) -> list[str]:
                 if vl not in seen:
                     seen.add(vl)
                     result.append(v)
+    if app.rolle and len(app.rolle.strip()) >= 3 and app.rolle.strip().lower() not in _GENERIC_ROLE_TERMS:
+        role = app.rolle.strip()
+        if role.lower() not in seen:
+            seen.add(role.lower())
+            result.append(role)
     return result
 
 
@@ -140,17 +159,6 @@ def _query_safe(term: str) -> str:
     return clean
 
 
-def _role_query_words(rolle: str) -> list[str]:
-    """Extract clean search keywords from a role title (strip punctuation, skip short words)."""
-    words = _re.split(r'[\s/()[\]{}]+', rolle)
-    result = []
-    for w in words:
-        w = w.strip('.,;:!?-+&|"\'')
-        if len(w) >= 5 and w not in result:
-            result.append(w)
-    return result
-
-
 # ── Gmail ─────────────────────────────────────────────────────────────────────
 
 async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
@@ -166,9 +174,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     app_id = app.id
     pfx = f"[SYNC #{app_id} gmail]"
     app_domains = _company_domains_for_app(app, terms, db)
-    text_terms = [_query_safe(term) for term in terms]
-    text_terms += _role_query_words(app.rolle) if app.rolle else []
-    text_terms = [w for w in text_terms if w]
+    text_terms = [w for w in (_query_safe(term) for term in terms) if w]
     if not app_domains and not text_terms:
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
         return 0, 0, []
@@ -231,8 +237,26 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         except Exception:
             pass
 
+        raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
+        # Re-verify the fetched message actually contains one of the real
+        # terms/domains that justified fetching it — the query above is a
+        # coarse pre-filter (it can OR in a fairly broad clause), not proof
+        # of relevance; without this check every message the query returns
+        # gets unconditionally attributed to this one application below
+        # (hint_apps is hardcoded to it), which is exactly how #230's false-
+        # positive flood happened.
+        if not _text_matches(raw, terms) and not any(d in raw.lower() for d in app_domains):
+            log.debug("{} {} SUBJ:{!r} FROM:{!r} → SKIP kein Begriff im Volltext bestätigt", pfx, msg_id, subject, sender)
+            skipped += 1
+            continue
+
         log.debug("{} {} SUBJ:{!r} FROM:{!r} → pending", pfx, msg_id, subject, sender)
-        pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
+        pending.append({"id": msg_id, "raw": raw, "date_hint": date_hint})
+
+    if len(pending) > _MAX_TARGETED_MAIL_MATCHES:
+        log.warning("{} {} Treffer übersteigt das Limit ({}) — Suchbegriffe vermutlich zu generisch, Lauf abgebrochen",
+                    pfx, len(pending), _MAX_TARGETED_MAIL_MATCHES)
+        return 0, total, [t("targeted_mail_too_many_matches", lang, count=len(pending), limit=_MAX_TARGETED_MAIL_MATCHES)]
 
     for i, item in enumerate(pending):
         update_progress("targeted_gmail", i, len(pending), t("gmail_progress", lang, current=i + 1, total=len(pending)))
@@ -398,9 +422,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     app_id = app.id
     pfx = f"[SYNC #{app_id} icloud_mail]"
     app_domains = _company_domains_for_app(app, terms, db)
-    text_terms = [_query_safe(term) for term in terms]
-    text_terms += _role_query_words(app.rolle) if app.rolle else []
-    text_terms = [w for w in text_terms if w]
+    text_terms = [w for w in (_query_safe(term) for term in terms) if w]
     if not app_domains and not text_terms:
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
         return 0, 0, []
@@ -462,13 +484,28 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
         except Exception:
             pass
 
+        raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
+        # Re-verify — see the matching comment in _sync_gmail_for_app above.
+        # IMAP's TEXT search already did server-side content matching, so
+        # this is mostly defense-in-depth here, but keeps both sources
+        # symmetric and guards against any IMAP TEXT-matching quirk.
+        if not _text_matches(raw, terms) and not any(d in raw.lower() for d in app_domains):
+            log.debug("{} {} SUBJ:{!r} FROM:{!r} → SKIP kein Begriff im Volltext bestätigt", pfx, msg_id, subject, sender)
+            skipped += 1
+            continue
+
         log.debug("{} {} SUBJ:{!r} FROM:{!r} → pending", pfx, msg_id, subject, sender)
-        pending.append({"id": msg_id, "raw": f"Von: {sender}\nBetreff: {subject}\n\n{body}", "date_hint": date_hint})
+        pending.append({"id": msg_id, "raw": raw, "date_hint": date_hint})
 
     try:
         await asyncio.to_thread(imap.logout)
     except Exception:
         pass
+
+    if len(pending) > _MAX_TARGETED_MAIL_MATCHES:
+        log.warning("{} {} Treffer übersteigt das Limit ({}) — Suchbegriffe vermutlich zu generisch, Lauf abgebrochen",
+                    pfx, len(pending), _MAX_TARGETED_MAIL_MATCHES)
+        return 0, total, [t("targeted_mail_too_many_matches", lang, count=len(pending), limit=_MAX_TARGETED_MAIL_MATCHES)]
 
     for i, item in enumerate(pending):
         update_progress("targeted_icloud_mail", i, len(pending), t("icloud_mail_progress", lang, current=i + 1, total=len(pending)))

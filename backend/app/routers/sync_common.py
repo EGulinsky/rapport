@@ -466,6 +466,30 @@ _COMMON_FIRST_NAMES = {
     "james", "john", "richard", "william", "henry", "charles", "george",
 }
 
+# A role title that IS (in full, not just contains) one of these generic
+# words is rejected as a search/match term — regression found live
+# 2026-07-16: application #230's role "Senior SW Projektleiter BMW" got
+# word-split (see sync_targeted.py's now-removed _role_query_words()) into
+# standalone terms "Senior"/"Projektleiter", each generic enough to match
+# hundreds of unrelated emails (LinkedIn digests, other companies'
+# recruiting mail), all wrongly attributed to that one application — 328
+# junk timeline events in a single sync run. A multi-word role ("Senior SW
+# Projektleiter BMW") stays specific enough to use as one whole phrase (see
+# build_firm_index() below); only a role that's JUST one of these words is
+# excluded entirely, since it wouldn't narrow anything.
+_GENERIC_ROLE_TERMS = frozenset({
+    "senior", "junior", "lead", "manager", "director", "head", "chief",
+    "specialist", "engineer", "consultant", "analyst", "associate",
+    "assistant", "coordinator", "executive", "officer", "president",
+    "vp", "svp", "principal", "staff", "architect", "expert", "trainee",
+    "intern", "praktikant", "praktikantin", "werkstudent", "werkstudentin",
+    "leiter", "leiterin", "mitarbeiter", "mitarbeiterin", "berater",
+    "beraterin", "referent", "referentin", "sachbearbeiter",
+    "sachbearbeiterin", "teamleiter", "teamleiterin", "abteilungsleiter",
+    "abteilungsleiterin", "geschaeftsfuehrer", "geschäftsführer",
+    "geschäftsführerin",
+})
+
 _GENERIC_EMAIL_DOMAINS = frozenset([
     "gmail.com", "googlemail.com", "yahoo.com", "yahoo.de",
     "outlook.com", "hotmail.com", "hotmail.de", "live.com",
@@ -531,9 +555,12 @@ def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
 
     Terms are the company name (+ corporate-suffix-stripped variants via
     term_variants), the headhunter target/filled-by firm, past merge-alias
-    names, and the role title — each an independent OR-criterion, same as
-    the others. A role title alone (no company-name match) is enough to hit
-    an application; with generic titles shared across applications this can
+    names, and the role title (whole phrase, not split into words — see
+    _GENERIC_ROLE_TERMS) — each an independent OR-criterion, same as the
+    others. A role title alone (no company-name match) is enough to hit an
+    application; a role that's just one generic word ("Manager") is
+    excluded entirely (see _GENERIC_ROLE_TERMS), but a multi-word role
+    sharing surface words with another application's role can still
     over-match (resolved the same way a firm-name collision already is: the
     caller picks the first matching app — see _classify_deterministic)."""
     active = db.query(models.Application).filter(models.Application.main_status != "rejected").all()
@@ -548,7 +575,7 @@ def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
                     term_to_apps.setdefault(key, [])
                     if app_dict not in term_to_apps[key]:
                         term_to_apps[key].append(app_dict)
-        if a.rolle and len(a.rolle.strip()) >= 3:
+        if a.rolle and len(a.rolle.strip()) >= 3 and a.rolle.strip().lower() not in _GENERIC_ROLE_TERMS:
             role_key = a.rolle.strip()
             term_to_apps.setdefault(role_key, [])
             if app_dict not in term_to_apps[role_key]:

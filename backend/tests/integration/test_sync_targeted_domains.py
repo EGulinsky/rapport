@@ -154,12 +154,16 @@ class TestSyncGmailForApp:
         assert service.list_calls == []  # gar keine Anfrage — Abbruch vor dem API-Call
 
     async def test_positiv_ohne_domain_aber_mit_suchbegriffen_wird_trotzdem_gesucht(self, db_session, google_sync, fake_gmail_direct):
+        # terms simulates what _search_terms() produces: the role as ONE
+        # whole phrase, not split into words — see the #230 false-positive
+        # incident documented in _search_terms()'s docstring. A word-split
+        # "Backend"/"Engineer" would each be far too generic to search alone.
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=None, rolle="Backend Engineer")
         db_session.commit()
         service = fake_gmail_direct([])
 
         created, total, errors = await _sync_gmail_for_app(
-            app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
+            app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso", "Backend Engineer"], db_session,
         )
 
         assert (created, total, errors) == (0, 0, [])
@@ -167,8 +171,72 @@ class TestSyncGmailForApp:
         query = service.list_calls[0]["q"]
         assert '"Contoso AG"' in query
         assert '"Contoso"' in query
-        assert '"Backend"' in query
-        assert '"Engineer"' in query
+        assert '"Backend Engineer"' in query
+        assert '"Backend"' not in query
+        assert '"Engineer"' not in query
+
+    async def test_negativ_zu_viele_treffer_bricht_lauf_ohne_speichern_ab(self, db_session, google_sync, fake_gmail_direct):
+        # Circuit breaker for the #230 incident class of bug: even if the
+        # search terms turn out too generic and the query over-fetches, a
+        # single run must not flood the timeline — it aborts and creates
+        # nothing rather than silently ingesting everything.
+        from app.routers.sync_targeted import _MAX_TARGETED_MAIL_MATCHES
+
+        profile = company_profile_factory(db_session, website="https://www.contoso.de/")
+        app = application_factory(
+            db_session, firma="Contoso AG", company_profile_id=profile.id,
+            datum_bewerbung=date.today() - timedelta(days=30),
+        )
+        db_session.commit()
+
+        n = _MAX_TARGETED_MAIL_MATCHES + 1
+        list_pages = [{"messages": [{"id": f"msg-{i}"} for i in range(n)]}]
+        messages_full = {
+            f"msg-{i}": _gmail_full_message(
+                f"msg-{i}", "Recruiterin <recruiterin@contoso.de>", f"Interview {i}",
+                "Wir würden Sie gerne zu einem Interview einladen.", _now_rfc2822(),
+            )
+            for i in range(n)
+        }
+        fake_gmail_direct(list_pages, messages_full=messages_full)
+
+        created, total, errors = await _sync_gmail_for_app(
+            app, {"id": app.id, "firma": app.firma, "rolle": None, "is_headhunter": False}, [], db_session,
+        )
+
+        assert created == 0
+        assert len(errors) == 1
+        assert str(_MAX_TARGETED_MAIL_MATCHES) in errors[0]
+        assert db_session.query(models.Event).filter_by(source="gmail").count() == 0
+
+    async def test_negativ_ungeprueftes_treffer_wird_bei_fehlendem_begriff_uebersprungen(
+        self, db_session, google_sync, fake_gmail_direct
+    ):
+        # Defense-in-depth: even if the query somehow returns a message that
+        # doesn't actually contain any real term/domain (query looseness,
+        # provider quirk), it must not be blindly attributed to this
+        # application just because hint_apps is hardcoded to it — see the
+        # re-verification step in _sync_gmail_for_app.
+        profile = company_profile_factory(db_session, website="https://www.contoso.de/")
+        app = application_factory(
+            db_session, firma="Contoso AG", company_profile_id=profile.id,
+            datum_bewerbung=date.today() - timedelta(days=30),
+        )
+        db_session.commit()
+
+        msg = _gmail_full_message(
+            "msg-unrelated", "Newsletter <news@irgendwas-anderes.de>", "Wochenrückblick",
+            "Diese Woche bei uns: nichts mit Contoso zu tun.", _now_rfc2822(),
+        )
+        fake_gmail_direct([{"messages": [{"id": "msg-unrelated"}]}], messages_full={"msg-unrelated": msg})
+
+        created, total, errors = await _sync_gmail_for_app(
+            app, {"id": app.id, "firma": app.firma, "rolle": None, "is_headhunter": False}, [], db_session,
+        )
+
+        assert errors == []
+        assert created == 0
+        assert db_session.query(models.Event).filter_by(source="gmail", external_id="msg-unrelated").first() is None
 
     async def test_negativ_google_nicht_verbunden_liefert_leeres_ergebnis(self, db_session):
         app = application_factory(db_session, firma="Contoso AG")

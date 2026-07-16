@@ -61,12 +61,16 @@ class TestSyncIcloudMailForApp:
         assert conn.search_calls == []
 
     async def test_positiv_ohne_domain_aber_mit_suchbegriffen_wird_trotzdem_gesucht(self, db_session, icloud_sync, fake_icloud_imap):
+        # terms simulates what _search_terms() produces: the role as ONE
+        # whole phrase, not split into words — see the #230 false-positive
+        # incident documented in _search_terms()'s docstring. A word-split
+        # "Backend"/"Engineer" would each be far too generic to search alone.
         app = application_factory(db_session, firma="Contoso AG", company_profile_id=None, rolle="Backend Engineer")
         db_session.commit()
         conn = fake_icloud_imap([])
 
         created, total, errors = await _sync_icloud_mail_for_app(
-            app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
+            app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso", "Backend Engineer"], db_session,
         )
 
         assert (created, total, errors) == (0, 0, [])
@@ -74,8 +78,9 @@ class TestSyncIcloudMailForApp:
         query = conn.search_calls[0]
         assert '"Contoso AG"' in query
         assert '"Contoso"' in query
-        assert '"Backend"' in query
-        assert '"Engineer"' in query
+        assert '"Backend Engineer"' in query
+        assert '"Backend"' not in query
+        assert '"Engineer"' not in query
 
     async def test_negativ_icloud_nicht_verbunden_liefert_leeres_ergebnis(self, db_session):
         app = application_factory(db_session, firma="Contoso AG")

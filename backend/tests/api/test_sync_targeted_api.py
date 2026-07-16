@@ -40,7 +40,11 @@ class TestSyncForAppValidation:
         assert resp.status_code == 404
 
     def test_negativ_keine_suchbegriffe_liefert_400(self, client, db_session):
-        app = application_factory(db_session, firma="AB", zielfirma_bei_hh=None, wurde_besetzt_von=None)
+        # rolle="" (not the factory's random fake.job() default) — the role
+        # is included in _search_terms() too now, which would otherwise
+        # randomly give this "no search terms at all" case something to
+        # search for and let the sync actually run instead of 400ing.
+        app = application_factory(db_session, firma="AB", zielfirma_bei_hh=None, wurde_besetzt_von=None, rolle="")
         resp = client.post(f"/api/sync/targeted/{app.id}")
         assert resp.status_code == 400
 

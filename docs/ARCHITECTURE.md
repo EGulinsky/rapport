@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v4.3.0, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v4.3.1, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -456,6 +456,8 @@ sequenceDiagram
 
 **Search — Gmail and iCloud Mail use the same matching, different transports.** Both search for: (1) known contact email addresses/domains (exact `Contact.email`, or a contact's domain excluding personal/freemail providers), and (2) the application's company name — including corporate-suffix-stripped variants ("Contoso GmbH" → "Contoso") — and role title as text appearing anywhere in the subject or body. Gmail additionally narrows its server-side query (`from:`/`to:` plus quoted company-name/role phrases) since the Gmail API only lists what the query matches; iCloud Mail's IMAP `SINCE`-only bulk query fetches more broadly (capped at the most recent 100 messages) and relies entirely on client-side matching, while targeted per-application IMAP sync narrows server-side too, via `TEXT` search criteria. Both fetch cheaply first (headers/subject only) to decide whether a full body fetch is worthwhile, then re-check the full text once fetched — a company/role mention that only appears in the body, not the subject or a known sender, can still surface a match at that second pass.
 
+**Role/company search terms are whole phrases, never split into words — and targeted sync re-verifies before saving.** A real incident (2026-07-16): a role title ("Senior SW Projektleiter BMW") got word-split into standalone search terms including "Senior" — generic enough to match hundreds of unrelated emails, all wrongly attributed to that one application (328 junk timeline events from a single sync run), since targeted sync hardcodes `hint_apps` to the one application being synced with no independent check. Fixed with three layers, all in `sync_targeted.py`/`sync_common.py`: (1) `_search_terms()`/`build_firm_index()` use the role as one whole phrase, never split into words; (2) a role that's *just* one generic word ("Manager", "Senior" — see `_GENERIC_ROLE_TERMS`) is excluded entirely rather than used as a term; (3) targeted sync re-verifies each fetched message actually contains one of the real terms/domains before attributing it to the application, instead of trusting the query result blindly; (4) a circuit breaker (`_MAX_TARGETED_MAIL_MATCHES` = 30) aborts a targeted-sync run without saving anything if it would otherwise create an anomalous number of events — a safety net independent of matching precision.
+
 ### 5.2 LinkedIn Import of a Job Posting
 
 ```mermaid
@@ -841,7 +843,7 @@ flowchart LR
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1386 tests (415 unit / 251 component / 526 api / 194 integration) — PR-gate coverage 76% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1388 tests (415 unit / 251 component / 526 api / 196 integration) — PR-gate coverage 75% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 
