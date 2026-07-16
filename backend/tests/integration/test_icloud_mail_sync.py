@@ -69,6 +69,30 @@ class TestDoIcloudMailNeueNachrichten:
         assert result["skipped"] == 1
         assert db_session.query(models.Event).filter_by(source="icloud_mail", external_id="2").first() is None
 
+    async def test_positiv_rolle_im_betreff_ohne_bekannten_kontakt_wird_gefunden(
+        self, db_session, icloud_sync, fake_icloud_imap
+    ):
+        # Role titles weren't indexed at all before this — only company name
+        # and domain. Company name doesn't appear anywhere here.
+        app = application_factory(
+            db_session, firma="Contoso AG", rolle="Senior Backend Engineer",
+            datum_bewerbung=date.today() - timedelta(days=30),
+        )
+        db_session.commit()
+
+        msg_id, msg = icloud_email(
+            "role-1", "Recruiting Team <talent@some-ats-vendor.example>",
+            "Regarding your application for Senior Backend Engineer",
+            "We'd love to schedule an interview.", _now_rfc2822(),
+        )
+        fake_icloud_imap(["role-1"], {msg_id: msg})
+
+        result = await _do_icloud_mail(1)
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="icloud_mail", external_id="role-1").one()
+        assert event.application_id == app.id
+
     async def test_negativ_mail_vor_globalem_cutoff_wird_uebersprungen(self, db_session, icloud_sync, fake_icloud_imap):
         app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today())
         contact = contact_factory(db_session, email="recruiterin@contoso.com")

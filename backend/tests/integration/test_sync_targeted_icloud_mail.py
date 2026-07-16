@@ -46,8 +46,12 @@ class TestSyncIcloudMailForApp:
         event = db_session.query(models.Event).filter_by(source="icloud_mail", external_id="1").one()
         assert event.application_id == app.id
 
-    async def test_negativ_ohne_firmendomain_wird_uebersprungen(self, db_session, icloud_sync, fake_icloud_imap):
-        app = application_factory(db_session, firma="Contoso AG", company_profile_id=None)
+    async def test_negativ_ohne_firmendomain_und_ohne_suchbegriffe_wird_uebersprungen(self, db_session, icloud_sync, fake_icloud_imap):
+        # rolle="" (not the factory's random fake.job() default) so there's
+        # truly nothing to search for — see the positive counterpart below,
+        # which confirms company-name/role text alone (no domain) now DOES
+        # trigger a search.
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=None, rolle="")
         db_session.commit()
         conn = fake_icloud_imap([])
 
@@ -55,6 +59,23 @@ class TestSyncIcloudMailForApp:
 
         assert (created, total, errors) == (0, 0, [])
         assert conn.search_calls == []
+
+    async def test_positiv_ohne_domain_aber_mit_suchbegriffen_wird_trotzdem_gesucht(self, db_session, icloud_sync, fake_icloud_imap):
+        app = application_factory(db_session, firma="Contoso AG", company_profile_id=None, rolle="Backend Engineer")
+        db_session.commit()
+        conn = fake_icloud_imap([])
+
+        created, total, errors = await _sync_icloud_mail_for_app(
+            app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
+        )
+
+        assert (created, total, errors) == (0, 0, [])
+        assert len(conn.search_calls) == 1
+        query = conn.search_calls[0]
+        assert '"Contoso AG"' in query
+        assert '"Contoso"' in query
+        assert '"Backend"' in query
+        assert '"Engineer"' in query
 
     async def test_negativ_icloud_nicht_verbunden_liefert_leeres_ergebnis(self, db_session):
         app = application_factory(db_session, firma="Contoso AG")

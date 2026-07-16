@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.0',
+    date: '2026-07-16',
+    changes: [
+      'Gmail and iCloud Mail sync now search and match consistently: both check known contact addresses/domains AND the application\'s company name and role title appearing anywhere in the subject or body — previously Gmail only matched by address (missing mail from unrecognized senders that named the company), and iCloud only matched by company name/domain (missing exact contact-address hits, and never considered the role title at all). Gmail\'s search query and the per-application targeted sync for both sources were extended the same way, so mail mentioning your company/role by name now gets found even without a saved contact.',
+    ],
+  },
+  {
     version: '4.2.0',
     date: '2026-07-16',
     changes: [

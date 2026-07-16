@@ -166,13 +166,20 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     app_id = app.id
     pfx = f"[SYNC #{app_id} gmail]"
     app_domains = _company_domains_for_app(app, terms, db)
-    if not app_domains:
-        log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
+    text_terms = [_query_safe(term) for term in terms]
+    text_terms += _role_query_words(app.rolle) if app.rolle else []
+    text_terms = [w for w in text_terms if w]
+    if not app_domains and not text_terms:
+        log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
         return 0, 0, []
 
     since = app.datum_bewerbung or (datetime.now(timezone.utc) - timedelta(days=365)).date()
     after_ts = int(datetime(since.year, since.month, since.day, tzinfo=timezone.utc).timestamp())
+    # Domain clause (from:/to:) plus company-name/role phrase clause — a mail
+    # mentioning the company or role by name from a sender with no known
+    # company domain would otherwise never even be listed, let alone matched.
     parts = [f"(from:{d} OR to:{d})" for d in app_domains]
+    parts += [f'"{w}"' for w in text_terms]
     query = f"after:{after_ts} ({' OR '.join(parts)})"
     log.debug("{} domains: {}  query: {}", pfx, app_domains, query)
 
@@ -391,8 +398,11 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     app_id = app.id
     pfx = f"[SYNC #{app_id} icloud_mail]"
     app_domains = _company_domains_for_app(app, terms, db)
-    if not app_domains:
-        log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
+    text_terms = [_query_safe(term) for term in terms]
+    text_terms += _role_query_words(app.rolle) if app.rolle else []
+    text_terms = [w for w in text_terms if w]
+    if not app_domains and not text_terms:
+        log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
         return 0, 0, []
 
     def _imap_or(criteria: list[str]) -> str:
@@ -402,11 +412,15 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
             return f'(OR TEXT "{criteria[0]}" TEXT "{criteria[1]}")'
         return f'(OR TEXT "{criteria[0]}" {_imap_or(criteria[1:])})'
 
-    imap_query = _imap_or(app_domains[:10])
+    # Domain criteria plus company-name/role text criteria — same reasoning
+    # as _sync_gmail_for_app above: a mail mentioning the company/role by
+    # name without a known company domain would otherwise never match.
+    search_criteria = (app_domains + text_terms)[:15]
+    imap_query = _imap_or(search_criteria)
     since = app.datum_bewerbung
     if since:
         imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
-    log.debug("{} domains: {}  query: {}", pfx, app_domains, imap_query)
+    log.debug("{} domains: {} terms: {}  query: {}", pfx, app_domains, text_terms, imap_query)
 
     created = skipped = 0
     errors: list[str] = []

@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v4.2.0, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v4.3.0, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -437,20 +437,24 @@ sequenceDiagram
     FE->>BE: POST /api/sync/targeted/{app_id}
     BE-->>FE: 202 (task started)
     loop per source
-        BE->>Src: query (company/role filter)
+        BE->>Src: query (company name/role/domain — see below)
         Src-->>BE: results
         BE->>BE: is_synced()? → skip if so
-        BE->>BE: AI classify_batch_for_app()
-        alt Confidence ≥ 80
+        BE->>BE: deterministic keyword classification (no AI)
+        alt Rejection/offer keyword found
+            BE->>BE: save event + create PendingMatch (review queue)
+        else Any other keyword or none
             BE->>BE: save event directly + contact upsert
-        else Confidence < 80
-            BE->>BE: create PendingMatch (review queue)
         end
     end
     FE->>BE: GET /progress (polling)
     BE-->>FE: done
     FE->>U: timeline updated
 ```
+
+**Matching and classification are deterministic, not AI-based.** Despite the "AI Classification" heading in §3.6, mail/calendar matching and event-type classification never call an AI provider — `sync_common.py`'s `find_matching_apps()` (address/domain + company-name/role text) decides *which* application a message belongs to, and `_classify_deterministic()`'s regex keyword patterns decide *what kind* of event it becomes (rejection/offer/interview-invitation/acknowledgment/plain note). A rejection or offer keyword always creates a `PendingMatch` for review rather than changing the status directly; every other case (including "no keyword matched") is saved straight to the timeline. AI is used elsewhere (LinkedIn job-posting extraction, the traffic-light application assessment) but not here. `sync_common.py` does contain an AI-confidence-scored path (`save_classified_event()`, `MIN_CONFIDENCE`/`REVIEW_THRESHOLD`) matching an earlier "Confidence ≥ 80 / < 80" design — it is unused by any router (exercised only by its own unit test) and should not be taken as a description of current behavior.
+
+**Search — Gmail and iCloud Mail use the same matching, different transports.** Both search for: (1) known contact email addresses/domains (exact `Contact.email`, or a contact's domain excluding personal/freemail providers), and (2) the application's company name — including corporate-suffix-stripped variants ("Contoso GmbH" → "Contoso") — and role title as text appearing anywhere in the subject or body. Gmail additionally narrows its server-side query (`from:`/`to:` plus quoted company-name/role phrases) since the Gmail API only lists what the query matches; iCloud Mail's IMAP `SINCE`-only bulk query fetches more broadly (capped at the most recent 100 messages) and relies entirely on client-side matching, while targeted per-application IMAP sync narrows server-side too, via `TEXT` search criteria. Both fetch cheaply first (headers/subject only) to decide whether a full body fetch is worthwhile, then re-check the full text once fetched — a company/role mention that only appears in the body, not the subject or a known sender, can still surface a match at that second pass.
 
 ### 5.2 LinkedIn Import of a Job Posting
 
@@ -513,7 +517,7 @@ flowchart TB
 - **Excel import/export** — `openpyxl`, "Tracking" sheet, 17 columns, status mapping via `EXCEL_IMPORT_MAP`/`EXCEL_EXPORT_MAP`
 - **Contact upsert from sync** — `upsert_contact_from_sender()`: email address as dedup key, footer extraction for phone/role, `INSERT OR IGNORE` instead of ORM `append()` (avoids autoflush races)
 - **`naechster_schritt` (next step) computation** — not stored in the DB, derived from timeline events + status on every `GET /api/applications/` request
-- **Review queue** — items with AI confidence < 80 land in `pending_matches`; the user confirms (→ event/status change) or discards
+- **Review queue** — deterministic status-change suggestions (rejection/offer keywords from mail sync) and cleanup/merge candidates land in `pending_matches`; the user confirms (→ event/status change) or discards. Every such row carries a fixed `confidence=80` literal (not a computed score — see §5.1's note on deterministic vs. AI-based matching)
 
 ---
 
@@ -837,7 +841,7 @@ flowchart LR
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1380 tests (415 unit / 251 component / 526 api / 188 integration) — PR-gate coverage 76% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1386 tests (415 unit / 251 component / 526 api / 194 integration) — PR-gate coverage 76% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 Repository: [github.com/EGulinsky/rapport](https://github.com/EGulinsky/rapport) (private)
 

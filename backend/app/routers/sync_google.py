@@ -26,7 +26,7 @@ from app.routers.sync_common import (
     is_synced, mark_synced, load_synced_ids, purge_source,
     strip_html, decode_b64,
     build_firm_index, build_contact_domain_index, find_hint_apps,
-    build_contact_email_index, find_apps_from_addresses,
+    build_contact_email_index, find_apps_from_addresses, find_matching_apps,
     process_item, earliest_bewerbung_date,
     init_progress, update_progress, finish_progress, get_all_progress,
     set_batch_result, get_batch_results,
@@ -305,18 +305,26 @@ async def _do_gmail(user_id: int) -> dict:
         _t0 = _time.perf_counter()
         contact_domain_index = build_contact_domain_index(db)
         contact_email_index  = build_contact_email_index(db)
+        firm_clause, term_to_apps = build_firm_index(db)
         t_index = _time.perf_counter() - _t0
 
-        # Build query from known contact domains (precise, no false positives from firm names)
-        fallback = (
-            "Bewerbung OR Interview OR Gespräch OR Absage OR Einladung OR Angebot "
-            "OR recruiting OR Headhunter OR Kandidat "
-            "OR application OR position OR candidate OR hiring OR shortlisted "
-            "OR \"not moving forward\" OR \"next steps\""
-        )
+        # Query combines known contact domains (from:/to:, precise) with every
+        # active application's company-name (+ variants) and role as quoted
+        # phrase search — Gmail matches quoted phrases across subject+body.
+        # Without the phrase clause, a mail from a sender with no saved
+        # contact yet (but mentioning the company/role by name) was never
+        # even fetched, let alone matched — this was Gmail's gap relative to
+        # iCloud Mail's search, which always fetches broadly and only
+        # filters client-side (see _do_icloud_mail below).
         domain_parts = [f"(from:{d} OR to:{d})" for d in contact_domain_index]
-        search_clause = f"({' OR '.join(domain_parts)})" if domain_parts else f"({fallback})"
-        query = f"after:{after_ts} {search_clause}"
+        clauses = domain_parts + ([firm_clause] if firm_clause else [])
+        if not clauses:
+            # No contact domains and no active applications to search for —
+            # nothing to attribute mail to yet, and an unqualified `after:`
+            # query would list the entire mailbox since the cutoff date.
+            finish_progress("gmail", lang=lang)
+            return {"processed": 0, "created": 0, "skipped": 0, "errors": []}
+        query = f"after:{after_ts} ({' OR '.join(clauses)})"
 
         # Global cutoff: skip mails older than the earliest application submission date
         global_cutoff = earliest_bewerbung_date(db)
@@ -378,7 +386,12 @@ async def _do_gmail(user_id: int) -> dict:
             n_phase1 += len(chunk)
         t_phase1 = _time.perf_counter() - _t0
 
-        # ── Filter: date cutoff + address-based app matching ──────────────────
+        # ── Filter: date cutoff + app matching on headers+subject (cheap) ──────
+        # Same combined matcher iCloud Mail uses (find_matching_apps: address/
+        # domain + company-name/role text) — subject text is available here,
+        # the body isn't yet, so this pass can still miss a body-only company/
+        # role mention. Re-checked with the full body once fetched (phase 2)
+        # below, same as iCloud Mail already does.
         phase2_ids: list[str] = []
         phase2_meta: dict[str, tuple] = {}   # msg_id → (subject, sender, date_hint, hint_apps)
 
@@ -400,14 +413,15 @@ async def _do_gmail(user_id: int) -> dict:
                 skipped += 1
                 continue
 
-            hint_apps = find_apps_from_addresses(sender, to_cc, contact_email_index, contact_domain_index)
+            quick_text = f"Von: {sender}\nBetreff: {subject}"
+            hint_apps = find_matching_apps(sender, to_cc, quick_text, contact_email_index, contact_domain_index, term_to_apps)
             if not hint_apps:
                 mark_synced(db, "gmail", msg_id, user_id)
                 skipped += 1
                 continue
 
             phase2_ids.append(msg_id)
-            phase2_meta[msg_id] = (subject, sender, date_hint, hint_apps)
+            phase2_meta[msg_id] = (subject, sender, to_cc, date_hint, hint_apps)
 
         # ── Phase 2: batch-fetch full body for promising messages ──────────────
         # Use smaller batches (50) as full bodies can be large
@@ -441,9 +455,13 @@ async def _do_gmail(user_id: int) -> dict:
             if not msg_full:
                 continue
 
-            subject, sender, date_hint, hint_apps = phase2_meta[msg_id]
+            subject, sender, to_cc, date_hint, _phase1_hint_apps = phase2_meta[msg_id]
             body = _gmail_body(msg_full["payload"])[:1500]
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
+            # Re-check with the full body — always a superset of the phase-1
+            # (subject-only) result, since raw only adds text; can surface a
+            # company/role mentioned only in the body, not the subject.
+            hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps)
 
             _t0 = _time.perf_counter()
             try:

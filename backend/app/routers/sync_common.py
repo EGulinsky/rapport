@@ -527,7 +527,15 @@ def term_variants(raw_term: str) -> list[str]:
 
 
 def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
-    """Build a search-term clause and reverse index term→apps from all applications."""
+    """Build a search-term clause and reverse index term→apps from all applications.
+
+    Terms are the company name (+ corporate-suffix-stripped variants via
+    term_variants), the headhunter target/filled-by firm, past merge-alias
+    names, and the role title — each an independent OR-criterion, same as
+    the others. A role title alone (no company-name match) is enough to hit
+    an application; with generic titles shared across applications this can
+    over-match (resolved the same way a firm-name collision already is: the
+    caller picks the first matching app — see _classify_deterministic)."""
     active = db.query(models.Application).filter(models.Application.main_status != "rejected").all()
     active_ids = {a.id for a in active}
     app_by_id = {a.id: a for a in active}
@@ -540,6 +548,11 @@ def build_firm_index(db: Session) -> tuple[str, dict[str, list[dict]]]:
                     term_to_apps.setdefault(key, [])
                     if app_dict not in term_to_apps[key]:
                         term_to_apps[key].append(app_dict)
+        if a.rolle and len(a.rolle.strip()) >= 3:
+            role_key = a.rolle.strip()
+            term_to_apps.setdefault(role_key, [])
+            if app_dict not in term_to_apps[role_key]:
+                term_to_apps[role_key].append(app_dict)
 
     # Also index alias firma names from past merges so old names still match
     for alias in db.query(models.MergeAlias).filter(
@@ -674,6 +687,43 @@ def find_hint_apps(
                     _add(a)
 
     return hints
+
+
+def find_matching_apps(
+    from_val: str,
+    to_cc_val: str,
+    raw_text: str,
+    contact_email_index: dict[str, list[dict]],
+    contact_domain_index: dict[str, list[dict]],
+    term_to_apps: dict[str, list[dict]],
+) -> list[dict]:
+    """Unified mail-matching used identically by both Gmail and iCloud Mail
+    (bulk and targeted) — combines find_apps_from_addresses() (exact contact
+    email / contact domain from the From/To/Cc headers) with find_hint_apps()
+    (company-name — incl. corporate-suffix variants — and role-title
+    substring match, plus firm-name-in-domain, against the full text). Before
+    this, Gmail only matched by address and iCloud only by text/domain —
+    each missed what the other caught (Gmail missed company/role mentions
+    from senders with no saved contact; iCloud missed exact-contact-address
+    hits it never checked). raw_text should be the fullest text available at
+    the call site (subject-only at a cheap header-only pass, subject+body
+    once fetched) — callers should re-run this once the body is available
+    even if an earlier pass already matched, since body-only company/role
+    mentions can add matches a header-only pass couldn't see."""
+    seen_ids: set[int] = set()
+    result: list[dict] = []
+
+    def _add(app_dict: dict) -> None:
+        if app_dict["id"] not in seen_ids:
+            result.append(app_dict)
+            seen_ids.add(app_dict["id"])
+
+    for a in find_apps_from_addresses(from_val, to_cc_val, contact_email_index, contact_domain_index):
+        _add(a)
+    for a in find_hint_apps(raw_text, term_to_apps, contact_domain_index):
+        _add(a)
+
+    return result
 
 
 # ── Deterministic classification helpers ─────────────────────────────────────

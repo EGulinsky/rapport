@@ -38,7 +38,8 @@ from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, A
 from app.auth.dependencies import get_current_user
 from app.routers.sync_common import (
     is_synced, load_synced_ids, purge_source,
-    build_firm_index, build_contact_domain_index, find_hint_apps,
+    build_firm_index, build_contact_domain_index, build_contact_email_index,
+    find_hint_apps, find_matching_apps,
     process_item, strip_html, earliest_bewerbung_date,
     init_progress, update_progress, finish_progress,
     set_batch_result, vobj_str,
@@ -289,6 +290,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
         _, term_to_apps = build_firm_index(db)
         contact_domain_index = build_contact_domain_index(db)
+        contact_email_index = build_contact_email_index(db)
         global_cutoff = earliest_bewerbung_date(db)
 
         update_progress("icloud_mail", 0, 0, t("connecting_imap", lang))
@@ -326,6 +328,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
             subject = hdr_msg.get("Subject", "(kein Betreff)")
             sender  = hdr_msg.get("From", "")
+            to_cc   = (hdr_msg.get("To", "") or "") + "," + (hdr_msg.get("Cc", "") or "")
             date_hint = None
             try:
                 date_hint = _parse_date_hdr(hdr_msg.get("Date", "")).astimezone(timezone.utc)
@@ -338,9 +341,14 @@ async def _do_icloud_mail(user_id: int) -> dict:
                 skipped += 1
                 continue
 
-            # Quick firm check on subject + sender — skip full fetch if no match
-            quick_hints = find_hint_apps(
-                f"Von: {sender}\nBetreff: {subject}", term_to_apps, contact_domain_index
+            # Quick check on subject + sender/to/cc — skip full fetch if no
+            # match. Same combined matcher Gmail sync uses (find_matching_apps:
+            # address/domain + company-name/role text) — previously this only
+            # checked company-name/domain text, never a saved contact's exact
+            # email address, unlike Gmail.
+            quick_hints = find_matching_apps(
+                sender, to_cc, f"Von: {sender}\nBetreff: {subject}",
+                contact_email_index, contact_domain_index, term_to_apps,
             )
             if not quick_hints:
                 synced_ids.add(msg_id)
@@ -358,7 +366,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
             body = _imap_body(msg)[:1500]
             raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
-            hint_apps = find_hint_apps(raw, term_to_apps, contact_domain_index)
+            hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps)
 
             try:
                 ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)

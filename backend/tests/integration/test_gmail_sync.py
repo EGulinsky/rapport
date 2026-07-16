@@ -104,6 +104,91 @@ class TestDoGmailNeueNachrichten:
         assert result["skipped"] == 1
         assert db_session.query(models.Event).filter_by(source="gmail", external_id="msg-3").first() is None
 
+    async def test_positiv_firmenname_im_betreff_ohne_bekannten_kontakt_wird_gefunden(
+        self, db_session, google_sync, fake_gmail
+    ):
+        # No contact saved for this app at all — before this, Gmail sync
+        # only matched by address (find_apps_from_addresses), so a mail from
+        # an address it had never seen could never match, even mentioning
+        # the company by name. It now also matches via company-name text
+        # (build_firm_index/find_matching_apps), same as iCloud Mail always did.
+        app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+
+        meta, full = gmail_message(
+            "msg-firmname", "Recruiting Team <talent@some-ats-vendor.example>",
+            "Ihre Bewerbung bei Contoso AG", "Wir würden Sie gerne zu einem Interview einladen.",
+            _now_rfc2822(),
+        )
+        fake_gmail([{"messages": [{"id": "msg-firmname"}]}], metadata={"msg-firmname": meta}, full={"msg-firmname": full})
+
+        result = await _do_gmail(1)
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="gmail", external_id="msg-firmname").one()
+        assert event.application_id == app.id
+
+    async def test_positiv_rolle_im_betreff_ohne_bekannten_kontakt_wird_gefunden(
+        self, db_session, google_sync, fake_gmail
+    ):
+        # Company name doesn't appear anywhere — only the role title, and
+        # only that (no address/domain match) justifies fetching the body.
+        app = application_factory(
+            db_session, firma="Contoso AG", rolle="Senior Backend Engineer",
+            datum_bewerbung=date.today() - timedelta(days=30),
+        )
+        db_session.commit()
+
+        meta, full = gmail_message(
+            "msg-role", "Recruiting Team <talent@some-ats-vendor.example>",
+            "Regarding your application for Senior Backend Engineer",
+            "We'd love to schedule an interview.",
+            _now_rfc2822(),
+        )
+        fake_gmail([{"messages": [{"id": "msg-role"}]}], metadata={"msg-role": meta}, full={"msg-role": full})
+
+        result = await _do_gmail(1)
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="gmail", external_id="msg-role").one()
+        assert event.application_id == app.id
+
+    async def test_positiv_phase2_erkennt_firmenname_der_nur_im_mailbody_steht(
+        self, db_session, google_sync, fake_gmail
+    ):
+        # Phase 1 (subject/sender/to/cc only) matches via the known contact's
+        # address — the company name only appears in the body, which phase 1
+        # never sees. This proves phase 2 actually re-checks with the full
+        # text rather than reusing the phase-1 hint_apps unchanged — before
+        # this, a second application matching only via the body text (not
+        # the contact) would never have been picked up.
+        app1 = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app1.contacts.append(contact)
+        app2 = application_factory(db_session, firma="Globex Corp", datum_bewerbung=date.today() - timedelta(days=30))
+        db_session.commit()
+
+        meta, full = gmail_message(
+            "msg-body-firm", "Recruiterin <recruiterin@contoso.com>", "Following up",
+            "Also — we passed your profile along to our partners at Globex Corp, they may reach out.",
+            _now_rfc2822(),
+        )
+        fake_gmail([{"messages": [{"id": "msg-body-firm"}]}], metadata={"msg-body-firm": meta}, full={"msg-body-firm": full})
+
+        result = await _do_gmail(1)
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="gmail", external_id="msg-body-firm").one()
+        # Both apps matched; _classify_deterministic() picks the first
+        # (app1, the phase-1 contact-address match) — proving app2's
+        # body-only match was found too (not just app1's) via the
+        # "(from N matches)" note in the audit reason, which only appears
+        # when hint_apps has 2+ entries.
+        assert event.application_id == app1.id
+        audit = db_session.query(models.AuditLog).filter_by(event_id=event.id).one()
+        assert "2 matches" in audit.reason or "2 Matches" in audit.reason
+        _ = app2
+
     async def test_negativ_mail_vor_globalem_cutoff_wird_uebersprungen(self, db_session, google_sync, fake_gmail):
         app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today())
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
@@ -151,6 +236,13 @@ class TestDoGmailPaginationUndFehler:
         assert service.list_calls[1]["pageToken"] == "page2"
 
     async def test_negativ_gmail_api_fehler_bei_list_liefert_sauberen_fehler(self, db_session, google_sync, fake_gmail):
+        # An active application must exist so the query-building step
+        # actually reaches the (deliberately failing) list() call below —
+        # with zero applications and zero contact domains there is nothing
+        # to search for, and _do_gmail() now returns early before ever
+        # calling the Gmail API (see the "nothing to search for yet" guard).
+        application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
         service = fake_gmail([])
 
         def _raise(**kwargs):
