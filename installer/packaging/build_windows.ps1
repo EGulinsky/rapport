@@ -18,10 +18,10 @@ $AppDir = Join-Path $DistDir "Rapport Installer"
 $ZipName = "Rapport-Installer-$Version-windows.zip"
 
 $VersionFile = Join-Path $RepoRoot "installer\version.py"
-$OriginalVersionContent = Get-Content -Raw $VersionFile
+$OriginalVersionContent = Get-Content -Raw -Path $VersionFile
 try {
     Write-Host "==> Stamping version $Version..."
-    "INSTALLER_VERSION = `"$Version`"" | Set-Content -NoNewline $VersionFile
+    Set-Content -NoNewline -Path $VersionFile -Value "INSTALLER_VERSION = `"$Version`""
 
     Write-Host "==> Building Rapport Installer.exe with PyInstaller..."
     pyinstaller (Join-Path $ScriptDir "installer-windows.spec") --distpath $DistDir --workpath $BuildDir --noconfirm
@@ -41,5 +41,5 @@ try {
 
     Write-Host "==> Done: $ZipPath"
 } finally {
-    Set-Content -NoNewline $VersionFile $OriginalVersionContent
+    Set-Content -NoNewline -Path $VersionFile -Value $OriginalVersionContent
 }

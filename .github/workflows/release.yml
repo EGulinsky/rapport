@@ -52,9 +52,12 @@ jobs:
       # with no Dockerfile.playwright-base/requirements.txt changes reuses
       # the cached layers instead of reinstalling Chromium from scratch.
       # load: true (alongside push) puts it in this runner's local Docker
-      # daemon too — backend/Dockerfile's `FROM rapport-playwright-base:latest`
-      # is a bare local tag (unchanged from the existing self-hosted deploy
-      # flow), so the next step needs to find it locally, not just in GHCR.
+      # daemon too, tagged with its GHCR name — only ever push the
+      # GHCR-qualified tag here. A bare `rapport-playwright-base:latest`
+      # tag in this same push list would make buildx default to
+      # docker.io/library/... for that one and fail (we're only
+      # authenticated to GHCR, not Docker Hub) — confirmed the hard way on
+      # the very first release run.
       - name: Build + push playwright base image
         uses: docker/build-push-action@v5
         with:
@@ -63,11 +66,17 @@ jobs:
           platforms: linux/amd64
           push: true
           load: true
-          tags: |
-            ghcr.io/egulinsky/rapport-playwright-base:latest
-            rapport-playwright-base:latest
+          tags: ghcr.io/egulinsky/rapport-playwright-base:latest
           cache-from: type=gha,scope=playwright-base
           cache-to: type=gha,mode=max,scope=playwright-base
+
+      # backend/Dockerfile's `FROM rapport-playwright-base:latest` is a bare
+      # local tag (unchanged from the existing self-hosted deploy flow) —
+      # alias the just-loaded GHCR-tagged image to that bare name locally
+      # (a pure local `docker tag`, no registry involved) so the next step
+      # finds it.
+      - name: Tag playwright base image for local use
+        run: docker tag ghcr.io/egulinsky/rapport-playwright-base:latest rapport-playwright-base:latest
 
       - name: Build + push backend image
         uses: docker/build-push-action@v5
