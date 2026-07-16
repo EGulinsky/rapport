@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.1.3',
+    date: '2026-07-16',
+    changes: [
+      'Fixed a production outage caused by v4.1.2 itself: the PDF-parsing library used for CV text extraction can occasionally spin at ~100% CPU for minutes on certain real-world PDFs without ever finishing, and since that ran during app startup (backfilling existing CV uploads), it blocked the entire app from starting. CV extraction now runs with a hard 20-second timeout — a file that\'s too slow to parse is skipped (no CV text for that assessment) rather than blocking anything.',
+    ],
+  },
+  {
     version: '4.1.2',
     date: '2026-07-16',
     changes: [

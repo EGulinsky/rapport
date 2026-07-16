@@ -83,3 +83,23 @@ class TestExtractCvText:
 
         assert result is not None
         assert len(result) == MAX_TEXT_CHARS
+
+    def test_negativ_ueberschreitet_timeout_liefert_none_statt_zu_haengen(self, tmp_path):
+        """Regression test for the 2026-07-16 production incident: pdfplumber
+        pathologically spun at ~100% CPU for minutes on a real CV, blocking
+        app startup indefinitely since the migration backfill called this
+        synchronously. A timeout far shorter than even a fast subprocess
+        spawn+import can complete in (real extraction of this trivial file
+        normally finishes well under 1s, see test_positiv_pdf_wird_extrahiert)
+        proves the call returns promptly instead of waiting on the child."""
+        import time
+
+        pdf_path = tmp_path / "cv.pdf"
+        _write_pdf(pdf_path, "Jane Doe - Senior Software Engineer")
+
+        t0 = time.monotonic()
+        result = extract_cv_text(str(pdf_path), timeout=0.01)
+        elapsed = time.monotonic() - t0
+
+        assert result is None
+        assert elapsed < 5
