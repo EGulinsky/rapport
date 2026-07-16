@@ -51,13 +51,6 @@ jobs:
       # install chromium) and rarely changes — GHA cache means a release
       # with no Dockerfile.playwright-base/requirements.txt changes reuses
       # the cached layers instead of reinstalling Chromium from scratch.
-      # load: true (alongside push) puts it in this runner's local Docker
-      # daemon too, tagged with its GHCR name — only ever push the
-      # GHCR-qualified tag here. A bare `rapport-playwright-base:latest`
-      # tag in this same push list would make buildx default to
-      # docker.io/library/... for that one and fail (we're only
-      # authenticated to GHCR, not Docker Hub) — confirmed the hard way on
-      # the very first release run.
       - name: Build + push playwright base image
         uses: docker/build-push-action@v5
         with:
@@ -65,19 +58,22 @@ jobs:
           file: ./backend/Dockerfile.playwright-base
           platforms: linux/amd64
           push: true
-          load: true
           tags: ghcr.io/egulinsky/rapport-playwright-base:latest
           cache-from: type=gha,scope=playwright-base
           cache-to: type=gha,mode=max,scope=playwright-base
 
       # backend/Dockerfile's `FROM rapport-playwright-base:latest` is a bare
-      # local tag (unchanged from the existing self-hosted deploy flow) —
-      # alias the just-loaded GHCR-tagged image to that bare name locally
-      # (a pure local `docker tag`, no registry involved) so the next step
-      # finds it.
-      - name: Tag playwright base image for local use
-        run: docker tag ghcr.io/egulinsky/rapport-playwright-base:latest rapport-playwright-base:latest
-
+      # local tag (unchanged from the existing self-hosted deploy flow,
+      # which builds it locally right before building backend — never
+      # pushed anywhere there). docker/setup-buildx-action's `docker-
+      # container` builder runs in its own isolated BuildKit instance with
+      # no access to the runner's local Docker image store, so a bare FROM
+      # tag resolves as a *pull* from docker.io/library/... by default and
+      # fails ("pull access denied") — confirmed the hard way on the first
+      # two release runs (the first also tried to *push* the bare tag
+      # there for the same reason). build-contexts redirects that FROM
+      # reference straight to the image just pushed above, without
+      # depending on any local Docker daemon state at all.
       - name: Build + push backend image
         uses: docker/build-push-action@v5
         with:
@@ -85,6 +81,8 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/amd64
           push: true
+          build-contexts: |
+            rapport-playwright-base:latest=docker-image://ghcr.io/egulinsky/rapport-playwright-base:latest
           tags: |
             ghcr.io/egulinsky/rapport-backend:${{ steps.version.outputs.version }}
             ghcr.io/egulinsky/rapport-backend:latest
