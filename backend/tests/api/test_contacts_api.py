@@ -51,6 +51,21 @@ class TestListContacts:
         names = {c["name"] for c in resp.json()}
         assert names == {"Anna Berg"}
 
+    def test_positiv_suche_filtert_auch_ueber_vorname(self, client, db_session):
+        # Regression: the search filter only checked name/email/firma/rolle,
+        # never vorname — a contact stored as name="Berg", vorname="Anna"
+        # (the common case since the vorname/name split) was invisible to a
+        # search for "Anna" (live-reported).
+        contact_factory(db_session, name="Berg", vorname="Anna")
+        contact_factory(db_session, name="Klein", vorname="Bruno")
+        db_session.commit()
+
+        resp = client.get("/api/contacts/", params={"search": "Anna"})
+
+        assert resp.status_code == 200
+        names = {c["name"] for c in resp.json()}
+        assert names == {"Berg"}
+
     def test_positiv_reichert_company_name_und_website_ueber_verlinkte_bewerbung_an(self, client, db_session):
         profile = company_profile_factory(db_session, name_display="Acme Corp", website="https://acme.example/")
         app_obj = application_factory(db_session, firma="Acme Corp", company_profile_id=profile.id)

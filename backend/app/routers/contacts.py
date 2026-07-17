@@ -26,6 +26,7 @@ def list_all_contacts(
         q = q.filter(
             or_(
                 models.Contact.name.ilike(term),
+                models.Contact.vorname.ilike(term),
                 models.Contact.email.ilike(term),
                 models.Contact.firma.ilike(term),
                 models.Contact.rolle.ilike(term),

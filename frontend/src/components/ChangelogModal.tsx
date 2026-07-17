@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.4.4',
+    date: '2026-07-17',
+    changes: [
+      'Fixed the contacts search box (and the "assign contact"/"link contact" pickers in the Company and Application views, which share the same search) ignoring first names — it only matched on last name, email, company, and role.',
+    ],
+  },
+  {
     version: '4.4.3',
     date: '2026-07-17',
     changes: [
