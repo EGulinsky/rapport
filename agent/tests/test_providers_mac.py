@@ -88,3 +88,33 @@ class TestMacCallsProvider:
         provider = MacCallsProvider()
         health = provider.health()
         assert health == {"ok": False, "phone_accessible": False, "whatsapp_accessible": False}
+
+    def test_negativ_health_datei_existiert_aber_nicht_lesbar(self, tmp_path, monkeypatch):
+        """Reproduces the real incident: CallHistory.storedata exists on disk but
+        Full Disk Access was revoked, so every read fails — health() must report
+        phone_accessible=False (previously it only checked os.path.exists() and
+        stayed True, hiding the outage)."""
+        import agent.providers.mac.calls as calls_module
+        unreadable_db = tmp_path / "existiert_aber_kaputt.db"
+        unreadable_db.write_bytes(b"not a valid sqlite file")
+        monkeypatch.setattr(calls_module, "PHONE_DB", str(unreadable_db))
+        monkeypatch.setattr(calls_module, "WA_CALLS", str(tmp_path / "auch_nicht_da.sqlite"))
+
+        provider = MacCallsProvider()
+        health = provider.health()
+        assert health == {"ok": False, "phone_accessible": False, "whatsapp_accessible": False}
+
+    def test_positiv_health_datei_lesbar(self, tmp_path, monkeypatch):
+        import sqlite3
+        import agent.providers.mac.calls as calls_module
+        readable_db = tmp_path / "lesbar.db"
+        conn = sqlite3.connect(str(readable_db))
+        conn.execute("CREATE TABLE ZCALLRECORD (ZDATE REAL)")
+        conn.commit()
+        conn.close()
+        monkeypatch.setattr(calls_module, "PHONE_DB", str(readable_db))
+        monkeypatch.setattr(calls_module, "WA_CALLS", str(tmp_path / "auch_nicht_da.sqlite"))
+
+        provider = MacCallsProvider()
+        health = provider.health()
+        assert health == {"ok": True, "phone_accessible": True, "whatsapp_accessible": False}

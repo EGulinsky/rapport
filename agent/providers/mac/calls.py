@@ -44,6 +44,22 @@ def _uid(source: str, raw: str) -> str:
     return hashlib.md5(f"{source}:{raw}".encode()).hexdigest()
 
 
+def _can_read_db(path: str) -> bool:
+    """Whether path exists AND is actually queryable — os.path.exists() alone
+    stays true even when Full Disk Access has been revoked, which previously
+    made the health check report phone call history as accessible while every
+    read silently failed and returned no calls."""
+    if not os.path.exists(path):
+        return False
+    try:
+        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        db.execute("SELECT 1").fetchone()
+        db.close()
+        return True
+    except Exception:
+        return False
+
+
 class MacCallsProvider(CallsProvider):
     def list_calls(self, since_days: int = 90, source: str = "all") -> list[dict[str, Any]]:
         calls: list[dict[str, Any]] = []
@@ -54,10 +70,12 @@ class MacCallsProvider(CallsProvider):
         return calls
 
     def health(self) -> dict[str, Any]:
+        phone_ok = _can_read_db(PHONE_DB)
+        whatsapp_ok = _can_read_db(WA_CALLS)
         return {
-            "ok": os.path.exists(PHONE_DB) or os.path.exists(WA_CALLS),
-            "phone_accessible": os.path.exists(PHONE_DB),
-            "whatsapp_accessible": os.path.exists(WA_CALLS),
+            "ok": phone_ok or whatsapp_ok,
+            "phone_accessible": phone_ok,
+            "whatsapp_accessible": whatsapp_ok,
         }
 
     def _read_phone_calls(self, since_days: int) -> list[dict[str, Any]]:

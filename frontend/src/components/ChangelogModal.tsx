@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.9',
+    date: '2026-07-17',
+    changes: [
+      'Rapport Agent: the health check for phone call history access only checked whether the call database file existed, not whether it could actually be read — so when macOS Full Disk Access was revoked, phone calls silently stopped syncing (only WhatsApp calls kept working) with no indication anything was wrong. The health check now attempts a real read, so a permission problem shows up immediately instead of failing invisibly.',
+    ],
+  },
+  {
     version: '4.3.8',
     date: '2026-07-17',
     changes: [
