@@ -2058,8 +2058,11 @@ async def _do_icloud_calls(user_id: int) -> dict:
                 skipped += 1
                 continue
 
-            if not call_name and matched_contacts:
-                call_name = matched_contacts[0].display_name
+            # Prefer our own contact record's (enriched, vorname+name) display
+            # name over the raw name the OS/agent supplied — the phone's own
+            # call history can have an incomplete name (e.g. only a surname
+            # saved locally) even when our contact record has the full name.
+            call_name = matched_contacts[0].display_name
 
             apps_by_id: dict[int, models.Application] = {}
             for c in matched_contacts:

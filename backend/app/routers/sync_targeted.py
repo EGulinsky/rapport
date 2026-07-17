@@ -1121,7 +1121,12 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         if not matched_contact:
             continue
 
-        call_name = call.get("name") or matched_contact
+        # Prefer our own contact record's (enriched, vorname+name) display
+        # name over the raw name the OS/agent supplied — the phone's own
+        # call history can have an incomplete name (e.g. only a surname
+        # saved locally) even when our contact record has the full name
+        # (live-reported: "Anruf von Fallnich" instead of "Fallnich Bjoern").
+        call_name = matched_contact
         direction = call.get("direction", "")
         answered = call.get("answered", True)
         duration = call.get("duration_s") or call.get("duration") or 0

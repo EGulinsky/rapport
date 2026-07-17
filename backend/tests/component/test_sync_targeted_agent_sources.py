@@ -168,6 +168,37 @@ class TestSyncCallsForApp:
         ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
         assert "Niklas Zoch" in ev.titel
 
+    async def test_positiv_anruf_titel_bevorzugt_kontaktnamen_vor_unvollstaendigem_agentennamen(self, db_session, monkeypatch):
+        # Regression: even after the previous fix, an incomplete raw name
+        # supplied by the OS/agent (e.g. the phone's local address book only
+        # has a surname saved) still won over our own, more complete contact
+        # record — live-reported: "Anruf von Fallnich" instead of
+        # "Fallnich Bjoern" despite the contact having vorname="Bjoern".
+        app = application_factory(db_session)
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
+        contact = contact_factory(db_session, telefon="0151 2345678", name="Fallnich", vorname="Bjoern")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        calls = [{
+            "id": "call-3", "phone": "+491512345678", "direction": "incoming",
+            "answered": True, "duration_s": 30, "date": "2026-07-01T10:00:00+00:00",
+            "name": "Fallnich",  # incomplete raw name from the OS/agent
+        }]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(calls)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+
+        assert errors == []
+        assert created == 1
+        db_session.flush()
+        ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
+        assert "Bjoern Fallnich" in ev.titel
+
     async def test_negativ_anruf_vor_fruehestem_ereignis_wird_ausgefiltert(self, db_session, monkeypatch):
         # Regression test for the #230 incident (2026-07-16): calls sync had
         # NO date filtering at all before this. Revised the same day: the

@@ -77,6 +77,34 @@ class TestDoIcloudCallsNeueAnrufe:
         assert "Erika Musterfrau" in event.titel
         assert "2:05 min" in event.notiz
 
+    async def test_positiv_titel_bevorzugt_kontaktnamen_vor_unvollstaendigem_agentennamen(self, db_session, monkeypatch):
+        # Regression: an incomplete raw name from the OS/agent (e.g. the
+        # phone's local address book only has a surname saved) previously
+        # won over our own, more complete contact record.
+        _calls_cfg(db_session)
+        app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
+        contact = contact_factory(db_session, name="Musterfrau", vorname="Erika", telefon="+49 172 1234567")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        calls = [{
+            "id": "call-99", "phone": "0172 1234567", "name": "Musterfrau", "date": "2026-07-01T10:00:00",
+            "duration_s": 60, "direction": "incoming", "answered": True,
+        }]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(calls)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        result = await _do_icloud_calls(1)
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="icloud_calls").one()
+        assert "Erika Musterfrau" in event.titel
+
     async def test_negativ_anruf_vor_fruehestem_ereignis_wird_ausgefiltert(self, db_session, monkeypatch):
         # Regression test for the #230 incident (2026-07-16): bulk calls
         # sync had NO date filtering at all before this. Revised the same

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.4.3',
+    date: '2026-07-17',
+    changes: [
+      'Fixed calls sync still showing only a last name in some cases (e.g. "Anruf von Fallnich" instead of "Fallnich Bjoern") even after the previous fix — an incomplete name from the phone\'s own call history was taking priority over the fuller name already stored in the matching contact record. The contact record now always wins once a match is found.',
+    ],
+  },
+  {
     version: '4.4.2',
     date: '2026-07-17',
     changes: [
