@@ -43,7 +43,19 @@
     "overview": "Overview",
     "timeline": "History",
     "attachments": "Attachments",
-    "contacts": "Contacts"
+    "contacts": "Contacts",
+    "salary": "Salary"
+  },
+  "salary": {
+    "currency": "Currency",
+    "currencySelectPlaceholder": "Select currency…",
+    "expectation": "Your expectation",
+    "budget": "Company budget",
+    "amountPlaceholder": "Amount",
+    "amountMaxPlaceholder": "Up to",
+    "rangeToggle": "Enter a range",
+    "mismatchWarning": "The company's budget is below your expectation.",
+    "notSet": "Not set"
   },
   "overview": {
     "status": "Status",

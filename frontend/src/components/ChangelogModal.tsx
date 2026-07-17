@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.5.0',
+    date: '2026-07-17',
+    changes: [
+      'New: Salary tracking per application. Add a "Salary" tab in the application modal with your salary expectation and the company\'s budget, each as a single figure or a min–max range, in a selectable currency (EUR, CHF, USD, GBP, SEK, DKK, NOK, PLN). When the company\'s best-case budget can\'t meet your minimum expectation, it\'s flagged in red in the modal and with a warning icon on the Kanban card.',
+    ],
+  },
+  {
     version: '4.4.4',
     date: '2026-07-17',
     changes: [

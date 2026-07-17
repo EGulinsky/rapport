@@ -5,7 +5,8 @@ import {
   useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { MapPin } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { MapPin, AlertTriangle } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
@@ -29,6 +30,7 @@ interface Props {
 function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Application; isDragging?: boolean; onOpenCompany?: (id: number) => void; isUpdated?: boolean }) {
   const { subStatusLabel } = useStatusLabels()
   const locale = useLocale()
+  const { t } = useTranslation('applications')
   return (
     <div className={clsx(
       'relative w-full text-left rounded-xl border bg-white p-3 shadow-sm',
@@ -100,6 +102,11 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
         <p className="text-xs text-gray-400 mt-1">{subStatusLabel(app.sub_status)}</p>
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
+      {app.salary_mismatch && (
+        <span title={t('salary.mismatchWarning')} className="inline-block ml-1 align-text-bottom">
+          <AlertTriangle className="inline-block h-3.5 w-3.5 text-red-500" />
+        </span>
+      )}
       {!app.abgesagt && app.ai_color && (
         <div className="mt-1.5 space-y-0.5">
           <div className="flex items-center gap-1.5">

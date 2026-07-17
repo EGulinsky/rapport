@@ -815,6 +815,30 @@ def _migrate_application_ort():
     conn.close()
 
 
+def _migrate_salary():
+    """Salary tracking (applicant expectation vs. company budget)."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(applications)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "salary_currency" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_currency TEXT")
+    if "salary_expectation_min" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_expectation_min INTEGER")
+    if "salary_expectation_max" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_expectation_max INTEGER")
+    if "salary_budget_min" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_budget_min INTEGER")
+    if "salary_budget_max" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_budget_max INTEGER")
+    conn.commit()
+    conn.close()
+
+
 _USER_SCOPED_TABLES = [
     "company_profiles", "applications", "contacts", "merge_aliases", "events",
     "attachments", "google_sync", "synced_items", "pending_matches", "icloud_sync",
@@ -1086,6 +1110,7 @@ def init_db():
     _migrate_company_parent()
     _migrate_ai_assessment()
     _migrate_application_ort()
+    _migrate_salary()
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
     _migrate_contact_phones()

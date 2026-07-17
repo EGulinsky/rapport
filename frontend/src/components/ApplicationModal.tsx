@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { LocationSearchInput } from './LocationSearchInput'
 import { displayName } from './ContactModal'
+import { CURRENCIES } from '../constants/currencies'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_COLORS,
@@ -21,6 +22,14 @@ function parentPath(p: string): string {
   const parts = p.replace(/\/$/, '').split('/')
   if (parts.length <= 1) return '/'
   return parts.slice(0, -1).join('/') || '/'
+}
+
+function formatSalaryRange(min: number | null | undefined, max: number | null | undefined, currency: string | null | undefined, locale: string): string | null {
+  if (min == null) return null
+  const fmt = currency
+    ? new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 })
+    : new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
+  return max == null ? fmt.format(min) : `${fmt.format(min)} – ${fmt.format(max)}`
 }
 
 interface Props {
@@ -113,7 +122,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [liStatus, setLiStatus] = useState<LinkedInSyncStatus | null>(null)
   const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'attachments' | 'contacts'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'attachments' | 'contacts' | 'salary'>('overview')
   const [timeFilter, setTimeFilter] = useState<'all' | '1m' | '3m' | '6m' | '1y'>('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set())
@@ -1142,6 +1151,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
             { id: 'timeline',     label: t('tabs.timeline'),    count: rawTimelineEvents.length },
             { id: 'attachments',  label: t('tabs.attachments'),    count: fileEvents.length },
             { id: 'contacts',     label: t('tabs.contacts'),   count: app?.contacts?.length ?? 0, icon: <Users className="h-3 w-3" /> },
+            { id: 'salary',       label: t('tabs.salary'),     icon: <Wallet className="h-3 w-3" />, alert: !!app?.salary_mismatch },
           ] as const).map(tab => (
             <button
               key={tab.id}
@@ -1154,6 +1164,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               {tab.label}
               {'count' in tab && (tab.count ?? 0) > 0 && (
                 <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 leading-none">{tab.count}</span>
+              )}
+              {'alert' in tab && tab.alert && (
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
               )}
             </button>
           ))}
@@ -1904,6 +1917,91 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 </>
               )}
             </div>
+          )}
+        </div>
+        )}
+
+        {/* Tab: Gehalt */}
+        {activeTab === 'salary' && (
+        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+          {editing ? (
+            <>
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 block">{t('salary.currency')}</label>
+                <select
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={draft.salary_currency ?? ''}
+                  onChange={e => setDraft(d => ({ ...d, salary_currency: e.target.value || null }))}
+                >
+                  <option value="">{t('salary.currencySelectPlaceholder')}</option>
+                  {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>)}
+                </select>
+              </div>
+
+              {([
+                ['salary_expectation_min', 'salary_expectation_max', t('salary.expectation')],
+                ['salary_budget_min', 'salary_budget_max', t('salary.budget')],
+              ] as const).map(([minKey, maxKey, label]) => {
+                const minVal = draft[minKey]
+                const maxVal = draft[maxKey]
+                const hasRange = maxVal != null
+                return (
+                  <div key={minKey}>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{label}</p>
+                    <div className="flex items-center gap-3">
+                      <input type="number" min={0}
+                        className="w-32 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder={t('salary.amountPlaceholder')}
+                        value={minVal ?? ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? null : Number(e.target.value)
+                          setDraft(d => ({ ...d, [minKey]: val, ...(val === null ? { [maxKey]: null } : {}) }))
+                        }}
+                      />
+                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" checked={hasRange}
+                          className="rounded border-gray-300 text-indigo-600"
+                          disabled={minVal == null}
+                          onChange={e => setDraft(d => ({ ...d, [maxKey]: e.target.checked ? (minVal ?? 0) : null }))}
+                        />
+                        {t('salary.rangeToggle')}
+                      </label>
+                      {hasRange && (
+                        <input type="number" min={0}
+                          className="w-32 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder={t('salary.amountMaxPlaceholder')}
+                          value={maxVal ?? ''}
+                          onChange={e => setDraft(d => ({ ...d, [maxKey]: e.target.value === '' ? null : Number(e.target.value) }))}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          ) : (
+            <>
+              {app?.salary_mismatch && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 ring-1 ring-inset ring-red-200 px-3 py-2 text-sm text-red-700">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {t('salary.mismatchWarning')}
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{t('salary.expectation')}</p>
+                <p className={`text-sm ${app?.salary_mismatch ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                  {formatSalaryRange(app?.salary_expectation_min, app?.salary_expectation_max, app?.salary_currency, locale)
+                    ?? <span className="text-gray-400 italic font-normal">{t('salary.notSet')}</span>}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{t('salary.budget')}</p>
+                <p className={`text-sm ${app?.salary_mismatch ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                  {formatSalaryRange(app?.salary_budget_min, app?.salary_budget_max, app?.salary_currency, locale)
+                    ?? <span className="text-gray-400 italic font-normal">{t('salary.notSet')}</span>}
+                </p>
+              </div>
+            </>
           )}
         </div>
         )}

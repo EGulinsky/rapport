@@ -43,7 +43,19 @@
     "overview": "Übersicht",
     "timeline": "Verlauf",
     "attachments": "Anhänge",
-    "contacts": "Kontakte"
+    "contacts": "Kontakte",
+    "salary": "Gehalt"
+  },
+  "salary": {
+    "currency": "Währung",
+    "currencySelectPlaceholder": "Währung wählen…",
+    "expectation": "Deine Vorstellung",
+    "budget": "Budget des Unternehmens",
+    "amountPlaceholder": "Betrag",
+    "amountMaxPlaceholder": "Bis zu",
+    "rangeToggle": "Als Spanne eingeben",
+    "mismatchWarning": "Das Budget des Unternehmens liegt unter deiner Gehaltsvorstellung.",
+    "notSet": "Nicht angegeben"
   },
   "overview": {
     "status": "Status",

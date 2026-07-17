@@ -145,6 +145,11 @@ class ApplicationBase(BaseModel):
     gespraech_3: Optional[str] = None
     gespraech_4: Optional[str] = None
     gespraech_5: Optional[str] = None
+    salary_currency: Optional[str] = None
+    salary_expectation_min: Optional[int] = None
+    salary_expectation_max: Optional[int] = None
+    salary_budget_min: Optional[int] = None
+    salary_budget_max: Optional[int] = None
 
 
 class ApplicationCreate(ApplicationBase):
@@ -178,11 +183,17 @@ class ApplicationUpdate(BaseModel):
     gespraech_3: Optional[str] = None
     gespraech_4: Optional[str] = None
     gespraech_5: Optional[str] = None
+    salary_currency: Optional[str] = None
+    salary_expectation_min: Optional[int] = None
+    salary_expectation_max: Optional[int] = None
+    salary_budget_min: Optional[int] = None
+    salary_budget_max: Optional[int] = None
 
 
 class ApplicationRead(ApplicationBase):
     id: int
     abgesagt: bool
+    salary_mismatch: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     company_profile_id: Optional[int] = None
@@ -216,6 +227,7 @@ class ApplicationListItem(BaseModel):
     letztes_update: Optional[date] = None
     abgesagt: bool
     ghosting: bool
+    salary_mismatch: bool
     kommentar: Optional[str] = None
     naechster_schritt: Optional[str] = None
     company_profile_id: Optional[int] = None

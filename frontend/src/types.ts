@@ -72,6 +72,12 @@ export interface Application {
   ai_next_step?: string | null
   ai_reasoning?: string | null
   ai_assessed_at?: string | null
+  salary_currency?: string | null
+  salary_expectation_min?: number | null
+  salary_expectation_max?: number | null
+  salary_budget_min?: number | null
+  salary_budget_max?: number | null
+  salary_mismatch: boolean
 }
 
 export interface ContactPhone {

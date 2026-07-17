@@ -17,6 +17,17 @@ from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
 
 
+def _validate_salary_pair(min_v: Optional[int], max_v: Optional[int], label: str) -> None:
+    if max_v is None:
+        return
+    if min_v is None:
+        raise api_error(400, ErrorKey.APPLICATION_SALARY_RANGE_INVALID,
+                         f"{label}: Max ohne Min nicht erlaubt")
+    if max_v < min_v:
+        raise api_error(400, ErrorKey.APPLICATION_SALARY_RANGE_INVALID,
+                         f"{label}: Max muss >= Min sein")
+
+
 def _status_label(main: str, sub: str | None) -> str:
     label = MAIN_STATUS_LABELS.get(main, main)
     if sub:
@@ -412,6 +423,8 @@ def create_application(
 ):
     data = payload.model_dump()
     skip_linkedin_sync = data.pop("created_from_linkedin")
+    _validate_salary_pair(data.get("salary_expectation_min"), data.get("salary_expectation_max"), "Gehaltsvorstellung")
+    _validate_salary_pair(data.get("salary_budget_min"), data.get("salary_budget_max"), "Budget")
     app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
     db.add(app)
@@ -452,6 +465,14 @@ def update_application(
 
     update_data = payload.model_dump(exclude_unset=True)
 
+    def _effective(field: str) -> Optional[int]:
+        return update_data[field] if field in update_data else getattr(app, field)
+
+    if {"salary_expectation_min", "salary_expectation_max"} & update_data.keys():
+        _validate_salary_pair(_effective("salary_expectation_min"), _effective("salary_expectation_max"), "Gehaltsvorstellung")
+    if {"salary_budget_min", "salary_budget_max"} & update_data.keys():
+        _validate_salary_pair(_effective("salary_budget_min"), _effective("salary_budget_max"), "Budget")
+
     old_main = app.main_status
     old_sub  = app.sub_status
 
@@ -467,7 +488,9 @@ def update_application(
     AUDIT_FIELDS = {"firma", "rolle", "zielfirma_bei_hh", "wurde_besetzt_von", "quelle",
                     "datum_bewerbung", "letztes_update", "kommentar", "stellenanzeige_url",
                     "ort", "is_headhunter",
-                    "gespraech_1", "gespraech_2", "gespraech_3", "gespraech_4", "gespraech_5"}
+                    "gespraech_1", "gespraech_2", "gespraech_3", "gespraech_4", "gespraech_5",
+                    "salary_currency", "salary_expectation_min", "salary_expectation_max",
+                    "salary_budget_min", "salary_budget_max"}
     for f, v in update_data.items():
         if f in AUDIT_FIELDS:
             old_v = getattr(app, f, None)

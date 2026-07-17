@@ -179,6 +179,12 @@ class Application(Base):
     wurde_besetzt_von   = Column(String, nullable=True)
     ort                 = Column(String, nullable=True)
 
+    salary_currency        = Column(String, nullable=True)   # ISO code, e.g. "EUR"
+    salary_expectation_min = Column(Integer, nullable=True)
+    salary_expectation_max = Column(Integer, nullable=True)
+    salary_budget_min      = Column(Integer, nullable=True)
+    salary_budget_max      = Column(Integer, nullable=True)
+
     datum_bewerbung     = Column(Date, nullable=True)
     letztes_update      = Column(Date, nullable=True)
 
@@ -214,6 +220,20 @@ class Application(Base):
     @property
     def abgesagt(self) -> bool:
         return self.main_status == "rejected"
+
+    @property
+    def salary_mismatch(self) -> bool:
+        """True only when the best possible budget (its max if a range was
+        given, else its single value) is still below the lowest amount the
+        applicant would accept — i.e. the ranges can't possibly meet. If
+        either side has no value at all, or the ranges could plausibly
+        overlap, this stays False rather than flagging a false positive."""
+        if self.salary_expectation_min is None:
+            return False
+        budget_ceiling = self.salary_budget_max if self.salary_budget_max is not None else self.salary_budget_min
+        if budget_ceiling is None:
+            return False
+        return budget_ceiling < self.salary_expectation_min
 
     @property
     def ghosting(self) -> bool:

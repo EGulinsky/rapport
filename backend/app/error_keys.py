@@ -35,6 +35,7 @@ class ErrorKey(str, Enum):
     # applications
     APPLICATION_NOT_FOUND = "application.not_found"
     APPLICATION_LINKEDIN_URL_REQUIRED = "application.linkedin_url_required"
+    APPLICATION_SALARY_RANGE_INVALID = "application.salary_range_invalid"
     AI_RATE_LIMIT = "ai.rate_limit"
     EVENT_NOT_FOUND = "event.not_found"
     CONTACT_NOT_FOUND = "contact.not_found"

@@ -208,6 +208,79 @@ class TestUpdateApplication:
         assert resp.json()["ort"] == "Berlin, Deutschland"
 
 
+class TestSalaryFields:
+    def test_positiv_gehalt_wird_beim_anlegen_gespeichert(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_currency": "EUR",
+            "salary_expectation_min": 70000, "salary_expectation_max": 80000,
+            "salary_budget_min": 60000,
+        })
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_currency"] == "EUR"
+        assert body["salary_expectation_min"] == 70000
+        assert body["salary_expectation_max"] == 80000
+        assert body["salary_budget_min"] == 60000
+        assert body["salary_budget_max"] is None
+        assert body["salary_mismatch"] is True
+
+    def test_negativ_anlegen_max_ohne_min_wird_abgelehnt(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_budget_max": 80000,
+        })
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "application.salary_range_invalid"
+
+    def test_negativ_anlegen_max_kleiner_als_min_wird_abgelehnt(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_expectation_min": 80000, "salary_expectation_max": 70000,
+        })
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "application.salary_range_invalid"
+
+    def test_positiv_gehalt_kann_nachtraeglich_gesetzt_werden_und_wird_auditiert(self, client, db_session):
+        app = application_factory(db_session)
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={
+            "salary_currency": "CHF", "salary_expectation_min": 90000,
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["salary_currency"] == "CHF"
+        assert resp.json()["salary_expectation_min"] == 90000
+        audit = (
+            db_session.query(models.AuditLog)
+            .filter_by(app_id=app.id, field="salary_expectation_min")
+            .first()
+        )
+        assert audit is not None
+        assert audit.new_value == "90000"
+
+    def test_negativ_update_max_ohne_bestehenden_min_wird_abgelehnt(self, client, db_session):
+        app = application_factory(db_session)
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"salary_budget_max": 80000})
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "application.salary_range_invalid"
+
+    def test_positiv_update_max_mit_bereits_bestehendem_min_ist_erlaubt(self, client, db_session):
+        app = application_factory(db_session, salary_budget_min=50000)
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"salary_budget_max": 60000})
+
+        assert resp.status_code == 200
+        assert resp.json()["salary_budget_min"] == 50000
+        assert resp.json()["salary_budget_max"] == 60000
+
+
 class TestBulkDeleteEvents:
     def test_positiv_mehrere_events_werden_geloescht(self, client, db_session):
         app = application_factory(db_session)
