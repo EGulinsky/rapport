@@ -127,6 +127,28 @@ def _find_app_groups(db: Session) -> list[dict]:
     return groups
 
 
+def _rejected_contact_pairs(db: Session) -> set[frozenset[int]]:
+    """Contact-ID pairs the user already reviewed and explicitly rejected as
+    NOT duplicates — must not keep resurfacing in the preview/run flow, since
+    once rejected there's no pending PendingMatch left for the user to act on
+    (the cleanup-run `external_id` guard also blocks re-queuing it), so an
+    unfiltered preview would show the same pair forever with no way to
+    dismiss it (live-reported: "Zoch" duplicate kept reappearing)."""
+    rows = db.query(models.PendingMatch).filter_by(
+        source="cleanup", event_type="duplicate_contact", review_status="rejected",
+    ).all()
+    pairs: set[frozenset[int]] = set()
+    for row in rows:
+        try:
+            payload = json.loads(row.raw_content or "{}")
+            keeper_id, dup_id = payload.get("keeper_contact_id"), payload.get("dup_contact_id")
+        except Exception:
+            continue
+        if keeper_id and dup_id:
+            pairs.add(frozenset((keeper_id, dup_id)))
+    return pairs
+
+
 def _find_contact_groups(db: Session) -> list[dict]:
     """Group contacts by normalized name + matching company context, to avoid
     conflating different people who share a name at unrelated companies."""
@@ -137,13 +159,17 @@ def _find_contact_groups(db: Session) -> list[dict]:
         company_key = c.company_profile_id if c.company_profile_id else norm_firma(c.firma or "")
         buckets.setdefault((name_key, company_key), []).append(c)
 
+    rejected_pairs = _rejected_contact_pairs(db)
+
     groups = []
     for dups in buckets.values():
         if len(dups) < 2:
             continue
         dups.sort(key=_contact_score, reverse=True)
         keeper = dups[0]
-        to_remove = dups[1:]
+        to_remove = [r for r in dups[1:] if frozenset((keeper.id, r.id)) not in rejected_pairs]
+        if not to_remove:
+            continue
         apps_merged = sum(len(r.applications) for r in to_remove)
         groups.append({
             "keep":        _contact_dict(keeper),

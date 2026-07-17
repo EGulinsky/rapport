@@ -1,10 +1,23 @@
 """L1 Component — cleanup.py Kontakt-Dublettenerkennung (_find_contact_groups)."""
+import json
+
 import pytest
 
+from app import models
 from app.routers.cleanup import _find_contact_groups
 from tests.factories import application_factory, company_profile_factory, contact_factory
 
 pytestmark = pytest.mark.component
+
+
+def _reject_pair(db, keeper_id: int, dup_id: int):
+    db.add(models.PendingMatch(
+        source="cleanup", external_id=f"cleanup_contact_{keeper_id}_{dup_id}",
+        confidence=90, event_type="duplicate_contact",
+        raw_content=json.dumps({"keeper_contact_id": keeper_id, "dup_contact_id": dup_id}),
+        review_status="rejected", user_id=1,
+    ))
+    db.flush()
 
 
 class TestFindContactGroups:
@@ -81,3 +94,31 @@ class TestFindContactGroups:
 
         assert len(groups) == 1
         assert len(groups[0]["remove"]) == 2
+
+    def test_negativ_bereits_abgelehntes_paar_taucht_nicht_wieder_auf(self, db_session):
+        """Regression: die Preview zeigte ein Paar unendlich weiter an, obwohl
+        der User es schon als "keine Dubletten" abgelehnt hatte — es gab
+        danach keinen Weg mehr, das im UI zu bestätigen (live gemeldet:
+        "Zoch"-Dublette taucht nach dem Ablehnen immer wieder auf)."""
+        cp = company_profile_factory(db_session)
+        keeper = contact_factory(db_session, name="Max Mustermann", company_profile_id=cp.id)
+        dup = contact_factory(db_session, name="Max Mustermann", company_profile_id=cp.id)
+        db_session.flush()
+        _reject_pair(db_session, keeper.id, dup.id)
+
+        groups = _find_contact_groups(db_session)
+
+        assert groups == []
+
+    def test_positiv_abgelehntes_paar_blendet_nur_dieses_paar_aus(self, db_session):
+        cp = company_profile_factory(db_session)
+        keeper = contact_factory(db_session, name="Max Mustermann", company_profile_id=cp.id)
+        rejected_dup = contact_factory(db_session, name="Max Mustermann", company_profile_id=cp.id)
+        other_dup = contact_factory(db_session, name="Max Mustermann", company_profile_id=cp.id)
+        db_session.flush()
+        _reject_pair(db_session, keeper.id, rejected_dup.id)
+
+        groups = _find_contact_groups(db_session)
+
+        assert len(groups) == 1
+        assert [r["id"] for r in groups[0]["remove"]] == [other_dup.id]

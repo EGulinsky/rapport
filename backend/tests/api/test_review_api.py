@@ -83,11 +83,14 @@ class TestApproveMatchDuplicateContact:
         resp = client.post(f"/api/review/{pm.id}/approve", json={"application_id": None})
         assert resp.status_code == 200
 
-        # Zweiter Aufruf — match ist "approved", aber kein 500
+        # Zweiter Aufruf — dup existiert nicht mehr → klarer Fehler statt
+        # stillem "approved" ohne Wirkung (Regression: die alte Fassung
+        # markierte den Match immer als approved, auch wenn nichts mehr zu
+        # tun war, was einen echten Fehlschlag unsichtbar machte).
         resp2 = client.post(f"/api/review/{pm.id}/approve", json={"application_id": None})
-        assert resp2.status_code == 200
+        assert resp2.status_code == 404
 
-    def test_corner_case_fehlerhaftes_raw_content_json_crasht_nicht(self, client, db_session):
+    def test_negativ_fehlerhaftes_raw_content_json_liefert_400_statt_stillem_erfolg(self, client, db_session):
         pm = models.PendingMatch(
             source="cleanup", external_id="cleanup_contact_3",
             confidence=90, event_type="duplicate_contact",
@@ -98,7 +101,13 @@ class TestApproveMatchDuplicateContact:
         db_session.commit()
 
         resp = client.post(f"/api/review/{pm.id}/approve", json={"application_id": None})
-        assert resp.status_code == 200  # no crash, approved anyway
+        # Regression: die alte Fassung markierte den Match trotz kaputter/
+        # fehlender IDs stillschweigend als "approved" — der Duplikat-Kontakt
+        # blieb unangetastet, ohne dass der User das je erfuhr (live
+        # gemeldet: mehrfaches "Approve" ohne sichtbare Wirkung).
+        assert resp.status_code == 400
+        db_session.refresh(pm)
+        assert pm.review_status == "pending"
 
 
 class TestApproveMatchDuplicateEvent:

@@ -86,6 +86,22 @@ export function ReviewModal({ onClose, onApproved }: Props) {
       }
       return
     }
+    if (item.event_type === 'duplicate_contact') {
+      // No application involved — the backend resolves the keeper/duplicate
+      // contact pair from the match itself, so no application_id is needed.
+      setSaving(item.id)
+      try {
+        await api.review.approve(item.id, {})
+        setItems(prev => prev.filter(i => i.id !== item.id))
+        setSelected(s => { const n = new Set(s); n.delete(item.id); return n })
+        onApproved()
+      } catch (e) {
+        alert(String(e))
+      } finally {
+        setSaving(null)
+      }
+      return
+    }
     const app_id = ov.app_id ?? item.suggested_app_id
     if (!app_id) return
     setSaving(item.id)
@@ -121,6 +137,7 @@ export function ReviewModal({ onClose, onApproved }: Props) {
   function canApproveItem(item: PendingMatch): boolean {
     const ov = getOverride(item.id)
     if (item.event_type === 'company_candidate') return !!ov.linkedin_url
+    if (item.event_type === 'duplicate_contact') return true
     return !!(ov.app_id ?? item.suggested_app_id)
   }
 
@@ -133,6 +150,9 @@ export function ReviewModal({ onClose, onApproved }: Props) {
         const ov = getOverride(item.id)
         if (item.event_type === 'company_candidate') {
           return api.review.approve(item.id, { linkedin_url: ov.linkedin_url })
+        }
+        if (item.event_type === 'duplicate_contact') {
+          return api.review.approve(item.id, {})
         }
         const app_id = ov.app_id ?? item.suggested_app_id!
         return api.review.approve(item.id, {

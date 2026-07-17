@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.4.1',
+    date: '2026-07-17',
+    changes: [
+      'Fixed the "Approve" button doing nothing for duplicate-contact entries in the Review queue — it required an associated application that duplicate-contact matches never have, so it stayed permanently disabled with no explanation. Approving (and rejecting) a duplicate contact now works as expected.',
+      'Fixed duplicate contacts reappearing endlessly in Cleanup after being reviewed: the duplicate search had no memory of past decisions, so a pair you\'d already rejected (or approved) kept resurfacing every time, with the "Delete" action silently doing nothing on repeat attempts. Reviewed pairs are no longer re-suggested.',
+    ],
+  },
+  {
     version: '4.4.0',
     date: '2026-07-17',
     changes: [

@@ -87,21 +87,30 @@ async def approve_match(
             dup_id = payload.get("dup_contact_id")
         except Exception:
             keeper_id = dup_id = None
-        if keeper_id and dup_id:
-            keeper = db.query(Contact).filter_by(id=keeper_id, user_id=current_user.id).first()
-            dup = db.query(Contact).filter_by(id=dup_id, user_id=current_user.id).first()
-            if keeper and dup:
-                keeper_app_ids = {a.id for a in keeper.applications}
-                for app in list(dup.applications):
-                    if app.id not in keeper_app_ids:
-                        keeper.applications.append(app)
-                dup.applications.clear()
-                db.flush()
-                add_audit(db, "delete", "system", contact_id=keeper.id,
-                          old_value=f"{dup.name} (#{dup.id})",
-                          reason_key="duplicate_cleaned_merged_into", reason_params={"id": keeper.id},
-                          user_id=current_user.id)
-                db.delete(dup)
+        # Previously this fell through to marking the match "approved" even
+        # when the IDs were missing or the contacts no longer existed — the
+        # PendingMatch silently vanished from Review while the duplicate
+        # contact was never actually deleted, with no error shown to the
+        # user (live-reported: approving a "Zoch" duplicate repeatedly had
+        # no effect). Fail loudly instead so a stale/invalid match surfaces
+        # as an error rather than a silent no-op.
+        if not keeper_id or not dup_id:
+            raise HTTPException(status_code=400, detail="Duplicate-contact match is missing contact IDs")
+        keeper = db.query(Contact).filter_by(id=keeper_id, user_id=current_user.id).first()
+        dup = db.query(Contact).filter_by(id=dup_id, user_id=current_user.id).first()
+        if not keeper or not dup:
+            raise HTTPException(status_code=404, detail="Keeper or duplicate contact no longer exists")
+        keeper_app_ids = {a.id for a in keeper.applications}
+        for app in list(dup.applications):
+            if app.id not in keeper_app_ids:
+                keeper.applications.append(app)
+        dup.applications.clear()
+        db.flush()
+        add_audit(db, "delete", "system", contact_id=keeper.id,
+                  old_value=f"{dup.name} (#{dup.id})",
+                  reason_key="duplicate_cleaned_merged_into", reason_params={"id": keeper.id},
+                  user_id=current_user.id)
+        db.delete(dup)
         match.review_status = "approved"
         db.commit()
         return {"status": "approved", "event_id": None}
