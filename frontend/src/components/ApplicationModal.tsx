@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle, Car } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -24,12 +24,18 @@ function parentPath(p: string): string {
   return parts.slice(0, -1).join('/') || '/'
 }
 
-function formatSalaryRange(min: number | null | undefined, max: number | null | undefined, currency: string | null | undefined, locale: string): string | null {
-  if (min == null) return null
+function formatCurrencyAmount(value: number, currency: string | null | undefined, locale: string): string {
   const fmt = currency
     ? new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 })
     : new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
-  return max == null ? fmt.format(min) : `${fmt.format(min)} – ${fmt.format(max)}`
+  return fmt.format(value)
+}
+
+function formatSalaryRange(min: number | null | undefined, max: number | null | undefined, currency: string | null | undefined, locale: string): string | null {
+  if (min == null) return null
+  return max == null
+    ? formatCurrencyAmount(min, currency, locale)
+    : `${formatCurrencyAmount(min, currency, locale)} – ${formatCurrencyAmount(max, currency, locale)}`
 }
 
 interface Props {
@@ -1939,42 +1945,105 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               </div>
 
               {([
-                ['salary_expectation_min', 'salary_expectation_max', t('salary.expectation')],
-                ['salary_budget_min', 'salary_budget_max', t('salary.budget')],
-              ] as const).map(([minKey, maxKey, label]) => {
+                ['salary_expectation_min', 'salary_expectation_max',
+                 'salary_expectation_min_fixed', 'salary_expectation_min_bonus',
+                 'salary_expectation_max_fixed', 'salary_expectation_max_bonus',
+                 t('salary.expectation'), 'salary_expectation_company_car', t('salary.companyCarExpectation')],
+                ['salary_budget_min', 'salary_budget_max',
+                 'salary_budget_min_fixed', 'salary_budget_min_bonus',
+                 'salary_budget_max_fixed', 'salary_budget_max_bonus',
+                 t('salary.budget'), 'salary_budget_company_car', t('salary.companyCarBudget')],
+              ] as const).map(([minKey, maxKey, minFixedKey, minBonusKey, maxFixedKey, maxBonusKey, label, carKey, carLabel]) => {
                 const minVal = draft[minKey]
                 const maxVal = draft[maxKey]
                 const hasRange = maxVal != null
-                return (
-                  <div key={minKey}>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{label}</p>
-                    <div className="flex items-center gap-3">
-                      <input type="number" min={0}
-                        className="w-32 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder={t('salary.amountPlaceholder')}
-                        value={minVal ?? ''}
-                        onChange={e => {
+
+                const renderAmountInput = (
+                  key: typeof minKey | typeof maxKey,
+                  fixedKey: typeof minFixedKey | typeof maxFixedKey,
+                  bonusKey: typeof minBonusKey | typeof maxBonusKey,
+                  placeholder: string,
+                  clearAlso?: Partial<Application>,
+                ) => {
+                  const fixedVal = draft[fixedKey]
+                  const bonusVal = draft[bonusKey]
+                  const hasBreakdown = fixedVal != null || bonusVal != null
+                  return (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input type="number" min={0} readOnly={hasBreakdown}
+                        className={`w-28 rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${hasBreakdown ? 'bg-gray-50 text-gray-500 border-gray-200' : 'border-gray-200'}`}
+                        placeholder={placeholder}
+                        value={draft[key] ?? ''}
+                        onChange={hasBreakdown ? undefined : e => {
                           const val = e.target.value === '' ? null : Number(e.target.value)
-                          setDraft(d => ({ ...d, [minKey]: val, ...(val === null ? { [maxKey]: null } : {}) }))
+                          setDraft(d => ({ ...d, [key]: val, ...(val === null && clearAlso ? clearAlso : {}) }))
                         }}
                       />
+                      {hasBreakdown ? (
+                        <>
+                          <span className="text-xs text-gray-400">=</span>
+                          <input type="number" min={0}
+                            className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder={t('salary.fixed')}
+                            value={fixedVal ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? null : Number(e.target.value)
+                              setDraft(d => ({ ...d, [fixedKey]: val, [key]: (val ?? 0) + (d[bonusKey] ?? 0) }))
+                            }}
+                          />
+                          <span className="text-xs text-gray-400">+</span>
+                          <input type="number" min={0}
+                            className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder={t('salary.bonus')}
+                            value={bonusVal ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? null : Number(e.target.value)
+                              setDraft(d => ({ ...d, [bonusKey]: val, [key]: (d[fixedKey] ?? 0) + (val ?? 0) }))
+                            }}
+                          />
+                          <button type="button" className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+                            onClick={() => setDraft(d => ({ ...d, [fixedKey]: null, [bonusKey]: null }))}>
+                            {t('salary.breakdownToggleOff')}
+                          </button>
+                        </>
+                      ) : (
+                        <button type="button" className="text-xs text-indigo-500 hover:text-indigo-700 whitespace-nowrap"
+                          disabled={draft[key] == null}
+                          onClick={() => setDraft(d => ({ ...d, [fixedKey]: d[key] ?? 0, [bonusKey]: 0 }))}>
+                          {t('salary.breakdownToggleOn')}
+                        </button>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <div key={minKey} className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{label}</p>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {renderAmountInput(minKey, minFixedKey, minBonusKey, t('salary.amountPlaceholder'))}
                       <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                         <input type="checkbox" checked={hasRange}
                           className="rounded border-gray-300 text-indigo-600"
                           disabled={minVal == null}
-                          onChange={e => setDraft(d => ({ ...d, [maxKey]: e.target.checked ? (minVal ?? 0) : null }))}
+                          onChange={e => setDraft(d => ({
+                            ...d,
+                            [maxKey]: e.target.checked ? (minVal ?? 0) : null,
+                            ...(e.target.checked ? {} : { [maxFixedKey]: null, [maxBonusKey]: null }),
+                          }))}
                         />
                         {t('salary.rangeToggle')}
                       </label>
-                      {hasRange && (
-                        <input type="number" min={0}
-                          className="w-32 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder={t('salary.amountMaxPlaceholder')}
-                          value={maxVal ?? ''}
-                          onChange={e => setDraft(d => ({ ...d, [maxKey]: e.target.value === '' ? null : Number(e.target.value) }))}
-                        />
-                      )}
                     </div>
+                    {hasRange && renderAmountInput(maxKey, maxFixedKey, maxBonusKey, t('salary.amountMaxPlaceholder'))}
+                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pt-1">
+                      <input type="checkbox" checked={!!draft[carKey]}
+                        className="rounded border-gray-300 text-indigo-600"
+                        onChange={e => setDraft(d => ({ ...d, [carKey]: e.target.checked }))}
+                      />
+                      <Car className="h-3.5 w-3.5 text-gray-400" />
+                      {carLabel}
+                    </label>
                   </div>
                 )
               })}
@@ -1987,20 +2056,43 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                   {t('salary.mismatchWarning')}
                 </div>
               )}
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{t('salary.expectation')}</p>
-                <p className={`text-sm ${app?.salary_mismatch ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                  {formatSalaryRange(app?.salary_expectation_min, app?.salary_expectation_max, app?.salary_currency, locale)
-                    ?? <span className="text-gray-400 italic font-normal">{t('salary.notSet')}</span>}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{t('salary.budget')}</p>
-                <p className={`text-sm ${app?.salary_mismatch ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                  {formatSalaryRange(app?.salary_budget_min, app?.salary_budget_max, app?.salary_currency, locale)
-                    ?? <span className="text-gray-400 italic font-normal">{t('salary.notSet')}</span>}
-                </p>
-              </div>
+              {([
+                ['salary_expectation_min', 'salary_expectation_max',
+                 'salary_expectation_min_fixed', 'salary_expectation_min_bonus',
+                 'salary_expectation_max_fixed', 'salary_expectation_max_bonus',
+                 t('salary.expectation'), 'salary_expectation_company_car', t('salary.companyCarExpectation')],
+                ['salary_budget_min', 'salary_budget_max',
+                 'salary_budget_min_fixed', 'salary_budget_min_bonus',
+                 'salary_budget_max_fixed', 'salary_budget_max_bonus',
+                 t('salary.budget'), 'salary_budget_company_car', t('salary.companyCarBudget')],
+              ] as const).map(([minKey, maxKey, minFixedKey, minBonusKey, maxFixedKey, maxBonusKey, label, carKey, carLabel]) => {
+                const isRange = app?.[maxKey] != null
+                return (
+                  <div key={minKey}>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                      {label}
+                      {app?.[carKey] && (
+                        <span title={carLabel}><Car className="h-3.5 w-3.5 text-gray-400" /></span>
+                      )}
+                    </p>
+                    <p className={`text-sm ${app?.salary_mismatch ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                      {formatSalaryRange(app?.[minKey], app?.[maxKey], app?.salary_currency, locale)
+                        ?? <span className="text-gray-400 italic font-normal">{t('salary.notSet')}</span>}
+                    </p>
+                    {app?.[minFixedKey] != null && app?.[minBonusKey] != null && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {isRange && `${t('salary.breakdownLabelMin')}: `}
+                        {formatCurrencyAmount(app[minFixedKey]!, app?.salary_currency, locale)} {t('salary.fixed').toLowerCase()} + {formatCurrencyAmount(app[minBonusKey]!, app?.salary_currency, locale)} {t('salary.bonus').toLowerCase()}
+                      </p>
+                    )}
+                    {app?.[maxFixedKey] != null && app?.[maxBonusKey] != null && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {t('salary.breakdownLabelMax')}: {formatCurrencyAmount(app[maxFixedKey]!, app?.salary_currency, locale)} {t('salary.fixed').toLowerCase()} + {formatCurrencyAmount(app[maxBonusKey]!, app?.salary_currency, locale)} {t('salary.bonus').toLowerCase()}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
             </>
           )}
         </div>

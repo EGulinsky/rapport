@@ -55,7 +55,15 @@
     "amountMaxPlaceholder": "Bis zu",
     "rangeToggle": "Als Spanne eingeben",
     "mismatchWarning": "Das Budget des Unternehmens liegt unter deiner Gehaltsvorstellung.",
-    "notSet": "Nicht angegeben"
+    "notSet": "Nicht angegeben",
+    "fixed": "Fixum",
+    "bonus": "Bonus",
+    "breakdownToggleOn": "+ Fixum/Bonus",
+    "breakdownToggleOff": "Ein Betrag",
+    "breakdownLabelMin": "Min",
+    "breakdownLabelMax": "Max",
+    "companyCarExpectation": "Ich hätte gerne einen Firmenwagen",
+    "companyCarBudget": "Firmenwagen wird angeboten"
   },
   "overview": {
     "status": "Status",

@@ -150,6 +150,16 @@ class ApplicationBase(BaseModel):
     salary_expectation_max: Optional[int] = None
     salary_budget_min: Optional[int] = None
     salary_budget_max: Optional[int] = None
+    salary_expectation_min_fixed: Optional[int] = None
+    salary_expectation_min_bonus: Optional[int] = None
+    salary_expectation_max_fixed: Optional[int] = None
+    salary_expectation_max_bonus: Optional[int] = None
+    salary_budget_min_fixed: Optional[int] = None
+    salary_budget_min_bonus: Optional[int] = None
+    salary_budget_max_fixed: Optional[int] = None
+    salary_budget_max_bonus: Optional[int] = None
+    salary_expectation_company_car: bool = False
+    salary_budget_company_car: bool = False
 
 
 class ApplicationCreate(ApplicationBase):
@@ -188,6 +198,16 @@ class ApplicationUpdate(BaseModel):
     salary_expectation_max: Optional[int] = None
     salary_budget_min: Optional[int] = None
     salary_budget_max: Optional[int] = None
+    salary_expectation_min_fixed: Optional[int] = None
+    salary_expectation_min_bonus: Optional[int] = None
+    salary_expectation_max_fixed: Optional[int] = None
+    salary_expectation_max_bonus: Optional[int] = None
+    salary_budget_min_fixed: Optional[int] = None
+    salary_budget_min_bonus: Optional[int] = None
+    salary_budget_max_fixed: Optional[int] = None
+    salary_budget_max_bonus: Optional[int] = None
+    salary_expectation_company_car: Optional[bool] = None
+    salary_budget_company_car: Optional[bool] = None
 
 
 class ApplicationRead(ApplicationBase):

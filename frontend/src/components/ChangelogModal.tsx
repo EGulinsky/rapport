@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.5.1',
+    date: '2026-07-17',
+    changes: [
+      'Salary tab: each amount (expectation min/max, budget min/max) can now optionally be broken down into a fixed salary + a bonus instead of one lump figure — enter either, your choice, per amount.',
+      'Salary tab: added an optional "company car" detail, tracked separately for what you\'d like (expectation side) and what\'s offered (budget side).',
+    ],
+  },
+  {
     version: '4.5.0',
     date: '2026-07-17',
     changes: [

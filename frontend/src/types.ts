@@ -77,6 +77,16 @@ export interface Application {
   salary_expectation_max?: number | null
   salary_budget_min?: number | null
   salary_budget_max?: number | null
+  salary_expectation_min_fixed?: number | null
+  salary_expectation_min_bonus?: number | null
+  salary_expectation_max_fixed?: number | null
+  salary_expectation_max_bonus?: number | null
+  salary_budget_min_fixed?: number | null
+  salary_budget_min_bonus?: number | null
+  salary_budget_max_fixed?: number | null
+  salary_budget_max_bonus?: number | null
+  salary_expectation_company_car?: boolean | null
+  salary_budget_company_car?: boolean | null
   salary_mismatch: boolean
 }
 

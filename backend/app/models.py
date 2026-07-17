@@ -185,6 +185,21 @@ class Application(Base):
     salary_budget_min      = Column(Integer, nullable=True)
     salary_budget_max      = Column(Integer, nullable=True)
 
+    # Optional per-slot breakdown: when set, the corresponding plain total
+    # above is kept equal to fixed + bonus (enforced in applications.py,
+    # not silently rewritten) rather than being a redundant free number.
+    salary_expectation_min_fixed = Column(Integer, nullable=True)
+    salary_expectation_min_bonus = Column(Integer, nullable=True)
+    salary_expectation_max_fixed = Column(Integer, nullable=True)
+    salary_expectation_max_bonus = Column(Integer, nullable=True)
+    salary_budget_min_fixed      = Column(Integer, nullable=True)
+    salary_budget_min_bonus      = Column(Integer, nullable=True)
+    salary_budget_max_fixed      = Column(Integer, nullable=True)
+    salary_budget_max_bonus      = Column(Integer, nullable=True)
+
+    salary_expectation_company_car = Column(Boolean, default=False)
+    salary_budget_company_car      = Column(Boolean, default=False)
+
     datum_bewerbung     = Column(Date, nullable=True)
     letztes_update      = Column(Date, nullable=True)
 

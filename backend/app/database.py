@@ -835,6 +835,18 @@ def _migrate_salary():
         cur.execute("ALTER TABLE applications ADD COLUMN salary_budget_min INTEGER")
     if "salary_budget_max" not in cols:
         cur.execute("ALTER TABLE applications ADD COLUMN salary_budget_max INTEGER")
+    for col in (
+        "salary_expectation_min_fixed", "salary_expectation_min_bonus",
+        "salary_expectation_max_fixed", "salary_expectation_max_bonus",
+        "salary_budget_min_fixed", "salary_budget_min_bonus",
+        "salary_budget_max_fixed", "salary_budget_max_bonus",
+    ):
+        if col not in cols:
+            cur.execute(f"ALTER TABLE applications ADD COLUMN {col} INTEGER")
+    if "salary_expectation_company_car" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_expectation_company_car BOOLEAN DEFAULT 0")
+    if "salary_budget_company_car" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN salary_budget_company_car BOOLEAN DEFAULT 0")
     conn.commit()
     conn.close()
 

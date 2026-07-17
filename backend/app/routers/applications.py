@@ -28,6 +28,17 @@ def _validate_salary_pair(min_v: Optional[int], max_v: Optional[int], label: str
                          f"{label}: Max muss >= Min sein")
 
 
+def _validate_salary_breakdown(fixed: Optional[int], bonus: Optional[int], total: Optional[int], label: str) -> None:
+    if fixed is None and bonus is None:
+        return
+    if fixed is None or bonus is None:
+        raise api_error(400, ErrorKey.APPLICATION_SALARY_RANGE_INVALID,
+                         f"{label}: Fixum und Bonus müssen beide gesetzt sein")
+    if total != fixed + bonus:
+        raise api_error(400, ErrorKey.APPLICATION_SALARY_RANGE_INVALID,
+                         f"{label}: Summe aus Fixum und Bonus muss dem Gesamtbetrag entsprechen")
+
+
 def _status_label(main: str, sub: str | None) -> str:
     label = MAIN_STATUS_LABELS.get(main, main)
     if sub:
@@ -425,6 +436,11 @@ def create_application(
     skip_linkedin_sync = data.pop("created_from_linkedin")
     _validate_salary_pair(data.get("salary_expectation_min"), data.get("salary_expectation_max"), "Gehaltsvorstellung")
     _validate_salary_pair(data.get("salary_budget_min"), data.get("salary_budget_max"), "Budget")
+    for slot, label in (
+        ("salary_expectation_min", "Gehaltsvorstellung (min)"), ("salary_expectation_max", "Gehaltsvorstellung (max)"),
+        ("salary_budget_min", "Budget (min)"), ("salary_budget_max", "Budget (max)"),
+    ):
+        _validate_salary_breakdown(data.get(f"{slot}_fixed"), data.get(f"{slot}_bonus"), data.get(slot), label)
     app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
     db.add(app)
@@ -473,6 +489,13 @@ def update_application(
     if {"salary_budget_min", "salary_budget_max"} & update_data.keys():
         _validate_salary_pair(_effective("salary_budget_min"), _effective("salary_budget_max"), "Budget")
 
+    for slot, label in (
+        ("salary_expectation_min", "Gehaltsvorstellung (min)"), ("salary_expectation_max", "Gehaltsvorstellung (max)"),
+        ("salary_budget_min", "Budget (min)"), ("salary_budget_max", "Budget (max)"),
+    ):
+        if {slot, f"{slot}_fixed", f"{slot}_bonus"} & update_data.keys():
+            _validate_salary_breakdown(_effective(f"{slot}_fixed"), _effective(f"{slot}_bonus"), _effective(slot), label)
+
     old_main = app.main_status
     old_sub  = app.sub_status
 
@@ -490,7 +513,12 @@ def update_application(
                     "ort", "is_headhunter",
                     "gespraech_1", "gespraech_2", "gespraech_3", "gespraech_4", "gespraech_5",
                     "salary_currency", "salary_expectation_min", "salary_expectation_max",
-                    "salary_budget_min", "salary_budget_max"}
+                    "salary_budget_min", "salary_budget_max",
+                    "salary_expectation_min_fixed", "salary_expectation_min_bonus",
+                    "salary_expectation_max_fixed", "salary_expectation_max_bonus",
+                    "salary_budget_min_fixed", "salary_budget_min_bonus",
+                    "salary_budget_max_fixed", "salary_budget_max_bonus",
+                    "salary_expectation_company_car", "salary_budget_company_car"}
     for f, v in update_data.items():
         if f in AUDIT_FIELDS:
             old_v = getattr(app, f, None)

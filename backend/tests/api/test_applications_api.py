@@ -281,6 +281,97 @@ class TestSalaryFields:
         assert resp.json()["salary_budget_max"] == 60000
 
 
+class TestSalaryBreakdown:
+    def test_positiv_anlegen_mit_fixum_und_bonus_wird_akzeptiert(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_expectation_min": 80000,
+            "salary_expectation_min_fixed": 65000, "salary_expectation_min_bonus": 15000,
+        })
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_expectation_min"] == 80000
+        assert body["salary_expectation_min_fixed"] == 65000
+        assert body["salary_expectation_min_bonus"] == 15000
+
+    def test_negativ_anlegen_summe_stimmt_nicht_mit_gesamtbetrag_ueberein(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_expectation_min": 80000,
+            "salary_expectation_min_fixed": 65000, "salary_expectation_min_bonus": 10000,
+        })
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "application.salary_range_invalid"
+
+    def test_negativ_anlegen_nur_fixum_ohne_bonus_wird_abgelehnt(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_expectation_min": 65000,
+            "salary_expectation_min_fixed": 65000,
+        })
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "application.salary_range_invalid"
+
+    def test_positiv_update_mit_fixum_und_bonus_wird_akzeptiert_und_auditiert(self, client, db_session):
+        app = application_factory(db_session, salary_budget_min=90000)
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={
+            "salary_budget_min_fixed": 70000, "salary_budget_min_bonus": 20000,
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["salary_budget_min_fixed"] == 70000
+        assert resp.json()["salary_budget_min_bonus"] == 20000
+        audit = (
+            db_session.query(models.AuditLog)
+            .filter_by(app_id=app.id, field="salary_budget_min_fixed")
+            .first()
+        )
+        assert audit is not None
+        assert audit.new_value == "70000"
+
+    def test_negativ_update_summe_stimmt_nicht_mit_bestehendem_gesamtbetrag_ueberein(self, client, db_session):
+        app = application_factory(db_session, salary_budget_min=90000)
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={
+            "salary_budget_min_fixed": 70000, "salary_budget_min_bonus": 15000,
+        })
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error_key"] == "application.salary_range_invalid"
+
+
+class TestCompanyCar:
+    def test_positiv_flags_werden_beim_anlegen_gespeichert(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_expectation_company_car": True,
+        })
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_expectation_company_car"] is True
+        assert body["salary_budget_company_car"] is False
+
+    def test_positiv_flag_kann_nachtraeglich_gesetzt_werden_und_wird_auditiert(self, client, db_session):
+        app = application_factory(db_session)
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"salary_budget_company_car": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["salary_budget_company_car"] is True
+        audit = (
+            db_session.query(models.AuditLog)
+            .filter_by(app_id=app.id, field="salary_budget_company_car")
+            .first()
+        )
+        assert audit is not None
+
+
 class TestBulkDeleteEvents:
     def test_positiv_mehrere_events_werden_geloescht(self, client, db_session):
         app = application_factory(db_session)

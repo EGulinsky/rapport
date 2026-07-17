@@ -55,7 +55,15 @@
     "amountMaxPlaceholder": "Up to",
     "rangeToggle": "Enter a range",
     "mismatchWarning": "The company's budget is below your expectation.",
-    "notSet": "Not set"
+    "notSet": "Not set",
+    "fixed": "Fixed",
+    "bonus": "Bonus",
+    "breakdownToggleOn": "+ Fixed/Bonus",
+    "breakdownToggleOff": "One amount",
+    "breakdownLabelMin": "Min",
+    "breakdownLabelMax": "Max",
+    "companyCarExpectation": "I'd like a company car",
+    "companyCarBudget": "Company car offered"
   },
   "overview": {
     "status": "Status",
