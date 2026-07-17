@@ -142,7 +142,7 @@ export const api = {
       return request<ContactWithApp[]>(`/contacts/${qs}`)
     },
 
-    add: (appId: number, data: Partial<Contact>) =>
+    add: (appId: number, data: Omit<Partial<Contact>, 'phones'> & { phones?: { number: string; type: string }[] }) =>
       request<Contact>(`/applications/${appId}/contacts`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -151,7 +151,7 @@ export const api = {
     link: (appId: number, contactId: number) =>
       request<Contact>(`/applications/${appId}/contacts/${contactId}`, { method: 'PUT' }),
 
-    update: (appId: number, contactId: number, data: Partial<Contact>) =>
+    update: (appId: number, contactId: number, data: Omit<Partial<Contact>, 'phones'> & { phones?: { number: string; type: string }[] }) =>
       request<Contact>(`/applications/${appId}/contacts/${contactId}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
@@ -166,16 +166,22 @@ export const api = {
         body: JSON.stringify({ ids, all }),
       }),
 
-    patch: (id: number, data: Partial<Contact> & { company_profile_id?: number | null }) =>
+    patch: (id: number, data: Omit<Partial<Contact>, 'phones'> & { company_profile_id?: number | null; phones?: { number: string; type: string }[] }) =>
       request<{ ok: boolean }>(`/contacts/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
 
-    create: (data: { name: string; vorname?: string; email?: string; telefon?: string; firma?: string; company_profile_id?: number; rolle?: string; typ?: string; linkedin_url?: string }) =>
+    create: (data: { name: string; vorname?: string; email?: string; phones?: { number: string; type: string }[]; firma?: string; company_profile_id?: number; rolle?: string; typ?: string; linkedin_url?: string }) =>
       request<{ id: number; name: string; firma: string | null; company_profile_id: number | null }>('/contacts/', {
         method: 'POST',
         body: JSON.stringify(data),
+      }),
+
+    syncICloud: (force: boolean, contactIds?: number[]) =>
+      request<{ synced: number[]; not_found: number[]; errors: string[] }>('/sync/icloud/contacts/sync', {
+        method: 'POST',
+        body: JSON.stringify({ contact_ids: contactIds ?? null, force }),
       }),
 
     searchICloud: (q: string) =>

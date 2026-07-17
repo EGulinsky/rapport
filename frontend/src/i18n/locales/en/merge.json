@@ -12,7 +12,7 @@
   "mergeAppsTitle": "Merge {{count}} applications",
   "mergeAppsFooter": "Events and contacts from all entries are merged. Non-base entries are then deleted. Future syncs will recognize the old names and won't create duplicates.",
   "mergeContactsTitle": "Merge {{count}} contacts",
-  "mergeContactsFooter": "Linked applications are transferred to the base contact. Non-base entries are then deleted.",
+  "mergeContactsFooter": "Linked applications are transferred to the base contact. Phone numbers from all entries are combined (duplicates dropped). Non-base entries are then deleted.",
   "mergeCompaniesTitle": "Merge {{count}} companies",
   "mergeCompaniesWinnerLabel": "Base entry (ID and applications are kept)",
   "mergeCompaniesFooter": "All applications of the non-base companies are transferred to the base company. The non-base entries are then deleted.",
@@ -42,7 +42,6 @@
   "contactFields": {
     "name": "Name",
     "email": "Email",
-    "telefon": "Phone",
     "linkedin_url": "LinkedIn",
     "firma": "Company",
     "rolle": "Role",

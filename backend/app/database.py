@@ -1020,6 +1020,50 @@ def get_first_user_id(db) -> int | None:
     return row[0] if row else None
 
 
+def _migrate_contact_phones():
+    """Contacts moved from a single telefon string to a typed contact_phones
+    child table (multiple numbers, like iCloud/vCard). Adds the icloud_last_synced_at
+    column and, if the legacy telefon column is still present, backfills one
+    ContactPhone(type='other') row per non-empty legacy value. Leaves the legacy
+    column in place (no DROP COLUMN) — same forward-only convention as every
+    other migration here."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    cur.execute("PRAGMA table_info(contacts)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "icloud_last_synced_at" not in cols:
+        cur.execute("ALTER TABLE contacts ADD COLUMN icloud_last_synced_at TIMESTAMP")
+
+    if "telefon" in cols:
+        cur.execute("SELECT id, telefon, user_id FROM contacts WHERE telefon IS NOT NULL AND trim(telefon) != ''")
+        rows = cur.fetchall()
+        migrated = 0
+        for contact_id, telefon, user_id in rows:
+            exists = cur.execute(
+                "SELECT 1 FROM contact_phones WHERE contact_id=? AND number=?",
+                (contact_id, telefon),
+            ).fetchone()
+            if exists:
+                continue
+            cur.execute(
+                "INSERT INTO contact_phones (contact_id, number, type, user_id) VALUES (?,?,?,?)",
+                (contact_id, telefon, "other", user_id),
+            )
+            migrated += 1
+        if migrated:
+            print(f"[migration] Migrated {migrated} legacy contact phone number(s) into contact_phones")
+
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     from app import models  # noqa: F401
     _migrate_status_fields()
@@ -1044,6 +1088,7 @@ def init_db():
     _migrate_application_ort()
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
+    _migrate_contact_phones()
     _migrate_user_profile()
     _migrate_cv_extracted_text_cache()
     _migrate_linkedin_profile_cache()

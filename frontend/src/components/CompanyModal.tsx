@@ -138,8 +138,10 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
     if (!newContactDraft.name) return
     setSavingNewContact(true)
     try {
+      const { telefon, ...rest } = newContactDraft
       const contact = await api.contacts.create({
-        ...newContactDraft,
+        ...rest,
+        phones: telefon.trim() ? [{ number: telefon.trim(), type: 'other' }] : [],
         firma: company?.name_display ?? company?.name_norm,
         company_profile_id: id,
       })
@@ -707,9 +709,9 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                               <Mail className="h-3 w-3" />{contact.email}
                             </span>
                           )}
-                          {contact.telefon && (
+                          {(contact.phones?.length ?? 0) > 0 && (
                             <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                              <Phone className="h-3 w-3" />{contact.telefon}
+                              <Phone className="h-3 w-3" />{contact.phones![0].number}
                             </span>
                           )}
                           {contact.linkedin_url && (

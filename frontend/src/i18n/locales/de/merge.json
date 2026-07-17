@@ -12,7 +12,7 @@
   "mergeAppsTitle": "{{count}} Bewerbungen zusammenführen",
   "mergeAppsFooter": "Ereignisse und Kontakte aller Einträge werden zusammengeführt. Nicht-Basis-Einträge werden danach gelöscht. Zukünftige Syncs erkennen die alten Bezeichnungen und legen keine Duplikate mehr an.",
   "mergeContactsTitle": "{{count}} Kontakte zusammenführen",
-  "mergeContactsFooter": "Verknüpfte Bewerbungen werden auf den Basis-Kontakt übertragen. Nicht-Basis-Einträge werden danach gelöscht.",
+  "mergeContactsFooter": "Verknüpfte Bewerbungen werden auf den Basis-Kontakt übertragen. Telefonnummern aller Einträge werden zusammengeführt (Duplikate entfernt). Nicht-Basis-Einträge werden danach gelöscht.",
   "mergeCompaniesTitle": "{{count}} Firmen zusammenführen",
   "mergeCompaniesWinnerLabel": "Basis-Eintrag (ID und Bewerbungen bleiben erhalten)",
   "mergeCompaniesFooter": "Alle Bewerbungen der nicht-Basis-Firmen werden auf die Basis-Firma übertragen. Die nicht-Basis-Einträge werden danach gelöscht.",
@@ -42,7 +42,6 @@
   "contactFields": {
     "name": "Name",
     "email": "E-Mail",
-    "telefon": "Telefon",
     "linkedin_url": "LinkedIn",
     "firma": "Firma",
     "rolle": "Rolle",

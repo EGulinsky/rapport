@@ -76,7 +76,7 @@ def _app_score(a: models.Application) -> int:
 
 
 def _contact_score(c: models.Contact) -> int:
-    filled = sum(1 for v in [c.email, c.telefon, c.linkedin_url, c.notizen, c.rolle] if v)
+    filled = sum(1 for v in [c.email, c.phones, c.linkedin_url, c.notizen, c.rolle] if v)
     return len(c.applications) * 3 + filled
 
 

@@ -1430,17 +1430,27 @@ def _parse_vcard(raw_vcard: str) -> Optional[dict]:
             vorname_val = given or None
 
     email_val = str(card.email.value) if hasattr(card, "email") else None
-    tel_val = None
-    _tel_props = card.contents.get("tel", [])
-    if _tel_props:
-        _cell = None
-        _first = str(_tel_props[0].value)
-        for _tp in _tel_props:
-            _type_str = str(getattr(_tp, "params", {}).get("TYPE", "")).upper()
-            if any(t in _type_str for t in ("CELL", "IPHONE", "MOBILE")):
-                _cell = str(_tp.value)
-                break
-        tel_val = _cell or _first
+
+    def _vcard_phone_type(type_str: str) -> str:
+        if any(t in type_str for t in ("CELL", "IPHONE", "MOBILE")):
+            return "mobile"
+        if "HOME" in type_str:
+            return "home"
+        if "WORK" in type_str:
+            return "work"
+        if "MAIN" in type_str or "PREF" in type_str:
+            return "main"
+        return "other"
+
+    phones_val: list[dict] = []
+    _seen_numbers: set[str] = set()
+    for _tp in card.contents.get("tel", []):
+        _number = str(_tp.value).strip()
+        if not _number or _number in _seen_numbers:
+            continue
+        _seen_numbers.add(_number)
+        _type_str = str(getattr(_tp, "params", {}).get("TYPE", "")).upper()
+        phones_val.append({"number": _number, "type": _vcard_phone_type(_type_str)})
     org_val = None
     if hasattr(card, "org"):
         parts = card.org.value
@@ -1456,9 +1466,95 @@ def _parse_vcard(raw_vcard: str) -> Optional[dict]:
             break
 
     return {
-        "name": name, "vorname": vorname_val, "fn": fn, "email": email_val, "telefon": tel_val,
+        "name": name, "vorname": vorname_val, "fn": fn, "email": email_val, "phones": phones_val,
         "firma": org_val, "rolle": title_val, "linkedin_url": linkedin_url,
     }
+
+
+def _merge_parsed_contact(
+    contact: "models.Contact", parsed: dict, db: Session, user_id: Optional[int], force: bool = False
+) -> list[str]:
+    """Apply a freshly parsed vCard onto an EXISTING contact — shared by every
+    sync path that discovers new info for an already-known contact (automatic
+    CardDAV address-book sync, mail/calendar-triggered contact discovery, and
+    the explicit per-contact Sync/Re-Sync action).
+
+    force=False ("Sync" / passive backfill): only fills fields that are
+    currently empty, and only ADDS phone numbers not already present — never
+    overwrites or removes existing data. This is the long-standing automatic-
+    sync behavior.
+
+    force=True ("Re-Sync"): overwrites name/vorname/rolle/linkedin_url/firma
+    (+ company link) directly from iCloud, and replaces the phone list
+    wholesale with the freshly parsed set — an explicit user request to make
+    the contact match iCloud right now.
+
+    Returns the list of changed field names (used for the Sync/Re-Sync result
+    message and to decide whether icloud_last_synced_at should be bumped).
+    """
+    from app.dedup import norm_firma
+
+    changed: list[str] = []
+
+    def _set_scalar(field: str, new_value):
+        if not new_value:
+            return
+        old_value = getattr(contact, field)
+        if not force and old_value:
+            return
+        if str(old_value or "") == str(new_value):
+            return
+        add_audit(db, "update", "sync", contact_id=contact.id,
+                  field=field, old_value=old_value, new_value=new_value,
+                  reason_key="contact_from_icloud_addressbook", user_id=user_id)
+        setattr(contact, field, new_value)
+        changed.append(field)
+
+    # vorname fill-if-empty is deliberately NOT handled by _set_scalar: a legacy
+    # contact whose name still holds the pre-split full display name needs BOTH
+    # vorname and name corrected together (see the dedicated block in each
+    # non-force call site) — setting vorname alone there would leave name
+    # stale/mismatched. force=True has no such ambiguity (name is left as-is,
+    # only vorname is refreshed), so it's safe to handle generically here.
+    if force:
+        _set_scalar("vorname", parsed.get("vorname"))
+    _set_scalar("linkedin_url", parsed.get("linkedin_url"))
+    _set_scalar("rolle", parsed.get("rolle"))
+
+    org_val = parsed.get("firma")
+    if org_val and (force or not contact.firma):
+        company_profile_id = None
+        cp = db.query(models.CompanyProfile).filter_by(name_norm=norm_firma(org_val)).first()
+        if cp:
+            company_profile_id = cp.id
+        if contact.firma != org_val or contact.company_profile_id != company_profile_id:
+            add_audit(db, "update", "sync", contact_id=contact.id,
+                      field="firma", old_value=contact.firma, new_value=org_val,
+                      reason_key="contact_from_icloud_addressbook", user_id=user_id)
+            contact.firma = org_val
+            contact.company_profile_id = company_profile_id
+            changed.append("firma")
+
+    parsed_phones = parsed.get("phones") or []
+    if force:
+        if parsed_phones or contact.phones:
+            contact.phones.clear()
+            for p in parsed_phones:
+                contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
+            changed.append("phones")
+    else:
+        existing_norm = {_normalize_phone(p.number) for p in contact.phones}
+        added = False
+        for p in parsed_phones:
+            norm = _normalize_phone(p["number"])
+            if norm and norm not in existing_norm:
+                contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
+                existing_norm.add(norm)
+                added = True
+        if added:
+            changed.append("phones")
+
+    return changed
 
 
 async def _sync_contacts_http(
@@ -1491,7 +1587,6 @@ async def _sync_contacts_http(
             vorname_val = parsed["vorname"]
             fn = parsed["fn"]
             email_val = parsed["email"]
-            tel_val = parsed["telefon"]
             org_val = parsed["firma"]
             title_val = parsed["rolle"]
             linkedin_url = parsed["linkedin_url"]
@@ -1507,26 +1602,7 @@ async def _sync_contacts_http(
                 # finden und fälschlich als Duplikat neu anlegen.
                 existing = db.query(models.Contact).filter_by(name=fn).first()
             if existing:
-                if linkedin_url and not existing.linkedin_url:
-                    add_audit(db, "update", "sync", contact_id=existing.id,
-                              field="linkedin_url", old_value=None, new_value=linkedin_url,
-                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
-                    existing.linkedin_url = linkedin_url
-                if tel_val and not existing.telefon:
-                    add_audit(db, "update", "sync", contact_id=existing.id,
-                              field="telefon", old_value=None, new_value=tel_val,
-                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
-                    existing.telefon = tel_val
-                if org_val and not existing.firma:
-                    add_audit(db, "update", "sync", contact_id=existing.id,
-                              field="firma", old_value=None, new_value=org_val,
-                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
-                    existing.firma = org_val
-                if title_val and not existing.rolle:
-                    add_audit(db, "update", "sync", contact_id=existing.id,
-                              field="rolle", old_value=None, new_value=title_val,
-                              reason_key="contact_from_icloud_addressbook", user_id=user_id)
-                    existing.rolle = title_val
+                _merge_parsed_contact(existing, parsed, db, user_id, force=False)
                 if vorname_val and not existing.vorname:
                     # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
                     # nutzt das strukturierte N:-Feld der vCard (echte Adress-
@@ -1580,10 +1656,12 @@ async def _sync_contacts_http(
                 continue
 
             contact = models.Contact(
-                name=name, vorname=vorname_val, email=email_val, telefon=tel_val,
+                name=name, vorname=vorname_val, email=email_val,
                 firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
                 company_profile_id=company_profile_id, user_id=user_id,
             )
+            for p in parsed.get("phones") or []:
+                contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
             db.add(contact)
             db.flush()
             if mention_app_ids:
@@ -1668,11 +1746,16 @@ async def search_contacts(
     return results
 
 
+class ContactPhoneIn(BaseModel):
+    number: str
+    type: str = "other"
+
+
 class ContactImportCandidate(BaseModel):
     name: str
     vorname: Optional[str] = None
     email: Optional[str] = None
-    telefon: Optional[str] = None
+    phones: list[ContactPhoneIn] = []
     firma: Optional[str] = None
     rolle: Optional[str] = None
     linkedin_url: Optional[str] = None
@@ -1716,10 +1799,12 @@ def import_contacts(
                 existing.applications.append(app_obj)
             continue
         contact = models.Contact(
-            name=cand.name, vorname=cand.vorname, email=cand.email, telefon=cand.telefon,
+            name=cand.name, vorname=cand.vorname, email=cand.email,
             firma=cand.firma, rolle=cand.rolle, linkedin_url=cand.linkedin_url,
             user_id=current_user.id,
         )
+        for p in cand.phones:
+            contact.phones.append(models.ContactPhone(number=p.number, type=p.type, user_id=current_user.id))
         db.add(contact)
         db.flush()
         if app_obj:
@@ -1732,6 +1817,71 @@ def import_contacts(
 
     db.commit()
     return {"imported": imported, "skipped": skipped}
+
+
+class ContactsSyncPayload(BaseModel):
+    contact_ids: Optional[list[int]] = None
+    force: bool = False
+
+
+@router.post("/contacts/sync")
+async def sync_contacts_icloud(
+    body: ContactsSyncPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Per-contact "Sync"/"Re-Sync": re-matches the given (or, if contact_ids
+    is omitted, all of the user's) contacts against the current iCloud address
+    book. force=False only adds new phone numbers and fills currently-empty
+    fields (the existing passive-sync behavior); force=True overwrites the
+    contact wholesale from the matched vCard — an explicit "make this match
+    iCloud now" action, unlike the automatic sync's conservative default.
+    """
+    cfg = _get_cfg(db)
+    if not cfg:
+        raise HTTPException(status_code=400, detail="iCloud nicht konfiguriert")
+
+    if body.contact_ids:
+        contacts = db.query(models.Contact).filter(models.Contact.id.in_(body.contact_ids)).all()
+    else:
+        contacts = db.query(models.Contact).all()
+    if not contacts:
+        return {"synced": [], "not_found": [], "errors": []}
+
+    try:
+        vcards_raw = await fetch_all_vcards(cfg)
+    except Exception as e:
+        return {"synced": [], "not_found": [], "errors": [f"CardDAV HTTP-Fehler: {e}"]}
+
+    parsed_cards = [p for p in (_parse_vcard(v) for v in vcards_raw) if p]
+    by_email = {p["email"].lower(): p for p in parsed_cards if p["email"]}
+    by_name: dict[str, dict] = {}
+    for p in parsed_cards:
+        by_name.setdefault(p["name"], p)
+        by_name.setdefault(p["fn"], p)
+
+    synced: list[int] = []
+    not_found: list[int] = []
+    errors: list[str] = []
+
+    for contact in contacts:
+        try:
+            match = None
+            if contact.email:
+                match = by_email.get(contact.email.lower())
+            if not match:
+                match = by_name.get(contact.name)
+            if not match:
+                not_found.append(contact.id)
+                continue
+            _merge_parsed_contact(contact, match, db, current_user.id, force=body.force)
+            contact.icloud_last_synced_at = datetime.now(timezone.utc)
+            synced.append(contact.id)
+        except Exception as e:
+            errors.append(f"{contact.name}: {e}")
+
+    db.commit()
+    return {"synced": synced, "not_found": not_found, "errors": errors}
 
 
 # ── Anrufliste (via Rapport Agent) ─────────────────────────────────────────
@@ -1872,7 +2022,7 @@ async def _do_icloud_calls(user_id: int) -> dict:
         total = len(calls)
         update_progress("icloud_calls", 0, total, t("calls_found", lang, count=total))
 
-        all_contacts = db.query(models.Contact).filter(models.Contact.telefon != None).all()  # noqa
+        all_contacts = db.query(models.Contact).join(models.ContactPhone).distinct().all()
 
         for i, call in enumerate(calls):
             update_progress("icloud_calls", i, total, t("call_progress", lang, current=i + 1, total=total))
@@ -1898,7 +2048,7 @@ async def _do_icloud_calls(user_id: int) -> dict:
             matched_contacts: list[models.Contact] = []
             if phone_raw:
                 for c in all_contacts:
-                    if c.telefon and _phones_match(phone_raw, c.telefon):
+                    if any(_phones_match(phone_raw, p.number) for p in c.phones):
                         matched_contacts.append(c)
 
             if not matched_contacts and call_name:

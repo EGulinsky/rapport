@@ -247,7 +247,6 @@ class Contact(Base):
     name            = Column(String, nullable=False)
     vorname         = Column(String, nullable=True)
     email           = Column(String, nullable=True)
-    telefon         = Column(String, nullable=True)
     linkedin_url    = Column(String, nullable=True)
     foto_url        = Column(String, nullable=True)
 
@@ -258,12 +257,26 @@ class Contact(Base):
     notizen         = Column(Text, nullable=True)
     letzter_kontakt = Column(Date, nullable=True)
 
+    icloud_last_synced_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     company_profile_id = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
     company_profile    = relationship("CompanyProfile", foreign_keys=[company_profile_id], back_populates="direct_contacts")
 
     applications    = relationship("Application", secondary="contact_application", back_populates="contacts")
+    phones          = relationship("ContactPhone", cascade="all, delete-orphan", order_by="ContactPhone.id")
+
+
+class ContactPhone(Base):
+    __tablename__ = "contact_phones"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    contact_id      = Column(Integer, ForeignKey("contacts.id"), nullable=False, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    number          = Column(String, nullable=False)
+    type            = Column(String, nullable=False, default="other")   # mobile|home|work|main|other
 
 
 class MergeAlias(Base):

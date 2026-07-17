@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink } from 'lucide-react'
+import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp } from '../types'
 import { CompanyLogo } from './CompanyLogo'
+import { PhoneListEditor, type PhoneEntry } from './PhoneListEditor'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
 import { errorMessage } from '../i18n/errorMessage'
@@ -31,7 +32,7 @@ interface EditState {
   vorname: string
   name: string
   email: string
-  telefon: string
+  phones: PhoneEntry[]
   linkedin_url: string
   rolle: string
   typ: string
@@ -45,7 +46,7 @@ function toEditState(c: ContactWithApp): EditState {
     vorname: c.vorname ?? '',
     name: c.name,
     email: c.email ?? '',
-    telefon: c.telefon ?? '',
+    phones: (c.phones ?? []).map(p => ({ number: p.number, type: p.type })),
     linkedin_url: c.linkedin_url ?? '',
     rolle: c.rolle ?? '',
     typ: c.typ ?? '',
@@ -69,6 +70,8 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
   const [editState, setEditState] = useState<EditState | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState<'sync' | 'resync' | null>(null)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -104,8 +107,12 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
     setSaveError(null)
   }
 
-  function set(field: keyof EditState, value: string) {
+  function set(field: keyof Omit<EditState, 'phones'>, value: string) {
     setEditState(prev => prev ? { ...prev, [field]: value } : prev)
+  }
+
+  function setPhones(phones: PhoneEntry[]) {
+    setEditState(prev => prev ? { ...prev, phones } : prev)
   }
 
   async function saveEdit() {
@@ -117,7 +124,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
         name: editState.name || contact.name,
         vorname: editState.vorname || undefined,
         email: editState.email || undefined,
-        telefon: editState.telefon || undefined,
+        phones: editState.phones.filter(p => p.number.trim()),
         linkedin_url: editState.linkedin_url || undefined,
         rolle: editState.rolle || undefined,
         typ: editState.typ || undefined,
@@ -133,6 +140,28 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
       setSaveError(errorMessage(e, t))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function runSync(force: boolean) {
+    if (!contact) return
+    setSyncing(force ? 'resync' : 'sync')
+    setSyncResult(null)
+    try {
+      const result = await api.contacts.syncICloud(force, [contact.id])
+      if (result.not_found.includes(contact.id)) {
+        setSyncResult(t('contactModal.syncNotFound'))
+      } else if (result.errors.length > 0) {
+        setSyncResult(result.errors[0])
+      } else {
+        setSyncResult(force ? t('contactModal.resyncDone') : t('contactModal.syncDone'))
+      }
+      await load()
+      onChanged?.()
+    } catch (e) {
+      setSyncResult(errorMessage(e, t))
+    } finally {
+      setSyncing(null)
     }
   }
 
@@ -155,6 +184,11 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 leading-tight">{displayName(contact)}</h2>
                   {contact.rolle && <p className="text-sm text-gray-500">{contact.rolle}</p>}
+                  {contact.icloud_last_synced_at && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {t('contactModal.lastSynced', { date: formatDate(contact.icloud_last_synced_at, locale) })}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -163,13 +197,33 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           </div>
           <div className="flex items-center gap-2 ml-4 shrink-0">
             {contact && !editing && (
-              <button
-                onClick={startEdit}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                {t('contactModal.edit')}
-              </button>
+              <>
+                <button
+                  onClick={() => runSync(false)}
+                  disabled={syncing !== null}
+                  title={t('contactModal.syncHint')}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={clsx('h-3.5 w-3.5', syncing === 'sync' && 'animate-spin')} />
+                  {t('contactModal.sync')}
+                </button>
+                <button
+                  onClick={() => runSync(true)}
+                  disabled={syncing !== null}
+                  title={t('contactModal.resyncHint')}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={clsx('h-3.5 w-3.5', syncing === 'resync' && 'animate-spin')} />
+                  {t('contactModal.resync')}
+                </button>
+                <button
+                  onClick={startEdit}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  {t('contactModal.edit')}
+                </button>
+              </>
             )}
             {editing && (
               <>
@@ -200,6 +254,10 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           <div className="mx-6 mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{saveError}</div>
         )}
 
+        {syncResult && (
+          <div className="mx-6 mt-4 rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-2 text-sm text-indigo-700">{syncResult}</div>
+        )}
+
         {loading && (
           <div className="px-6 py-8 text-center text-gray-400">{t('view.loading')}</div>
         )}
@@ -227,12 +285,13 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                   {contact.email}
                 </a>
               )}
-              {contact.telefon && (
-                <a href={`tel:${contact.telefon}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-indigo-600">
+              {(contact.phones ?? []).map(p => (
+                <a key={p.id} href={`tel:${p.number}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-indigo-600">
                   <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                  {contact.telefon}
+                  {p.number}
+                  <span className="text-xs text-gray-400">{t(`phoneTypes.${p.type}`)}</span>
                 </a>
-              )}
+              ))}
               {contact.linkedin_url && (
                 <a href={contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-indigo-600 hover:underline">
                   <Linkedin className="h-3.5 w-3.5 shrink-0" />
@@ -240,7 +299,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
-              {!contact.email && !contact.telefon && !contact.linkedin_url && (
+              {!contact.email && (contact.phones ?? []).length === 0 && !contact.linkedin_url && (
                 <p className="text-sm text-gray-300">{t('contactModal.noContactData')}</p>
               )}
             </div>
@@ -354,25 +413,19 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.phoneLabel')}</label>
-                <input
-                  value={editState.telefon}
-                  onChange={e => set('telefon', e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder={t('contactModal.phonePlaceholder')}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.linkedinLabel')}</label>
-                <input
-                  value={editState.linkedin_url}
-                  onChange={e => set('linkedin_url', e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder={t('contactModal.linkedinPlaceholder')}
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.phoneLabel')}</label>
+              <PhoneListEditor phones={editState.phones} onChange={setPhones} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('contactModal.linkedinLabel')}</label>
+              <input
+                value={editState.linkedin_url}
+                onChange={e => set('linkedin_url', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder={t('contactModal.linkedinPlaceholder')}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

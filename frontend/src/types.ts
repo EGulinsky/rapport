@@ -74,11 +74,17 @@ export interface Application {
   ai_assessed_at?: string | null
 }
 
+export interface ContactPhone {
+  id: number
+  number: string
+  type: string
+}
+
 export interface CompanyContactRef {
   id: number
   name: string
   email?: string | null
-  telefon?: string | null
+  phones?: ContactPhone[]
   linkedin_url?: string | null
   firma?: string | null
   rolle?: string | null
@@ -119,7 +125,7 @@ export interface Contact {
   name: string
   vorname?: string
   email?: string
-  telefon?: string
+  phones?: ContactPhone[]
   linkedin_url?: string
   firma?: string
   rolle?: string
@@ -128,6 +134,7 @@ export interface Contact {
   letzter_kontakt?: string
   company_website?: string | null
   company_profile_id?: number | null
+  icloud_last_synced_at?: string | null
 }
 
 export interface ContactWithApp extends Contact {
@@ -137,7 +144,7 @@ export interface ContactWithApp extends Contact {
 export interface ICloudContactCandidate {
   name: string
   email?: string | null
-  telefon?: string | null
+  phones?: { number: string; type: string }[]
   firma?: string | null
   rolle?: string | null
   linkedin_url?: string | null

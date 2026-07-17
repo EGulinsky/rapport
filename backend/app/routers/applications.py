@@ -751,7 +751,10 @@ def add_contact(
     current_user: models.User = Depends(get_current_user),
 ):
     app = _get_owned_application(db, app_id, current_user)
-    contact = models.Contact(**payload.model_dump(), user_id=current_user.id)
+    data = payload.model_dump(exclude={"phones"})
+    contact = models.Contact(**data, user_id=current_user.id)
+    for p in payload.phones:
+        contact.phones.append(models.ContactPhone(number=p.number, type=p.type, user_id=current_user.id))
     db.add(contact)
     db.flush()
     app.contacts.append(contact)
@@ -774,12 +777,16 @@ def update_contact(
     contact = next((c for c in app.contacts if c.id == contact_id), None)
     if not contact:
         raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True, exclude={"phones"}).items():
         old_v = getattr(contact, field, None)
         if str(old_v or "") != str(value or ""):
             add_audit(db, "update", "user", app_id=app_id, contact_id=contact.id,
                       field=field, old_value=old_v, new_value=value, user_id=current_user.id)
         setattr(contact, field, value)
+    if payload.phones is not None:
+        contact.phones.clear()
+        for p in payload.phones:
+            contact.phones.append(models.ContactPhone(number=p.number, type=p.type, user_id=current_user.id))
     db.commit()
     db.refresh(contact)
     return contact

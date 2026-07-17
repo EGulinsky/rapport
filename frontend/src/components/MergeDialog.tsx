@@ -19,7 +19,7 @@ const APP_FIELD_KEYS = [
 ] as const
 
 const CONTACT_FIELD_KEYS = [
-  'name', 'email', 'telefon', 'linkedin_url', 'firma', 'rolle', 'typ', 'notizen', 'letzter_kontakt',
+  'name', 'email', 'linkedin_url', 'firma', 'rolle', 'typ', 'notizen', 'letzter_kontakt',
 ] as const
 
 const COMPANY_FIELD_KEYS = [

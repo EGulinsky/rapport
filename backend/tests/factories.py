@@ -47,6 +47,10 @@ def application_factory(db: Session, **overrides) -> models.Application:
 
 
 def contact_factory(db: Session, **overrides) -> models.Contact:
+    # telefon= is a convenience kwarg for tests predating the multi-phone
+    # ContactPhone table — translated into a single "other"-type phone row.
+    telefon = overrides.pop("telefon", None)
+    phones = overrides.pop("phones", None)
     defaults = dict(
         name=fake.name(),
         email=fake.unique.email(),
@@ -56,6 +60,10 @@ def contact_factory(db: Session, **overrides) -> models.Contact:
     )
     defaults.update(overrides)
     contact = models.Contact(**defaults)
+    if telefon:
+        contact.phones.append(models.ContactPhone(number=telefon, type="other", user_id=defaults.get("user_id")))
+    for p in phones or []:
+        contact.phones.append(models.ContactPhone(number=p["number"], type=p.get("type", "other"), user_id=defaults.get("user_id")))
     db.add(contact)
     db.flush()
     return contact

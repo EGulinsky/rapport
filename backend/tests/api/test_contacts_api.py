@@ -94,6 +94,21 @@ class TestCreateContact:
 
         assert resp.status_code == 422
 
+    def test_positiv_legt_kontakt_mit_mehreren_telefonnummern_an(self, client, db_session):
+        resp = client.post("/api/contacts/", json={
+            "name": "Multi Nummer",
+            "phones": [
+                {"number": "+491701234567", "type": "mobile"},
+                {"number": "+49301234567", "type": "work"},
+            ],
+        })
+
+        assert resp.status_code == 201
+        created = db_session.query(models.Contact).filter_by(id=resp.json()["id"]).first()
+        assert {(p.number, p.type) for p in created.phones} == {
+            ("+491701234567", "mobile"), ("+49301234567", "work"),
+        }
+
 
 class TestUpdateContact:
     def test_negativ_nicht_gefunden_liefert_404(self, client):
@@ -101,6 +116,28 @@ class TestUpdateContact:
 
         assert resp.status_code == 404
         assert resp.json()["detail"]["error_key"] == "contact.not_found"
+
+    def test_positiv_phones_werden_vollstaendig_ersetzt(self, client, db_session):
+        contact = contact_factory(db_session, telefon="+49111")
+        db_session.commit()
+
+        resp = client.patch(f"/api/contacts/{contact.id}", json={
+            "phones": [{"number": "+49222", "type": "home"}, {"number": "+49333", "type": "work"}],
+        })
+
+        assert resp.status_code == 200
+        db_session.refresh(contact)
+        assert {(p.number, p.type) for p in contact.phones} == {("+49222", "home"), ("+49333", "work")}
+
+    def test_positiv_phones_weglassen_laesst_bestehende_unangetastet(self, client, db_session):
+        contact = contact_factory(db_session, telefon="+49111")
+        db_session.commit()
+
+        resp = client.patch(f"/api/contacts/{contact.id}", json={"rolle": "CTO"})
+
+        assert resp.status_code == 200
+        db_session.refresh(contact)
+        assert [p.number for p in contact.phones] == ["+49111"]
 
 
 class TestBulkDeleteContacts:

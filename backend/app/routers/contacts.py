@@ -53,11 +53,22 @@ def list_all_contacts(
     return contacts
 
 
+class ContactPhoneIn(BaseModel):
+    number: str
+    type: str = "other"
+
+
+def _replace_phones(contact: models.Contact, phones: List[ContactPhoneIn], user_id: int) -> None:
+    contact.phones.clear()
+    for p in phones:
+        contact.phones.append(models.ContactPhone(number=p.number, type=p.type, user_id=user_id))
+
+
 class ContactCreate(BaseModel):
     name: str
     vorname: Optional[str] = None
     email: Optional[str] = None
-    telefon: Optional[str] = None
+    phones: List[ContactPhoneIn] = []
     firma: Optional[str] = None
     company_profile_id: Optional[int] = None
     rolle: Optional[str] = None
@@ -71,7 +82,10 @@ def create_contact(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    contact = models.Contact(**body.model_dump(), user_id=current_user.id)
+    data = body.model_dump(exclude={"phones"})
+    contact = models.Contact(**data, user_id=current_user.id)
+    for p in body.phones:
+        contact.phones.append(models.ContactPhone(number=p.number, type=p.type, user_id=current_user.id))
     db.add(contact)
     db.flush()
     add_audit(db, "create", "user", contact_id=contact.id,
@@ -88,7 +102,7 @@ class ContactPatch(BaseModel):
     name: Optional[str] = None
     vorname: Optional[str] = None
     email: Optional[str] = None
-    telefon: Optional[str] = None
+    phones: Optional[List[ContactPhoneIn]] = None
     linkedin_url: Optional[str] = None
     rolle: Optional[str] = None
     typ: Optional[str] = None
@@ -106,12 +120,16 @@ def patch_contact(
     contact = db.query(models.Contact).filter_by(id=contact_id).first()
     if not contact:
         raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    for field, value in body.model_dump(exclude_unset=True, exclude={"phones"}).items():
         old_v = getattr(contact, field, None)
         if str(old_v or "") != str(value or ""):
             add_audit(db, "update", "user", contact_id=contact.id,
                       field=field, old_value=old_v, new_value=value, user_id=current_user.id)
         setattr(contact, field, value)
+    if body.phones is not None:
+        _replace_phones(contact, body.phones, current_user.id)
+        add_audit(db, "update", "user", contact_id=contact.id,
+                  field="phones", old_value=None, new_value=f"{len(body.phones)} Nummer(n)", user_id=current_user.id)
     db.commit()
     return {"ok": True}
 

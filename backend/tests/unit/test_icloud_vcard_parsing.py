@@ -23,7 +23,7 @@ class TestParseVcard:
         assert parsed["vorname"] == "Erika"
         assert parsed["fn"] == "Erika Musterfrau"
         assert parsed["email"] == "erika@contoso.com"
-        assert parsed["telefon"] == "+491701234567"
+        assert parsed["phones"] == [{"number": "+491701234567", "type": "mobile"}]
         assert parsed["firma"] == "Contoso AG"
         assert parsed["rolle"] == "Recruiter"
         assert parsed["linkedin_url"] == "https://linkedin.com/in/erika"
@@ -35,7 +35,9 @@ class TestParseVcard:
         assert parsed["name"] == "Contoso AG Empfang"
         assert parsed["vorname"] is None
 
-    def test_positiv_bevorzugt_mobilnummer_vor_erster_telefonnummer(self):
+    def test_positiv_alle_telefonnummern_mit_typ_werden_zurueckgegeben(self):
+        """vCards can carry several typed TEL entries (HOME/WORK/CELL/...) —
+        all of them are kept (with a mapped type), not just one."""
         import vobject
         card = vobject.vCard()
         card.add("fn").value = "Erika Musterfrau"
@@ -48,7 +50,10 @@ class TestParseVcard:
 
         parsed = _parse_vcard(card.serialize())
 
-        assert parsed["telefon"] == "+491701234567"
+        assert parsed["phones"] == [
+            {"number": "+49301234567", "type": "work"},
+            {"number": "+491701234567", "type": "mobile"},
+        ]
 
     def test_negativ_leere_vcard_ohne_fn_liefert_none(self):
         raw = "BEGIN:VCARD\nVERSION:3.0\nEMAIL:x@y.de\nEND:VCARD\n"

@@ -316,11 +316,17 @@ def _upsert_contact(
     if existing:
         if event_date and (existing.letzter_kontakt is None or event_date > existing.letzter_kontakt):
             existing.letzter_kontakt = event_date
-        # Fill empty fields from footer — existing values always win
-        if not existing.telefon and extra.get('telefon'):
-            old_v, existing.telefon = existing.telefon, extra['telefon']
-            add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
-                      field="telefon", old_value=old_v, new_value=existing.telefon, user_id=user_id)
+        # Fill empty fields from footer — existing values always win. Phone
+        # numbers are additive (a contact can have several), so a footer
+        # number is added if it's not already among the contact's numbers.
+        if extra.get('telefon'):
+            from app.routers.sync_icloud import _normalize_phone
+            new_norm = _normalize_phone(extra['telefon'])
+            existing_norms = {_normalize_phone(p.number) for p in existing.phones}
+            if new_norm and new_norm not in existing_norms:
+                existing.phones.append(_models.ContactPhone(number=extra['telefon'], type="other", user_id=user_id))
+                add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
+                          field="telefon", old_value=None, new_value=extra['telefon'], user_id=user_id)
         if not existing.rolle and extra.get('rolle'):
             old_v, existing.rolle = existing.rolle, extra['rolle']
             add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
@@ -338,10 +344,11 @@ def _upsert_contact(
         firma=firma or None,
         typ="Headhunter" if is_headhunter else None,
         letzter_kontakt=event_date,
-        telefon=extra.get('telefon') or None,
         rolle=extra.get('rolle') or None,
         user_id=user_id,
     )
+    if extra.get('telefon'):
+        contact.phones.append(_models.ContactPhone(number=extra['telefon'], type="other", user_id=user_id))
     db.add(contact)
     db.flush()  # get contact.id
     db.execute(_LINK_SQL, {"cid": contact.id, "aid": app_id})

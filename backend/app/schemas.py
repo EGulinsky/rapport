@@ -3,11 +3,22 @@ from typing import Optional, List
 from datetime import date, datetime
 
 
+class ContactPhoneIn(BaseModel):
+    number: str
+    type: str = "other"
+
+
+class ContactPhoneOut(ContactPhoneIn):
+    id: int
+
+    model_config = {"from_attributes": True}
+
+
 class ContactBase(BaseModel):
     name: str
     vorname: Optional[str] = None
     email: Optional[str] = None
-    telefon: Optional[str] = None
+    phones: List[ContactPhoneIn] = []
     linkedin_url: Optional[str] = None
     firma: Optional[str] = None
     rolle: Optional[str] = None
@@ -25,7 +36,7 @@ class ContactUpdate(BaseModel):
     name: Optional[str] = None
     vorname: Optional[str] = None
     email: Optional[str] = None
-    telefon: Optional[str] = None
+    phones: Optional[List[ContactPhoneIn]] = None
     linkedin_url: Optional[str] = None
     firma: Optional[str] = None
     rolle: Optional[str] = None
@@ -34,8 +45,19 @@ class ContactUpdate(BaseModel):
     letzter_kontakt: Optional[date] = None
 
 
-class ContactRead(ContactBase):
+class ContactRead(BaseModel):
     id: int
+    name: str
+    vorname: Optional[str] = None
+    email: Optional[str] = None
+    phones: List[ContactPhoneOut] = []
+    linkedin_url: Optional[str] = None
+    firma: Optional[str] = None
+    rolle: Optional[str] = None
+    typ: Optional[str] = None
+    notizen: Optional[str] = None
+    letzter_kontakt: Optional[date] = None
+    icloud_last_synced_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

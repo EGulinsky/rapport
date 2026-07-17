@@ -64,7 +64,15 @@
     "contactCount_one": "{{count}} contact",
     "contactCount_other": "{{count}} contacts",
     "ofTotal": "of {{count}}",
-    "selectedCount": "{{count}} selected"
+    "selectedCount": "{{count}} selected",
+    "sync": "Sync",
+    "syncCount": "Sync ({{count}})",
+    "syncMenuTitle": "Sync from iCloud",
+    "syncMenuSubtitle": "Add new phone numbers and fill in empty fields — existing values are kept.",
+    "resyncMenuTitle": "Re-Sync from iCloud",
+    "resyncMenuSubtitle": "Overwrite with the current iCloud data.",
+    "syncResult": "{{synced}} synced, {{notFound}} without a matching iCloud contact",
+    "genericError": "Something went wrong"
   },
   "contactModal": {
     "notFound": "Contact not found",
@@ -79,6 +87,22 @@
     "phonePlaceholder": "+1 ...",
     "linkedinLabel": "LinkedIn URL",
     "linkedinPlaceholder": "https://linkedin.com/in/...",
-    "rolePlaceholder": "e.g. Recruiter"
+    "rolePlaceholder": "e.g. Recruiter",
+    "addPhone": "Add phone",
+    "sync": "Sync",
+    "syncHint": "Add new phone numbers from iCloud and fill in empty fields — existing values are kept.",
+    "resync": "Re-Sync",
+    "resyncHint": "Overwrite this contact with the current iCloud data.",
+    "lastSynced": "Last synced from iCloud: {{date}}",
+    "syncDone": "Synced — new phone numbers and empty fields were filled in.",
+    "resyncDone": "Re-synced — this contact now matches iCloud.",
+    "syncNotFound": "No matching iCloud contact found."
+  },
+  "phoneTypes": {
+    "mobile": "Mobile",
+    "home": "Home",
+    "work": "Work",
+    "main": "Main",
+    "other": "Other"
   }
 }

@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.4.0',
+    date: '2026-07-17',
+    changes: [
+      'Contacts now support several phone numbers with types (mobile/home/work/main/other), like iCloud/Apple Contacts — previously only one number could be stored, and importing from iCloud silently discarded every number beyond the first. Add, edit, or remove numbers from the contact detail view or when creating a new contact.',
+      'Added a "Sync" and "Re-Sync" action for contacts, similar to the existing Company sync — available for a single contact or for a selection in the Contacts table. Sync adds new phone numbers and fills in empty fields from iCloud without touching anything already filled in; Re-Sync overwrites the contact with the current iCloud data.',
+      'Calls sync now matches against all of a contact\'s phone numbers instead of just one, so a call from a work or home number is found even if the contact\'s primary number is different.',
+    ],
+  },
+  {
     version: '4.3.9',
     date: '2026-07-17',
     changes: [

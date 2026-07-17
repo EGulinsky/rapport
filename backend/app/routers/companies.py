@@ -60,11 +60,19 @@ class CompanyApplicationRef(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CompanyContactPhoneRef(BaseModel):
+    id: int
+    number: str
+    type: str
+
+    model_config = {"from_attributes": True}
+
+
 class CompanyContactRef(BaseModel):
     id: int
     name: str
     email: Optional[str] = None
-    telefon: Optional[str] = None
+    phones: List[CompanyContactPhoneRef] = []
     linkedin_url: Optional[str] = None
     firma: Optional[str] = None
     rolle: Optional[str] = None
@@ -285,7 +293,7 @@ def get_company(
             id=c.id,
             name=c.name,
             email=c.email,
-            telefon=c.telefon,
+            phones=[CompanyContactPhoneRef(id=p.id, number=p.number, type=p.type) for p in c.phones],
             linkedin_url=c.linkedin_url,
             firma=c.firma,
             rolle=c.rolle,

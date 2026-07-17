@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X } from 'lucide-react'
+import { Linkedin, Mail, Phone, Trash2, ArrowUpDown, GitMerge, Building2, X, RefreshCw, ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp, CompanyProfile } from '../types'
@@ -143,6 +143,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [appsFilter, setAppsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [openContactId, setOpenContactId] = useState<number | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMenuOpen, setSyncMenuOpen] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const syncMenuRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -219,6 +223,31 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
     }
   }
 
+  useEffect(() => {
+    if (!syncMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node)) setSyncMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [syncMenuOpen])
+
+  async function startSync(force: boolean) {
+    setSyncMenuOpen(false)
+    setSyncing(true)
+    setSyncMsg(null)
+    const scopedIds = selected.size > 0 ? [...selected] : undefined
+    try {
+      const r = await api.contacts.syncICloud(force, scopedIds)
+      setSyncMsg(t('view.syncResult', { synced: r.synced.length, notFound: r.not_found.length }))
+      await load()
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : t('view.genericError'))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const Th = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
     <th
       className={clsx(
@@ -256,6 +285,37 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
         </div>
 
 
+        <div className="relative shrink-0" ref={syncMenuRef}>
+          <button
+            onClick={() => !syncing && setSyncMenuOpen(o => !o)}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {syncing
+              ? <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-white rounded-full" />
+              : <RefreshCw className="h-3.5 w-3.5" />}
+            {selected.size > 0 ? t('view.syncCount', { count: selected.size }) : t('view.sync')}
+            {!syncing && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
+          </button>
+          {syncMenuOpen && (
+            <div className="absolute z-50 top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+              <button
+                onClick={() => startSync(false)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              >
+                <div className="font-medium">{t('view.syncMenuTitle')}</div>
+                <div className="text-xs text-gray-400">{t('view.syncMenuSubtitle')}</div>
+              </button>
+              <button
+                onClick={() => startSync(true)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              >
+                <div className="font-medium">{t('view.resyncMenuTitle')}</div>
+                <div className="text-xs text-gray-400">{t('view.resyncMenuSubtitle')}</div>
+              </button>
+            </div>
+          )}
+        </div>
         {selected.size >= 2 && (
           <button
             onClick={() => setShowMerge(true)}
@@ -276,6 +336,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
           </button>
         )}
       </div>
+
+      {syncMsg && (
+        <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-2 text-sm text-indigo-700">{syncMsg}</div>
+      )}
 
       {/* Tabelle */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -352,10 +416,11 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                         <span className="truncate max-w-[180px]">{c.email}</span>
                       </a>
                     )}
-                    {c.telefon && (
-                      <a href={`tel:${c.telefon}`} className="flex items-center gap-1 text-xs text-gray-600 hover:text-indigo-600">
+                    {(c.phones?.length ?? 0) > 0 && (
+                      <a href={`tel:${c.phones![0].number}`} className="flex items-center gap-1 text-xs text-gray-600 hover:text-indigo-600">
                         <Phone className="h-3 w-3 shrink-0" />
-                        {c.telefon}
+                        {c.phones![0].number}
+                        {c.phones!.length > 1 && <span className="text-gray-400">+{c.phones!.length - 1}</span>}
                       </a>
                     )}
                     {c.linkedin_url && (
@@ -364,7 +429,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                         {t('view.linkedin')}
                       </a>
                     )}
-                    {!c.email && !c.telefon && !c.linkedin_url && (
+                    {!c.email && !(c.phones?.length) && !c.linkedin_url && (
                       <span className="text-xs text-gray-300">—</span>
                     )}
                   </div>

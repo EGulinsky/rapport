@@ -89,6 +89,25 @@ class TestMergeContactsEdgeCases:
         })
         assert resp.status_code == 400
 
+    def test_positiv_telefonnummern_werden_vereinigt_und_dedupliziert(self, client, db_session):
+        """Phones aren't a pick-one-side MERGEABLE_CONTACT_FIELD — both sides'
+        numbers land on the winner, with a normalized-duplicate dropped."""
+        winner = contact_factory(db_session, phones=[{"number": "+491701111111", "type": "mobile"}])
+        loser = contact_factory(db_session, phones=[
+            {"number": "+491701111111", "type": "mobile"},  # same as winner's → dropped
+            {"number": "+4930222222", "type": "work"},
+        ])
+        db_session.commit()
+
+        resp = client.post("/api/merge/contacts", json={
+            "winner_id": winner.id, "loser_ids": [loser.id], "field_overrides": {},
+        })
+
+        assert resp.status_code == 200
+        db_session.refresh(winner)
+        numbers = {p.number for p in winner.phones}
+        assert numbers == {"+491701111111", "+4930222222"}
+
 
 class TestMergeCompaniesEdgeCases:
     def test_negativ_winner_in_loser_ids_gibt_400(self, client, db_session):

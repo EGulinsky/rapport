@@ -18,7 +18,7 @@ MERGEABLE_APP_FIELDS = {
 }
 
 MERGEABLE_CONTACT_FIELDS = {
-    "name", "email", "telefon", "linkedin_url", "foto_url",
+    "name", "email", "linkedin_url", "foto_url",
     "firma", "rolle", "typ", "notizen", "letzter_kontakt",
 }
 
@@ -234,6 +234,8 @@ def merge_contacts(
                       field=field, old_value=old_v, new_value=new_v,
                       reason_key="merge_field_taken", user_id=current_user.id)
 
+    from app.routers.sync_icloud import _normalize_phone
+
     for loser in losers:
         db.add(models.MergeAlias(
             entity_type="contact",
@@ -247,6 +249,17 @@ def merge_contacts(
         for app in list(loser.applications):
             if app not in winner.applications:
                 winner.applications.append(app)
+
+        # Union phone numbers onto the winner (dedup by normalized number) —
+        # unlike the scalar MERGEABLE_CONTACT_FIELDS, phones aren't a
+        # pick-one-side field, so both sides' numbers are combined.
+        winner_norms = {_normalize_phone(p.number) for p in winner.phones}
+        for phone in list(loser.phones):
+            norm = _normalize_phone(phone.number)
+            if norm and norm not in winner_norms:
+                loser.phones.remove(phone)
+                winner.phones.append(phone)
+                winner_norms.add(norm)
 
         add_audit(db, "merge", "user", contact_id=winner.id,
                   old_value=f"{loser.name} (#{loser.id})",

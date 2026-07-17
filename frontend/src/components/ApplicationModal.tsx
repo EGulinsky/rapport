@@ -34,6 +34,11 @@ interface Props {
 const CONTACT_TYPES = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk']
 const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 
+// Quick-entry draft for the inline add/edit-contact panels: a single phone
+// input (telefon) instead of the full multi-phone editor used in the
+// dedicated Contact modals — kept simple since these panels are already dense.
+type ContactDraft = Partial<Omit<Contact, 'phones'>> & { telefon?: string }
+
 export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields, onReviewOpen }: Props) {
   const { t } = useTranslation('applications')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
@@ -44,10 +49,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
   const [saving, setSaving] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
   const [addMode, setAddMode] = useState<'new' | 'link'>('new')
-  const [contactDraft, setContactDraft] = useState<Partial<Contact>>(EMPTY_CONTACT)
+  const [contactDraft, setContactDraft] = useState<ContactDraft>(EMPTY_CONTACT)
   const [savingContact, setSavingContact] = useState(false)
   const [editingContactId, setEditingContactId] = useState<number | null>(null)
-  const [editContactDraft, setEditContactDraft] = useState<Partial<Contact>>({})
+  const [editContactDraft, setEditContactDraft] = useState<ContactDraft>({})
   const [linkSearch, setLinkSearch] = useState('')
   const [linkResults, setLinkResults] = useState<Contact[]>([])
   const [linkLoading, setLinkLoading] = useState(false)
@@ -514,7 +519,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     if (!appId || !contactDraft.name || !contactDraft.email) return
     setSavingContact(true)
     try {
-      await api.contacts.add(appId, contactDraft)
+      const { telefon, ...rest } = contactDraft
+      await api.contacts.add(appId, { ...rest, phones: telefon?.trim() ? [{ number: telefon.trim(), type: 'other' }] : [] })
       await refreshContacts()
       setContactDraft(EMPTY_CONTACT)
       setAddingContact(false)
@@ -667,7 +673,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     if (!appId) return
     setSavingContact(true)
     try {
-      await api.contacts.update(appId, contactId, editContactDraft)
+      const { telefon, ...rest } = editContactDraft
+      await api.contacts.update(appId, contactId, { ...rest, phones: telefon?.trim() ? [{ number: telefon.trim(), type: 'other' }] : [] })
       await refreshContacts()
       setEditingContactId(null)
     } finally {
@@ -1753,11 +1760,11 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
                         {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
                         {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
-                        {c.telefon && <p className="text-xs text-gray-400">{c.telefon}</p>}
+                        {(c.phones?.length ?? 0) > 0 && <p className="text-xs text-gray-400">{c.phones![0].number}</p>}
                         {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">{t('contacts.linkedin')}</a>}
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ vorname: c.vorname, name: c.name, email: c.email, telefon: c.telefon, rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
+                        <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ vorname: c.vorname, name: c.name, email: c.email, telefon: c.phones?.[0]?.number ?? '', rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
                           className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600" title={t('contacts.edit')}><Pencil className="h-3.5 w-3.5" /></button>
                         <button onClick={() => deleteContact(c.id, c.name)}
                           className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title={t('contacts.delete')}><Trash2 className="h-3.5 w-3.5" /></button>

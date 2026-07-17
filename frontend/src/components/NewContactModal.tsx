@@ -3,9 +3,10 @@ import { Building2, Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { errorMessage } from '../i18n/errorMessage'
+import { PhoneListEditor, type PhoneEntry } from './PhoneListEditor'
 import type { CompanyProfile } from '../types'
 
-const EMPTY_NEW_CONTACT = { name: '', vorname: '', email: '', telefon: '', firma: '', company_profile_id: null as number | null, rolle: '', linkedin_url: '' }
+const EMPTY_NEW_CONTACT = { name: '', vorname: '', email: '', phones: [] as PhoneEntry[], firma: '', company_profile_id: null as number | null, rolle: '', linkedin_url: '' }
 
 export function NewContactModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { t } = useTranslation('contacts')
@@ -65,7 +66,7 @@ export function NewContactModal({ onClose, onCreated }: { onClose: () => void; o
         name: draft.name.trim(),
         vorname: draft.vorname.trim() || undefined,
         email: draft.email.trim() || undefined,
-        telefon: draft.telefon.trim() || undefined,
+        phones: draft.phones.filter(p => p.number.trim()),
         firma: draft.firma.trim() || undefined,
         company_profile_id: draft.company_profile_id ?? undefined,
         rolle: draft.rolle.trim() || undefined,
@@ -105,9 +106,7 @@ export function NewContactModal({ onClose, onCreated }: { onClose: () => void; o
           <input placeholder={t('newContact.emailPlaceholder')} value={draft.email}
             onChange={e => setDraft(d => ({ ...d, email: e.target.value }))}
             className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <input placeholder={t('newContact.phonePlaceholder')} value={draft.telefon}
-            onChange={e => setDraft(d => ({ ...d, telefon: e.target.value }))}
-            className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <PhoneListEditor phones={draft.phones} onChange={phones => setDraft(d => ({ ...d, phones }))} />
           <div className="grid grid-cols-2 gap-2.5">
             <div className="relative" ref={firmaPickerRef}>
               <div

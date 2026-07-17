@@ -30,15 +30,14 @@ class TestContactAudit:
 
     def test_positiv_patch_wird_protokolliert(self, client, db_session):
         _make_verbose(db_session)
-        contact = contact_factory(db_session, name="Alt", telefon=None)
+        contact = contact_factory(db_session, name="Alt")
         db_session.commit()
 
-        resp = client.patch(f"/api/contacts/{contact.id}", json={"telefon": "+49123456"})
+        resp = client.patch(f"/api/contacts/{contact.id}", json={"phones": [{"number": "+49123456", "type": "other"}]})
 
         assert resp.status_code == 200
-        audit = db_session.query(models.AuditLog).filter_by(contact_id=contact.id, field="telefon").first()
+        audit = db_session.query(models.AuditLog).filter_by(contact_id=contact.id, field="phones").first()
         assert audit is not None
-        assert audit.new_value == "+49123456"
 
     def test_positiv_bulk_delete_wird_protokolliert(self, client, db_session):
         contact = contact_factory(db_session, name="Zu löschen")

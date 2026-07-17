@@ -821,7 +821,7 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
 # ── iCloud Contacts ───────────────────────────────────────────────────────────
 
 async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
-    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, fetch_all_vcards
+    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, fetch_all_vcards, _normalize_phone
     cfg = _get_icloud_cfg(db)
     if not cfg:
         return 0, 0, []
@@ -850,16 +850,27 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 continue
 
             email_val = str(card.email.value) if hasattr(card, "email") else None
-            tel_val = None
-            _tel_props = card.contents.get("tel", [])
-            if _tel_props:
-                _cell = None
-                _first = str(_tel_props[0].value)
-                for _tp in _tel_props:
-                    if any(t in str(getattr(_tp, "params", {}).get("TYPE", "")).upper() for t in ("CELL", "IPHONE", "MOBILE")):
-                        _cell = str(_tp.value)
-                        break
-                tel_val = _cell or _first
+
+            def _vcard_phone_type(type_str: str) -> str:
+                if any(t in type_str for t in ("CELL", "IPHONE", "MOBILE")):
+                    return "mobile"
+                if "HOME" in type_str:
+                    return "home"
+                if "WORK" in type_str:
+                    return "work"
+                if "MAIN" in type_str or "PREF" in type_str:
+                    return "main"
+                return "other"
+
+            phones_val: list[dict] = []
+            _seen_numbers: set[str] = set()
+            for _tp in card.contents.get("tel", []):
+                _number = str(_tp.value).strip()
+                if not _number or _number in _seen_numbers:
+                    continue
+                _seen_numbers.add(_number)
+                _type_str = str(getattr(_tp, "params", {}).get("TYPE", "")).upper()
+                phones_val.append({"number": _number, "type": _vcard_phone_type(_type_str)})
             org_val = None
             if hasattr(card, "org"):
                 parts = card.org.value
@@ -897,11 +908,16 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                               field="linkedin_url", old_value=None, new_value=linkedin_url,
                               reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
                     existing.linkedin_url = linkedin_url
-                if tel_val and not existing.telefon:
-                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="telefon", old_value=None, new_value=tel_val,
-                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
-                    existing.telefon = tel_val
+                if phones_val:
+                    existing_norms = {_normalize_phone(p.number) for p in existing.phones}
+                    for p in phones_val:
+                        norm = _normalize_phone(p["number"])
+                        if norm and norm not in existing_norms:
+                            existing.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
+                            existing_norms.add(norm)
+                            add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
+                                      field="telefon", old_value=None, new_value=p["number"],
+                                      reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
                 if org_val and not existing.firma:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
                               field="firma", old_value=None, new_value=org_val,
@@ -918,10 +934,12 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                     ), {"c": existing.id, "a": app.id})
             else:
                 contact = models.Contact(
-                    name=name, email=email_val, telefon=tel_val,
+                    name=name, email=email_val,
                     firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
                     user_id=user_id,
                 )
+                for p in phones_val:
+                    contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
                 db.add(contact)
                 db.flush()
                 add_audit(db, "create", "sync", contact_id=contact.id, app_id=app.id,
@@ -1070,8 +1088,8 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
 
     contact_phones: list[tuple[str, str]] = []  # (normalized, contact_name)
     for c in contacts:
-        if c.telefon:
-            n = _normalize_phone(c.telefon)
+        for p in c.phones:
+            n = _normalize_phone(p.number)
             if n:
                 contact_phones.append((n, c.name))
 
