@@ -6,6 +6,11 @@
     "emailPlaceholder": "Email",
     "phonePlaceholder": "Phone",
     "companyPlaceholder": "Company",
+    "searchCompanyPlaceholder": "Search company…",
+    "searching": "Searching…",
+    "enterSearchTerm": "Type a company name to search, or to add it as new…",
+    "creating": "Creating…",
+    "createNew": "Create \"{{name}}\"",
     "rolePlaceholder": "Role",
     "linkedinPlaceholder": "LinkedIn URL"
   },

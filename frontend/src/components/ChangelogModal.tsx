@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.8',
+    date: '2026-07-17',
+    changes: [
+      'Creating a new contact from the Contacts tab now uses the same company search-or-create picker as creating a new application — previously it was just a plain text field that never linked to an actual company record, so a contact created this way wouldn\'t show up under that company\'s profile or get a logo until someone fixed it up later.',
+    ],
+  },
+  {
     version: '4.3.7',
     date: '2026-07-17',
     changes: [
