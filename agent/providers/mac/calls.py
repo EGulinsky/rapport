@@ -53,7 +53,10 @@ def _can_read_db(path: str) -> bool:
         return False
     try:
         db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-        db.execute("SELECT 1").fetchone()
+        # "SELECT 1" doesn't touch the file at all (SQLite connections are
+        # lazy) and passed even against unreadable/corrupt files on some
+        # platforms — querying sqlite_master forces an actual page read.
+        db.execute("SELECT count(*) FROM sqlite_master").fetchone()
         db.close()
         return True
     except Exception:

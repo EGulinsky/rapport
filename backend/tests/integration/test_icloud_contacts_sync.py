@@ -215,7 +215,7 @@ class TestSyncContactsHttp:
         created, errors = await _sync_contacts_http(cfg, db_session)
 
         assert created == 0
-        assert existing.telefon == "+49 30 1234567"
+        assert [p.number for p in existing.phones] == ["+49 30 1234567"]
         assert existing.firma == "Contoso AG"
         assert existing.rolle == "Recruiterin"
 
