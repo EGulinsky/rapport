@@ -139,6 +139,35 @@ class TestSyncCallsForApp:
         ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
         assert "Erika Musterfrau" in ev.titel
 
+    async def test_positiv_anruf_titel_zeigt_vornamen_bei_getrenntem_kontaktnamen(self, db_session, monkeypatch):
+        # Regression: contacts with a structured vorname/name split (the
+        # common case, e.g. from vCard imports) only showed the surname in
+        # the call event title — the title was built from the bare Contact.name
+        # column instead of the combined display name.
+        app = application_factory(db_session)
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
+        contact = contact_factory(db_session, telefon="0151 2345678", name="Zoch", vorname="Niklas")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        calls = [{
+            "id": "call-2", "phone": "+491512345678", "direction": "incoming",
+            "answered": True, "duration_s": 90, "date": "2026-07-01T10:00:00+00:00",
+        }]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(calls)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+
+        assert errors == []
+        assert created == 1
+        db_session.flush()
+        ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
+        assert "Niklas Zoch" in ev.titel
+
     async def test_negativ_anruf_vor_fruehestem_ereignis_wird_ausgefiltert(self, db_session, monkeypatch):
         # Regression test for the #230 incident (2026-07-16): calls sync had
         # NO date filtering at all before this. Revised the same day: the

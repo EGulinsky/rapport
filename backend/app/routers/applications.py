@@ -759,7 +759,7 @@ def add_contact(
     db.flush()
     app.contacts.append(contact)
     add_audit(db, "create", "user", app_id=app_id, contact_id=contact.id,
-              new_value=contact.name, user_id=current_user.id)
+              new_value=contact.display_name, user_id=current_user.id)
     db.commit()
     db.refresh(contact)
     return contact
@@ -837,7 +837,7 @@ def bulk_delete_contacts(
         db.flush()
         if not contact.applications:
             add_audit(db, "delete", "user", app_id=app_id, contact_id=contact.id,
-                      old_value=contact.name, user_id=current_user.id)
+                      old_value=contact.display_name, user_id=current_user.id)
             db.delete(contact)
         unlinked += 1
     db.commit()
@@ -862,6 +862,6 @@ def delete_contact(
     db.flush()
     if not contact.applications:
         add_audit(db, "delete", "user", app_id=app_id, contact_id=contact.id,
-                  old_value=contact.name, user_id=current_user.id)
+                  old_value=contact.display_name, user_id=current_user.id)
         db.delete(contact)
     db.commit()

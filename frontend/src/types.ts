@@ -83,6 +83,7 @@ export interface ContactPhone {
 export interface CompanyContactRef {
   id: number
   name: string
+  vorname?: string | null
   email?: string | null
   phones?: ContactPhone[]
   linkedin_url?: string | null
@@ -143,6 +144,7 @@ export interface ContactWithApp extends Contact {
 
 export interface ICloudContactCandidate {
   name: string
+  vorname?: string | null
   email?: string | null
   phones?: { number: string; type: string }[]
   firma?: string | null

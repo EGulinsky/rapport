@@ -43,7 +43,7 @@ def list_audit(
                 "app_firma": r.application.firma if r.application else None,
                 "app_rolle": r.application.rolle if r.application else None,
                 "contact_id": r.contact_id,
-                "contact_name": r.contact.name if r.contact else None,
+                "contact_name": r.contact.display_name if r.contact else None,
                 "company_profile_id": r.company_profile_id,
                 "company_name": (r.company_profile.name_display or r.company_profile.name_norm) if r.company_profile else None,
                 "event_id": r.event_id,

@@ -943,7 +943,7 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                 db.add(contact)
                 db.flush()
                 add_audit(db, "create", "sync", contact_id=contact.id, app_id=app.id,
-                          new_value=contact.name,
+                          new_value=contact.display_name,
                           reason_key="contact_created_targeted_icloud_sync", reason_params={"match_reason": match_reason},
                           user_id=user_id)
                 if name_in_app_text:
@@ -1091,7 +1091,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         for p in c.phones:
             n = _normalize_phone(p.number)
             if n:
-                contact_phones.append((n, c.name))
+                contact_phones.append((n, c.display_name))
 
     if not contact_phones:
         return 0, 0, []

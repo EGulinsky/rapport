@@ -107,7 +107,7 @@ async def approve_match(
         dup.applications.clear()
         db.flush()
         add_audit(db, "delete", "system", contact_id=keeper.id,
-                  old_value=f"{dup.name} (#{dup.id})",
+                  old_value=f"{dup.display_name} (#{dup.id})",
                   reason_key="duplicate_cleaned_merged_into", reason_params={"id": keeper.id},
                   user_id=current_user.id)
         db.delete(dup)

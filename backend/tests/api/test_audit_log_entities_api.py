@@ -28,6 +28,19 @@ class TestContactAudit:
         assert audit is not None
         assert audit.new_value == "Max Mustermann"
 
+    def test_positiv_create_mit_vorname_zeigt_vollen_namen_im_audit(self, client, db_session):
+        # Regression: audit entries (and other user-facing strings — event
+        # titles, error messages) showed only the surname since the
+        # vorname/name split, because Contact.name alone was logged instead
+        # of the combined display name.
+        resp = client.post("/api/contacts/", json={"name": "Zoch", "vorname": "Niklas"})
+
+        assert resp.status_code == 201
+        contact_id = resp.json()["id"]
+        audit = db_session.query(models.AuditLog).filter_by(contact_id=contact_id, action="create").first()
+        assert audit is not None
+        assert audit.new_value == "Niklas Zoch"
+
     def test_positiv_patch_wird_protokolliert(self, client, db_session):
         _make_verbose(db_session)
         contact = contact_factory(db_session, name="Alt")

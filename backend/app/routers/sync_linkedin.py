@@ -1603,7 +1603,7 @@ def import_people(
             contact.applications.append(app_obj)
         add_audit(db, "create", "user", contact_id=contact.id,
                   app_id=app_obj.id if app_obj else None,
-                  new_value=contact.name, reason_key="import_from_linkedin_people_search",
+                  new_value=contact.display_name, reason_key="import_from_linkedin_people_search",
                   user_id=current_user.id)
         imported += 1
 

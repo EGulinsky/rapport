@@ -353,7 +353,7 @@ def _upsert_contact(
     db.flush()  # get contact.id
     db.execute(_LINK_SQL, {"cid": contact.id, "aid": app_id})
     add_audit(db, "create", "sync", contact_id=contact.id, app_id=app_id,
-              new_value=contact.name, reason_key="contact_from_email_sync", user_id=user_id)
+              new_value=contact.display_name, reason_key="contact_from_email_sync", user_id=user_id)
 
 
 def upsert_contact_from_sender(

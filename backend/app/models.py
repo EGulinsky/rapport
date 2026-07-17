@@ -267,6 +267,21 @@ class Contact(Base):
     applications    = relationship("Application", secondary="contact_application", back_populates="contacts")
     phones          = relationship("ContactPhone", cascade="all, delete-orphan", order_by="ContactPhone.id")
 
+    @property
+    def display_name(self) -> str:
+        """Most contact-creation paths store only the surname in "name"
+        (structured N:-field split from vCard imports), so every user-facing
+        string (audit log, event titles, etc.) needs vorname + name, not name
+        alone. One path (mail-signature contact upsert, sync_common.py)
+        instead stores the already-full name in "name" and redundantly
+        duplicates the first name into "vorname" — guard against that
+        prepending vorname a second time ("Niklas Niklas Zoch")."""
+        if not self.vorname:
+            return self.name
+        if self.name.lower().startswith(self.vorname.lower()):
+            return self.name
+        return f"{self.vorname} {self.name}"
+
 
 class ContactPhone(Base):
     __tablename__ = "contact_phones"

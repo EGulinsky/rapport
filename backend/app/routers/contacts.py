@@ -89,7 +89,7 @@ def create_contact(
     db.add(contact)
     db.flush()
     add_audit(db, "create", "user", contact_id=contact.id,
-              new_value=contact.name, user_id=current_user.id)
+              new_value=contact.display_name, user_id=current_user.id)
     db.commit()
     db.refresh(contact)
     return {"id": contact.id, "name": contact.name, "firma": contact.firma,
@@ -153,7 +153,7 @@ def bulk_delete_contacts(
     to_delete = q.all()
     for c in to_delete:
         add_audit(db, "delete", "user", contact_id=c.id,
-                  old_value=c.name, user_id=current_user.id)
+                  old_value=c.display_name, user_id=current_user.id)
     deleted = q.delete(synchronize_session=False)
     db.commit()
     return {"deleted": deleted}

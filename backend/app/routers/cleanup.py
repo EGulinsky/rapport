@@ -323,7 +323,7 @@ def _app_dict(a: models.Application, **extra) -> dict:
 def _contact_dict(c: models.Contact, **extra) -> dict:
     d = {
         "id":    c.id,
-        "name":  c.name,
+        "name":  c.display_name,
         "email": c.email,
         "firma": c.firma,
         "apps":  len(c.applications),

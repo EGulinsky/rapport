@@ -71,6 +71,7 @@ class CompanyContactPhoneRef(BaseModel):
 class CompanyContactRef(BaseModel):
     id: int
     name: str
+    vorname: Optional[str] = None
     email: Optional[str] = None
     phones: List[CompanyContactPhoneRef] = []
     linkedin_url: Optional[str] = None
@@ -292,6 +293,7 @@ def get_company(
         CompanyContactRef(
             id=c.id,
             name=c.name,
+            vorname=c.vorname,
             email=c.email,
             phones=[CompanyContactPhoneRef(id=p.id, number=p.number, type=p.type) for p in c.phones],
             linkedin_url=c.linkedin_url,

@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { LocationSearchInput } from './LocationSearchInput'
+import { displayName } from './ContactModal'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_COLORS,
@@ -1756,7 +1757,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       <input type="checkbox" checked={selectedContactIds.has(c.id)} onChange={() => toggleContactSelect(c.id)}
                         className="mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{c.vorname ? `${c.vorname} ${c.name}` : c.name}</p>
+                        <p className="font-medium text-gray-900 truncate">{displayName(c)}</p>
                         <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
                         {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
                         {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
@@ -1766,7 +1767,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                       <div className="flex gap-1 shrink-0">
                         <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ vorname: c.vorname, name: c.name, email: c.email, telefon: c.phones?.[0]?.number ?? '', rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}
                           className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600" title={t('contacts.edit')}><Pencil className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => deleteContact(c.id, c.name)}
+                        <button onClick={() => deleteContact(c.id, displayName(c))}
                           className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title={t('contacts.delete')}><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     </div>
@@ -1888,7 +1889,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                         <button key={c.id} type="button" disabled={savingContact}
                           onClick={() => linkContact(c.id)}
                           className="w-full text-left rounded-md border border-gray-200 bg-white px-3 py-2 hover:border-indigo-400 hover:bg-indigo-50 disabled:opacity-50 transition-colors">
-                          <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                          <p className="text-sm font-medium text-gray-900">{displayName(c)}</p>
                           <p className="text-xs text-gray-500">{[c.typ, c.rolle, c.firma].filter(Boolean).join(' · ')}</p>
                           {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
                         </button>

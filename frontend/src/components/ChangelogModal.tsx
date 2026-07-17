@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.4.2',
+    date: '2026-07-17',
+    changes: [
+      'Fixed contacts sometimes showing only their last name — the audit log, phone call entries, company contact lists, "assign contact" and "link contact" searches, and the iCloud import list all used to read the surname alone instead of combining it with the first name.',
+    ],
+  },
+  {
     version: '4.4.1',
     date: '2026-07-17',
     changes: [

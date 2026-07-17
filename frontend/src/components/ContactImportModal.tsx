@@ -18,6 +18,14 @@ function candidateKey(source: 'icloud' | 'linkedin', c: Candidate): string {
   return (c as LinkedInPeopleCandidate).profile_url
 }
 
+function candidateDisplayName(source: 'icloud' | 'linkedin', c: Candidate): string {
+  if (source === 'icloud') {
+    const ic = c as ICloudContactCandidate
+    return ic.vorname ? `${ic.vorname} ${ic.name}` : ic.name
+  }
+  return c.name
+}
+
 function candidateSubtitle(source: 'icloud' | 'linkedin', c: Candidate, atWord: string): string {
   if (source === 'icloud') {
     const ic = c as ICloudContactCandidate
@@ -150,6 +158,7 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
           )}
           {candidates.map(c => {
             const key = candidateKey(source, c)
+            const displayName = candidateDisplayName(source, c)
             const subtitle = candidateSubtitle(source, c, t('import.at'))
             const alreadyImported = source === 'icloud' && (c as ICloudContactCandidate).already_imported
             return (
@@ -170,7 +179,7 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-gray-800 truncate">{c.name}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{displayName}</p>
                     {alreadyImported && (
                       <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
                         {t('import.alreadyImported')}

@@ -1671,7 +1671,7 @@ async def _sync_contacts_http(
             else:
                 match_reason = t("email_domain_matches_company", lang, org=org_val)
             add_audit(db, "create", "sync", contact_id=contact.id,
-                      new_value=contact.name,
+                      new_value=contact.display_name,
                       reason_key="contact_imported_icloud_addressbook", reason_params={"match_reason": match_reason},
                       user_id=user_id)
             linked_ids = list({*mention_app_ids, *firma_app_ids})
@@ -1811,7 +1811,7 @@ def import_contacts(
             contact.applications.append(app_obj)
         add_audit(db, "create", "user", contact_id=contact.id,
                   app_id=app_obj.id if app_obj else None,
-                  new_value=contact.name, reason_key="import_from_icloud_contact_search",
+                  new_value=contact.display_name, reason_key="import_from_icloud_contact_search",
                   user_id=current_user.id)
         imported += 1
 
@@ -1878,7 +1878,7 @@ async def sync_contacts_icloud(
             contact.icloud_last_synced_at = datetime.now(timezone.utc)
             synced.append(contact.id)
         except Exception as e:
-            errors.append(f"{contact.name}: {e}")
+            errors.append(f"{contact.display_name}: {e}")
 
     db.commit()
     return {"synced": synced, "not_found": not_found, "errors": errors}
@@ -2059,7 +2059,7 @@ async def _do_icloud_calls(user_id: int) -> dict:
                 continue
 
             if not call_name and matched_contacts:
-                call_name = matched_contacts[0].name
+                call_name = matched_contacts[0].display_name
 
             apps_by_id: dict[int, models.Application] = {}
             for c in matched_contacts:

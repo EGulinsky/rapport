@@ -262,8 +262,8 @@ def merge_contacts(
                 winner_norms.add(norm)
 
         add_audit(db, "merge", "user", contact_id=winner.id,
-                  old_value=f"{loser.name} (#{loser.id})",
-                  new_value=f"{winner.name} (#{winner.id})",
+                  old_value=f"{loser.display_name} (#{loser.id})",
+                  new_value=f"{winner.display_name} (#{winner.id})",
                   reason_key="merged", user_id=current_user.id)
         db.delete(loser)
 

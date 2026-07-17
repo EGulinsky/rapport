@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { CompanyProfile, MainStatus, ContactWithApp } from '../types'
 import { StatusBadge } from './StatusBadge'
+import { displayName } from './ContactModal'
 import { CompanyLogo } from './CompanyLogo'
 import { CompanyFilterPicker, type CompanyFilter } from './CompanyFilterPicker'
 import { useLocale } from '../i18n/useLocale'
@@ -674,7 +675,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                         {contactResults.slice(0, 15).map(c => (
                           <button key={c.id} onClick={() => assignContact(c.id)}
                             className="w-full text-left px-2 py-1.5 rounded hover:bg-indigo-100 hover:text-indigo-700 transition-colors">
-                            <p className="text-xs font-medium text-gray-900">{c.name}</p>
+                            <p className="text-xs font-medium text-gray-900">{displayName(c)}</p>
                             {(c.firma || c.rolle) && (
                               <p className="text-[11px] text-gray-400">{[c.rolle, c.firma].filter(Boolean).join(' · ')}</p>
                             )}
@@ -701,7 +702,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
                         onClick={() => onOpenContact?.(contact.id)}
                         className="min-w-0 flex-1 text-left hover:text-indigo-600 transition-colors"
                       >
-                        <p className="text-sm font-medium text-gray-900 truncate">{contact.name}</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">{displayName(contact)}</p>
                         {contact.rolle && <p className="text-xs text-gray-500 truncate">{contact.rolle}</p>}
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           {contact.email && (
