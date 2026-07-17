@@ -60,7 +60,7 @@
     "chooseCompany": "Firma wählen… *",
     "searchCompanyPlaceholder": "Firma suchen…",
     "searching": "Suche…",
-    "enterSearchTerm": "Suchbegriff eingeben…",
+    "enterSearchTerm": "Firmenname eingeben, um zu suchen oder neu anzulegen…",
     "creating": "Anlegen…",
     "createNew": "\"{{name}}\" neu anlegen",
     "rolePlaceholder": "Rolle *",

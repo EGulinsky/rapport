@@ -3,7 +3,7 @@
   "pickCompanyPlaceholder": "Choose company…",
   "searchCompanyPlaceholder": "Search company…",
   "searching": "Searching…",
-  "enterSearchTerm": "Enter search term…",
+  "enterSearchTerm": "Type a company name to search, or to add it as new…",
   "creating": "Creating…",
   "createNew": "Create \"{{name}}\"",
   "rolePlaceholder": "Role",

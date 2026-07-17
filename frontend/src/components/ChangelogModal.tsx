@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.3.7',
+    date: '2026-07-17',
+    changes: [
+      'The "add a new company" option when creating an application (or picking a contact\'s company) was easy to miss — it only appears after you start typing a name that doesn\'t match an existing company, but the empty-state hint gave no clue that typing would let you create one. The hint now says so explicitly.',
+    ],
+  },
+  {
     version: '4.3.6',
     date: '2026-07-16',
     changes: [
