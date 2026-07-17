@@ -160,7 +160,7 @@ frontend/src/
     ├── RequireAuth.tsx          Route guard: redirects to /login when not signed in
     ├── ApplicationTable.tsx    Sortable table view
     ├── KanbanBoard.tsx          Kanban with drag & drop
-    ├── ApplicationModal.tsx     Detail/edit modal: lifecycle bar, timeline, attachments, contacts, AI assessment
+    ├── ApplicationModal.tsx     Detail/edit modal: lifecycle bar, timeline, attachments, contacts, salary, AI assessment
     ├── CalendarView.tsx          Calendar view (day/week/month)
     ├── StatsBar.tsx               KPI tiles
     ├── StatusBadge.tsx            Colored status badges
@@ -683,6 +683,10 @@ erDiagram
 | `company_profile_id` / `target_company_profile_id` | INTEGER FK | → `company_profiles.id` |
 | `ai_color` / `ai_reasoning` / `ai_next_step` / `ai_assessed_at` | VARCHAR/TEXT/VARCHAR/DATETIME | AI assessment |
 | `gespraech_1`…`5` | TEXT NULL | Interview notes (legacy from Excel import) |
+| `salary_currency` | VARCHAR NULL | Shared ISO currency code for both salary figures below |
+| `salary_expectation_min`/`_max`, `salary_budget_min`/`_max` | INTEGER NULL | Applicant expectation / company budget — single value (`_min` only) or range; each of these 4 slots may additionally carry a `_fixed`/`_bonus` breakdown pair (8 more INTEGER NULL columns) whose sum is kept equal to the plain total (enforced in `applications.py`, not silently rewritten) |
+| `salary_expectation_company_car` / `salary_budget_company_car` | BOOLEAN | Optional "would like"/"offered" company-car flags, informational only — not part of `salary_mismatch` |
+| `salary_mismatch` (property) | — | Computed: best-case budget (its max if a range, else its single value) below the lowest acceptable expectation; flagged in the modal and as a Kanban icon |
 | `abgesagt` (property) | — | Computed from `main_status == "rejected"` |
 | `ghosting` (property) | — | Computed: > 14 days with no activity |
 

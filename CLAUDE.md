@@ -185,6 +185,35 @@ deliberately not read via `docker cp`, since `docker compose run` ignores the se
 Original: `/Users/eugengulinsky/Documents/Bewerbungen und Arbeitsverträge/Ich/Aktuell/Stellen/Bewerbungen_Eugen_Gulinsky.xlsx`
 Sheet: `Tracking`, 17 columns — mapping in `models.py` under `EXCEL_IMPORT_MAP` / `EXCEL_EXPORT_MAP`.
 
+## Work State (Session v4.5.2 – 2026-07-17)
+
+Picks up after v3.78.0 (below). Between v3.78.0 and this session, work continued across many sessions not individually logged here (from `git log`): Portability Phase 5+6 hardware verification + a Docker-volume-name safety fix (v3.79.0–v3.79.1), AI assessment considering CV + LinkedIn profile plus follow-up performance/stability fixes — event-loop-freeze fix, CV-extraction caching, a hard subprocess timeout (v4.1.0–v4.1.3), auto-triggering per-app sync right after application creation (v4.2.0), unifying Gmail/iCloud Mail matching with company-name/role search followed by three incident-response fixes (false-positive flood, contact-domain cross-contamination, a uniform sync date floor, v4.3.0–v4.3.5), the downloadable Rapport Installer (v4.3.6), two NewContactModal/company-field UX fixes (v4.3.7–v4.3.8), an agent health-check fix (v4.3.9), and multi-phone-number contact support + iCloud contacts sync/re-sync (v4.4.0).
+
+### Completed in This Session
+
+**Contacts display-name bugs (v4.4.1–v4.4.4):** a duplicate-contact review loop (two compounding bugs — a disabled Approve button in `ReviewModal.tsx` for `duplicate_contact` items, and `cleanup.py`'s duplicate search having no memory of past reject/approve decisions); a new `Contact.display_name` property (`models.py`) with a guard against double-prepending the first name, swapped in at ~15 backend call sites and several frontend components after a user report of last-name-only display in the audit log and elsewhere; a deeper follow-up in `sync_targeted.py`/`sync_icloud.py`'s calls sync where an incomplete raw OS-supplied call name still won over the enriched contact record even after the `display_name` fix (fixed by making the matched contact record always take priority); and `contacts.py`'s `GET /` search filter missing `vorname` entirely, so full-text search silently ignored first names.
+
+**Salary tracking feature (v4.5.0–v4.5.2), the largest piece:** new "Salary" tab in `ApplicationModal.tsx` — applicant expectation vs. company budget, each a single value or min/max range, in a selectable currency (`frontend/src/constants/currencies.ts`). 15 new nullable `Application` columns total across the three point releases: `salary_currency`, `salary_expectation_min`/`_max`, `salary_budget_min`/`_max` (v4.5.0); an optional per-slot fixed+bonus breakdown — 8 more columns, one `_fixed`/`_bonus` pair for each of the 4 min/max slots, independently toggleable — plus `salary_expectation_company_car`/`salary_budget_company_car` boolean flags (v4.5.1). All migrated via `_migrate_salary()` in `database.py` (idempotent `PRAGMA table_info` + `ALTER TABLE ADD COLUMN`, grown in place across the three releases rather than one function per release). `Application.salary_mismatch` (`models.py`) is a computed property — true only when the budget's best case (its max if a range, else its single value) is still below the expectation's minimum acceptable value — flagged in red in the modal and as an `AlertTriangle` icon on the Kanban card (`KanbanBoard.tsx`). Backend validation in `applications.py`: `_validate_salary_pair()` (max requires min, max ≥ min) and `_validate_salary_breakdown()` (fixed/bonus must both be set together, and must sum exactly to the slot's total) run in both `create_application` and `update_application`, the latter via an `_effective()` closure that merges the incoming partial update with the row's existing values so a breakdown on an untouched slot still validates correctly. v4.5.2 changed `salary_currency`'s Pydantic default from `None` to `"EUR"` (`ApplicationBase` only — new applications now always get a real currency) and made the currency `<select>` and the read-only `Intl.NumberFormat` display fall back to EUR for older rows that still have `salary_currency = NULL`, rather than showing an unlabeled number.
+
+All 1250 PR-gate backend tests pass (1451 combined with integration), 93 frontend tests, `tsc`/`vitest`/`npm run build`/ruff clean. One CI hiccup mid-session: v4.5.0's `Deploy` job was cancelled at the Docker rebuild step — the self-hosted runner shares this Mac's disk with the interactive dev session, which independently hit `ENOSPC` around the same time (611MB free at the low point, recovered to 20GB+ once background processes cleared); resolved by simply pushing the next commit (v4.5.1), whose own CI run redeployed the latest `main` HEAD including the missed v4.5.0 changes.
+
+### Open / Next Steps
+- The salary feature has no dedicated E2E journey yet (13 journeys currently cover the pre-salary feature set) — not requested this session, worth considering if the feature proves central to the workflow
+- No live-browser verification of the Salary tab was done this session (no login credentials available in this dev environment) — verified via `tsc`/`vitest`/backend API tests only, consistent with how prior UI-only work this session was handled
+
+### Commits (this session, newest first)
+```
+a964532 fix: salary currency defaults to EUR when unset (v4.5.2)
+4e43a59 feat: salary fixed+bonus breakdown and company car detail (v4.5.1)
+b97a916 feat: salary tracking per application — expectation vs. budget with mismatch flag (v4.5.0)
+b3d4ba4 fix: contacts full-text search ignores first names (v4.4.4)
+871bd14 fix: calls sync still showing last-name-only despite display_name fix (v4.4.3)
+56019ed fix: contacts showing only last name across audit log, calls, and more (v4.4.2)
+e382c55 fix: duplicate-contact review loop — disabled Approve button + preview never forgetting rejections (v4.4.1)
+```
+
+---
+
 ## Work State (Session v3.78.0 – 2026-07-13)
 
 Picks up right after the v3.55.12 session documented below (kept as historical reference). Between v3.55.12 and this session, a full 13-phase i18n rollout shipped across many sessions (P1–P13, not individually logged here): DB migration + `ui_language` on `users` (registration default `en`, existing accounts migrated to `de`), `react-i18next` frontend scaffolding with per-feature-area namespaces, `error_keys.py` stable backend error keys, email translation, the full auth flow, `AccountPanel` language selector, a `types.ts` status-label hook conversion, locale-aware date/collation, every feature view (Companies/Contacts/Calendar/Analytics/ApplicationModal/SettingsModal's 11 panels), the native macOS agent (`agent/strings.py` + config push endpoint), E2E `data-testid` refactor + `uiLanguage` fixture, and the correctness test suite (`locales.test.ts`). Several gap-fix passes followed (AuditLogModal, ApplicationTable, AnalyticsView, SyncButton, ReviewModal, changelog history retranslation — v3.72.0–v3.77.0).
