@@ -145,7 +145,7 @@ class ApplicationBase(BaseModel):
     gespraech_3: Optional[str] = None
     gespraech_4: Optional[str] = None
     gespraech_5: Optional[str] = None
-    salary_currency: Optional[str] = None
+    salary_currency: Optional[str] = "EUR"
     salary_expectation_min: Optional[int] = None
     salary_expectation_max: Optional[int] = None
     salary_budget_min: Optional[int] = None

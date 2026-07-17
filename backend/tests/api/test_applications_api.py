@@ -209,6 +209,11 @@ class TestUpdateApplication:
 
 
 class TestSalaryFields:
+    def test_positiv_waehrung_defaultet_auf_eur_wenn_nicht_angegeben(self, client):
+        resp = client.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})
+        assert resp.status_code == 201
+        assert resp.json()["salary_currency"] == "EUR"
+
     def test_positiv_gehalt_wird_beim_anlegen_gespeichert(self, client):
         resp = client.post("/api/applications/", json={
             "firma": "Test GmbH", "rolle": "Engineer",

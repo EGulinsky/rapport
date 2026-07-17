@@ -48,7 +48,6 @@
   },
   "salary": {
     "currency": "Währung",
-    "currencySelectPlaceholder": "Währung wählen…",
     "expectation": "Deine Vorstellung",
     "budget": "Budget des Unternehmens",
     "amountPlaceholder": "Betrag",

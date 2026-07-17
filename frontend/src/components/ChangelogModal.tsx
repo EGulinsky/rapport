@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.5.2',
+    date: '2026-07-17',
+    changes: [
+      'Salary tab: currency now defaults to EUR when none is explicitly picked, instead of showing amounts without a currency.',
+    ],
+  },
+  {
     version: '4.5.1',
     date: '2026-07-17',
     changes: [

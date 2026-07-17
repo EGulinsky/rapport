@@ -25,9 +25,7 @@ function parentPath(p: string): string {
 }
 
 function formatCurrencyAmount(value: number, currency: string | null | undefined, locale: string): string {
-  const fmt = currency
-    ? new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 })
-    : new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
+  const fmt = new Intl.NumberFormat(locale, { style: 'currency', currency: currency || 'EUR', maximumFractionDigits: 0 })
   return fmt.format(value)
 }
 
@@ -1936,10 +1934,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 block">{t('salary.currency')}</label>
                 <select
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={draft.salary_currency ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, salary_currency: e.target.value || null }))}
+                  value={draft.salary_currency || 'EUR'}
+                  onChange={e => setDraft(d => ({ ...d, salary_currency: e.target.value }))}
                 >
-                  <option value="">{t('salary.currencySelectPlaceholder')}</option>
                   {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>)}
                 </select>
               </div>
