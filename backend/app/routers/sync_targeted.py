@@ -932,6 +932,9 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                     db.execute(text(
                         "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
                     ), {"c": existing.id, "a": app.id})
+                    db.expire(existing, ["applications"])
+                    from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+                    attach_linkedin_messages_for_contact(db, existing, user_id)
             else:
                 contact = models.Contact(
                     name=name, email=email_val,
@@ -950,6 +953,9 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
                     db.execute(text(
                         "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
                     ), {"c": contact.id, "a": app.id})
+                    db.expire(contact, ["applications"])
+                    from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+                    attach_linkedin_messages_for_contact(db, contact, user_id)
                 created += 1
         except Exception as e:
             errors.append(f"Kontakt {name if 'name' in dir() else '?'}: {e}")

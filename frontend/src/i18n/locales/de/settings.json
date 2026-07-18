@@ -179,7 +179,17 @@
     "logUpdated": "Aktualisiert",
     "logUnchanged": "Unverändert",
     "logUpdateArrow": " ({{from}} → {{to}})",
-    "logWasRejected": " (war: {{from}})"
+    "logWasRejected": " (war: {{from}})",
+    "messagesTitle": "Nachrichten",
+    "messagesHint": "LinkedIn-Nachrichtenexport hochladen (\"Kopie deiner Daten anfordern\" → messages.csv), um Unterhaltungen passenden Kontakten als Verlaufseinträge zuzuordnen.",
+    "messagesUploadPrompt": "Zum Hochladen der messages.csv klicken",
+    "messagesReupload": "messages.csv erneut hochladen",
+    "messagesUploading": "Wird hochgeladen…",
+    "messagesImportedCount": "{{count}} Unterhaltungen importiert",
+    "messagesLastImportedSuffix": " · Zuletzt aktualisiert: {{date}}",
+    "messagesStatNew": "Neu",
+    "messagesStatUpdated": "Aktualisiert",
+    "messagesStatEvents": "Einträge erstellt"
   },
   "backup": {
     "title": "Datenbank-Backup",

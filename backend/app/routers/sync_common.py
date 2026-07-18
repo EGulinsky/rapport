@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import html
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
 from email.utils import parseaddr
@@ -96,7 +97,12 @@ def _normalize_name(name: str) -> str:
     """Return a canonical sorted-token fingerprint for order-independent name comparison.
 
     "Mehra, Malvika" and "Malvika Mehra" both become frozenset → sorted str.
+    NFC-normalized first — an umlaut can be encoded as one precomposed codepoint
+    ("ü") or as a base letter + combining diaeresis ("u" + U+0308); these look
+    identical but compare unequal without normalization, silently breaking
+    matches for names sourced from different exports/systems.
     """
+    name = unicodedata.normalize("NFC", name or "")
     tokens = sorted(t.strip().lower() for t in re.split(r"[,\s]+", name) if t.strip())
     return " ".join(tokens)
 
@@ -333,6 +339,9 @@ def _upsert_contact(
                       field="rolle", old_value=old_v, new_value=existing.rolle, user_id=user_id)
         # INSERT OR IGNORE bypasses ORM relationship tracking — no autoflush race
         db.execute(_LINK_SQL, {"cid": existing.id, "aid": app_id})
+        db.expire(existing, ["applications"])
+        from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+        attach_linkedin_messages_for_contact(db, existing, user_id)
         return
 
     raw_name = name.strip() or email_addr.split("@")[0]
@@ -354,6 +363,9 @@ def _upsert_contact(
     db.execute(_LINK_SQL, {"cid": contact.id, "aid": app_id})
     add_audit(db, "create", "sync", contact_id=contact.id, app_id=app_id,
               new_value=contact.display_name, reason_key="contact_from_email_sync", user_id=user_id)
+    db.expire(contact, ["applications"])
+    from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+    attach_linkedin_messages_for_contact(db, contact, user_id)
 
 
 def upsert_contact_from_sender(

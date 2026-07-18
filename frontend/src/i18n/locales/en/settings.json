@@ -179,7 +179,17 @@
     "logUpdated": "Updated",
     "logUnchanged": "Unchanged",
     "logUpdateArrow": " ({{from}} → {{to}})",
-    "logWasRejected": " (was: {{from}})"
+    "logWasRejected": " (was: {{from}})",
+    "messagesTitle": "Messages",
+    "messagesHint": "Upload your LinkedIn message export (\"Get a copy of your data\" → messages.csv) to attach conversations to matching contacts as timeline entries.",
+    "messagesUploadPrompt": "Click to upload messages.csv",
+    "messagesReupload": "Re-upload messages.csv",
+    "messagesUploading": "Uploading…",
+    "messagesImportedCount": "{{count}} conversations imported",
+    "messagesLastImportedSuffix": " · Last updated: {{date}}",
+    "messagesStatNew": "New",
+    "messagesStatUpdated": "Updated",
+    "messagesStatEvents": "Events created"
   },
   "backup": {
     "title": "Database backup",

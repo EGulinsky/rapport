@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle, Car } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle, Car, Linkedin } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -811,7 +811,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     return evs.filter(ev => {
       if (cutoff && ev.datum && new Date(ev.datum) < cutoff) return false
       if (typeFilter === 'all') return true
-      if (typeFilter === 'mail') return ev.source === 'gmail' || ev.source === 'icloud_mail'
+      if (typeFilter === 'mail') return ev.source === 'gmail' || ev.source === 'icloud_mail' || ev.typ === 'mail'
       if (typeFilter === 'calendar') return ev.source === 'gcal' || ev.source === 'icloud_cal'
       return ev.typ === typeFilter
     })
@@ -2363,6 +2363,7 @@ function getEventIcon(event: Event): { icon: React.ReactNode; bg: string; fg: st
   if (src === 'icloud_calls' || src === 'call') return { icon: <Phone className={sz} />, bg: 'bg-green-100', fg: 'text-green-700' }
   if (src === 'gmail') return { icon: <Mail className={sz} />, bg: 'bg-red-100', fg: 'text-red-600' }
   if (src === 'icloud_mail') return { icon: <Mail className={sz} />, bg: 'bg-sky-100', fg: 'text-sky-600' }
+  if (src === 'linkedin_msg') return { icon: <Linkedin className={sz} />, bg: 'bg-blue-100', fg: 'text-blue-700' }
   if (src === 'gcal') return { icon: <Calendar className={sz} />, bg: 'bg-blue-100', fg: 'text-blue-600' }
   if (src === 'icloud_cal') return { icon: <Calendar className={sz} />, bg: 'bg-sky-100', fg: 'text-sky-700' }
   if (src === 'icloud_notes' || src === 'notes') return { icon: <FileText className={sz} />, bg: 'bg-amber-100', fg: 'text-amber-700' }
@@ -2383,6 +2384,7 @@ const SOURCE_META: Record<string, { icon: React.ReactNode; label: string; cls: s
   icloud_todo:  { icon: <FileText className="h-3 w-3" />, label: 'Erinnerungen',   cls: 'bg-orange-50 text-orange-700 border-orange-100' },
   notes:        { icon: <FileText className="h-3 w-3" />, label: 'Notizen',        cls: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
   call:         { icon: <Phone className="h-3 w-3" />,    label: 'Anruf',          cls: 'bg-green-50 text-green-700 border-green-100' },
+  linkedin_msg: { icon: <Linkedin className="h-3 w-3" />, label: 'LinkedIn',       cls: 'bg-blue-50 text-blue-700 border-blue-100' },
 }
 
 function buildDeepLink(source: string | undefined, external_id: string | undefined): string | null {
