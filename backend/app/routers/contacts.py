@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -71,6 +71,111 @@ def list_all_contacts(
                         c.company_website = website_map[a.company_profile_id]
 
     return contacts
+
+
+class ContactEventItem(BaseModel):
+    id: int
+    application_id: int
+    company_name: Optional[str] = None
+    rolle: Optional[str] = None
+    typ: str
+    datum: Optional[date] = None
+    titel: Optional[str] = None
+    notiz: Optional[str] = None
+    source: Optional[str] = None
+    external_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ContactEventsResponse(BaseModel):
+    calls: List[ContactEventItem]
+    mails: List[ContactEventItem]
+    messages: List[ContactEventItem]
+
+
+def _sort_newest_first(events: List[models.Event]) -> List[models.Event]:
+    """Newest-dated first; undated events sort last. Ties break on id (higher
+    id = synced/created later) rather than created_at, to sidestep comparing
+    naive vs. timezone-aware datetimes across differently-sourced events."""
+    return sorted(events, key=lambda e: (e.datum or date.min, e.id), reverse=True)
+
+
+@router.get("/{contact_id}/events", response_model=ContactEventsResponse)
+def get_contact_events(
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Calls, mails, and LinkedIn messages connected to this specific contact
+    (not just anything on the same application) — mirrors CompanyModal's
+    per-tab breakdown, but here scoped to one contact across all of their
+    linked applications.
+
+    None of these event types has a direct FK to Contact, so each is matched
+    by the same signal already used elsewhere in the codebase: calls and
+    LinkedIn messages embed the contact's display name in Event.titel at
+    creation time (see _delete_call_events_for_contact() in applications.py
+    and attach_linkedin_messages_for_contact() in sync_linkedin.py); mails
+    are matched by the sender address in Event.autor (only populated for
+    mail events synced after this feature shipped — see
+    _save_deterministic_event() in sync_common.py)."""
+    contact = db.query(models.Contact).filter_by(id=contact_id).first()
+    if not contact:
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
+
+    apps = list(contact.applications)
+    if not apps:
+        return ContactEventsResponse(calls=[], mails=[], messages=[])
+
+    app_ids = [a.id for a in apps]
+    company_ids = {a.company_profile_id for a in apps if a.company_profile_id}
+    company_names = {}
+    if company_ids:
+        company_names = dict(
+            db.query(models.CompanyProfile.id, models.CompanyProfile.name_display)
+            .filter(models.CompanyProfile.id.in_(company_ids))
+            .all()
+        )
+    app_meta = {a.id: a for a in apps}
+
+    def _to_item(e: models.Event) -> ContactEventItem:
+        app = app_meta[e.application_id]
+        company_name = company_names.get(app.company_profile_id) if app.company_profile_id else None
+        return ContactEventItem(
+            id=e.id, application_id=e.application_id, company_name=company_name or app.firma,
+            rolle=app.rolle, typ=e.typ, datum=e.datum, titel=e.titel, notiz=e.notiz,
+            source=e.source, external_id=e.external_id, created_at=e.created_at,
+        )
+
+    display_name = contact.display_name
+
+    calls = db.query(models.Event).filter(
+        models.Event.application_id.in_(app_ids),
+        models.Event.source == "icloud_calls",
+        models.Event.titel.contains(display_name),
+    ).all()
+
+    messages = db.query(models.Event).filter(
+        models.Event.application_id.in_(app_ids),
+        models.Event.source == "linkedin_msg",
+        models.Event.titel.contains(display_name),
+    ).all()
+
+    mails: List[models.Event] = []
+    if contact.email:
+        mails = db.query(models.Event).filter(
+            models.Event.application_id.in_(app_ids),
+            models.Event.source.in_(("gmail", "icloud_mail")),
+            models.Event.autor.ilike(f"%{contact.email}%"),
+        ).all()
+
+    return ContactEventsResponse(
+        calls=[_to_item(e) for e in _sort_newest_first(calls)],
+        mails=[_to_item(e) for e in _sort_newest_first(mails)],
+        messages=[_to_item(e) for e in _sort_newest_first(messages)],
+    )
 
 
 class ContactPhoneIn(BaseModel):

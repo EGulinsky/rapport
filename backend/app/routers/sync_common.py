@@ -967,6 +967,17 @@ def _save_deterministic_event(
     elif time_pfx:
         notiz = time_pfx.rstrip('\n') or None
 
+    # Sender header ("Von: "/"From: ") for mail events — stored on the event
+    # itself (Event.autor) so a contact's Mails tab (ContactModal.tsx) can
+    # later match past mail events back to them by email address; also used
+    # below to auto-create a contact from the sender, as before.
+    autor: Optional[str] = None
+    if source in ('gmail', 'icloud_mail'):
+        for line in raw_text.splitlines():
+            if line.startswith("Von: ") or line.startswith("From: "):
+                autor = line.split(": ", 1)[1].strip() or None
+                break
+
     log.debug("{} {!r} → CREATED typ={} datum={} ({})", pfx, det['titel'], det['typ'], datum, det.get('reason', '?'))
     new_event = models.Event(
         application_id=det['app_id'],
@@ -974,6 +985,7 @@ def _save_deterministic_event(
         datum=datum,
         titel=det['titel'] or source,
         notiz=notiz or None,
+        autor=autor,
         source=source,
         external_id=external_id,
         user_id=user_id,
@@ -985,21 +997,16 @@ def _save_deterministic_event(
     mark_synced(db, source, external_id, user_id)
 
     # Auto-create contact from sender (mail events only)
-    if source in ('gmail', 'icloud_mail'):
-        for line in raw_text.splitlines():
-            if line.startswith("Von: ") or line.startswith("From: "):
-                sender = line.split(": ", 1)[1].strip()
-                if sender:
-                    upsert_contact_from_sender(
-                        db, sender,
-                        app_id=det['app_id'],
-                        firma=app.firma,
-                        is_headhunter=app.is_headhunter,
-                        event_date=datum,
-                        body=raw_text,
-                        user_id=user_id,
-                    )
-                break
+    if autor:
+        upsert_contact_from_sender(
+            db, autor,
+            app_id=det['app_id'],
+            firma=app.firma,
+            is_headhunter=app.is_headhunter,
+            event_date=datum,
+            body=raw_text,
+            user_id=user_id,
+        )
 
     # Queue status change for user review (PendingMatch)
     status = det.get('status')

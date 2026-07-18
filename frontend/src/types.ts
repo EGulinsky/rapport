@@ -204,6 +204,26 @@ export interface Event {
   attachments?: Attachment[]
 }
 
+export interface ContactEventItem {
+  id: number
+  application_id: number
+  company_name?: string
+  rolle?: string
+  typ: string
+  datum?: string
+  titel?: string
+  notiz?: string
+  source?: string
+  external_id?: string
+  created_at?: string
+}
+
+export interface ContactEvents {
+  calls: ContactEventItem[]
+  mails: ContactEventItem[]
+  messages: ContactEventItem[]
+}
+
 export interface FileBrowseItem {
   name: string
   path: string

@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.4',
+    date: '2026-07-18',
+    changes: [
+      'Contact detail view now has separate tabs for Applications, Calls, Mails, and Messages (alongside the existing Overview), each listing the calls, emails, and LinkedIn messages connected to that specific contact, newest first — same layout style as the Company view.',
+      'Fixed mail events silently losing their sender address since June 29 (v3.14.6, "remove AI from sync") — a leftover from that refactor meant every email synced since then couldn\'t be matched back to a contact. Restored going forward; emails synced during that window can\'t be recovered since the sender address was never saved.',
+    ],
+  },
+  {
     version: '4.6.3',
     date: '2026-07-18',
     changes: [

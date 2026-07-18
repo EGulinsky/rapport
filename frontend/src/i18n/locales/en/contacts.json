@@ -97,7 +97,16 @@
     "lastSynced": "Last synced from iCloud: {{date}}",
     "syncDone": "Synced — new phone numbers and empty fields were filled in.",
     "resyncDone": "Re-synced — this contact now matches iCloud.",
-    "syncNotFound": "No matching iCloud contact found."
+    "syncNotFound": "No matching iCloud contact found.",
+    "tabOverview": "Overview",
+    "tabApplications": "Applications",
+    "tabCalls": "Calls",
+    "tabMails": "Mails",
+    "tabMessages": "Messages",
+    "noApplications": "No linked applications",
+    "noCalls": "No calls",
+    "noMails": "No mails",
+    "noMessages": "No messages"
   },
   "phoneTypes": {
     "mobile": "Mobile",

@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
+import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
 
 const BASE = '/api'
 
@@ -145,6 +145,8 @@ export const api = {
       const s = qs.toString()
       return request<ContactWithApp[]>(`/contacts/${s ? `?${s}` : ''}`)
     },
+
+    getEvents: (id: number) => request<ContactEvents>(`/contacts/${id}/events`),
 
     add: (appId: number, data: Omit<Partial<Contact>, 'phones'> & { phones?: { number: string; type: string }[] }) =>
       request<Contact>(`/applications/${appId}/contacts`, {

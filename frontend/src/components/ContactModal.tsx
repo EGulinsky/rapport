@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
-import type { ContactWithApp } from '../types'
+import type { ContactWithApp, ContactEvents, ContactEventItem } from '../types'
 import { CompanyLogo } from './CompanyLogo'
 import { PhoneListEditor, type PhoneEntry } from './PhoneListEditor'
 import { useLocale } from '../i18n/useLocale'
@@ -17,6 +17,8 @@ interface Props {
   onOpenCompany?: (id: number) => void
   onChanged?: () => void
 }
+
+type Tab = 'overview' | 'apps' | 'calls' | 'mails' | 'messages'
 
 const TYP_OPTIONS = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk', 'Sonstiges']
 
@@ -72,6 +74,9 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
   const [saveError, setSaveError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState<'sync' | 'resync' | null>(null)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('overview')
+  const [events, setEvents] = useState<ContactEvents | null>(null)
+  const [eventsLoading, setEventsLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -84,7 +89,16 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
     }
   }, [id])
 
-  useEffect(() => { load() }, [load])
+  const loadEvents = useCallback(async () => {
+    setEventsLoading(true)
+    try {
+      setEvents(await api.contacts.getEvents(id))
+    } finally {
+      setEventsLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => { load(); loadEvents() }, [load, loadEvents])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -250,6 +264,40 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           </div>
         </div>
 
+        {/* Tabs */}
+        {contact && (
+          <div className="flex border-b border-gray-100 px-6 gap-1 overflow-x-auto">
+            {([
+              ['overview', t('contactModal.tabOverview'), undefined],
+              ['apps', t('contactModal.tabApplications'), contact.applications?.length],
+              ['calls', t('contactModal.tabCalls'), events?.calls.length],
+              ['mails', t('contactModal.tabMails'), events?.mails.length],
+              ['messages', t('contactModal.tabMessages'), events?.messages.length],
+            ] as [Tab, string, number | undefined][]).map(([tabKey, label, count]) => (
+              <button
+                key={tabKey}
+                onClick={() => setTab(tabKey)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
+                  tab === tabKey
+                    ? 'border-indigo-500 text-indigo-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                )}
+              >
+                {label}
+                {!!count && (
+                  <span className={clsx(
+                    'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                    tab === tabKey ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                  )}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {saveError && (
           <div className="mx-6 mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{saveError}</div>
         )}
@@ -262,7 +310,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           <div className="px-6 py-8 text-center text-gray-400">{t('view.loading')}</div>
         )}
 
-        {!loading && contact && !editing && (
+        {!loading && contact && !editing && tab === 'overview' && (
           <div className="px-6 py-5 space-y-5">
             {/* Name fields */}
             <div className="grid grid-cols-2 gap-4">
@@ -355,24 +403,44 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{contact.notizen}</p>
               </div>
             )}
+          </div>
+        )}
 
-            {/* Linked applications */}
-            {contact.applications && contact.applications.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{t('contactModal.applicationsHeading')}</p>
-                <div className="space-y-1">
-                  {contact.applications.map(a => (
-                    <button
-                      key={a.id}
-                      onClick={() => onOpenApplication?.(a.id)}
-                      className="w-full text-left rounded-lg border border-gray-100 px-3 py-2 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
-                    >
-                      <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
-                      <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
-                    </button>
-                  ))}
-                </div>
+        {/* Applications tab */}
+        {!loading && contact && !editing && tab === 'apps' && (
+          <div className="px-6 py-5">
+            {contact.applications && contact.applications.length > 0 ? (
+              <div className="space-y-1">
+                {contact.applications.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => onOpenApplication?.(a.id)}
+                    className="w-full text-left rounded-lg border border-gray-100 px-3 py-2 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
+                  >
+                    <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
+                    <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
+                  </button>
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">{t('contactModal.noApplications')}</p>
+            )}
+          </div>
+        )}
+
+        {/* Calls / Mails / Messages tabs */}
+        {!loading && contact && !editing && (tab === 'calls' || tab === 'mails' || tab === 'messages') && (
+          <div className="px-6 py-5">
+            {eventsLoading ? (
+              <div className="py-8 text-center text-gray-400">{t('view.loading')}</div>
+            ) : (
+              <EventList
+                items={tab === 'calls' ? (events?.calls ?? []) : tab === 'mails' ? (events?.mails ?? []) : (events?.messages ?? [])}
+                emptyLabel={tab === 'calls' ? t('contactModal.noCalls') : tab === 'mails' ? t('contactModal.noMails') : t('contactModal.noMessages')}
+                icon={tab === 'calls' ? <Phone className="h-3.5 w-3.5" /> : tab === 'mails' ? <Mail className="h-3.5 w-3.5" /> : <Linkedin className="h-3.5 w-3.5" />}
+                locale={locale}
+                onOpenApplication={onOpenApplication}
+              />
             )}
           </div>
         )}
@@ -485,6 +553,49 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function EventList({ items, emptyLabel, icon, locale, onOpenApplication }: {
+  items: ContactEventItem[]
+  emptyLabel: string
+  icon: React.ReactNode
+  locale: string
+  onOpenApplication?: (id: number) => void
+}) {
+  if (items.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-8">{emptyLabel}</p>
+  }
+  return (
+    <div className="space-y-1.5">
+      {items.map(item => (
+        <button
+          key={item.id}
+          onClick={() => onOpenApplication?.(item.application_id)}
+          className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2 min-w-0">
+              <span className="mt-0.5 text-gray-400 shrink-0">{icon}</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{item.titel || '—'}</p>
+                {(item.company_name || item.rolle) && (
+                  <p className="text-xs text-gray-500 truncate">
+                    {[item.company_name, item.rolle].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                {item.notiz && (
+                  <p className="text-xs text-gray-400 truncate mt-0.5">{item.notiz}</p>
+                )}
+              </div>
+            </div>
+            {item.datum && (
+              <span className="text-xs text-gray-400 shrink-0">{formatDate(item.datum, locale)}</span>
+            )}
+          </div>
+        </button>
+      ))}
     </div>
   )
 }
