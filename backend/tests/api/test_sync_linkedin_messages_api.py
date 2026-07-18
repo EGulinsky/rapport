@@ -22,7 +22,7 @@ _COLUMNS = [
     "TO", "RECIPIENT PROFILE URLS", "DATE", "SUBJECT", "CONTENT", "FOLDER", "ATTACHMENTS",
 ]
 
-SELF_NAME = "Eugen Gulinsky"
+SELF_NAME = "Max Mustermann"
 
 
 def _build_csv(rows: list[dict], columns: list[str] | None = None) -> bytes:
@@ -41,9 +41,9 @@ def _message_row(conv_id, frm, to, date, content, folder="INBOX", other_url="htt
         "CONVERSATION ID": conv_id,
         "CONVERSATION TITLE": "",
         "FROM": frm,
-        "SENDER PROFILE URL": "https://www.linkedin.com/in/eugen-gulinsky" if frm == SELF_NAME else other_url,
+        "SENDER PROFILE URL": "https://www.linkedin.com/in/max-mustermann" if frm == SELF_NAME else other_url,
         "TO": to,
-        "RECIPIENT PROFILE URLS": other_url if frm == SELF_NAME else "https://www.linkedin.com/in/eugen-gulinsky",
+        "RECIPIENT PROFILE URLS": other_url if frm == SELF_NAME else "https://www.linkedin.com/in/max-mustermann",
         "DATE": date,
         "SUBJECT": "",
         "CONTENT": content,
@@ -300,23 +300,23 @@ class TestDateFloor:
 
 
 class TestUmlautTransliterationMatching:
-    """Real-world case reported after shipping: a contact stored as
-    "Franz-Josef Schürmann" wasn't matched against LinkedIn's own export,
-    which spelled the same person "Schuermann" (ASCII digraph substitute for
-    an umlaut). Covers both matching directions plus a mix of all four
-    German umlaut/eszett substitutions."""
+    """Real-world case reported after shipping: a contact stored with a German
+    umlaut wasn't matched against LinkedIn's own export, which spelled the
+    same person using the ASCII digraph substitute for that umlaut instead.
+    Covers both matching directions plus a mix of all four German
+    umlaut/eszett substitutions."""
 
     def test_positiv_kontakt_mit_umlaut_matcht_csv_mit_ue(self, client, db_session):
         app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Franz-Josef Schürmann", vorname=None)
+        contact = contact_factory(db_session, name="Hans-Peter Grünwald", vorname=None)
         app.contacts.append(contact)
         seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         content = _build_csv([
             *_filler_rows(),
-            _message_row("conv-umlaut-1", "Franz-Josef Schuermann", SELF_NAME,
-                          _fmt(date.today() - timedelta(days=1)), "Sehr geehrter Herr Schuermann"),
+            _message_row("conv-umlaut-1", "Hans-Peter Gruenwald", SELF_NAME,
+                          _fmt(date.today() - timedelta(days=1)), "Sehr geehrter Herr Gruenwald"),
         ])
         resp = _upload(client, content)
 
@@ -329,14 +329,14 @@ class TestUmlautTransliterationMatching:
     def test_positiv_kontakt_mit_ue_matcht_csv_mit_umlaut(self, client, db_session):
         # Reverse direction: contact stored with the ASCII digraph, CSV has the umlaut.
         app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Franz-Josef Schuermann", vorname=None)
+        contact = contact_factory(db_session, name="Hans-Peter Gruenwald", vorname=None)
         app.contacts.append(contact)
         seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         content = _build_csv([
             *_filler_rows(),
-            _message_row("conv-umlaut-2", "Franz-Josef Schürmann", SELF_NAME,
+            _message_row("conv-umlaut-2", "Hans-Peter Grünwald", SELF_NAME,
                           _fmt(date.today() - timedelta(days=1)), "Guten Tag"),
         ])
         resp = _upload(client, content)
@@ -346,14 +346,14 @@ class TestUmlautTransliterationMatching:
 
     def test_positiv_alle_vier_umlaut_varianten_in_einem_namen(self, client, db_session):
         app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Bärbel Käßmann-Öztürk", vorname=None)
+        contact = contact_factory(db_session, name="Bärbel Preißler-Öztürk", vorname=None)
         app.contacts.append(contact)
         seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         content = _build_csv([
             *_filler_rows(),
-            _message_row("conv-umlaut-3", "Baerbel Kaessmann-Oeztuerk", SELF_NAME,
+            _message_row("conv-umlaut-3", "Baerbel Preissler-Oeztuerk", SELF_NAME,
                           _fmt(date.today() - timedelta(days=1)), "Hallo"),
         ])
         resp = _upload(client, content)
@@ -365,14 +365,14 @@ class TestUmlautTransliterationMatching:
         # Sanity check: transliteration must not cause false-positive matches
         # between genuinely different people.
         app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Franz-Josef Schürmann", vorname=None)
+        contact = contact_factory(db_session, name="Hans-Peter Grünwald", vorname=None)
         app.contacts.append(contact)
         seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         content = _build_csv([
             *_filler_rows(),
-            _message_row("conv-umlaut-4", "Franz-Josef Schumann", SELF_NAME,
+            _message_row("conv-umlaut-4", "Hans-Peter Baumann", SELF_NAME,
                           _fmt(date.today() - timedelta(days=1)), "Hallo"),
         ])
         resp = _upload(client, content)

@@ -14,7 +14,7 @@ const CHANGELOG: Release[] = [
     date: '2026-07-18',
     changes: [
       'LinkedIn message import: conversations before an application\'s earliest existing timeline entry (or on an application with no dated entries yet) no longer create a timeline event — same date-floor rule already used for mail/calendar/call sync.',
-      'LinkedIn message import: contact matching now also recognizes German umlauts spelled out as ASCII (ä/ö/ü/ß written as ae/oe/ue/ss), e.g. "Schürmann" now matches a LinkedIn export spelling the same person "Schuermann". Also fixes this for the existing mail-sync name+company fallback match, which shares the same matching code.',
+      'LinkedIn message import: contact matching now also recognizes German umlauts spelled out as ASCII (ä/ö/ü/ß written as ae/oe/ue/ss), e.g. a contact whose name contains "ü" now matches a LinkedIn export spelling the same person\'s name with "ue" instead. Also fixes this for the existing mail-sync name+company fallback match, which shares the same matching code.',
     ],
   },
   {

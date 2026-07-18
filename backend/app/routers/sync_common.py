@@ -108,8 +108,9 @@ def _normalize_name(name: str) -> str:
     Also transliterates German umlauts to their ASCII digraph form (ä→ae,
     ö→oe, ü→ue, ß→ss) after lowercasing — many external systems (e.g. a
     LinkedIn account's own display name, or a manually-typed contact) spell
-    "Schürmann" as "Schuermann" when umlaut input isn't available, and both
-    forms must fingerprint identically. Safe to apply unconditionally: a name
+    a name's umlauts out as ASCII digraphs when umlaut input isn't available
+    (e.g. "ü" becomes "ue"), and both forms must fingerprint identically. Safe
+    to apply unconditionally: a name
     already in ASCII form (no umlauts) is unaffected, so this never merges
     two names that weren't already umlaut/digraph variants of each other.
     """

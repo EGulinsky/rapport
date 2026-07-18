@@ -42,11 +42,12 @@ class TestNormalizeName:
 class TestNormalizeNameUmlautTransliteration:
     """German umlauts are frequently spelled out as ASCII digraphs (ä→ae,
     ö→oe, ü→ue, ß→ss) when umlaut input isn't available -- e.g. a LinkedIn
-    export writing "Franz-Josef Schuermann" for a contact stored in Rapport
-    as "Franz-Josef Schürmann". Both forms must match."""
+    export writing a contact's surname without any umlauts at all, while
+    Rapport has the same person stored with proper umlauts. Both forms must
+    match. (Names below are invented placeholders, not real contacts.)"""
 
     def test_positiv_ue_gegen_ü_nachname(self):
-        assert _normalize_name("Franz-Josef Schürmann") == _normalize_name("Franz-Josef Schuermann")
+        assert _normalize_name("Hans-Peter Grünwald") == _normalize_name("Hans-Peter Gruenwald")
 
     def test_positiv_ue_gegen_ü_einfacher_nachname(self):
         assert _normalize_name("Müller") == _normalize_name("Mueller")
@@ -61,13 +62,13 @@ class TestNormalizeNameUmlautTransliteration:
         assert _normalize_name("Weiß") == _normalize_name("Weiss")
 
     def test_positiv_gemischte_umlaute_in_einem_namen(self):
-        assert _normalize_name("Jürgen Käßmann") == _normalize_name("Juergen Kaessmann")
+        assert _normalize_name("Jürgen Preißler") == _normalize_name("Juergen Preissler")
 
     def test_positiv_transliteration_kombiniert_mit_reihenfolge(self):
-        assert _normalize_name("Schürmann, Franz-Josef") == _normalize_name("Franz-Josef Schuermann")
+        assert _normalize_name("Grünwald, Hans-Peter") == _normalize_name("Hans-Peter Gruenwald")
 
     def test_positiv_transliteration_kombiniert_mit_grossschreibung(self):
-        assert _normalize_name("FRANZ-JOSEF SCHÜRMANN") == _normalize_name("franz-josef schuermann")
+        assert _normalize_name("HANS-PETER GRÜNWALD") == _normalize_name("hans-peter gruenwald")
 
     def test_positiv_grossbuchstabe_umlaut(self):
         # Ü/Ö/Ä lowercase to ü/ö/ä (stdlib .lower() handles this), which the
@@ -81,4 +82,4 @@ class TestNormalizeNameUmlautTransliteration:
         assert _normalize_name("Bauer") != _normalize_name("Bär")
 
     def test_negativ_transliteration_verschmilzt_keine_verschiedenen_namen(self):
-        assert _normalize_name("Schürmann") != _normalize_name("Schumann")
+        assert _normalize_name("Grünwald") != _normalize_name("Baumann")
