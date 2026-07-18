@@ -1679,6 +1679,9 @@ async def _sync_contacts_http(
                 app_obj = db.query(models.Application).get(aid)
                 if app_obj:
                     contact.applications.append(app_obj)
+            if linked_ids:
+                from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+                attach_linkedin_messages_for_contact(db, contact, user_id)
             processed += 1
             created += 1
         except Exception as e:
@@ -1797,6 +1800,8 @@ def import_contacts(
             skipped += 1
             if app_obj and app_obj not in existing.applications:
                 existing.applications.append(app_obj)
+                from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+                attach_linkedin_messages_for_contact(db, existing, current_user.id)
             continue
         contact = models.Contact(
             name=cand.name, vorname=cand.vorname, email=cand.email,
@@ -1813,6 +1818,9 @@ def import_contacts(
                   app_id=app_obj.id if app_obj else None,
                   new_value=contact.display_name, reason_key="import_from_icloud_contact_search",
                   user_id=current_user.id)
+        if app_obj:
+            from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+            attach_linkedin_messages_for_contact(db, contact, current_user.id)
         imported += 1
 
     db.commit()

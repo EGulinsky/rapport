@@ -413,6 +413,27 @@ class SyncedItem(Base):
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class LinkedInMessage(Base):
+    """One row per LinkedIn message conversation, imported from the official
+    "Get a copy of your data" CSV export (messages.csv) — replaces the live
+    Playwright inbox scraper, which only ever scrolled the page once and
+    missed most conversations. See attach_linkedin_messages_for_contact()
+    in sync_linkedin.py for how these get turned into timeline events."""
+    __tablename__ = "linkedin_messages"
+
+    id                           = Column(Integer, primary_key=True)
+    user_id                      = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    conversation_id              = Column(String, nullable=False, index=True)
+    participant_name             = Column(String, nullable=False)   # raw, as shown in the CSV
+    participant_name_normalized  = Column(String, nullable=False, index=True)
+    participant_profile_url      = Column(String, nullable=True)
+    last_message_date            = Column(DateTime, nullable=True)
+    last_message_preview         = Column(Text, nullable=True)
+    message_count                = Column(Integer, default=1)
+    folder                       = Column(String, nullable=True)   # INBOX | ARCHIVE | SPAM
+    imported_at                  = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class PendingMatch(Base):
     __tablename__ = "pending_matches"
 

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.0',
+    date: '2026-07-18',
+    changes: [
+      'Added LinkedIn message sync via CSV import — replaces the removed live inbox scraper. Upload your LinkedIn data export (Settings → LinkedIn → Messages) to attach conversations to matching contacts as timeline entries, matched by name (umlaut-safe) with re-upload support and automatic retroactive attachment when a matching contact is created afterwards.',
+    ],
+  },
+  {
     version: '4.5.5',
     date: '2026-07-18',
     changes: [

@@ -544,6 +544,18 @@ export interface LinkedInSyncStatus {
   finished_at: string | null
 }
 
+export interface LinkedInMessagesImportResult {
+  conversations_imported: number
+  conversations_updated: number
+  events_created: number
+  errors: string[]
+}
+
+export interface LinkedInMessagesStatus {
+  conversation_count: number
+  last_imported_at: string | null
+}
+
 export interface AnalyticsFunnelItem {
   status: string
   label: string

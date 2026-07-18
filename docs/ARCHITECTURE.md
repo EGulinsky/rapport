@@ -285,6 +285,8 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 | `GET`/`POST`/`DELETE` | `/api/sync/linkedin/*` | LinkedIn login, session, scraper start, 2FA |
 | `GET`/`POST` | `/api/sync/linkedin/people/search` \| `/people/import` | Manual contact import: LinkedIn people search → import selection |
 | `GET`/`POST` | `/api/sync/linkedin/companies/search` \| `/companies/import` | Manual company import: LinkedIn company search → import selection |
+| `POST` | `/api/sync/linkedin/messages/import` | Import LinkedIn's own `messages.csv` data-export file, see §3.4 |
+| `GET` | `/api/sync/linkedin/messages/status` | Conversation count + last import timestamp, for the Settings panel |
 | `GET`/`POST` | `/api/sync/icloud/contacts/search` \| `/contacts/import` | Manual contact import: full-text search in iCloud address book → import selection |
 | `GET`/`POST` | `/api/sync/files/*` | Local documents (Rapport Agent) |
 
@@ -336,6 +338,8 @@ Two separate use cases, both via headless Chromium:
 Both use the same login/2FA/consent helpers. Session cookies are cached in `linkedin_sync.session_cookies`.
 
 3. **Manually import people** (`people/search`, `people/import`) — name search via LinkedIn's people search (text-based card extraction instead of CSS selectors, robust against hashed class names), selection is created as a contact
+
+**Message import via CSV (no Playwright).** A live inbox scraper (`_scrape_messages()`) existed briefly but was removed (v4.5.5) — it only ever scrolled the conversation list once and reliably missed most conversations beyond whatever loaded initially, with no fix short of a different approach entirely. Replaced by an upload flow (Settings → LinkedIn → Messages): the user exports their own data from LinkedIn ("Get a copy of your data" → `messages.csv`) and uploads it via `POST /api/sync/linkedin/messages/import`. One `messages.csv` row is one message; import aggregates by `CONVERSATION ID` into one `LinkedInMessage` row per conversation (`participant_name_normalized` for matching, `last_message_date`/`preview`/`message_count`), re-upload updates existing conversations in place rather than duplicating. The account owner's own name is auto-detected as the most frequent name across `FROM`/`TO` in the file, robust against it not exactly matching the account's stored name. `attach_linkedin_messages_for_contact(db, contact, user_id)` matches a contact to its conversations by normalized name (`sync_common._normalize_name()`, NFC-normalized so precomposed vs. decomposed umlaut codepoints still match) and creates one timeline `Event` per (application, conversation) pair — `source="linkedin_msg"`, `typ="mail"`, deduplicated the same way calls-sync events are. This runs at import time (across all contacts) and again from every contact-creation call site (`contacts.py`, `applications.py`, `sync_common.py`, `sync_targeted.py`, `sync_icloud.py` ×2, `sync_linkedin.py::import_people` — no shared choke point exists across these seven), so messages later attach retroactively the moment a matching contact is created by any means.
 
 ### 3.5 Local Documents, Notes & Calls (Rapport Agent)
 

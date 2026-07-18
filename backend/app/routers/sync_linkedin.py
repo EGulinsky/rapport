@@ -5,6 +5,8 @@ Credentials are stored encrypted; session cookies are persisted so re-login is r
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import re
 import time
@@ -12,7 +14,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 from urllib.parse import quote_plus
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,7 @@ from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db
 from app import models
 from app.routers.applications import _ensure_company_profile
+from app.routers.sync_common import _normalize_name
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
@@ -1414,6 +1417,7 @@ def import_people(
             skipped += 1
             if app_obj and app_obj not in existing.applications:
                 existing.applications.append(app_obj)
+                attach_linkedin_messages_for_contact(db, existing, current_user.id)
             continue
         rolle, firma = _split_headline(cand.headline)
         contact = models.Contact(
@@ -1428,6 +1432,8 @@ def import_people(
                   app_id=app_obj.id if app_obj else None,
                   new_value=contact.display_name, reason_key="import_from_linkedin_people_search",
                   user_id=current_user.id)
+        if app_obj:
+            attach_linkedin_messages_for_contact(db, contact, current_user.id)
         imported += 1
 
     db.commit()
@@ -1582,3 +1588,221 @@ async def sync_own_profile(db: Session = Depends(get_db), current_user: models.U
     current_user.linkedin_profile_synced_at = datetime.now(timezone.utc)
     db.commit()
     return {"synced_at": current_user.linkedin_profile_synced_at, "chars": len(text)}
+
+
+# ── LinkedIn message import (CSV, replaces the removed live inbox scraper) ───
+
+_REQUIRED_MESSAGE_CSV_COLUMNS = {"CONVERSATION ID", "FROM", "TO", "DATE", "CONTENT", "FOLDER"}
+
+
+def _parse_message_csv_date(s: Optional[str]) -> Optional[datetime]:
+    """LinkedIn's export format: '2026-07-16 17:36:22 UTC'."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _aggregate_messages_csv(content: str) -> tuple[list[dict], list[str]]:
+    """Parse a LinkedIn 'messages.csv' export (one row per individual message)
+    and aggregate rows by CONVERSATION ID into one dict per conversation —
+    mirrors the old scraper's own granularity (one timeline event per
+    conversation, not per message). Returns (conversations, row-level errors).
+    """
+    reader = csv.DictReader(io.StringIO(content))
+    fieldnames = set(reader.fieldnames or [])
+    missing = _REQUIRED_MESSAGE_CSV_COLUMNS - fieldnames
+    if missing:
+        raise ValueError(
+            f"Fehlende Spalten: {', '.join(sorted(missing))} — ist das wirklich messages.csv aus dem LinkedIn-Datenexport?"
+        )
+
+    rows = list(reader)
+    if not rows:
+        return [], []
+
+    # LinkedIn's export has no "is this me" marker — the account owner's own
+    # name is whichever name appears most often across FROM+TO (it appears
+    # on every single row, either as sender or recipient).
+    name_counts: dict[str, int] = {}
+    for r in rows:
+        for name in (r.get("FROM", ""), r.get("TO", "")):
+            name = (name or "").strip()
+            if name:
+                name_counts[name] = name_counts.get(name, 0) + 1
+    self_name = max(name_counts, key=name_counts.get) if name_counts else None
+
+    errors: list[str] = []
+    convs: dict[str, dict] = {}
+    for i, r in enumerate(rows, start=2):
+        cid = (r.get("CONVERSATION ID") or "").strip()
+        if not cid:
+            errors.append(f"Zeile {i}: keine CONVERSATION ID, übersprungen")
+            continue
+
+        frm = (r.get("FROM") or "").strip()
+        to = (r.get("TO") or "").strip()
+        is_outgoing = frm == self_name
+        participant = to if is_outgoing else frm
+        participant_url = (
+            (r.get("RECIPIENT PROFILE URLS") or "").split("\n")[0].strip() if is_outgoing
+            else (r.get("SENDER PROFILE URL") or "").strip()
+        )
+        msg_date = _parse_message_csv_date(r.get("DATE"))
+        content_text = (r.get("CONTENT") or "").strip()
+        folder = (r.get("FOLDER") or "").strip()
+
+        conv = convs.setdefault(cid, {
+            "conversation_id": cid,
+            "participant_name": participant,
+            "participant_profile_url": participant_url or None,
+            "last_message_date": msg_date,
+            "last_message_preview": content_text or None,
+            "message_count": 0,
+            "folder": folder or None,
+        })
+        conv["message_count"] += 1
+        if msg_date and (conv["last_message_date"] is None or msg_date >= conv["last_message_date"]):
+            conv["last_message_date"] = msg_date
+            conv["last_message_preview"] = content_text or conv["last_message_preview"]
+            if folder:
+                conv["folder"] = folder
+
+    return list(convs.values()), errors
+
+
+def attach_linkedin_messages_for_contact(db: Session, contact: "models.Contact", user_id: Optional[int] = None) -> int:
+    """Match imported LinkedIn conversations to this contact by name and
+    create a timeline event on every application it's linked to, unless one
+    already exists. Idempotent and safe to call repeatedly — used both right
+    after a CSV import (for all contacts) and right after any new Contact is
+    created (so previously-unmatched conversations get attached the moment a
+    matching contact appears, regardless of how that contact was created)."""
+    if not contact.applications:
+        return 0
+    norm = _normalize_name(contact.display_name)
+    if not norm:
+        return 0
+
+    convs = db.query(models.LinkedInMessage).filter_by(participant_name_normalized=norm).all()
+    if not convs:
+        return 0
+
+    created = 0
+    for conv in convs:
+        for app in contact.applications:
+            existing = db.query(models.Event).filter_by(
+                application_id=app.id, source="linkedin_msg", external_id=conv.conversation_id,
+            ).first()
+            if existing:
+                continue
+            titel = f"LinkedIn-Nachricht: {contact.display_name}"
+            notiz = conv.last_message_preview or ""
+            if conv.message_count and conv.message_count > 1:
+                notiz = f"{notiz}\n({conv.message_count} Nachrichten)" if notiz else f"{conv.message_count} Nachrichten"
+            event = models.Event(
+                application_id=app.id, typ="mail",
+                datum=conv.last_message_date.date() if conv.last_message_date else None,
+                titel=titel, notiz=notiz or None,
+                source="linkedin_msg", external_id=conv.conversation_id,
+                user_id=user_id,
+            )
+            db.add(event)
+            db.flush()
+            add_audit(db, "create", "linkedin", app_id=app.id, event_id=event.id,
+                      new_value=titel, user_id=user_id)
+            created += 1
+    return created
+
+
+class LinkedInMessagesImportResult(BaseModel):
+    conversations_imported: int
+    conversations_updated: int
+    events_created: int
+    errors: list[str] = []
+
+
+@router.post("/messages/import", response_model=LinkedInMessagesImportResult)
+async def import_linkedin_messages(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Nur .csv Dateien erlaubt")
+
+    raw = await file.read()
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=422, detail="CSV konnte nicht gelesen werden (Encoding)")
+
+    try:
+        convs, parse_errors = _aggregate_messages_csv(content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    imported = 0
+    updated = 0
+    for c in convs:
+        existing = db.query(models.LinkedInMessage).filter_by(
+            user_id=current_user.id, conversation_id=c["conversation_id"],
+        ).first()
+        norm = _normalize_name(c["participant_name"])
+        if existing:
+            existing.participant_name = c["participant_name"]
+            existing.participant_name_normalized = norm
+            existing.participant_profile_url = c["participant_profile_url"]
+            existing.last_message_date = c["last_message_date"]
+            existing.last_message_preview = c["last_message_preview"]
+            existing.message_count = c["message_count"]
+            existing.folder = c["folder"]
+            updated += 1
+        else:
+            db.add(models.LinkedInMessage(
+                user_id=current_user.id, conversation_id=c["conversation_id"],
+                participant_name=c["participant_name"], participant_name_normalized=norm,
+                participant_profile_url=c["participant_profile_url"],
+                last_message_date=c["last_message_date"], last_message_preview=c["last_message_preview"],
+                message_count=c["message_count"], folder=c["folder"],
+            ))
+            imported += 1
+    db.flush()
+
+    events_created = 0
+    contacts = (
+        db.query(models.Contact)
+        .filter_by(user_id=current_user.id)
+        .filter(models.Contact.applications.any())
+        .all()
+    )
+    for contact in contacts:
+        events_created += attach_linkedin_messages_for_contact(db, contact, current_user.id)
+
+    db.commit()
+    return LinkedInMessagesImportResult(
+        conversations_imported=imported, conversations_updated=updated,
+        events_created=events_created, errors=parse_errors,
+    )
+
+
+class LinkedInMessagesStatus(BaseModel):
+    conversation_count: int
+    last_imported_at: Optional[datetime] = None
+
+
+@router.get("/messages/status", response_model=LinkedInMessagesStatus)
+def get_linkedin_messages_status(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    q = db.query(models.LinkedInMessage).filter_by(user_id=current_user.id)
+    count = q.count()
+    last = q.order_by(models.LinkedInMessage.imported_at.desc()).first()
+    return LinkedInMessagesStatus(
+        conversation_count=count,
+        last_imported_at=last.imported_at if last else None,
+    )

@@ -91,6 +91,8 @@ def create_contact(
     db.flush()
     add_audit(db, "create", "user", contact_id=contact.id,
               new_value=contact.display_name, user_id=current_user.id)
+    from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+    attach_linkedin_messages_for_contact(db, contact, current_user.id)
     db.commit()
     db.refresh(contact)
     return {"id": contact.id, "name": contact.name, "firma": contact.firma,
