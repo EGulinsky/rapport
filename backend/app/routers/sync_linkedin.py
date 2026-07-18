@@ -24,7 +24,7 @@ from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db
 from app import models
 from app.routers.applications import _ensure_company_profile
-from app.routers.sync_common import _normalize_name
+from app.routers.sync_common import _normalize_name, _predates_bewerbung
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
@@ -1698,6 +1698,9 @@ def attach_linkedin_messages_for_contact(db: Session, contact: "models.Contact",
                 application_id=app.id, source="linkedin_msg", external_id=conv.conversation_id,
             ).first()
             if existing:
+                continue
+            datum = conv.last_message_date.date() if conv.last_message_date else None
+            if _predates_bewerbung(datum, app):
                 continue
             titel = f"LinkedIn-Nachricht: {contact.display_name}"
             notiz = conv.last_message_preview or ""

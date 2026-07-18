@@ -93,6 +93,9 @@ def _time_prefix(date_hint: Optional[datetime]) -> str:
 
 # ── Contact name helpers ──────────────────────────────────────────────────────
 
+_GERMAN_UMLAUT_TRANSLATION = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
+
 def _normalize_name(name: str) -> str:
     """Return a canonical sorted-token fingerprint for order-independent name comparison.
 
@@ -101,9 +104,17 @@ def _normalize_name(name: str) -> str:
     ("ü") or as a base letter + combining diaeresis ("u" + U+0308); these look
     identical but compare unequal without normalization, silently breaking
     matches for names sourced from different exports/systems.
+
+    Also transliterates German umlauts to their ASCII digraph form (ä→ae,
+    ö→oe, ü→ue, ß→ss) after lowercasing — many external systems (e.g. a
+    LinkedIn account's own display name, or a manually-typed contact) spell
+    "Schürmann" as "Schuermann" when umlaut input isn't available, and both
+    forms must fingerprint identically. Safe to apply unconditionally: a name
+    already in ASCII form (no umlauts) is unaffected, so this never merges
+    two names that weren't already umlaut/digraph variants of each other.
     """
-    name = unicodedata.normalize("NFC", name or "")
-    tokens = sorted(t.strip().lower() for t in re.split(r"[,\s]+", name) if t.strip())
+    name = unicodedata.normalize("NFC", name or "").lower().translate(_GERMAN_UMLAUT_TRANSLATION)
+    tokens = sorted(t.strip() for t in re.split(r"[,\s]+", name) if t.strip())
     return " ".join(tokens)
 
 
