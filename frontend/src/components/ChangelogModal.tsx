@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.5.5',
+    date: '2026-07-18',
+    changes: [
+      'Removed LinkedIn message sync. Scraping the inbox only ever scrolled the page once (not the conversation list itself), so it reliably missed most conversations beyond whatever loaded initially — not fixable without a fundamentally different approach (e.g. importing LinkedIn\'s own data export), so it\'s been removed rather than left silently incomplete.',
+    ],
+  },
+  {
     version: '4.5.4',
     date: '2026-07-18',
     changes: [

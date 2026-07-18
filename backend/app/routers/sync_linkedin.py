@@ -64,8 +64,6 @@ _state: dict = {
     "skipped": 0,
     "errors": [],
     "raw_jobs": [],        # all scraped jobs (for status endpoint)
-    "msg_processed": 0,    # conversations scanned for messages
-    "msg_created": 0,      # message events created
     "started_at": None,
     "finished_at": None,
 }
@@ -86,8 +84,6 @@ def _reset_state():
         "updated": 0,
         "skipped": 0,
         "errors": [],
-        "msg_processed": 0,
-        "msg_created": 0,
         "started_at": None,
         "finished_at": None,
     })
@@ -725,184 +721,6 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
     return jobs
 
 
-async def _scrape_messages(page, db: Session, apps_list: list, user_id: Optional[int] = None, lang: str = "de") -> int:
-    """Scrape LinkedIn inbox and create timeline events for application-related conversations.
-
-    Matching strategy (two passes, no blind thread-opens):
-    1. PRIMARY — contact name in sidebar: LinkedIn shows the person's name in the
-       conversation list. We match known contacts (linked to applications via
-       contact_application) against that name. Accurate and efficient.
-    2. SECONDARY — company name in message preview: when the sidebar preview text
-       itself mentions a known company ("Hi, I'm reaching out from Acme…"), we catch
-       initial messages from yet-unknown recruiters without needing to open the thread.
-    """
-    from app.routers.sync_common import load_synced_ids, mark_synced
-    from app.dedup import norm_firma
-
-    _state["step"] = t("li_messages_loading_inbox", lang)
-
-    # PRIMARY lookup: contact full-name (lowercased) → set of linked app_ids
-    name_map: dict[str, set[int]] = {}
-    try:
-        contacts_with_apps = (
-            db.query(models.Contact)
-            .filter(models.Contact.applications.any())
-            .all()
-        )
-        for contact in contacts_with_apps:
-            normalized = (contact.name or "").lower().strip()
-            if len(normalized) >= 3:
-                app_ids = {app.id for app in contact.applications}
-                if app_ids:
-                    name_map.setdefault(normalized, set()).update(app_ids)
-    except Exception:
-        pass
-
-    # SECONDARY lookup: normalized company name → set of app_ids
-    # Used for preview-text matching (requires ≥ 5 chars to avoid "SAP"/"BMW" noise)
-    company_map: dict[str, set[int]] = {}
-    for app in apps_list:
-        for raw in filter(None, [app.firma, getattr(app, "zielfirma_bei_hh", None)]):
-            key = norm_firma(raw)
-            if len(key) >= 5:
-                company_map.setdefault(key, set()).add(app.id)
-
-    if not name_map and not company_map:
-        return 0
-
-    synced = load_synced_ids(db, "linkedin_msg")
-    created = 0
-
-    try:
-        await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(3)
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(1)
-
-        # Extract conversation thread links + sidebar text (name + last-message preview)
-        try:
-            conv_data: list[dict] = await page.evaluate("""
-                () => {
-                    const seen = new Set();
-                    const results = [];
-                    document.querySelectorAll('a[href*="/messaging/thread/"]').forEach(a => {
-                        const href = a.href.split('?')[0];
-                        if (seen.has(href)) return;
-                        seen.add(href);
-                        const item = a.closest('li') || a.closest('[data-control-name]') || a.parentElement;
-                        results.push({ href, text: item ? item.innerText : a.innerText });
-                    });
-                    return results;
-                }
-            """)
-        except Exception:
-            conv_data = []
-
-        _state["msg_processed"] = len(conv_data)
-
-        for conv in conv_data[:50]:
-            href = (conv.get("href") or "").strip()
-            sidebar_text = (conv.get("text") or "").lower()
-            if not href:
-                continue
-
-            m = re.search(r"/messaging/thread/([^/?#]+)", href)
-            if not m:
-                continue
-            thread_id = m.group(1)
-
-            if thread_id in synced:
-                continue
-
-            # ── Pass 1: contact name in sidebar (person's name shown by LinkedIn) ──
-            matched_ids: set[int] = set()
-            matched_participant: Optional[str] = None
-            for contact_name, ids in name_map.items():
-                if contact_name in sidebar_text:
-                    matched_ids.update(ids)
-                    if not matched_participant:
-                        matched_participant = contact_name.title()
-
-            # ── Pass 2: company name in sidebar preview text ──
-            if not matched_ids:
-                for company_key, ids in company_map.items():
-                    if company_key in sidebar_text:
-                        matched_ids.update(ids)
-
-            if not matched_ids:
-                continue
-
-            # Open conversation only for matched threads (to get message content)
-            _state["step"] = t("li_messages_opening_thread", lang, thread=thread_id[:16])
-            try:
-                await page.goto(href, wait_until="domcontentloaded", timeout=20000)
-                await asyncio.sleep(2)
-                full_text = await page.inner_text("body")
-            except Exception:
-                continue
-
-            # ── Pass 3 (refinement): if we only matched via company (pass 2),
-            #    also try contact names in the full thread text to narrow app_ids ──
-            if matched_participant is None:
-                refined: set[int] = set()
-                for contact_name, ids in name_map.items():
-                    if contact_name in full_text.lower():
-                        refined.update(ids)
-                if refined:
-                    matched_ids &= refined if matched_ids & refined else matched_ids
-
-            # Extract human-readable participant name for the event title
-            skip = {"LinkedIn", "Messaging", "Nachrichten", "Messages", "New message", "Send"}
-            lines = [ln.strip() for ln in full_text.split("\n") if 2 < len(ln.strip()) < 80]
-            participant = matched_participant or next(
-                (ln for ln in lines if ln not in skip), "Unbekannt"
-            )
-
-            # Message preview: first long-ish line that looks like actual content
-            preview_lines = [ln.strip() for ln in full_text.split("\n")
-                             if len(ln.strip()) > 20 and ln.strip() not in skip
-                             and ln.strip() != participant]
-            preview = preview_lines[0][:300] if preview_lines else None
-
-            today = date.today()
-
-            for app_id in matched_ids:
-                existing = (
-                    db.query(models.Event)
-                    .filter_by(application_id=app_id, source="linkedin_msg", external_id=thread_id)
-                    .first()
-                )
-                if existing:
-                    continue
-                msg_titel = f"LinkedIn-Nachricht: {participant[:80]}"
-                msg_event = models.Event(
-                    application_id=app_id,
-                    typ="mail",
-                    datum=today,
-                    titel=msg_titel,
-                    notiz=preview,
-                    source="linkedin_msg",
-                    external_id=thread_id,
-                    user_id=user_id,
-                )
-                db.add(msg_event)
-                db.flush()
-                add_audit(db, "create", "linkedin", app_id=app_id, event_id=msg_event.id,
-                          new_value=msg_titel, user_id=user_id)
-                created += 1
-
-            mark_synced(db, "linkedin_msg", thread_id, user_id)
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-
-    except Exception as e:
-        _state["errors"].append(f"Messages-Scraper: {e}")
-
-    _state["msg_created"] = created
-    return created
-
 
 def _li_job_id_from_url(url: str) -> str | None:
     """Extract LinkedIn job ID from a stellenanzeige_url like .../jobs/view/1234567890/..."""
@@ -1397,11 +1215,6 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                     _state["step"] = t("li_jobs_found_total", lang, label=label, count=len(cat_jobs), total=len(all_jobs_by_key))
                 all_jobs = list(all_jobs_by_key.values())
 
-                # Scrape messages before closing the browser session
-                apps_for_msg = db.query(models.Application).all()
-                msg_created = await _scrape_messages(page, db, apps_for_msg, user_id, lang=lang)
-                _state["msg_created"] = msg_created
-
                 await browser.close()
 
                 if not all_jobs and _state["status"] != "needs_login":
@@ -1432,7 +1245,6 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             "updated": updated,
             "skipped": skipped,
             "errors": errors,
-            "msg_created": _state.get("msg_created", 0),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         })
 

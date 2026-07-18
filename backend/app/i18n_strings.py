@@ -149,8 +149,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "li_processing_progress": "Verarbeite {current}/{total}…",
         "li_error": "Fehler: {error}",
         "li_page_result": "{label}: Seite {page} — {count} gefunden",
-        "li_messages_loading_inbox": "Nachrichten: Posteingang laden…",
-        "li_messages_opening_thread": "Nachrichten: öffne Thread {thread}…",
         # iCloud sync progress
         "connecting_imap": "IMAP wird verbunden…",
         "email_progress": "E-Mail {current}/{total}",
@@ -307,8 +305,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "li_processing_progress": "Processing {current}/{total}…",
         "li_error": "Error: {error}",
         "li_page_result": "{label}: page {page} — {count} found",
-        "li_messages_loading_inbox": "Messages: loading inbox…",
-        "li_messages_opening_thread": "Messages: opening thread {thread}…",
         "connecting_imap": "Connecting to IMAP…",
         "email_progress": "Email {current}/{total}",
         "notes_found": "{count} notes found",

@@ -540,8 +540,6 @@ export interface LinkedInSyncStatus {
   errors: string[]
   log: LinkedInSyncLogEntry[]
   category_counts: LinkedInSyncCategoryCount[]
-  msg_processed: number
-  msg_created: number
   started_at: string | null
   finished_at: string | null
 }

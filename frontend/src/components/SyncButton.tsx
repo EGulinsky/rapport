@@ -204,12 +204,10 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
 
       // Add LinkedIn results to summary
       if (finalLi && ['done', 'error'].includes(finalLi.status)) {
-        const liJobsCreated = finalLi.created ?? 0
-        const liMsgCreated = finalLi.msg_created ?? 0
         const liSrc: SourceResult = {
           label: 'LinkedIn',
-          created: liJobsCreated + liMsgCreated,
-          processed: (finalLi.total ?? 0) + (finalLi.msg_processed ?? 0),
+          created: finalLi.created ?? 0,
+          processed: finalLi.total ?? 0,
           skipped: finalLi.skipped ?? 0,
           errors: finalLi.errors ?? [],
         }
