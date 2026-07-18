@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.1',
+    date: '2026-07-18',
+    changes: [
+      'Fixed file uploads over 1 MB failing outright ("Load failed") — nginx\'s default 1 MB request-body limit was silently capping every upload (LinkedIn messages.csv, CV, attachments) at the reverse-proxy layer, before the request ever reached the backend\'s own, much higher limits (15 MB / 100 MB). Raised to 100 MB in both the production and E2E-test nginx configs.',
+    ],
+  },
+  {
     version: '4.6.0',
     date: '2026-07-18',
     changes: [
