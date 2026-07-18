@@ -42,8 +42,9 @@ class TestNormalizeName:
 class TestNormalizeNameUmlautTransliteration:
     """German umlauts are frequently spelled out as ASCII digraphs (ä→ae,
     ö→oe, ü→ue, ß→ss) when umlaut input isn't available -- e.g. a LinkedIn
-    export writing "Hans-Peter Gruenwald" for a contact stored in Rapport
-    as "Hans-Peter Grünwald". Both forms must match."""
+    export writing a contact's surname without any umlauts at all, while
+    Rapport has the same person stored with proper umlauts. Both forms must
+    match. (Names below are invented placeholders, not real contacts.)"""
 
     def test_positiv_ue_gegen_ü_nachname(self):
         assert _normalize_name("Hans-Peter Grünwald") == _normalize_name("Hans-Peter Gruenwald")
@@ -81,4 +82,4 @@ class TestNormalizeNameUmlautTransliteration:
         assert _normalize_name("Bauer") != _normalize_name("Bär")
 
     def test_negativ_transliteration_verschmilzt_keine_verschiedenen_namen(self):
-        assert _normalize_name("Grünwald") != _normalize_name("Schumann")
+        assert _normalize_name("Grünwald") != _normalize_name("Baumann")

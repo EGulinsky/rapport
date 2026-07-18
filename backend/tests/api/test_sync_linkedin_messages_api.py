@@ -300,11 +300,11 @@ class TestDateFloor:
 
 
 class TestUmlautTransliterationMatching:
-    """Real-world case reported after shipping: a contact stored as
-    "Hans-Peter Grünwald" wasn't matched against LinkedIn's own export,
-    which spelled the same person "Gruenwald" (ASCII digraph substitute for
-    an umlaut). Covers both matching directions plus a mix of all four
-    German umlaut/eszett substitutions."""
+    """Real-world case reported after shipping: a contact stored with a German
+    umlaut wasn't matched against LinkedIn's own export, which spelled the
+    same person using the ASCII digraph substitute for that umlaut instead.
+    Covers both matching directions plus a mix of all four German
+    umlaut/eszett substitutions."""
 
     def test_positiv_kontakt_mit_umlaut_matcht_csv_mit_ue(self, client, db_session):
         app = application_factory(db_session, firma="Contoso")
@@ -372,7 +372,7 @@ class TestUmlautTransliterationMatching:
 
         content = _build_csv([
             *_filler_rows(),
-            _message_row("conv-umlaut-4", "Franz-Josef Schumann", SELF_NAME,
+            _message_row("conv-umlaut-4", "Hans-Peter Baumann", SELF_NAME,
                           _fmt(date.today() - timedelta(days=1)), "Hallo"),
         ])
         resp = _upload(client, content)
