@@ -8,11 +8,12 @@ tests/api/test_import_excel_api.py.
 """
 import csv
 import io
+from datetime import date, timedelta
 
 import pytest
 
 from app import models
-from tests.factories import application_factory, contact_factory
+from tests.factories import application_factory, contact_factory, seed_floor
 
 pytestmark = pytest.mark.api
 
@@ -93,6 +94,7 @@ class TestImportMessagesMatching:
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
         app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         content = _build_csv([
@@ -139,6 +141,7 @@ class TestImportMessagesMatching:
         nfd_name = unicodedata.normalize("NFD", "Jörgen Müller")
         contact = contact_factory(db_session, name=nfd_name, vorname=None)
         app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         # CSV row uses the NFC (precomposed) form -- must still match.
@@ -157,6 +160,7 @@ class TestImportMessagesMatching:
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
         app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         content1 = _build_csv([
@@ -189,6 +193,7 @@ class TestImportMessagesMatching:
 class TestRetroactiveAttach:
     def test_positiv_neuer_kontakt_bekommt_bestehende_nachrichten_zugewiesen(self, client, db_session):
         app = application_factory(db_session, firma="Contoso")
+        seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
         # Import first -- no matching contact yet.
@@ -226,3 +231,151 @@ class TestMessagesStatus:
         assert resp1.status_code == 200
         assert resp1.json()["conversation_count"] == 3  # conv-6 + 2 filler
         assert resp1.json()["last_imported_at"] is not None
+
+
+def _fmt(d: date) -> str:
+    return f"{d.isoformat()} 12:00:00 UTC"
+
+
+class TestDateFloor:
+    """Message events must respect the same effective_bewerbung_floor() rule
+    as mail/calendar/call sync (sync_common.py): no anchor event yet -> no
+    timed sync at all; a message dated before the earliest existing dated
+    event on the application must not be attached either."""
+
+    def test_negativ_ohne_jeden_bestehenden_termin_kein_event(self, client, db_session):
+        # Brand-new application, zero dated events yet -- no floor to anchor to.
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        db_session.commit()
+
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-floor-1", SELF_NAME, "Anna Recruiterin", _fmt(date.today()), "Hallo"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 0
+        assert db_session.query(models.Event).filter_by(source="linkedin_msg").count() == 0
+
+    def test_negativ_nachricht_vor_dem_floor_wird_nicht_angehaengt(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)  # floor = today - 30 days
+        db_session.commit()
+
+        too_old = date.today() - timedelta(days=60)
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-floor-2", SELF_NAME, "Anna Recruiterin", _fmt(too_old), "Vor der Bewerbung"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 0
+        assert db_session.query(models.Event).filter_by(source="linkedin_msg", external_id="conv-floor-2").count() == 0
+
+    def test_positiv_nachricht_nach_dem_floor_wird_angehaengt(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)  # floor = today - 30 days
+        db_session.commit()
+
+        recent = date.today() - timedelta(days=5)
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-floor-3", SELF_NAME, "Anna Recruiterin", _fmt(recent), "Nach der Bewerbung"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 1
+        event = db_session.query(models.Event).filter_by(source="linkedin_msg", external_id="conv-floor-3").first()
+        assert event is not None
+        assert event.datum == recent
+
+
+class TestUmlautTransliterationMatching:
+    """Real-world case reported after shipping: a contact stored as
+    "Hans-Peter Grünwald" wasn't matched against LinkedIn's own export,
+    which spelled the same person "Gruenwald" (ASCII digraph substitute for
+    an umlaut). Covers both matching directions plus a mix of all four
+    German umlaut/eszett substitutions."""
+
+    def test_positiv_kontakt_mit_umlaut_matcht_csv_mit_ue(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Hans-Peter Grünwald", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
+        db_session.commit()
+
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-umlaut-1", "Hans-Peter Gruenwald", SELF_NAME,
+                          _fmt(date.today() - timedelta(days=1)), "Sehr geehrter Herr Gruenwald"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 1
+        event = db_session.query(models.Event).filter_by(application_id=app.id, source="linkedin_msg").first()
+        assert event is not None
+        assert event.external_id == "conv-umlaut-1"
+
+    def test_positiv_kontakt_mit_ue_matcht_csv_mit_umlaut(self, client, db_session):
+        # Reverse direction: contact stored with the ASCII digraph, CSV has the umlaut.
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Hans-Peter Gruenwald", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
+        db_session.commit()
+
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-umlaut-2", "Hans-Peter Grünwald", SELF_NAME,
+                          _fmt(date.today() - timedelta(days=1)), "Guten Tag"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 1
+
+    def test_positiv_alle_vier_umlaut_varianten_in_einem_namen(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Bärbel Preißler-Öztürk", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
+        db_session.commit()
+
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-umlaut-3", "Baerbel Preissler-Oeztuerk", SELF_NAME,
+                          _fmt(date.today() - timedelta(days=1)), "Hallo"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 1
+
+    def test_negativ_unterschiedliche_nachnamen_werden_nicht_verwechselt(self, client, db_session):
+        # Sanity check: transliteration must not cause false-positive matches
+        # between genuinely different people.
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Hans-Peter Grünwald", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
+        db_session.commit()
+
+        content = _build_csv([
+            *_filler_rows(),
+            _message_row("conv-umlaut-4", "Franz-Josef Schumann", SELF_NAME,
+                          _fmt(date.today() - timedelta(days=1)), "Hallo"),
+        ])
+        resp = _upload(client, content)
+
+        assert resp.status_code == 200
+        assert resp.json()["events_created"] == 0

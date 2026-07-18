@@ -37,3 +37,48 @@ class TestNormalizeName:
 
     def test_corner_case_leerstring(self):
         assert _normalize_name("") == ""
+
+
+class TestNormalizeNameUmlautTransliteration:
+    """German umlauts are frequently spelled out as ASCII digraphs (ä→ae,
+    ö→oe, ü→ue, ß→ss) when umlaut input isn't available -- e.g. a LinkedIn
+    export writing "Hans-Peter Gruenwald" for a contact stored in Rapport
+    as "Hans-Peter Grünwald". Both forms must match."""
+
+    def test_positiv_ue_gegen_ü_nachname(self):
+        assert _normalize_name("Hans-Peter Grünwald") == _normalize_name("Hans-Peter Gruenwald")
+
+    def test_positiv_ue_gegen_ü_einfacher_nachname(self):
+        assert _normalize_name("Müller") == _normalize_name("Mueller")
+
+    def test_positiv_oe_gegen_ö(self):
+        assert _normalize_name("Björn Köhler") == _normalize_name("Bjoern Koehler")
+
+    def test_positiv_ae_gegen_ä(self):
+        assert _normalize_name("Bärbel Bär") == _normalize_name("Baerbel Baer")
+
+    def test_positiv_ss_gegen_eszett(self):
+        assert _normalize_name("Weiß") == _normalize_name("Weiss")
+
+    def test_positiv_gemischte_umlaute_in_einem_namen(self):
+        assert _normalize_name("Jürgen Preißler") == _normalize_name("Juergen Preissler")
+
+    def test_positiv_transliteration_kombiniert_mit_reihenfolge(self):
+        assert _normalize_name("Grünwald, Hans-Peter") == _normalize_name("Hans-Peter Gruenwald")
+
+    def test_positiv_transliteration_kombiniert_mit_grossschreibung(self):
+        assert _normalize_name("HANS-PETER GRÜNWALD") == _normalize_name("hans-peter gruenwald")
+
+    def test_positiv_grossbuchstabe_umlaut(self):
+        # Ü/Ö/Ä lowercase to ü/ö/ä (stdlib .lower() handles this), which the
+        # translation table then expands the same as the lowercase originals.
+        assert _normalize_name("Ünal Öztürk") == _normalize_name("Uenal Oeztuerk")
+
+    def test_negativ_ascii_namen_ohne_umlaut_bleiben_unveraendert(self):
+        # Sanity check: transliteration must not accidentally merge unrelated
+        # ASCII names that happen to contain "ue"/"oe"/"ae"/"ss" literally.
+        assert _normalize_name("Sue Baker") != _normalize_name("Su Baker")
+        assert _normalize_name("Bauer") != _normalize_name("Bär")
+
+    def test_negativ_transliteration_verschmilzt_keine_verschiedenen_namen(self):
+        assert _normalize_name("Grünwald") != _normalize_name("Schumann")
