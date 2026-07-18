@@ -296,6 +296,17 @@ def _parse_date(text: str) -> Optional[str]:
     """Parse LinkedIn date strings → YYYY-MM-DD."""
     from datetime import timedelta
     t = text.lower().strip()
+    # An application submitted minutes/hours ago shows no day-scale offset yet
+    # ("Applied just now", "Applied today") — without this, _find_or_create_
+    # application() got no date at all for brand-new applications, only
+    # picking one up a day later once LinkedIn's own display had aged into a
+    # pattern below (live-reported: apps #242/#243 sat with no date for a day).
+    if "just now" in t or "today" in t:
+        return datetime.now().strftime("%Y-%m-%d")
+    # short form: "3h ago"
+    m = re.search(r"(\d+)\s*h\b", t)
+    if m:
+        return (datetime.now() - timedelta(hours=int(m.group(1)))).strftime("%Y-%m-%d")
     # short form: "6d ago", "2w ago", "3mo ago"
     m = re.search(r"(\d+)\s*d\b", t)
     if m:

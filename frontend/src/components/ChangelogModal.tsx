@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.5.4',
+    date: '2026-07-18',
+    changes: [
+      'Fixed LinkedIn sync leaving new applications with no application date for a day: a just-submitted application shows on LinkedIn as "Applied just now"/"today" or "Xh ago", which the date parser didn\'t recognize at all — it silently fell back to no date until a later sync happened to catch it once LinkedIn\'s own display aged past a day.',
+    ],
+  },
+  {
     version: '4.5.3',
     date: '2026-07-17',
     changes: [

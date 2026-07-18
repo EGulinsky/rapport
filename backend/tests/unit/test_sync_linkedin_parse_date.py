@@ -38,6 +38,17 @@ class TestParseDateKurzform:
         assert _parse_date("Applied 1mo ago") == _days_ago(30)
 
 
+class TestParseDateFrischeBewerbung:
+    def test_positiv_just_now_liefert_heute(self):
+        assert _parse_date("Applied just now") == datetime.now().strftime("%Y-%m-%d")
+
+    def test_positiv_today_liefert_heute(self):
+        assert _parse_date("Applied today") == datetime.now().strftime("%Y-%m-%d")
+
+    def test_positiv_stunden_kurzform(self):
+        assert _parse_date("Applied 3h ago") == (datetime.now() - timedelta(hours=3)).strftime("%Y-%m-%d")
+
+
 class TestParseDateLangform:
     def test_positiv_tage_langform(self):
         assert _parse_date("Applied 3 days ago") == _days_ago(3)
