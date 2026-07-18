@@ -17,6 +17,27 @@ from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
 
 
+def _delete_call_events_for_contact(db: Session, app_id: int, contact: "models.Contact", user_id: Optional[int]) -> int:
+    """Calls sync has no live FK to Contact — the caller's name is baked into
+    the event's titel as plain text at sync time (see sync_targeted.py's
+    _sync_calls_for_app / sync_icloud.py's global calls sync). Matching on
+    that embedded name is the only way to find "calls from/to this contact"
+    for this application after the fact."""
+    name = contact.display_name
+    if not name:
+        return 0
+    events = db.query(models.Event).filter(
+        models.Event.application_id == app_id,
+        models.Event.source == "icloud_calls",
+        models.Event.titel.contains(name),
+    ).all()
+    for event in events:
+        add_audit(db, "delete", "user", app_id=app_id, event_id=event.id,
+                  old_value=event.titel, user_id=user_id)
+        db.delete(event)
+    return len(events)
+
+
 def _validate_salary_pair(min_v: Optional[int], max_v: Optional[int], label: str) -> None:
     if max_v is None:
         return
@@ -883,6 +904,7 @@ def bulk_delete_contacts(
         contact = next((c for c in app.contacts if c.id == contact_id), None)
         if not contact:
             continue
+        _delete_call_events_for_contact(db, app_id, contact, current_user.id)
         # Remove link; delete contact entirely if no other application links remain
         app.contacts.remove(contact)
         db.flush()
@@ -908,6 +930,7 @@ def delete_contact(
     contact = next((c for c in app.contacts if c.id == contact_id), None)
     if not contact:
         raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
+    _delete_call_events_for_contact(db, app_id, contact, current_user.id)
     # Remove link; delete contact entirely if no other application links remain
     app.contacts.remove(contact)
     db.flush()

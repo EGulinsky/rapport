@@ -429,6 +429,53 @@ class TestContacts:
         assert resp.status_code == 204
         assert db_session.query(models.Contact).filter_by(id=contact.id).first() is None
 
+    def test_positiv_delete_contact_entfernt_zugehoerige_anrufe(self, client, db_session):
+        app = application_factory(db_session)
+        contact = contact_factory(db_session, name="Zoch", vorname="Niklas")
+        app.contacts.append(contact)
+        call = event_factory(db_session, app, typ="notiz", titel="Anruf von Niklas Zoch",
+                              notiz="Dauer: 2:00 min", source="icloud_calls")
+        other = event_factory(db_session, app, typ="mail", titel="Mail von Niklas Zoch", source="gmail")
+        db_session.commit()
+
+        resp = client.delete(f"/api/applications/{app.id}/contacts/{contact.id}")
+
+        assert resp.status_code == 204
+        assert db_session.query(models.Event).filter_by(id=call.id).first() is None
+        # Only calls sourced from icloud_calls are touched, other events with the
+        # same name in the title (e.g. a mail event) are left alone.
+        assert db_session.query(models.Event).filter_by(id=other.id).first() is not None
+
+    def test_positiv_delete_contact_laesst_anrufe_anderer_bewerbungen_unangetastet(self, client, db_session):
+        app1 = application_factory(db_session)
+        app2 = application_factory(db_session)
+        contact = contact_factory(db_session, name="Zoch", vorname="Niklas")
+        app1.contacts.append(contact)
+        app2.contacts.append(contact)
+        call_app1 = event_factory(db_session, app1, typ="notiz", titel="Anruf von Niklas Zoch", source="icloud_calls")
+        call_app2 = event_factory(db_session, app2, typ="notiz", titel="Anruf von Niklas Zoch", source="icloud_calls")
+        db_session.commit()
+
+        resp = client.delete(f"/api/applications/{app1.id}/contacts/{contact.id}")
+
+        assert resp.status_code == 204
+        assert db_session.query(models.Event).filter_by(id=call_app1.id).first() is None
+        assert db_session.query(models.Event).filter_by(id=call_app2.id).first() is not None
+        # Contact still linked to app2, so it isn't hard-deleted.
+        assert db_session.query(models.Contact).filter_by(id=contact.id).first() is not None
+
+    def test_positiv_bulk_delete_contact_entfernt_zugehoerige_anrufe(self, client, db_session):
+        app = application_factory(db_session)
+        contact = contact_factory(db_session, name="Zoch", vorname="Niklas")
+        app.contacts.append(contact)
+        call = event_factory(db_session, app, typ="anruf", titel="↙ Verpasst: Niklas Zoch", source="icloud_calls")
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/applications/{app.id}/contacts/bulk", json={"ids": [contact.id]})
+
+        assert resp.status_code == 200
+        assert db_session.query(models.Event).filter_by(id=call.id).first() is None
+
 
 class TestGetApplicationCompanyAttach:
     def test_positiv_haengt_firmenname_und_website_an(self, client, db_session):

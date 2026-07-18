@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.5.3',
+    date: '2026-07-17',
+    changes: [
+      'Removing a contact from an application now also removes any calls to/from that contact from the timeline (single removal and bulk removal) — calls sync has no live link back to the contact record, so this is matched by the contact\'s name in the call entry.',
+    ],
+  },
+  {
     version: '4.5.2',
     date: '2026-07-17',
     changes: [
