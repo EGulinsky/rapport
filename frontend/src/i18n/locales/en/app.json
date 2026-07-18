@@ -29,6 +29,7 @@
   "auditLog": "Audit log",
   "aiSettings": "AI settings",
   "searchPlaceholder": "Search company or role…",
+  "companyFilterChip": "Company: {{name}}",
   "filters": {
     "all": "All",
     "clearSelection": "Clear selection",

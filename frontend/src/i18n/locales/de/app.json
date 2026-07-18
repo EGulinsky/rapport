@@ -29,6 +29,7 @@
   "auditLog": "Audit-Log",
   "aiSettings": "KI-Einstellungen",
   "searchPlaceholder": "Firma oder Rolle suchen…",
+  "companyFilterChip": "Firma: {{name}}",
   "filters": {
     "all": "Alle",
     "clearSelection": "Auswahl aufheben",

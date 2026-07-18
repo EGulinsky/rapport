@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.3',
+    date: '2026-07-18',
+    changes: [
+      'Fixed clicking a company\'s application/contact count in the Companies view sometimes showing fewer than the actual linked applications/contacts — it filtered by matching the company name as text against each application/contact\'s stored company name, which can have a different spelling (e.g. "Rohde & Schwarz" vs. "Rohde+Schwarz") even when correctly linked. Now filters by the actual company link instead, shown as a "Company: X" chip that replaces the free-text search while active.',
+    ],
+  },
+  {
     version: '4.6.2',
     date: '2026-07-18',
     changes: [

@@ -41,6 +41,7 @@
     "searching": "Searching…",
     "noResults": "No results",
     "searchPlaceholder": "Name, email, or company…",
+    "companyFilterChip": "Company: {{name}}",
     "applicationsLabel": "Applications:",
     "filterAll": "All",
     "filterYes": "Yes",

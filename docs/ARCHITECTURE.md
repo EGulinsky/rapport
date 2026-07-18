@@ -210,7 +210,7 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/applications/` | List (filters: `main_status`, `search`, `show_rejected`) |
+| `GET` | `/api/applications/` | List (filters: `main_status`, `search`, `company_profile_id`, `show_rejected`) |
 | `GET` | `/api/applications/stats` | KPI numbers |
 | `GET` | `/api/applications/ai-assess-all` | AI assessment of all active applications (SSE stream with progress) |
 | `POST` | `/api/applications/extract-from-linkedin-url` | Load job posting from LinkedIn URL, extract fields via AI, match/create company |
@@ -235,7 +235,7 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 
 | Method | Path | Description |
 |---|---|---|
-| `GET`/`POST` | `/api/contacts/` | All contacts / create |
+| `GET`/`POST` | `/api/contacts/` | All contacts / create (filters: `search`, `company_profile_id`) |
 | `PATCH` | `/api/contacts/{id}` | Edit |
 | `DELETE` | `/api/contacts/bulk` | Delete multiple |
 | `POST` | `/api/attachments/{event_id}/upload` | Attach a file to an event |

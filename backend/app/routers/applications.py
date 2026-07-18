@@ -162,6 +162,7 @@ router = APIRouter(prefix="/api/applications", tags=["applications"])
 def list_applications(
     main_status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    company_profile_id: Optional[int] = Query(None),
     show_rejected: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -182,6 +183,20 @@ def list_applications(
                 models.Application.rolle.ilike(term),
                 models.Application.quelle.ilike(term),
                 models.Application.zielfirma_bei_hh.ilike(term),
+            )
+        )
+
+    if company_profile_id:
+        # Matches by FK, not by the free-text firma/zielfirma_bei_hh columns
+        # above — those can drift from the linked CompanyProfile's name
+        # (different spelling, abbreviation, sync source), which previously
+        # made "show this company's applications" (from the Companies view)
+        # silently miss applications that are correctly linked but whose
+        # firma text isn't a substring match for the company's display name.
+        q = q.filter(
+            or_(
+                models.Application.company_profile_id == company_profile_id,
+                models.Application.target_company_profile_id == company_profile_id,
             )
         )
 

@@ -668,7 +668,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
     const timer = setTimeout(async () => {
       setLinkLoading(true)
       try {
-        const res = await api.contacts.listAll(linkSearch)
+        const res = await api.contacts.listAll({ search: linkSearch })
         const existing = new Set((app?.contacts ?? []).map(c => c.id))
         setLinkResults(res.filter(c => !existing.has(c.id)))
       } finally {

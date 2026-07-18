@@ -87,6 +87,64 @@ class TestListContacts:
         assert resp.json() == []
 
 
+class TestListContactsCompanyProfileIdFilter:
+    """Regressionsfall (analog zu Applications): der "N Kontakte"-Klick in
+    der Firmenansicht filterte per Freitextsuche über Contact.firma statt
+    über die tatsächliche FK-Verknüpfung. company_profile_id filtert
+    stattdessen wie _collect_contacts() in companies.py: direkt verlinkte
+    Kontakte (Contact.company_profile_id) plus Kontakte, die über eine
+    verlinkte Bewerbung an dieselbe Firma hängen."""
+
+    def test_positiv_findet_direkt_verlinkten_kontakt(self, client, db_session):
+        profile = company_profile_factory(db_session, name_display="Rohde+Schwarz")
+        contact_factory(db_session, name="Anna Berg", firma="Ganz anderer Text", company_profile_id=profile.id)
+        db_session.commit()
+
+        resp = client.get("/api/contacts/", params={"company_profile_id": profile.id})
+
+        assert resp.status_code == 200
+        assert [c["name"] for c in resp.json()] == ["Anna Berg"]
+
+    def test_positiv_findet_kontakt_ueber_verlinkte_bewerbung_trotz_abweichender_firma(self, client, db_session):
+        profile = company_profile_factory(db_session, name_display="Rohde+Schwarz")
+        app_obj = application_factory(db_session, firma="Rohde und Schwarz GmbH & Co. KG", company_profile_id=profile.id)
+        contact = contact_factory(db_session, name="Carla Fuchs", firma="Rohde und Schwarz GmbH & Co. KG")
+        contact.applications.append(app_obj)
+        db_session.commit()
+
+        resp = client.get("/api/contacts/", params={"company_profile_id": profile.id})
+
+        assert resp.status_code == 200
+        assert [c["name"] for c in resp.json()] == ["Carla Fuchs"]
+
+    def test_positiv_findet_kontakt_ueber_target_company_profile_id(self, client, db_session):
+        profile = company_profile_factory(db_session, name_display="Contoso")
+        app_obj = application_factory(
+            db_session, firma="Headhunter XY", is_headhunter=True,
+            zielfirma_bei_hh="Contoso Corp", target_company_profile_id=profile.id,
+        )
+        contact = contact_factory(db_session, name="Ben Weiss")
+        contact.applications.append(app_obj)
+        db_session.commit()
+
+        resp = client.get("/api/contacts/", params={"company_profile_id": profile.id})
+
+        assert resp.status_code == 200
+        assert [c["name"] for c in resp.json()] == ["Ben Weiss"]
+
+    def test_negativ_andere_firma_wird_nicht_zurueckgegeben(self, client, db_session):
+        profile_a = company_profile_factory(db_session, name_display="Firma A")
+        profile_b = company_profile_factory(db_session, name_display="Firma B")
+        contact_factory(db_session, name="Kontakt A", company_profile_id=profile_a.id)
+        contact_factory(db_session, name="Kontakt B", company_profile_id=profile_b.id)
+        db_session.commit()
+
+        resp = client.get("/api/contacts/", params={"company_profile_id": profile_a.id})
+
+        assert resp.status_code == 200
+        assert [c["name"] for c in resp.json()] == ["Kontakt A"]
+
+
 class TestCreateContact:
     def test_positiv_legt_kontakt_an_und_schreibt_audit(self, client, db_session):
         resp = client.post("/api/contacts/", json={"name": "Dana Voss", "firma": "Beta GmbH"})

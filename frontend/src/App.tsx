@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud } from 'lucide-react'
+import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud, X } from 'lucide-react'
 import { CompanySearchInput } from './components/CompanySearchInput'
 import { api, authFetch } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
@@ -111,6 +111,8 @@ export default function App() {
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
+  const [appsCompanyFilter, setAppsCompanyFilter] = useState<{ id: number; name: string } | null>(null)
+  const [contactsCompanyFilter, setContactsCompanyFilter] = useState<{ id: number; name: string } | null>(null)
   const [contactsSearch, setContactsSearch] = useState('')
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewCompany, setShowNewCompany] = useState(false)
@@ -149,7 +151,8 @@ export default function App() {
       const [appsData, statsData] = await Promise.all([
         api.applications.list({
           main_status: filterStatus === 'all' ? undefined : filterStatus,
-          search: debouncedSearch || undefined,
+          search: appsCompanyFilter ? undefined : (debouncedSearch || undefined),
+          company_profile_id: appsCompanyFilter?.id,
           show_rejected: showRejected || showGhostingOnly,
         }),
         api.applications.stats(),
@@ -189,7 +192,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [filterStatus, debouncedSearch, showRejected])
+  }, [filterStatus, debouncedSearch, showRejected, appsCompanyFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -499,7 +502,9 @@ export default function App() {
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
             search={contactsSearch}
-            onSearchChange={setContactsSearch}
+            onSearchChange={v => { setContactsSearch(v); setContactsCompanyFilter(null) }}
+            companyFilter={contactsCompanyFilter}
+            onClearCompanyFilter={() => setContactsCompanyFilter(null)}
             reloadKey={contactsReloadKey}
           />
         )}
@@ -508,8 +513,8 @@ export default function App() {
             onOpenApplication={id => { setMainView('applications'); setSelectedId(id) }}
             onOpenCompany={id => setCompanyModalId(id)}
             onMergeRequest={ids => setCompanyMergeIds(ids)}
-            onNavigateToApps={name => { setSearch(name); setMainView('applications') }}
-            onNavigateToContacts={name => { setContactsSearch(name); setMainView('contacts') }}
+            onNavigateToApps={(id, name) => { setAppsCompanyFilter({ id, name }); setSearch(''); setMainView('applications') }}
+            onNavigateToContacts={(id, name) => { setContactsCompanyFilter({ id, name }); setContactsSearch(''); setMainView('contacts') }}
             reloadKey={companyReloadKey}
             onReviewOpen={checkReviewAfterSync}
           />
@@ -524,8 +529,20 @@ export default function App() {
         {/* Stats */}
         {stats && <StatsBar stats={stats} />}
 
-        {/* Search bar (mit Firmen-Autocomplete) */}
-        <CompanySearchInput value={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
+        {/* Search bar (mit Firmen-Autocomplete), oder ein Filter-Chip statt Freitextsuche,
+            wenn von der Firmenansicht aus per company_profile_id gefiltert wird (nicht per Name-Text) */}
+        {appsCompanyFilter ? (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 text-indigo-700 pl-3 pr-1.5 py-1 text-sm font-medium">
+              {t('companyFilterChip', { name: appsCompanyFilter.name })}
+              <button onClick={() => setAppsCompanyFilter(null)} className="p-0.5 rounded-full hover:bg-indigo-100">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          </div>
+        ) : (
+          <CompanySearchInput value={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
+        )}
 
         {/* Controls row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">

@@ -74,10 +74,11 @@ async function request<T>(path: string, options?: AuthFetchOptions): Promise<T> 
 // ── Applications ─────────────────────────────────────────────────────────
 export const api = {
   applications: {
-    list: (params?: { main_status?: string; search?: string; show_rejected?: boolean }) => {
+    list: (params?: { main_status?: string; search?: string; company_profile_id?: number; show_rejected?: boolean }) => {
       const qs = new URLSearchParams()
       if (params?.main_status) qs.set('main_status', params.main_status)
       if (params?.search) qs.set('search', params.search)
+      if (params?.company_profile_id !== undefined) qs.set('company_profile_id', String(params.company_profile_id))
       if (params?.show_rejected !== undefined) qs.set('show_rejected', String(params.show_rejected))
       return request<Application[]>(`/applications/?${qs}`)
     },
@@ -137,9 +138,12 @@ export const api = {
   },
 
   contacts: {
-    listAll: (search?: string) => {
-      const qs = search ? `?search=${encodeURIComponent(search)}` : ''
-      return request<ContactWithApp[]>(`/contacts/${qs}`)
+    listAll: (params?: { search?: string; company_profile_id?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.search) qs.set('search', params.search)
+      if (params?.company_profile_id !== undefined) qs.set('company_profile_id', String(params.company_profile_id))
+      const s = qs.toString()
+      return request<ContactWithApp[]>(`/contacts/${s ? `?${s}` : ''}`)
     },
 
     add: (appId: number, data: Omit<Partial<Contact>, 'phones'> & { phones?: { number: string; type: string }[] }) =>

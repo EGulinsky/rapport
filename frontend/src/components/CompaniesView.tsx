@@ -13,8 +13,8 @@ interface Props {
   onOpenApplication: (id: number) => void
   onOpenCompany: (id: number) => void
   onMergeRequest?: (ids: number[]) => void
-  onNavigateToApps?: (name: string) => void
-  onNavigateToContacts?: (name: string) => void
+  onNavigateToApps?: (id: number, name: string) => void
+  onNavigateToContacts?: (id: number, name: string) => void
   reloadKey?: number
   onReviewOpen?: () => void
 }
@@ -583,7 +583,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {(company.app_count ?? 0) > 0 && (
                             <button
-                              onClick={e => { e.stopPropagation(); onNavigateToApps?.(company.name_display ?? company.name_norm) }}
+                              onClick={e => { e.stopPropagation(); onNavigateToApps?.(company.id, company.name_display ?? company.name_norm) }}
                               className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                             >
                               <Briefcase className="h-2.5 w-2.5" />
@@ -592,7 +592,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                           )}
                           {(company.contact_count ?? 0) > 0 && (
                             <button
-                              onClick={e => { e.stopPropagation(); onNavigateToContacts?.(company.name_display ?? company.name_norm) }}
+                              onClick={e => { e.stopPropagation(); onNavigateToContacts?.(company.id, company.name_display ?? company.name_norm) }}
                               className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors"
                             >
                               <Users className="h-2.5 w-2.5" />

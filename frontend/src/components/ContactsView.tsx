@@ -128,10 +128,12 @@ interface Props {
   onOpenCompany?: (id: number) => void
   search: string
   onSearchChange: (v: string) => void
+  companyFilter?: { id: number; name: string } | null
+  onClearCompanyFilter?: () => void
   reloadKey?: number
 }
 
-export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearchChange: setSearch, reloadKey }: Props) {
+export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearchChange: setSearch, companyFilter, onClearCompanyFilter, reloadKey }: Props) {
   const { t } = useTranslation('contacts')
   const locale = useLocale()
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
@@ -151,19 +153,22 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setContacts(await api.contacts.listAll(search || undefined))
+      setContacts(await api.contacts.listAll({
+        search: companyFilter ? undefined : (search || undefined),
+        company_profile_id: companyFilter?.id,
+      }))
       setSelected(new Set())
     } finally {
       setLoading(false)
     }
-  }, [search])
+  }, [search, companyFilter])
 
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
-  }, [search])
+  }, [search, companyFilter])
 
   // Neuanlage/Import laufen über das globale "Neu"-Menü in App.tsx — reloadKey
   // signalisiert von dort, dass die Liste neu geladen werden soll.
@@ -267,13 +272,22 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3">
-        <CompanySearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder={t('view.searchPlaceholder')}
-          containerClassName="relative flex-1 max-w-sm"
-          inputClassName="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+        {companyFilter ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 text-indigo-700 pl-3 pr-1.5 py-1 text-sm font-medium">
+            {t('view.companyFilterChip', { name: companyFilter.name })}
+            <button onClick={onClearCompanyFilter} className="p-0.5 rounded-full hover:bg-indigo-100">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        ) : (
+          <CompanySearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('view.searchPlaceholder')}
+            containerClassName="relative flex-1 max-w-sm"
+            inputClassName="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        )}
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-xs text-gray-400">{t('view.applicationsLabel')}</span>
           {(['all', 'yes', 'no'] as const).map(v => (

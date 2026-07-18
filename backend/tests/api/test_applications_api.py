@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from tests.factories import application_factory, contact_factory, event_factory
+from tests.factories import application_factory, company_profile_factory, contact_factory, event_factory
 from app import models
 
 pytestmark = pytest.mark.api
@@ -152,6 +152,78 @@ class TestListApplicationsSearch:
 
         assert resp.status_code == 200
         assert resp.json()[0]["ort"] == "Berlin, Deutschland"
+
+
+class TestListApplicationsCompanyProfileIdFilter:
+    """Regressionsfall: der "N Bewerbungen"-Klick in der Firmenansicht filterte
+    bisher per Freitextsuche über den Firmennamen (Application.firma) statt
+    über die tatsächliche FK-Verknüpfung (company_profile_id /
+    target_company_profile_id) — genau die, aus der der Badge-Zähler selbst
+    berechnet wird (_app_count() in companies.py). Bewerbungen mit
+    abweichender Firma-Schreibweise (Synonym, Abkürzung, andere Quelle) waren
+    dadurch zwar korrekt verknüpft, verschwanden aber aus der gefilterten
+    Liste. Der company_profile_id-Parameter filtert stattdessen per FK."""
+
+    def test_positiv_findet_bewerbung_trotz_abweichender_firma_schreibweise(self, client, db_session):
+        profile = company_profile_factory(db_session, name_display="Rohde+Schwarz")
+        # Korrekt über die FK verknüpft, aber mit komplett anderem Freitext --
+        # genau der Fall, den eine Substring-Suche über "Rohde+Schwarz" verpasst.
+        application_factory(db_session, firma="Rohde und Schwarz GmbH & Co. KG", company_profile_id=profile.id)
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"company_profile_id": profile.id})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["firma"] == "Rohde und Schwarz GmbH & Co. KG"
+
+    def test_positiv_findet_auch_ueber_target_company_profile_id(self, client, db_session):
+        # Headhunter-Bewerbung: die eigentliche Zielfirma steckt in
+        # target_company_profile_id, nicht in company_profile_id.
+        profile = company_profile_factory(db_session, name_display="Contoso")
+        application_factory(
+            db_session, firma="Headhunter XY", is_headhunter=True,
+            zielfirma_bei_hh="Contoso Corp", target_company_profile_id=profile.id,
+        )
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"company_profile_id": profile.id})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    def test_negativ_andere_firma_wird_nicht_zurueckgegeben(self, client, db_session):
+        profile_a = company_profile_factory(db_session, name_display="Firma A")
+        profile_b = company_profile_factory(db_session, name_display="Firma B")
+        application_factory(db_session, firma="Firma A GmbH", company_profile_id=profile_a.id)
+        application_factory(db_session, firma="Firma B GmbH", company_profile_id=profile_b.id)
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"company_profile_id": profile_a.id})
+
+        assert resp.status_code == 200
+        assert [a["firma"] for a in resp.json()] == ["Firma A GmbH"]
+
+    def test_positiv_alle_fuenf_verknuepften_bewerbungen_werden_gefunden(self, client, db_session):
+        # Reproduziert das gemeldete Szenario: 5 über die FK verknüpfte
+        # Bewerbungen mit unterschiedlichsten Firma-Schreibweisen, keine
+        # davon muss als Substring im Firmennamen des Profils vorkommen.
+        profile = company_profile_factory(db_session, name_display="Rohde+Schwarz")
+        firmen = [
+            "Rohde und Schwarz GmbH & Co. KG",
+            "R&S",
+            "Rohde & Schwarz Cybersecurity",
+            "rohde schwarz gmbh",
+            "Rohde+Schwarz (via LinkedIn)",
+        ]
+        for firma in firmen:
+            application_factory(db_session, firma=firma, company_profile_id=profile.id)
+        db_session.commit()
+
+        resp = client.get("/api/applications/", params={"company_profile_id": profile.id})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 5
 
 
 class TestGetApplication:

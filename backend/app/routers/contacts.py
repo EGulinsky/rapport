@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 @router.get("/", response_model=List[schemas.ContactWithApp])
 def list_all_contacts(
     search: Optional[str] = Query(None),
+    company_profile_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -30,6 +31,24 @@ def list_all_contacts(
                 models.Contact.email.ilike(term),
                 models.Contact.firma.ilike(term),
                 models.Contact.rolle.ilike(term),
+            )
+        )
+    if company_profile_id:
+        # Matches by FK (direct link, or via any linked application's company),
+        # not by the free-text firma column above -- mirrors _collect_contacts()
+        # in companies.py, which is what the company's own contact-count badge
+        # is computed from. A text match can silently miss contacts that are
+        # correctly linked but whose firma text isn't a substring of the
+        # company's display name.
+        q = q.filter(
+            or_(
+                models.Contact.company_profile_id == company_profile_id,
+                models.Contact.applications.any(
+                    or_(
+                        models.Application.company_profile_id == company_profile_id,
+                        models.Application.target_company_profile_id == company_profile_id,
+                    )
+                ),
             )
         )
     contacts = q.order_by(models.Contact.name).all()

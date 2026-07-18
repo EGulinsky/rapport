@@ -115,7 +115,7 @@ export function CompanyModal({ id, onClose, onOpenApplication, onOpenContact, on
     if (!addingContact || addContactMode !== 'link') { setContactQuery(''); setContactResults([]); return }
     const t = setTimeout(async () => {
       setContactSearching(true)
-      try { setContactResults(await api.contacts.listAll(contactQuery || undefined)) }
+      try { setContactResults(await api.contacts.listAll({ search: contactQuery || undefined })) }
       finally { setContactSearching(false) }
     }, 200)
     return () => clearTimeout(t)
