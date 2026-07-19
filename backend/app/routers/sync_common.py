@@ -996,6 +996,7 @@ def _save_deterministic_event(
     raw_text: str,
     date_hint: Optional[datetime],
     user_id: Optional[int] = None,
+    external_url: Optional[str] = None,
 ) -> bool:
     """Persist a deterministically classified event. Returns True if event was created."""
     app = db.query(models.Application).get(det['app_id'])
@@ -1053,6 +1054,7 @@ def _save_deterministic_event(
         autor=autor,
         source=source,
         external_id=external_id,
+        external_url=external_url,
         user_id=user_id,
     )
     db.add(new_event)
@@ -1124,6 +1126,7 @@ async def process_item(
     date_hint: Optional[datetime] = None,
     hint_apps: Optional[list[dict]] = None,
     user_id: Optional[int] = None,
+    external_url: Optional[str] = None,
 ) -> bool:
     """Classify and persist event using deterministic rules. No AI."""
     if is_synced(db, source, external_id):
@@ -1136,7 +1139,7 @@ async def process_item(
     lang = resolve_ui_language(db, user_id)
     det = _classify_deterministic(source, raw_text, date_hint, hint_apps, lang)
     if det is not None:
-        return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint, user_id)
+        return _save_deterministic_event(db, source, external_id, det, raw_text, date_hint, user_id, external_url=external_url)
 
     mark_synced(db, source, external_id, user_id)
     return False

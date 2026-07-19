@@ -18,9 +18,9 @@ from tests.factories import application_factory, contact_factory, seed_floor
 pytestmark = pytest.mark.integration
 
 
-def _cal_event(event_id: str, summary: str, organizer_email: str, days_from_now: int = 0) -> dict:
+def _cal_event(event_id: str, summary: str, organizer_email: str, days_from_now: int = 0, html_link: str | None = None) -> dict:
     dt = datetime.now(timezone.utc) + timedelta(days=days_from_now)
-    return {
+    ev = {
         "id": event_id,
         "summary": summary,
         "description": "",
@@ -29,6 +29,9 @@ def _cal_event(event_id: str, summary: str, organizer_email: str, days_from_now:
         "organizer": {"email": organizer_email, "displayName": "Recruiterin"},
         "attendees": [],
     }
+    if html_link:
+        ev["htmlLink"] = html_link
+    return ev
 
 
 class TestDoGcalNichtVerbunden:
@@ -68,6 +71,29 @@ class TestDoGcalNeueTermine:
         assert event.typ == "gespräch"
         assert event.titel == "Interview Runde 1"
         assert event.application_id == app.id
+
+    async def test_positiv_htmllink_wird_als_external_url_gespeichert(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        # Google's own ready-made, correctly-encoded event link -- used as-is
+        # by the frontend instead of reconstructing an "eventedit" URL from
+        # just external_id, which the deep link format doesn't actually
+        # support without the calendar ID baked in too.
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
+        contact = contact_factory(db_session, email="recruiterin@contoso.com")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        fake_google_calendar([_cal_event(
+            "evt-html", "Interview Runde 1", "recruiterin@contoso.com",
+            html_link="https://www.google.com/calendar/event?eid=abc123",
+        )])
+
+        await _do_gcal(1)
+
+        event = db_session.query(models.Event).filter_by(source="gcal", external_id="evt-html").one()
+        assert event.external_url == "https://www.google.com/calendar/event?eid=abc123"
         # Organizer (see _cal_event()) ends up in Event.autor via the
         # "Teilnehmer: ..." line -- lets a contact's Calendar tab
         # (ContactModal.tsx) match this event back to them by email address.
@@ -120,6 +146,32 @@ class TestDoGcalAenderungserkennungUndVerwaisteTermine:
         assert result["skipped"] == 1  # bereits synced, aber Titel wird trotzdem aktualisiert
         db_session.refresh(existing)
         assert existing.titel == "Neues Thema (verschoben)"
+
+    async def test_positiv_bereits_synctes_event_ohne_external_url_wird_nebenbei_nachgetragen(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        # Regression: an already-synced event from before v4.6.18 has no
+        # external_url yet -- a regular sync run touching it again should
+        # backfill it opportunistically, without needing the dedicated
+        # backfill_gcal_external_url() repair for events still in-window.
+        app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
+        existing = models.Event(
+            application_id=app.id, typ="gespräch", titel="Thema",
+            datum=date.today(), source="gcal", external_id="evt-3", user_id=1,
+        )
+        db_session.add(existing)
+        db_session.add(models.SyncedItem(source="gcal", external_id="evt-3", user_id=1))
+        db_session.commit()
+
+        fake_google_calendar([_cal_event(
+            "evt-3", "Thema", "irrelevant@x.de",
+            html_link="https://www.google.com/calendar/event?eid=xyz789",
+        )])
+
+        await _do_gcal(1)
+
+        db_session.refresh(existing)
+        assert existing.external_url == "https://www.google.com/calendar/event?eid=xyz789"
 
     async def test_positiv_verwaister_termin_ausserhalb_des_aktuellen_kalenders_wird_geloescht(
         self, db_session, google_sync, fake_google_calendar

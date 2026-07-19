@@ -118,6 +118,7 @@ class TestNoFreshDbGuard:
         "_migrate_audit_log_entity_type", "_backfill_events",
         "_backfill_event_datum_zeit_noon",
         "_migrate_event_datum_zeit_is_placeholder", "_flag_noon_backfill_placeholders",
+        "_migrate_event_external_url",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -748,6 +749,17 @@ class TestMigrateEventDatumZeitIsPlaceholder:
     def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
         _drop_table(db_path, "events")
         db_module._migrate_event_datum_zeit_is_placeholder()  # must not raise
+
+
+class TestMigrateEventExternalUrl:
+    def test_positiv_fuegt_spalte_hinzu(self, db_path):
+        _drop_columns(db_path, "events", "external_url")
+        db_module._migrate_event_external_url()
+        assert "external_url" in _cols(db_path, "events")
+
+    def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "events")
+        db_module._migrate_event_external_url()  # must not raise
 
 
 class TestFlagNoonBackfillPlaceholders:

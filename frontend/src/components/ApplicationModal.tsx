@@ -2431,7 +2431,7 @@ const SOURCE_META: Record<string, { icon: React.ReactNode; label: string; cls: s
   linkedin_msg: { icon: <Linkedin className="h-3 w-3" />, label: 'LinkedIn',       cls: 'bg-blue-50 text-blue-700 border-blue-100' },
 }
 
-function buildDeepLink(source: string | undefined, external_id: string | undefined): string | null {
+export function buildDeepLink(source: string | undefined, external_id: string | undefined, external_url: string | undefined): string | null {
   if (!source || !external_id) return null
   // Strip status-suffix used for PendingMatch keys (e.g. "abc__status")
   const rawId = external_id.replace(/__status$/, '')
@@ -2439,7 +2439,11 @@ function buildDeepLink(source: string | undefined, external_id: string | undefin
     case 'gmail':
       return `https://mail.google.com/mail/u/0/#all/${rawId}`
     case 'gcal':
-      return `https://calendar.google.com/calendar/r/eventedit/${btoa(rawId)}`
+      // Google Calendar's "eventedit" deep link needs the calendar ID baked
+      // into the same base64 blob as the event ID -- the frontend has no
+      // access to that, so external_url (the API's own ready-made link,
+      // captured at sync time) is required here; no reconstructed fallback.
+      return external_url || null
     case 'icloud_mail':
       return `message://${rawId}`
     case 'icloud_cal':
@@ -2451,11 +2455,11 @@ function buildDeepLink(source: string | undefined, external_id: string | undefin
   }
 }
 
-function SourceBadge({ source, external_id }: { source?: string; external_id?: string }) {
+function SourceBadge({ source, external_id, external_url }: { source?: string; external_id?: string; external_url?: string }) {
   const { t } = useTranslation('applications')
   if (!source) return null
   const meta = SOURCE_META[source]
-  const deepLink = buildDeepLink(source, external_id)
+  const deepLink = buildDeepLink(source, external_id, external_url)
   const cls = meta
     ? `inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${meta.cls}`
     : 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium bg-gray-50 text-gray-500 border-gray-200'
@@ -2636,7 +2640,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
       <div className="text-xs text-gray-400 mb-0.5 flex items-center gap-2 flex-wrap">
         <span>{dateStr ?? <span className="italic">{t('timeline.noDate')}</span>}{timeStr && <span className="text-gray-400">, {timeStr}</span>}</span>
         <span className="uppercase tracking-wide font-medium text-gray-400">{styleLabel}</span>
-        <SourceBadge source={event.source} external_id={event.external_id} />
+        <SourceBadge source={event.source} external_id={event.external_id} external_url={event.external_url} />
         <span className="ml-auto hidden group-hover:flex items-center gap-1">
           <button
             onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(displayableDatumZeit(event)), titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}

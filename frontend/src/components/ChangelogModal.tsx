@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.18',
+    date: '2026-07-19',
+    changes: [
+      'Fixed the "open in app" link on Google Calendar timeline entries never working (Gmail links were unaffected). Now uses the ready-made link Google provides for each event instead of trying to reconstruct one, which never produced a valid link. Existing calendar entries are repaired automatically the next time they sync.',
+    ],
+  },
+  {
     version: '4.6.17',
     date: '2026-07-19',
     changes: [

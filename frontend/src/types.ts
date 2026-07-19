@@ -209,6 +209,12 @@ export interface Event {
   autor?: string
   source?: string
   external_id?: string
+  // Ready-to-use deep link for sources whose external_id alone can't be
+  // turned into a working URL (currently only gcal -- Google Calendar's
+  // "eventedit" link needs the calendar ID baked into the same base64 blob,
+  // which the frontend has no access to). None for sources whose link is
+  // built purely from external_id (gmail, icloud_*).
+  external_url?: string
   created_at?: string
   attachments?: Attachment[]
 }

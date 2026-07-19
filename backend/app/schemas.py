@@ -122,6 +122,10 @@ class EventRead(EventBase):
     id: int
     application_id: int
     external_id: Optional[str] = None
+    # Ready-to-use deep link for sources whose external_id alone can't be
+    # turned into a working URL client-side (currently only gcal -- see the
+    # Event.external_url comment in models.py).
+    external_url: Optional[str] = None
     # Full timestamp when the sync source had one -- read-only, used by the
     # frontend timeline to break same-day ties in newest-first sort order
     # (datum alone can't). Not on EventBase: the create form stays date-only;

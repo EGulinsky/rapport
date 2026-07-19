@@ -651,6 +651,30 @@ def _migrate_event_datum_zeit_is_placeholder():
     conn.close()
 
 
+def _migrate_event_external_url():
+    """Add external_url column to events if missing -- a ready-to-use deep
+    link for sources (currently only gcal) whose external_id alone can't be
+    turned into a working URL client-side."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "external_url" not in cols:
+        cur.execute("ALTER TABLE events ADD COLUMN external_url TEXT")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_linkedin_job_id():
     """Add linkedin_job_id column to applications if missing."""
     import sqlite3
@@ -1271,6 +1295,7 @@ def init_db():
     _migrate_event_external_id()
     _migrate_event_datum_zeit()
     _migrate_event_datum_zeit_is_placeholder()
+    _migrate_event_external_url()
     _migrate_linkedin_job_id()
     _migrate_pre_rejection_status()
     _migrate_audit_log()

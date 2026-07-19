@@ -381,6 +381,14 @@ class Event(Base):
     autor           = Column(String, nullable=True)   # sender for mail events
     source          = Column(String, nullable=True)   # "gmail","gcal","notes","call"
     external_id     = Column(String, nullable=True)   # original ID from sync source (for deep links)
+    # Ready-to-use deep link for sources whose external_id alone can't be
+    # turned into a working URL client-side -- e.g. Google Calendar's
+    # "eventedit" link needs the calendar ID (the account's email) base64-
+    # encoded together with the event ID, which the frontend has no access
+    # to. Populated straight from the sync API's own link field (Google
+    # Calendar's "htmlLink") instead of reconstructing it. None for sources
+    # that build their link purely from external_id (gmail, icloud_*).
+    external_url    = Column(String, nullable=True)
 
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 

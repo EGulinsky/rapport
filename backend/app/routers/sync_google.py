@@ -720,15 +720,19 @@ async def _do_gcal(user_id: int) -> dict:
                 pass
 
             uid_set.add(ev_id)
+            html_link = ev.get("htmlLink")
 
             if ev_id in synced_ids:
-                # Check if the event changed (date or title)
+                # Check if the event changed (date or title), or is still
+                # missing its deep link from before v4.6.18 added external_url
                 new_datum = date_hint.date() if date_hint else None
-                if new_datum:
-                    existing = db.query(models.Event).filter_by(source="gcal", external_id=ev_id).first()
-                    if existing and (existing.datum != new_datum or existing.titel != summary):
+                existing = db.query(models.Event).filter_by(source="gcal", external_id=ev_id).first()
+                if existing:
+                    if new_datum and (existing.datum != new_datum or existing.titel != summary):
                         existing.datum = new_datum
                         existing.titel = summary
+                    if html_link and not existing.external_url:
+                        existing.external_url = html_link
                 skipped += 1
                 continue
 
@@ -759,7 +763,7 @@ async def _do_gcal(user_id: int) -> dict:
             )
 
             try:
-                ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
+                ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id, external_url=html_link)
             except AINotConfigured as e:
                 finish_progress("gcal", lang=lang)
                 return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
@@ -912,6 +916,87 @@ def gcal_backfill_autor(
     current_user: models.User = Depends(get_current_user),
 ):
     return backfill_gcal_autor(db, current_user.id)
+
+
+def backfill_gcal_external_url(db: Session, user_id: int) -> dict:
+    """One-time repair for Google Calendar events created before v4.6.18
+    added Event.external_url -- their timeline "open in app" link was
+    reconstructed client-side from external_id alone (base64 of just the
+    event ID), which Google Calendar's "eventedit" deep link format doesn't
+    actually accept (it also needs the calendar ID baked into the same
+    base64 blob) -- so every such link was broken. Re-fetches each affected
+    event's own htmlLink (Google's ready-made, correctly-encoded link) via
+    its stored external_id, using the same batched-with-retry approach as
+    backfill_gcal_autor() in this file."""
+    cfg = db.query(models.GoogleSync).first()
+    if not cfg or not cfg.refresh_token_enc:
+        return {"updated": 0, "errors": ["Nicht mit Google verbunden."]}
+
+    events = db.query(models.Event).filter(
+        models.Event.source == "gcal",
+        models.Event.external_url.is_(None),
+        models.Event.external_id.isnot(None),
+        models.Event.user_id == user_id,
+    ).all()
+    if not events:
+        return {"updated": 0, "errors": []}
+
+    from googleapiclient.discovery import build
+    creds = _refresh_if_needed(cfg, db)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    by_id: dict[str, models.Event] = {e.external_id: e for e in events}
+    results: dict[str, dict] = {}
+    errors: dict[str, Exception] = {}
+
+    def _cb(request_id: str, response: dict | None, exception: Exception | None) -> None:
+        if exception is None and response is not None:
+            results[request_id] = response
+            errors.pop(request_id, None)
+        else:
+            errors[request_id] = exception
+
+    BATCH = 15
+    MAX_ATTEMPTS = 4
+    ids = list(by_id.keys())
+
+    for attempt in range(MAX_ATTEMPTS):
+        pending = ids if attempt == 0 else list(errors.keys())
+        if not pending:
+            break
+        for start in range(0, len(pending), BATCH):
+            chunk = pending[start:start + BATCH]
+            batch_req = service.new_batch_http_request(callback=_cb)
+            for ev_id in chunk:
+                batch_req.add(
+                    service.events().get(calendarId="primary", eventId=ev_id),
+                    request_id=ev_id,
+                )
+            batch_req.execute()
+            time.sleep(1)
+        if errors:
+            time.sleep(2 ** attempt)
+
+    errors_out = [f"{ev_id}: {exc}" for ev_id, exc in errors.items()]
+
+    updated = 0
+    for ev_id, ev_data in results.items():
+        html_link = ev_data.get("htmlLink")
+        if not html_link:
+            continue
+        by_id[ev_id].external_url = html_link
+        updated += 1
+
+    db.commit()
+    return {"updated": updated, "errors": errors_out}
+
+
+@router.post("/calendar/backfill-external-url")
+def gcal_backfill_external_url(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return backfill_gcal_external_url(db, current_user.id)
 
 
 @router.get("/calendar/debug")
