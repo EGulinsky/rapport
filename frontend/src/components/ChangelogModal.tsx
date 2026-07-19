@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.22',
+    date: '2026-07-19',
+    changes: [
+      'The previous fade-edge hint for the contact detail view\'s tab row (v4.6.21) wasn\'t enough to make the LinkedIn tab easy to find. Widened the dialog instead, so on a normal-sized screen all six tabs are visible right away without needing to scroll at all.',
+    ],
+  },
+  {
     version: '4.6.21',
     date: '2026-07-19',
     changes: [
