@@ -374,10 +374,13 @@ def cleanup_preview(
         result["contacts"] = _find_contact_groups(db)
     if scope in (None, "companies"):
         result["companies"] = _find_company_groups(db)
-    if scope in (None, "events"):
-        # scope="events" wird ausschließlich vom "Bereinigen"-Button der Kalender-
-        # ansicht ausgelöst → auf echte Kalendereinträge beschränken. Ungescopte
-        # Läufe (scope=None, "alles bereinigen") bleiben bewusst umfassend.
+    if scope in (None, "applications", "events"):
+        # scope="events" comes exclusively from the Calendar view's "Bereinigen"
+        # button → restrict to real calendar entries. scope="applications" is the
+        # Applications view's button — event duplicates (notes/mail/calls, not
+        # just calendar) are squarely part of an application's own data, so they
+        # belong here too, unrestricted. Unscoped runs (scope=None, "clean up
+        # everything") stay deliberately comprehensive either way.
         calendar_only = scope == "events"
         result["events"] = _find_event_groups(db, calendar_only=calendar_only)
         result["cross_app_events"] = _find_cross_app_event_groups(db, calendar_only=calendar_only)
@@ -400,7 +403,10 @@ async def cleanup_run(
     scope: "applications" | "contacts" | "companies" | "events" | None (= all)
     """
     init_progress(PROGRESS_KEY, "Bereinigung", "Analysiere Duplikate…")
-    steps = [s for s in ["applications", "contacts", "companies", "events"] if scope in (None, s)]
+    run_events = scope in (None, "applications", "events")
+    steps = [s for s in ["applications", "contacts", "companies"] if scope in (None, s)]
+    if run_events:
+        steps.append("events")
     total_steps = max(len(steps), 1)
     step_i = 0
 
@@ -502,9 +508,12 @@ async def cleanup_run(
         await asyncio.sleep(0)
 
     # ── 4. Events (same app) → auto-delete ────────────────────────────────────
-    if scope in (None, "events"):
+    if run_events:
         # Analog zu /preview: scope="events" kommt ausschließlich vom Kalender-
-        # Bereinigen-Button → auf echte Kalendereinträge beschränken.
+        # Bereinigen-Button → auf echte Kalendereinträge beschränken. scope=
+        # "applications" (Bewerbungen-Ansicht) prüft Events ebenfalls, aber
+        # unbeschränkt -- Notiz-/Mail-/Anruf-Duplikate gehören genauso zu einer
+        # Bewerbung wie Kalendereinträge.
         calendar_only = scope == "events"
         update_progress(PROGRESS_KEY, step_i, total_steps, "Timeline-Einträge werden bereinigt…")
         step_i += 1

@@ -13,6 +13,8 @@ from datetime import date
 
 import pytest
 
+from app import models
+from app.routers import cleanup
 from app.routers.cleanup import _find_event_groups
 from tests.factories import application_factory, event_factory
 
@@ -131,3 +133,75 @@ class TestCalendarOnlyFilter:
         groups = _find_event_groups(db_session, calendar_only=True)
 
         assert len(groups) == 1
+
+
+class TestApplicationsScopeIncludesEvents:
+    """Regression: live-reported that scope="applications" (the Applications
+    view's own "Bereinigen" button) never checked for event duplicates at
+    all -- cleanup_preview()/cleanup_run() only ran _find_event_groups() for
+    scope in (None, "events"), so an icloud_notes duplicate on an application
+    (same source+datum+titel, e.g. from a sync re-run after a synced_items
+    marker reset) never surfaced there, only under the unscoped "clean up
+    everything" run. scope="applications" now checks events too, unrestricted
+    (calendar_only=False) -- notes/mail/call duplicates are as much a part of
+    an application's own data as calendar entries."""
+
+    def _user(self) -> models.User:
+        return models.User(id=1, email="test@x.de", password_hash="x", email_verified=True)
+
+    def test_positiv_preview_findet_notiz_dublette_unter_applications_scope(self, db_session):
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        db_session.commit()
+
+        result = cleanup.cleanup_preview(db=db_session, scope="applications", current_user=self._user())
+
+        assert len(result["events"]) == 1
+        assert len(result["events"][0]["remove"]) == 1
+
+    async def test_positiv_run_loescht_notiz_dublette_unter_applications_scope(self, db_session):
+        app = application_factory(db_session)
+        keeper_ev = event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        dup_ev = event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        db_session.commit()
+
+        await cleanup.cleanup_run(db=db_session, scope="applications", current_user=self._user())
+
+        db_session.expire_all()
+        assert db_session.get(models.Event, keeper_ev.id) is not None
+        assert db_session.get(models.Event, dup_ev.id) is None
+
+    def test_negativ_events_scope_bleibt_kalender_beschraenkt(self, db_session):
+        # Regression guard: scope="events" (Kalenderansicht) darf durch diese
+        # Änderung nicht auf einmal auch Notiz-Duplikate zeigen.
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        db_session.commit()
+
+        result = cleanup.cleanup_preview(db=db_session, scope="events", current_user=self._user())
+
+        assert result["events"] == []
+
+    def test_negativ_contacts_scope_prueft_weiterhin_keine_events(self, db_session):
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        event_factory(db_session, app, typ="notiz", source="icloud_notes", datum=date(2026, 7, 14), titel="Erstgespräch")
+        db_session.commit()
+
+        result = cleanup.cleanup_preview(db=db_session, scope="contacts", current_user=self._user())
+
+        assert result["events"] == []
+
+    def test_positiv_applications_scope_findet_auch_echte_kalenderdubletten(self, db_session):
+        # Nicht nur Notizen -- ein echter Kalendertermin-Duplikat (source=gcal)
+        # muss unter scope="applications" ebenfalls unbeschränkt gefunden werden.
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="gespräch", source="gcal", datum=date(2026, 7, 14), titel="Kennen lernen")
+        event_factory(db_session, app, typ="gespräch", source="gcal", datum=date(2026, 7, 14), titel="Kennen lernen")
+        db_session.commit()
+
+        result = cleanup.cleanup_preview(db=db_session, scope="applications", current_user=self._user())
+
+        assert len(result["events"]) == 1

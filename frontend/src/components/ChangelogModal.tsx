@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.15',
+    date: '2026-07-19',
+    changes: [
+      'Fixed the "Cleanup" button on the Applications view never checking for duplicate timeline entries (notes, mails, calls) — only the Calendar view\'s cleanup checked events at all, and only for calendar entries specifically. Application-scoped cleanup now finds and offers to remove those duplicates too.',
+    ],
+  },
+  {
     version: '4.6.14',
     date: '2026-07-19',
     changes: [

@@ -527,15 +527,18 @@ Batch run ("Assess with AI" in the header) processes all active applications one
 ```mermaid
 flowchart TB
     Btn["'Cleanup' button<br/>(shows category of the current view)"] --> Scope{current view}
-    Scope -- Applications --> App["scope=applications<br/>dedup_key(firma, rolle)"]
+    Scope -- Applications --> App["scope=applications<br/>dedup_key(firma, rolle) + event dupes (unrestricted)"]
     Scope -- Contacts --> Con["scope=contacts<br/>name + company_profile_id/norm_firma"]
     Scope -- Companies --> Comp["scope=companies<br/>website domain (name_norm is DB-unique)"]
-    Scope -- Calendar --> Ev["scope=events<br/>app-local + cross-application duplicates"]
+    Scope -- Calendar --> Ev["scope=events<br/>app-local + cross-application duplicates (calendar-only)"]
     App --> Merge1["auto-merge: transfer events+contacts, delete duplicate"]
+    App --> Auto1["event dupes: app-local auto-delete · cross-app: → review queue"]
     Con --> Review["→ review queue (PendingMatch)"]
     Comp --> Merge2["merge_companies() — apps/contacts reassigned, duplicate deleted"]
     Ev --> Auto["app-local: auto-delete · cross-app: → review queue"]
 ```
+
+`scope=applications` was originally application-dedup only — a live-reported gap (v4.6.15) found that an application's own event duplicates (e.g. an `icloud_notes` entry re-synced twice after a `synced_items` marker reset) never surfaced there, since `cleanup_preview()`/`cleanup_run()` only ran the event-duplicate finder for `scope in (None, "events")`. Fixed by also running it (unrestricted, `calendar_only=False`) for `scope="applications"` — notes/mail/call duplicates are as much a part of an application's own data as calendar entries. `scope=events` (the Calendar view's own button) is unchanged and stays calendar-only, so it doesn't also surface mail/call duplicates there.
 
 ### 5.5 Other Workflows (Brief)
 
