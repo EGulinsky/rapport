@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw, Calendar } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
@@ -78,6 +78,8 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
   const [tab, setTab] = useState<Tab>('overview')
   const [events, setEvents] = useState<ContactEvents | null>(null)
   const [eventsLoading, setEventsLoading] = useState(true)
+  const tabsScrollRef = useRef<HTMLDivElement>(null)
+  const [tabsOverflowRight, setTabsOverflowRight] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -108,6 +110,27 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // The tabs row hides its native scrollbar (v4.6.13) for a cleaner look,
+  // but that also hid any hint that scrolling right reveals more tabs --
+  // the LinkedIn tab in particular ended up practically undiscoverable.
+  // Track whether there's still hidden content to the right and show a
+  // fade-out edge instead, only when it's actually needed.
+  useEffect(() => {
+    const el = tabsScrollRef.current
+    if (!el) return
+    function update() {
+      if (!el) return
+      setTabsOverflowRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 1)
+    }
+    update()
+    el.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    return () => {
+      el.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [contact, events, tab])
 
   function startEdit() {
     if (!contact) return
@@ -267,39 +290,45 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
 
         {/* Tabs */}
         {contact && (
-          <div
-            className="flex border-b border-gray-100 px-6 gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-            style={{ scrollbarWidth: 'none' }}
-          >
-            {([
-              ['overview', t('contactModal.tabOverview'), undefined],
-              ['apps', t('contactModal.tabApplications'), contact.applications?.length],
-              ['calls', t('contactModal.tabCalls'), events?.calls.length],
-              ['mails', t('contactModal.tabMails'), events?.mails.length],
-              ['calendar', t('contactModal.tabCalendar'), events?.calendar.length],
-              ['messages', t('contactModal.tabMessages'), events?.messages.length],
-            ] as [Tab, string, number | undefined][]).map(([tabKey, label, count]) => (
-              <button
-                key={tabKey}
-                onClick={() => setTab(tabKey)}
-                className={clsx(
-                  'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
-                  tab === tabKey
-                    ? 'border-indigo-500 text-indigo-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                )}
-              >
-                {label}
-                {!!count && (
-                  <span className={clsx(
-                    'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
-                    tab === tabKey ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
-                  )}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="relative border-b border-gray-100">
+            <div
+              ref={tabsScrollRef}
+              className="flex px-6 gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              {([
+                ['overview', t('contactModal.tabOverview'), undefined],
+                ['apps', t('contactModal.tabApplications'), contact.applications?.length],
+                ['calls', t('contactModal.tabCalls'), events?.calls.length],
+                ['mails', t('contactModal.tabMails'), events?.mails.length],
+                ['calendar', t('contactModal.tabCalendar'), events?.calendar.length],
+                ['messages', t('contactModal.tabMessages'), events?.messages.length],
+              ] as [Tab, string, number | undefined][]).map(([tabKey, label, count]) => (
+                <button
+                  key={tabKey}
+                  onClick={() => setTab(tabKey)}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
+                    tab === tabKey
+                      ? 'border-indigo-500 text-indigo-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  )}
+                >
+                  {label}
+                  {!!count && (
+                    <span className={clsx(
+                      'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                      tab === tabKey ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                    )}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {tabsOverflowRight && (
+              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent" />
+            )}
           </div>
         )}
 

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.21',
+    date: '2026-07-19',
+    changes: [
+      'Fixed the LinkedIn tab in the contact detail view being easy to miss: the tabs row can scroll further than the modal is wide, but had no visible hint that more tabs existed off to the right. Now shows a subtle fade at the edge when there\'s more to scroll to.',
+    ],
+  },
+  {
     version: '4.6.20',
     date: '2026-07-19',
     changes: [
