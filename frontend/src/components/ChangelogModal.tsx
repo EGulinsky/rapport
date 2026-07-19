@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.10',
+    date: '2026-07-19',
+    changes: [
+      'Fixed mail attribution missing for contacts on Gmail messages synced before the "mails" tab feature shipped (v4.6.4) — a one-time repair re-fetches the sender header for each affected message so those older mails now correctly show up under the right contact.',
+    ],
+  },
+  {
     version: '4.6.9',
     date: '2026-07-19',
     changes: [

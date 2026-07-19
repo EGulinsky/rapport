@@ -27,7 +27,7 @@ from app.routers.sync_common import (
     strip_html, decode_b64,
     build_firm_index, build_contact_domain_index, find_hint_apps,
     build_contact_email_index, find_apps_from_addresses, find_matching_apps,
-    process_item, earliest_bewerbung_date,
+    process_item, earliest_bewerbung_date, upsert_contact_from_sender,
     init_progress, update_progress, finish_progress, get_all_progress,
     set_batch_result, get_batch_results,
 )
@@ -520,6 +520,87 @@ def reset_gmail_sync(db: Session = Depends(get_db), current_user: models.User = 
         cfg.gmail_last_sync = None
         purge_source(db, "gmail", current_user.id)
         db.commit()
+
+
+def backfill_gmail_autor(db: Session, user_id: int) -> dict:
+    """One-time repair for Gmail events created before v4.6.4 added
+    Event.autor population. Event.autor is what the Mails tab (ContactModal.tsx,
+    via GET /api/contacts/{id}/events in contacts.py) matches back to a
+    contact by email address -- events from before that feature shipped have
+    autor=NULL and so are invisible there, even though the contact and
+    application match correctly otherwise. Re-fetches just the From header
+    for each affected message via its stored external_id (the Gmail message
+    ID), using the same cheap metadata-only batch call _do_gmail() already
+    uses for its own Phase 1 — no need to re-fetch the full message body.
+    Never touches an event that already has autor set, from a normal sync or
+    a manual edit."""
+    cfg = db.query(models.GoogleSync).first()
+    if not cfg or not cfg.refresh_token_enc:
+        return {"updated": 0, "errors": ["Nicht mit Google verbunden."]}
+
+    events = db.query(models.Event).filter(
+        models.Event.source == "gmail",
+        models.Event.autor.is_(None),
+        models.Event.external_id.isnot(None),
+        models.Event.user_id == user_id,
+    ).all()
+    if not events:
+        return {"updated": 0, "errors": []}
+
+    from googleapiclient.discovery import build
+    creds = _refresh_if_needed(cfg, db)
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+    by_id: dict[str, models.Event] = {e.external_id: e for e in events}
+    meta_results: dict[str, dict] = {}
+    errors: list[str] = []
+
+    def _cb(request_id: str, response: dict | None, exception: Exception | None) -> None:
+        if exception is None and response is not None:
+            meta_results[request_id] = response
+        else:
+            errors.append(f"{request_id}: {exception}")
+
+    BATCH = 100
+    ids = list(by_id.keys())
+    for start in range(0, len(ids), BATCH):
+        chunk = ids[start:start + BATCH]
+        batch_req = service.new_batch_http_request(callback=_cb)
+        for msg_id in chunk:
+            batch_req.add(
+                service.users().messages().get(
+                    userId="me", id=msg_id, format="metadata", metadataHeaders=["From"],
+                ),
+                request_id=msg_id,
+            )
+        batch_req.execute()
+
+    updated = 0
+    for msg_id, meta in meta_results.items():
+        hdrs = {h["name"].lower(): h["value"] for h in meta.get("payload", {}).get("headers", [])}
+        sender = hdrs.get("from")
+        if not sender:
+            continue
+        event = by_id[msg_id]
+        event.autor = sender
+        updated += 1
+        app = db.query(models.Application).get(event.application_id)
+        if app:
+            upsert_contact_from_sender(
+                db, sender, app_id=event.application_id, firma=app.firma,
+                is_headhunter=app.is_headhunter, event_date=event.datum, user_id=user_id,
+            )
+
+    db.commit()
+    return {"updated": updated, "errors": errors}
+
+
+@router.post("/gmail/backfill-autor")
+def gmail_backfill_autor(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return backfill_gmail_autor(db, current_user.id)
 
 
 @router.post("/gmail", response_model=schemas.SyncResult)
