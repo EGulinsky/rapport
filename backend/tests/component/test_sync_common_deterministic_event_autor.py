@@ -105,6 +105,70 @@ class TestSaveDeterministicEventAutor:
         assert contact.vorname == "Carla"
 
 
+class TestSaveDeterministicEventAutorCalendar:
+    """Event.autor for calendar events (gcal/icloud_cal) -- the organizer +
+    attendee list ("Teilnehmer: ...") instead of a mail sender, so a
+    contact's Calendar tab (ContactModal.tsx, GET /api/contacts/{id}/events)
+    can match past calendar entries back to them by email address, the same
+    way the Mails tab already does."""
+
+    def test_positiv_autor_wird_aus_teilnehmer_zeile_gesetzt_gcal(self, db_session):
+        app = application_factory(db_session)
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        raw_text = "Titel: Interview\nOrt: \nTeilnehmer: Anna Recruiterin <anna@contoso.example>, Eugen Gulinsky <eu@example.com>\nBeschreibung: "
+        _save_deterministic_event(
+            db_session, "gcal", "evt-cal-1", _det(app.id, typ="gespräch"), raw_text, date_hint=_RECENT, user_id=None,
+        )
+
+        event = db_session.query(models.Event).filter_by(external_id="evt-cal-1").one()
+        assert event.autor == "Anna Recruiterin <anna@contoso.example>, Eugen Gulinsky <eu@example.com>"
+
+    def test_positiv_autor_wird_aus_teilnehmer_zeile_gesetzt_icloud_cal(self, db_session):
+        app = application_factory(db_session)
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        raw_text = "Titel: Interview\nOrt: \nTeilnehmer: Ben Recruiter <ben@contoso.example>\nBeschreibung: "
+        _save_deterministic_event(
+            db_session, "icloud_cal", "evt-cal-2", _det(app.id, typ="gespräch"), raw_text, date_hint=_RECENT, user_id=None,
+        )
+
+        event = db_session.query(models.Event).filter_by(external_id="evt-cal-2").one()
+        assert event.autor == "Ben Recruiter <ben@contoso.example>"
+
+    def test_negativ_kein_autor_ohne_teilnehmer_zeile(self, db_session):
+        app = application_factory(db_session)
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        raw_text = "Titel: Interview\nOrt: \nBeschreibung: keine Teilnehmerliste"
+        _save_deterministic_event(
+            db_session, "gcal", "evt-cal-3", _det(app.id, typ="gespräch"), raw_text, date_hint=_RECENT, user_id=None,
+        )
+
+        event = db_session.query(models.Event).filter_by(external_id="evt-cal-3").one()
+        assert event.autor is None
+
+    def test_negativ_kein_kontakt_wird_aus_teilnehmerliste_angelegt(self, db_session):
+        # Unlike mail's autor (a single, reliable sender), a calendar event's
+        # Teilnehmer line can list several people and organizer isn't
+        # necessarily "the person this application is with" -- must not
+        # trigger upsert_contact_from_sender() the way mail's autor does.
+        app = application_factory(db_session, firma="Contoso AG")
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        raw_text = "Titel: Interview\nOrt: \nTeilnehmer: Neue Person <neu@contoso-ag.example>\nBeschreibung: "
+        _save_deterministic_event(
+            db_session, "gcal", "evt-cal-4", _det(app.id, typ="gespräch"), raw_text, date_hint=_RECENT, user_id=None,
+        )
+
+        contact = db_session.query(models.Contact).filter_by(email="neu@contoso-ag.example").first()
+        assert contact is None
+
+
 class TestSaveDeterministicEventDatumZeit:
     """Event.datum stays date-only (unchanged); datum_zeit carries the full
     timestamp when the sync source had one, so same-day events can still be

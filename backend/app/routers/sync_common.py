@@ -550,6 +550,31 @@ def vobj_str(vobj, attr: str) -> str:
     return str(getattr(obj, "value", None) or obj or "")
 
 
+def vobj_participants(vevent) -> list[str]:
+    """Extract 'Name <email>' strings for a VEVENT's organizer + attendees
+    (iCal ORGANIZER/ATTENDEE properties), in the same "Teilnehmer: ..." format
+    _do_gcal() already builds from the Google Calendar API's organizer/
+    attendees -- lets _save_deterministic_event() populate Event.autor
+    uniformly for both calendar sources. Property values are "mailto:"
+    URIs; the display name (if any) is the CN parameter."""
+    participants: list[str] = []
+
+    def _add(contentline) -> None:
+        raw_value = str(getattr(contentline, "value", "") or "")
+        email = re.sub(r"(?i)^mailto:", "", raw_value).strip()
+        if not email:
+            return
+        cn = (contentline.params.get("CN") or [""])[0]
+        participants.append(f"{cn} <{email}>" if cn else email)
+
+    organizer = getattr(vevent, "organizer", None)
+    if organizer is not None:
+        _add(organizer)
+    for attendee in getattr(vevent, "attendee_list", []):
+        _add(attendee)
+    return participants
+
+
 # ── Firm / contact indexes ────────────────────────────────────────────────────
 
 _CORP_SUFFIXES = {
@@ -996,14 +1021,24 @@ def _save_deterministic_event(
     elif time_pfx:
         notiz = time_pfx.rstrip('\n') or None
 
-    # Sender header ("Von: "/"From: ") for mail events — stored on the event
-    # itself (Event.autor) so a contact's Mails tab (ContactModal.tsx) can
-    # later match past mail events back to them by email address; also used
-    # below to auto-create a contact from the sender, as before.
+    # Sender header ("Von: "/"From: ") for mail events, or the participant
+    # list ("Teilnehmer: ") for calendar events — stored on the event itself
+    # (Event.autor) so a contact's Mails/Calendar tab (ContactModal.tsx) can
+    # later match past events back to them by email address (see
+    # GET /api/contacts/{id}/events in contacts.py); also used below to
+    # auto-create a contact from a mail sender, as before -- NOT done for
+    # calendar participants, since that line can list several people and
+    # isn't a reliable "this application belongs to this person" signal the
+    # way a mail's actual sender is.
     autor: Optional[str] = None
     if source in ('gmail', 'icloud_mail'):
         for line in raw_text.splitlines():
             if line.startswith("Von: ") or line.startswith("From: "):
+                autor = line.split(": ", 1)[1].strip() or None
+                break
+    elif source in ('gcal', 'icloud_cal'):
+        for line in raw_text.splitlines():
+            if line.startswith("Teilnehmer: "):
                 autor = line.split(": ", 1)[1].strip() or None
                 break
 
@@ -1026,8 +1061,9 @@ def _save_deterministic_event(
               new_value=new_event.titel, reason=det.get('reason'), user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
-    # Auto-create contact from sender (mail events only)
-    if autor:
+    # Auto-create contact from sender (mail events only -- not calendar
+    # participants, see the autor comment above)
+    if autor and source in ('gmail', 'icloud_mail'):
         upsert_contact_from_sender(
             db, autor,
             app_id=det['app_id'],

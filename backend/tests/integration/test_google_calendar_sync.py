@@ -68,6 +68,10 @@ class TestDoGcalNeueTermine:
         assert event.typ == "gespräch"
         assert event.titel == "Interview Runde 1"
         assert event.application_id == app.id
+        # Organizer (see _cal_event()) ends up in Event.autor via the
+        # "Teilnehmer: ..." line -- lets a contact's Calendar tab
+        # (ContactModal.tsx) match this event back to them by email address.
+        assert event.autor == "Recruiterin <recruiterin@contoso.com>"
 
     async def test_negativ_termin_ohne_kontakt_match_wird_uebersprungen(self, db_session, google_sync, fake_google_calendar):
         application_factory(db_session)

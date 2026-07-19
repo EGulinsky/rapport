@@ -80,6 +80,37 @@ class TestContactEventsMatching:
         assert resp.status_code == 200
         assert resp.json()["mails"] == []
 
+    def test_positiv_kalendertermin_wird_ueber_autor_gematcht(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Fuchs", vorname="Carla", email="carla@contoso.example")
+        app.contacts.append(contact)
+        event = event_factory(db_session, app, source="gcal", typ="gespräch", titel="Interview", datum=date.today())
+        event.autor = "Carla Fuchs <carla@contoso.example>"
+        # Termin mit jemand anderem -- darf nicht matchen.
+        other = event_factory(db_session, app, source="icloud_cal", typ="gespräch", titel="Anderer Termin", datum=date.today())
+        other.autor = "Jemand Anders <jemand@contoso.example>"
+        db_session.commit()
+
+        resp = client.get(f"/api/contacts/{contact.id}/events")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["calendar"]) == 1
+        assert body["calendar"][0]["titel"] == "Interview"
+
+    def test_negativ_kontakt_ohne_email_bekommt_keine_kalendertermine(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Fuchs", vorname="Carla", email=None)
+        app.contacts.append(contact)
+        event = event_factory(db_session, app, source="gcal", typ="gespräch", titel="Irrelevant", datum=date.today())
+        event.autor = "Irgendwer <irgendwer@contoso.example>"
+        db_session.commit()
+
+        resp = client.get(f"/api/contacts/{contact.id}/events")
+
+        assert resp.status_code == 200
+        assert resp.json()["calendar"] == []
+
     def test_negativ_events_anderer_bewerbung_werden_nicht_einbezogen(self, client, db_session):
         app_a = application_factory(db_session, firma="Contoso")
         app_b = application_factory(db_session, firma="Other Inc")
@@ -129,7 +160,7 @@ class TestContactEventsMatching:
         resp = client.get(f"/api/contacts/{contact.id}/events")
 
         assert resp.status_code == 200
-        assert resp.json() == {"calls": [], "mails": [], "messages": []}
+        assert resp.json() == {"calls": [], "mails": [], "messages": [], "calendar": []}
 
     def test_negativ_unbekannter_kontakt_liefert_404(self, client):
         resp = client.get("/api/contacts/999999/events")

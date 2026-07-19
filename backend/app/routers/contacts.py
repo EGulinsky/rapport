@@ -93,6 +93,7 @@ class ContactEventsResponse(BaseModel):
     calls: List[ContactEventItem]
     mails: List[ContactEventItem]
     messages: List[ContactEventItem]
+    calendar: List[ContactEventItem]
 
 
 def _sort_newest_first(events: List[models.Event]) -> List[models.Event]:
@@ -120,26 +121,27 @@ def get_contact_events(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Calls, mails, and LinkedIn messages connected to this specific contact
-    (not just anything on the same application) — mirrors CompanyModal's
-    per-tab breakdown, but here scoped to one contact across all of their
-    linked applications.
+    """Calls, mails, calendar entries, and LinkedIn messages connected to this
+    specific contact (not just anything on the same application) — mirrors
+    CompanyModal's per-tab breakdown, but here scoped to one contact across
+    all of their linked applications.
 
     None of these event types has a direct FK to Contact, so each is matched
     by the same signal already used elsewhere in the codebase: calls and
     LinkedIn messages embed the contact's display name in Event.titel at
     creation time (see _delete_call_events_for_contact() in applications.py
-    and attach_linkedin_messages_for_contact() in sync_linkedin.py); mails
-    are matched by the sender address in Event.autor (only populated for
-    mail events synced after this feature shipped — see
-    _save_deterministic_event() in sync_common.py)."""
+    and attach_linkedin_messages_for_contact() in sync_linkedin.py); mails and
+    calendar entries are matched by an email address in Event.autor -- the
+    sender for mail, the organizer+attendee list for calendar (only populated
+    for events synced after each of those two features shipped, respectively
+    — see _save_deterministic_event() in sync_common.py)."""
     contact = db.query(models.Contact).filter_by(id=contact_id).first()
     if not contact:
         raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
 
     apps = list(contact.applications)
     if not apps:
-        return ContactEventsResponse(calls=[], mails=[], messages=[])
+        return ContactEventsResponse(calls=[], mails=[], messages=[], calendar=[])
 
     app_ids = [a.id for a in apps]
     company_ids = {a.company_profile_id for a in apps if a.company_profile_id}
@@ -176,10 +178,16 @@ def get_contact_events(
     ).all()
 
     mails: List[models.Event] = []
+    calendar: List[models.Event] = []
     if contact.email:
         mails = db.query(models.Event).filter(
             models.Event.application_id.in_(app_ids),
             models.Event.source.in_(("gmail", "icloud_mail")),
+            models.Event.autor.ilike(f"%{contact.email}%"),
+        ).all()
+        calendar = db.query(models.Event).filter(
+            models.Event.application_id.in_(app_ids),
+            models.Event.source.in_(("gcal", "icloud_cal")),
             models.Event.autor.ilike(f"%{contact.email}%"),
         ).all()
 
@@ -187,6 +195,7 @@ def get_contact_events(
         calls=[_to_item(e) for e in _sort_newest_first(calls)],
         mails=[_to_item(e) for e in _sort_newest_first(mails)],
         messages=[_to_item(e) for e in _sort_newest_first(messages)],
+        calendar=[_to_item(e) for e in _sort_newest_first(calendar)],
     )
 
 

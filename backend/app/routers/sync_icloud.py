@@ -42,7 +42,7 @@ from app.routers.sync_common import (
     find_hint_apps, find_matching_apps,
     process_item, strip_html, earliest_bewerbung_date, _predates_bewerbung,
     init_progress, update_progress, finish_progress,
-    set_batch_result, vobj_str, _to_naive_utc,
+    set_batch_result, vobj_str, vobj_participants, _to_naive_utc,
 )
 
 # In-memory session cache: apple_id -> {'api': ICloudPyService, 'sms_device': dict|None}
@@ -939,7 +939,12 @@ async def _do_icloud_cal(user_id: int) -> dict:
                 continue
 
             location = vobj_str(vevent, "location")
-            raw = f"Titel: {summary}\nOrt: {location}\nBeschreibung: {desc[:800]}"
+            participants = vobj_participants(vevent)
+            raw = (
+                f"Titel: {summary}\nOrt: {location}\n"
+                + (f"Teilnehmer: {', '.join(participants)}\n" if participants else "")
+                + f"Beschreibung: {desc[:800]}"
+            )
             hint_apps = find_hint_apps(raw, term_to_apps)
 
             try:

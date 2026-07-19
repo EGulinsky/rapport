@@ -102,10 +102,12 @@
     "tabApplications": "Applications",
     "tabCalls": "Calls",
     "tabMails": "Mails",
+    "tabCalendar": "Calendar",
     "tabMessages": "Messages",
     "noApplications": "No linked applications",
     "noCalls": "No calls",
     "noMails": "No mails",
+    "noCalendar": "No calendar entries",
     "noMessages": "No messages"
   },
   "phoneTypes": {

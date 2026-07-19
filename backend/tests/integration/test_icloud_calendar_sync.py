@@ -239,6 +239,48 @@ class TestDoIcloudCalNeueTermine:
         assert any("process-item-boom" in e for e in result["errors"])
 
 
+class TestDoIcloudCalTeilnehmer:
+    """Event.autor for icloud_cal is built from the VEVENT's real ORGANIZER/
+    ATTENDEE properties (via vobj_participants() in sync_common.py), parsed
+    from an actual .ics string like the rest of this file's tests -- so a
+    contact's Calendar tab (ContactModal.tsx) can match these events back to
+    them by email address, the same way it already does for mail."""
+
+    async def test_positiv_autor_wird_aus_organizer_und_attendees_gesetzt(
+        self, db_session, icloud_sync, fake_caldav
+    ):
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
+        db_session.commit()
+        ev = icloud_calendar_event(
+            "evt-teilnehmer-1", "Interview bei Contoso AG", datetime.now(timezone.utc),
+            organizer_email="recruiter@contoso-ag.example",
+            attendee_emails=["eugen@example.com"],
+        )
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-teilnehmer-1").one()
+        assert event.autor == "Organizer <recruiter@contoso-ag.example>, Guest <eugen@example.com>"
+
+    async def test_negativ_kein_autor_ohne_organizer_oder_attendees(
+        self, db_session, icloud_sync, fake_caldav
+    ):
+        app = application_factory(db_session, firma="Contoso AG")
+        seed_floor(db_session, app)
+        db_session.commit()
+        ev = icloud_calendar_event("evt-teilnehmer-2", "Interview bei Contoso AG", datetime.now(timezone.utc))
+        fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
+
+        result = await _do_icloud_cal(1)
+
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="icloud_cal", external_id="evt-teilnehmer-2").one()
+        assert event.autor is None
+
+
 class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
     async def test_positiv_geaenderter_titel_wird_bei_bereits_synctem_termin_aktualisiert(
         self, db_session, icloud_sync, fake_caldav

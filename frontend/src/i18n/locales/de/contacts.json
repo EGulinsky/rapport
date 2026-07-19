@@ -102,10 +102,12 @@
     "tabApplications": "Bewerbungen",
     "tabCalls": "Anrufe",
     "tabMails": "Mails",
+    "tabCalendar": "Termine",
     "tabMessages": "Nachrichten",
     "noApplications": "Keine verknüpften Bewerbungen",
     "noCalls": "Keine Anrufe",
     "noMails": "Keine Mails",
+    "noCalendar": "Keine Termine",
     "noMessages": "Keine Nachrichten"
   },
   "phoneTypes": {

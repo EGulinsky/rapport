@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw } from 'lucide-react'
+import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw, Calendar } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp, ContactEvents, ContactEventItem } from '../types'
@@ -18,7 +18,7 @@ interface Props {
   onChanged?: () => void
 }
 
-type Tab = 'overview' | 'apps' | 'calls' | 'mails' | 'messages'
+type Tab = 'overview' | 'apps' | 'calls' | 'mails' | 'calendar' | 'messages'
 
 const TYP_OPTIONS = ['HR', 'Headhunter', 'FB', 'CEO', 'Netzwerk', 'Sonstiges']
 
@@ -275,6 +275,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
               ['apps', t('contactModal.tabApplications'), contact.applications?.length],
               ['calls', t('contactModal.tabCalls'), events?.calls.length],
               ['mails', t('contactModal.tabMails'), events?.mails.length],
+              ['calendar', t('contactModal.tabCalendar'), events?.calendar.length],
               ['messages', t('contactModal.tabMessages'), events?.messages.length],
             ] as [Tab, string, number | undefined][]).map(([tabKey, label, count]) => (
               <button
@@ -411,16 +412,31 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
           </div>
         )}
 
-        {/* Calls / Mails / Messages tabs */}
-        {!loading && contact && !editing && (tab === 'calls' || tab === 'mails' || tab === 'messages') && (
+        {/* Calls / Mails / Calendar / Messages tabs */}
+        {!loading && contact && !editing && (tab === 'calls' || tab === 'mails' || tab === 'calendar' || tab === 'messages') && (
           <div className="px-6 py-5">
             {eventsLoading ? (
               <div className="py-8 text-center text-gray-400">{t('view.loading')}</div>
             ) : (
               <EventList
-                items={tab === 'calls' ? (events?.calls ?? []) : tab === 'mails' ? (events?.mails ?? []) : (events?.messages ?? [])}
-                emptyLabel={tab === 'calls' ? t('contactModal.noCalls') : tab === 'mails' ? t('contactModal.noMails') : t('contactModal.noMessages')}
-                icon={tab === 'calls' ? <Phone className="h-3.5 w-3.5" /> : tab === 'mails' ? <Mail className="h-3.5 w-3.5" /> : <Linkedin className="h-3.5 w-3.5" />}
+                items={
+                  tab === 'calls' ? (events?.calls ?? [])
+                  : tab === 'mails' ? (events?.mails ?? [])
+                  : tab === 'calendar' ? (events?.calendar ?? [])
+                  : (events?.messages ?? [])
+                }
+                emptyLabel={
+                  tab === 'calls' ? t('contactModal.noCalls')
+                  : tab === 'mails' ? t('contactModal.noMails')
+                  : tab === 'calendar' ? t('contactModal.noCalendar')
+                  : t('contactModal.noMessages')
+                }
+                icon={
+                  tab === 'calls' ? <Phone className="h-3.5 w-3.5" />
+                  : tab === 'mails' ? <Mail className="h-3.5 w-3.5" />
+                  : tab === 'calendar' ? <Calendar className="h-3.5 w-3.5" />
+                  : <Linkedin className="h-3.5 w-3.5" />
+                }
                 locale={locale}
                 onOpenApplication={onOpenApplication}
               />

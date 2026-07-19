@@ -231,6 +231,7 @@ export interface ContactEvents {
   calls: ContactEventItem[]
   mails: ContactEventItem[]
   messages: ContactEventItem[]
+  calendar: ContactEventItem[]
 }
 
 export interface FileBrowseItem {

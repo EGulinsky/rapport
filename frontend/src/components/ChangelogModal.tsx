@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.14',
+    date: '2026-07-19',
+    changes: [
+      'Contact detail view has a new "Calendar" tab showing Google/iCloud calendar entries linked to that specific contact, alongside the existing Calls/Mails/Messages tabs. Applies going forward — existing calendar entries pick up their attendee info on their next sync.',
+    ],
+  },
+  {
     version: '4.6.13',
     date: '2026-07-19',
     changes: [
