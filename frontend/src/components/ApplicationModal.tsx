@@ -41,6 +41,7 @@ interface Props {
   onClose: () => void
   onSaved: () => void
   onOpenCompany?: (id: number) => void
+  onOpenContact?: (id: number) => void
   updatedFields?: Set<string>
   onReviewOpen?: () => void
 }
@@ -53,7 +54,7 @@ const EMPTY_CONTACT = { name: '', email: '', telefon: '', typ: '', rolle: '' }
 // dedicated Contact modals — kept simple since these panels are already dense.
 type ContactDraft = Partial<Omit<Contact, 'phones'>> & { telefon?: string }
 
-export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updatedFields, onReviewOpen }: Props) {
+export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpenContact, updatedFields, onReviewOpen }: Props) {
   const { t } = useTranslation('applications')
   const { mainStatusLabel, subStatusLabel } = useStatusLabels()
   const locale = useLocale()
@@ -1773,13 +1774,16 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
                     <div className="flex items-start gap-2">
                       <input type="checkbox" checked={selectedContactIds.has(c.id)} onChange={() => toggleContactSelect(c.id)}
                         className="mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" />
-                      <div className="flex-1 min-w-0">
+                      <div
+                        className={`flex-1 min-w-0 ${onOpenContact ? 'cursor-pointer' : ''}`}
+                        onClick={() => onOpenContact?.(c.id)}
+                      >
                         <p className="font-medium text-gray-900 truncate">{displayName(c)}</p>
                         <p className="text-xs text-gray-500 truncate">{[c.typ, c.rolle].filter(Boolean).join(' · ')}</p>
                         {c.firma && <p className="text-xs text-gray-400 truncate">{c.firma}</p>}
                         {c.email && <p className="text-xs text-gray-400 truncate">{c.email}</p>}
                         {(c.phones?.length ?? 0) > 0 && <p className="text-xs text-gray-400">{c.phones![0].number}</p>}
-                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-500 hover:underline truncate block">{t('contacts.linkedin')}</a>}
+                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-indigo-500 hover:underline truncate block">{t('contacts.linkedin')}</a>}
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <button onClick={() => { setEditingContactId(c.id); setEditContactDraft({ vorname: c.vorname, name: c.name, email: c.email, telefon: c.phones?.[0]?.number ?? '', rolle: c.rolle, firma: c.firma, typ: c.typ, linkedin_url: c.linkedin_url }) }}

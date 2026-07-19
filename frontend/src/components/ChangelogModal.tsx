@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.9',
+    date: '2026-07-19',
+    changes: [
+      'Clicking a contact in an application\'s Contacts tab now opens that contact\'s own detail view (with its calls, mails, and messages), instead of only the inline edit form.',
+    ],
+  },
+  {
     version: '4.6.8',
     date: '2026-07-19',
     changes: [

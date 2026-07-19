@@ -15,6 +15,7 @@ import { ContactImportModal } from './components/ContactImportModal'
 import { CompanyImportModal } from './components/CompanyImportModal'
 import { CompaniesView } from './components/CompaniesView'
 import { CompanyModal } from './components/CompanyModal'
+import { ContactModal } from './components/ContactModal'
 import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
 import { SettingsModal } from './components/SettingsModal'
@@ -109,6 +110,7 @@ export default function App() {
   const [showChangelog, setShowChangelog] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [companyModalId, setCompanyModalId] = useState<number | null>(null)
+  const [contactModalId, setContactModalId] = useState<number | null>(null)
   const [companyMergeIds, setCompanyMergeIds] = useState<number[] | null>(null)
   const [companyReloadKey, setCompanyReloadKey] = useState(0)
   const [appsCompanyFilter, setAppsCompanyFilter] = useState<{ id: number; name: string } | null>(null)
@@ -660,8 +662,19 @@ export default function App() {
           onClose={() => setSelectedId(null)}
           onSaved={() => { load(); loadReviewCount() }}
           onOpenCompany={id => setCompanyModalId(id)}
+          onOpenContact={id => setContactModalId(id)}
           updatedFields={changedFields.get(selectedId) ?? undefined}
           onReviewOpen={checkReviewAfterSync}
+        />
+      )}
+
+      {contactModalId !== null && (
+        <ContactModal
+          id={contactModalId}
+          onClose={() => setContactModalId(null)}
+          onOpenApplication={id => { setContactModalId(null); setMainView('applications'); setSelectedId(id) }}
+          onOpenCompany={id => setCompanyModalId(id)}
+          onChanged={load}
         />
       )}
 
