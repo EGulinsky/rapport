@@ -2450,6 +2450,12 @@ export function buildDeepLink(source: string | undefined, external_id: string | 
       return `x-apple-calevent:///${rawId}`
     case 'icloud_notes':
       return `applenotes://${rawId}`
+    case 'linkedin_msg':
+      // external_url is the participant's own LinkedIn profile (captured
+      // from the export CSV's SENDER/RECIPIENT PROFILE URL column at
+      // import time) -- there's no reliable way to reconstruct a link to
+      // the exact conversation thread from just the CSV's conversation ID.
+      return external_url || null
     default:
       return null
   }

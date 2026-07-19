@@ -103,12 +103,12 @@
     "tabCalls": "Anrufe",
     "tabMails": "Mails",
     "tabCalendar": "Termine",
-    "tabMessages": "Nachrichten",
+    "tabMessages": "LinkedIn",
     "noApplications": "Keine verknüpften Bewerbungen",
     "noCalls": "Keine Anrufe",
     "noMails": "Keine Mails",
     "noCalendar": "Keine Termine",
-    "noMessages": "Keine Nachrichten"
+    "noMessages": "Keine LinkedIn-Nachrichten"
   },
   "phoneTypes": {
     "mobile": "Mobil",

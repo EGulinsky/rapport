@@ -36,7 +36,16 @@ describe('buildDeepLink', () => {
     expect(buildDeepLink('icloud_notes', 'note-1', undefined)).toBe('applenotes://note-1')
   })
 
-  it('returns null for unknown sources', () => {
+  it('uses external_url (the participant\'s LinkedIn profile) for linkedin_msg', () => {
+    expect(buildDeepLink('linkedin_msg', 'conv-1', 'https://www.linkedin.com/in/max-mustermann'))
+      .toBe('https://www.linkedin.com/in/max-mustermann')
+  })
+
+  it('returns null for linkedin_msg when external_url is missing (no broken link shown)', () => {
     expect(buildDeepLink('linkedin_msg', 'conv-1', undefined)).toBeNull()
+  })
+
+  it('returns null for unknown sources', () => {
+    expect(buildDeepLink('icloud_todo', 'reminder-1', undefined)).toBeNull()
   })
 })

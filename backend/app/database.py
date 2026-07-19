@@ -675,6 +675,52 @@ def _migrate_event_external_url():
     conn.close()
 
 
+def _backfill_linkedin_message_external_url():
+    """Populate external_url for linkedin_msg events created before v4.6.20
+    added it -- a pure local join against linkedin_messages (the account's
+    already-imported CSV export), no LinkedIn API access needed, unlike the
+    Google Calendar equivalents in sync_google.py. Naturally idempotent
+    (only touches rows still missing external_url), safe to run every
+    startup -- no marker file needed."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    for table in ("events", "linkedin_messages"):
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        if not cur.fetchone():
+            conn.close()
+            return
+    cur.execute("PRAGMA table_info(events)")
+    if "external_url" not in {row[1] for row in cur.fetchall()}:
+        conn.close()
+        return
+
+    cur.execute(
+        """
+        UPDATE events
+        SET external_url = (
+            SELECT lm.participant_profile_url FROM linkedin_messages lm
+            WHERE lm.conversation_id = events.external_id
+              AND lm.participant_profile_url IS NOT NULL
+        )
+        WHERE source = 'linkedin_msg'
+          AND external_url IS NULL
+          AND EXISTS (
+              SELECT 1 FROM linkedin_messages lm
+              WHERE lm.conversation_id = events.external_id
+                AND lm.participant_profile_url IS NOT NULL
+          )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def _migrate_linkedin_job_id():
     """Add linkedin_job_id column to applications if missing."""
     import sqlite3
@@ -1321,3 +1367,4 @@ def init_db():
     _migrate_gespraeche_to_events()
     _backfill_event_datum_zeit_noon()
     _flag_noon_backfill_placeholders()
+    _backfill_linkedin_message_external_url()

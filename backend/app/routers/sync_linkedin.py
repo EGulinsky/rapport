@@ -1712,6 +1712,7 @@ def attach_linkedin_messages_for_contact(db: Session, contact: "models.Contact",
                 datum_zeit=_to_naive_utc(conv.last_message_date),
                 titel=titel, notiz=notiz or None,
                 source="linkedin_msg", external_id=conv.conversation_id,
+                external_url=conv.participant_profile_url,
                 user_id=user_id,
             )
             db.add(event)

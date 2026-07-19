@@ -118,7 +118,7 @@ class TestNoFreshDbGuard:
         "_migrate_audit_log_entity_type", "_backfill_events",
         "_backfill_event_datum_zeit_noon",
         "_migrate_event_datum_zeit_is_placeholder", "_flag_noon_backfill_placeholders",
-        "_migrate_event_external_url",
+        "_migrate_event_external_url", "_backfill_linkedin_message_external_url",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -760,6 +760,102 @@ class TestMigrateEventExternalUrl:
     def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
         _drop_table(db_path, "events")
         db_module._migrate_event_external_url()  # must not raise
+
+
+class TestBackfillLinkedinMessageExternalUrl:
+    """Populates Event.external_url for linkedin_msg events from
+    LinkedInMessage.participant_profile_url -- a pure local join (no
+    LinkedIn API access, unlike backfill_gcal_external_url()), so it's safe
+    to run unconditionally on every startup rather than needing a manual
+    endpoint."""
+
+    def _seed_app(self, path) -> int:
+        _exec(path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        return 1
+
+    def test_positiv_setzt_external_url_aus_conversation_match(self, db_path):
+        app_id = self._seed_app(db_path)
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, source, external_id) VALUES (?, 'mail', 'linkedin_msg', 'conv-1')",
+            (app_id,),
+        )
+        _exec(
+            db_path,
+            "INSERT INTO linkedin_messages (conversation_id, participant_name, participant_name_normalized, participant_profile_url) "
+            "VALUES ('conv-1', 'Max Mustermann', 'maxmustermann', 'https://www.linkedin.com/in/maxmustermann')",
+        )
+
+        db_module._backfill_linkedin_message_external_url()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT external_url FROM events WHERE external_id='conv-1'").fetchone()
+        conn.close()
+        assert row[0] == "https://www.linkedin.com/in/maxmustermann"
+
+    def test_negativ_bereits_gesetztes_external_url_bleibt_unveraendert(self, db_path):
+        app_id = self._seed_app(db_path)
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, source, external_id, external_url) "
+            "VALUES (?, 'mail', 'linkedin_msg', 'conv-2', 'https://old-link')",
+            (app_id,),
+        )
+        _exec(
+            db_path,
+            "INSERT INTO linkedin_messages (conversation_id, participant_name, participant_name_normalized, participant_profile_url) "
+            "VALUES ('conv-2', 'Someone', 'someone', 'https://www.linkedin.com/in/someone')",
+        )
+
+        db_module._backfill_linkedin_message_external_url()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT external_url FROM events WHERE external_id='conv-2'").fetchone()
+        conn.close()
+        assert row[0] == "https://old-link"
+
+    def test_negativ_kein_match_bleibt_null(self, db_path):
+        app_id = self._seed_app(db_path)
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, source, external_id) VALUES (?, 'mail', 'linkedin_msg', 'conv-orphan')",
+            (app_id,),
+        )
+
+        db_module._backfill_linkedin_message_external_url()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT external_url FROM events WHERE external_id='conv-orphan'").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_negativ_andere_source_wird_nicht_angefasst(self, db_path):
+        app_id = self._seed_app(db_path)
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, source, external_id) VALUES (?, 'mail', 'gmail', 'conv-3')",
+            (app_id,),
+        )
+        _exec(
+            db_path,
+            "INSERT INTO linkedin_messages (conversation_id, participant_name, participant_name_normalized, participant_profile_url) "
+            "VALUES ('conv-3', 'Irrelevant', 'irrelevant', 'https://www.linkedin.com/in/irrelevant')",
+        )
+
+        db_module._backfill_linkedin_message_external_url()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT external_url FROM events WHERE external_id='conv-3'").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_negativ_linkedin_messages_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "linkedin_messages")
+        db_module._backfill_linkedin_message_external_url()  # must not raise
+
+    def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "events")
+        db_module._backfill_linkedin_message_external_url()  # must not raise
 
 
 class TestFlagNoonBackfillPlaceholders:

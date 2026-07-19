@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.20',
+    date: '2026-07-19',
+    changes: [
+      'The "Messages" tab in the contact detail view is now labeled "LinkedIn", matching the badge already used elsewhere. Clicking a LinkedIn message on the timeline or in the contact detail view now opens that person\'s LinkedIn profile on the web, the same way clicking a Gmail or Google Calendar entry opens those — previously it only jumped to the application.',
+    ],
+  },
+  {
     version: '4.6.19',
     date: '2026-07-19',
     changes: [

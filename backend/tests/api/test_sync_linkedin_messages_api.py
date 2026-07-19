@@ -116,6 +116,10 @@ class TestImportMessagesMatching:
         assert event.typ == "mail"
         assert "Anna Recruiterin" in event.titel
         assert event.notiz == "Thanks for reaching out\n(2 Nachrichten)"
+        # external_url (the participant's own profile) lets the timeline/
+        # contact modal open LinkedIn on the web, same as clicking a Gmail
+        # or Google Calendar entry opens those.
+        assert event.external_url == "https://www.linkedin.com/in/other-person"
         # Event.datum stays date-only; datum_zeit carries the full timestamp
         # of the conversation's latest message, for same-day sort ordering.
         assert event.datum == date(2026, 7, 17)
