@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.13',
+    date: '2026-07-19',
+    changes: [
+      'Decluttered the contact detail view: first/last name and role no longer repeat in the Overview tab since they\'re already shown right under the name at the top, and the tabs row no longer shows a visible scrollbar when it overflows.',
+    ],
+  },
+  {
     version: '4.6.12',
     date: '2026-07-19',
     changes: [

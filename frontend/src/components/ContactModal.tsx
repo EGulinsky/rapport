@@ -266,7 +266,10 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
 
         {/* Tabs */}
         {contact && (
-          <div className="flex border-b border-gray-100 px-6 gap-1 overflow-x-auto">
+          <div
+            className="flex border-b border-gray-100 px-6 gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: 'none' }}
+          >
             {([
               ['overview', t('contactModal.tabOverview'), undefined],
               ['apps', t('contactModal.tabApplications'), contact.applications?.length],
@@ -312,18 +315,6 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
 
         {!loading && contact && !editing && tab === 'overview' && (
           <div className="px-6 py-5 space-y-5">
-            {/* Name fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.firstName')}</p>
-                <p className="text-sm text-gray-900">{contact.vorname || <span className="text-gray-300">—</span>}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.lastName')}</p>
-                <p className="text-sm text-gray-900">{contact.name}</p>
-              </div>
-            </div>
-
             {/* Kontaktdaten */}
             <div className="space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t('view.contact')}</p>
@@ -352,34 +343,26 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
               )}
             </div>
 
-            {/* Firma, Rolle, Typ */}
-            <div className="grid grid-cols-2 gap-4">
-              {contact.firma && (
-                <div>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.company')}</p>
-                  <div className="flex items-center gap-2">
-                    <CompanyLogo name={contact.firma} website={contact.company_website ?? undefined} size="sm" />
-                    {contact.company_profile_id && onOpenCompany ? (
-                      <button
-                        onClick={() => onOpenCompany(contact.company_profile_id!)}
-                        className="text-sm text-gray-700 hover:text-indigo-600 hover:underline text-left flex items-center gap-1"
-                      >
-                        {contact.firma}
-                        <Building2 className="h-3 w-3 text-gray-400" />
-                      </button>
-                    ) : (
-                      <span className="text-sm text-gray-700">{contact.firma}</span>
-                    )}
-                  </div>
+            {/* Rolle is already shown under the name in the header -- no need to repeat it here. */}
+            {contact.firma && (
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('view.company')}</p>
+                <div className="flex items-center gap-2">
+                  <CompanyLogo name={contact.firma} website={contact.company_website ?? undefined} size="sm" />
+                  {contact.company_profile_id && onOpenCompany ? (
+                    <button
+                      onClick={() => onOpenCompany(contact.company_profile_id!)}
+                      className="text-sm text-gray-700 hover:text-indigo-600 hover:underline text-left flex items-center gap-1"
+                    >
+                      {contact.firma}
+                      <Building2 className="h-3 w-3 text-gray-400" />
+                    </button>
+                  ) : (
+                    <span className="text-sm text-gray-700">{contact.firma}</span>
+                  )}
                 </div>
-              )}
-              {contact.rolle && (
-                <div>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{t('contactModal.role')}</p>
-                  <p className="text-sm text-gray-900">{contact.rolle}</p>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {contact.typ && (
               <div>
