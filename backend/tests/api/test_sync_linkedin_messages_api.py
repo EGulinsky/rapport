@@ -8,7 +8,7 @@ tests/api/test_import_excel_api.py.
 """
 import csv
 import io
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -116,6 +116,10 @@ class TestImportMessagesMatching:
         assert event.typ == "mail"
         assert "Anna Recruiterin" in event.titel
         assert event.notiz == "Thanks for reaching out\n(2 Nachrichten)"
+        # Event.datum stays date-only; datum_zeit carries the full timestamp
+        # of the conversation's latest message, for same-day sort ordering.
+        assert event.datum == date(2026, 7, 17)
+        assert event.datum_zeit == datetime(2026, 7, 17, 9, 0, 0)
 
         conv = db_session.query(models.LinkedInMessage).filter_by(conversation_id="conv-1").first()
         assert conv is not None

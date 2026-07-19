@@ -139,6 +139,34 @@ class TestSyncCallsForApp:
         ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
         assert "Erika Musterfrau" in ev.titel
 
+    async def test_positiv_datum_zeit_wird_aus_anruf_zeitstempel_gesetzt(self, db_session, monkeypatch):
+        # Event.datum stays date-only; datum_zeit carries the full call
+        # timestamp so same-day calls sort in real chronological order
+        # instead of by coincidental sync/insertion order.
+        from datetime import datetime as dt
+
+        app = application_factory(db_session)
+        event_factory(db_session, app, datum=date(2026, 1, 1), source="icloud_mail")
+        contact = contact_factory(db_session, telefon="0151 2345678", name="Erika Musterfrau")
+        app.contacts.append(contact)
+        db_session.commit()
+
+        calls = [{
+            "id": "call-3", "phone": "+491512345678", "direction": "incoming",
+            "answered": True, "duration_s": 60, "date": "2026-07-01T14:32:00+00:00",
+        }]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(calls)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        await _sync_calls_for_app(app, {"id": app.id}, db_session)
+
+        ev = db_session.query(models.Event).filter_by(source="icloud_calls", application_id=app.id).one()
+        assert ev.datum == date(2026, 7, 1)
+        assert ev.datum_zeit == dt(2026, 7, 1, 14, 32, 0)
+
     async def test_positiv_anruf_titel_zeigt_vornamen_bei_getrenntem_kontaktnamen(self, db_session, monkeypatch):
         # Regression: contacts with a structured vorname/name split (the
         # common case, e.g. from vCard imports) only showed the surname in

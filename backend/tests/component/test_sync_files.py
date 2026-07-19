@@ -91,6 +91,27 @@ class TestDoLocalFiles:
         assert event.application_id == app.id
         assert event.titel == "cv.pdf"
 
+    async def test_positiv_datum_zeit_wird_aus_datei_mtime_gesetzt(self, db_session, monkeypatch):
+        from datetime import datetime, timezone
+
+        application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=10))
+        contact_factory(db_session, firma="Contoso AG")
+        _cfg(db_session)
+
+        mtime = datetime(2026, 7, 18, 11, 15, 0, tzinfo=timezone.utc)
+        files = [{"path": "/root/Contoso AG/cv.pdf", "name": "cv.pdf", "subfolder": "Contoso AG", "modified": mtime.timestamp()}]
+
+        async def fake_get(self, url, **kw):
+            return _mock_response(files)
+
+        monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
+
+        await _do_local_files(1)
+
+        event = db_session.query(models.Event).filter_by(source="local_files").one()
+        assert event.datum == date(2026, 7, 18)
+        assert event.datum_zeit == datetime(2026, 7, 18, 11, 15, 0)
+
     async def test_negativ_agent_nicht_erreichbar_liefert_fehler(self, db_session, monkeypatch):
         application_factory(db_session, firma="Contoso AG")
         _cfg(db_session)

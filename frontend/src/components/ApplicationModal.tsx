@@ -1589,7 +1589,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, updat
               <div className="relative">
                 <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200" />
                 <div className="space-y-3 pl-7">
-                  {[...timelineEvents].sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? '')).map(ev => (
+                  {[...timelineEvents].sort(compareTimelineEventsNewestFirst).map(ev => (
                     <div key={ev.id} className="flex items-start gap-2">
                       <input type="checkbox" checked={selectedEventIds.has(ev.id)} onChange={() => toggleEventSelect(ev.id)}
                         className="mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" />
@@ -2356,6 +2356,23 @@ const OTHER_EVENT_TYPES = [
   { value: 'angebot',  label: 'Angebot' },
   { value: 'absage',   label: 'Absage' },
 ]
+
+function timelineSortKey(ev: Event): string {
+  // Prefer the full timestamp (datum_zeit) when the sync source had one;
+  // pad a bare date to midnight so it compares consistently against a
+  // full-precision key on another event the same day (an event with a
+  // known time later that day correctly sorts as newer).
+  if (ev.datum_zeit) return ev.datum_zeit
+  if (ev.datum) return `${ev.datum}T00:00:00`
+  return ''
+}
+
+export function compareTimelineEventsNewestFirst(a: Event, b: Event): number {
+  const ka = timelineSortKey(a)
+  const kb = timelineSortKey(b)
+  if (ka !== kb) return kb.localeCompare(ka)
+  return b.id - a.id
+}
 
 function getEventIcon(event: Event): { icon: React.ReactNode; bg: string; fg: string } {
   const sz = 'h-[9px] w-[9px]'

@@ -103,3 +103,80 @@ class TestSaveDeterministicEventAutor:
         assert contact is not None
         assert contact.name == "Carla Fuchs"
         assert contact.vorname == "Carla"
+
+
+class TestSaveDeterministicEventDatumZeit:
+    """Event.datum stays date-only (unchanged); datum_zeit carries the full
+    timestamp when the sync source had one, so same-day events can still be
+    told apart chronologically (see ARCHITECTURE.md's timeline-sort note)."""
+
+    def test_positiv_datum_zeit_wird_aus_date_hint_gesetzt(self, db_session):
+        app = application_factory(db_session)
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        hint = datetime(2026, 7, 18, 14, 32, 0, tzinfo=timezone.utc)
+        raw_text = "Von: Anna Recruiterin <anna@contoso.example>\nBetreff: Ihre Bewerbung\n\nHallo,\n..."
+        _save_deterministic_event(
+            db_session, "gmail", "msg-5", _det(app.id), raw_text, date_hint=hint, user_id=None,
+        )
+
+        event = db_session.query(models.Event).filter_by(application_id=app.id, source="gmail").first()
+        assert event.datum == date(2026, 7, 18)
+        assert event.datum_zeit == datetime(2026, 7, 18, 14, 32, 0)
+
+    def test_positiv_datum_zeit_gilt_auch_fuer_kalendertermine(self, db_session):
+        # _save_deterministic_event is the shared choke point for gmail,
+        # icloud_mail, gcal, icloud_cal, icloud_notes, icloud_todo -- confirm
+        # a non-mail source gets datum_zeit too.
+        app = application_factory(db_session)
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        hint = datetime(2026, 7, 18, 9, 0, 0, tzinfo=timezone.utc)
+        _save_deterministic_event(
+            db_session, "gcal", "evt-2", _det(app.id, titel="Vorstellungsgespräch", typ="gespräch"),
+            "Titel: Vorstellungsgespräch", date_hint=hint, user_id=None,
+        )
+
+        event = db_session.query(models.Event).filter_by(application_id=app.id, external_id="evt-2").first()
+        assert event.datum_zeit == datetime(2026, 7, 18, 9, 0, 0)
+
+    def test_negativ_kein_date_hint_kein_datum_zeit(self, db_session):
+        app = application_factory(db_session)
+        _seed_floor(db_session, app, days_ago=0)
+        db_session.commit()
+
+        _save_deterministic_event(
+            db_session, "icloud_notes", "note-1", _det(app.id, typ="notiz"), "irrelevant", date_hint=None, user_id=None,
+        )
+
+        event = db_session.query(models.Event).filter_by(application_id=app.id, source="icloud_notes").first()
+        # No date at all -> _predates_bewerbung() skips it entirely (existing
+        # behavior, unrelated to this fix); nothing gets created.
+        assert event is None
+
+    def test_positiv_gleicher_tag_sortiert_ueber_datum_zeit_korrekt(self, db_session):
+        # Reproduces the reported bug: two events on the same calendar day
+        # (same Event.datum) must still come out in real chronological order
+        # once datum_zeit is used as the sort key, not insertion order.
+        app = application_factory(db_session)
+        _seed_floor(db_session, app)
+        db_session.commit()
+
+        morning = datetime(2026, 7, 18, 8, 0, 0, tzinfo=timezone.utc)
+        evening = datetime(2026, 7, 18, 18, 0, 0, tzinfo=timezone.utc)
+        # Deliberately save the evening one first -- if same-day ordering
+        # relied on insertion order, this would come out "newest" wrongly.
+        _save_deterministic_event(
+            db_session, "gmail", "msg-evening", _det(app.id, titel="Abendmail"), "From: a@x.example", date_hint=evening, user_id=None,
+        )
+        _save_deterministic_event(
+            db_session, "gmail", "msg-morning", _det(app.id, titel="Morgenmail"), "From: b@x.example", date_hint=morning, user_id=None,
+        )
+
+        events = db_session.query(models.Event).filter_by(application_id=app.id, source="gmail").all()
+        assert len(events) == 2
+        newest_first = sorted(events, key=lambda e: e.datum_zeit, reverse=True)
+        assert newest_first[0].titel == "Abendmail"
+        assert newest_first[1].titel == "Morgenmail"

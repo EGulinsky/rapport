@@ -31,7 +31,7 @@ from app.routers.sync_common import (
     term_variants, process_item, process_item_for_app,
     init_progress, update_progress, finish_progress,
     upsert_contact_from_sender, vobj_str, _GENERIC_ROLE_TERMS,
-    effective_bewerbung_floor, _predates_bewerbung,
+    effective_bewerbung_floor, _predates_bewerbung, _to_naive_utc,
 )
 from app.logger import get_logger
 
@@ -1181,6 +1181,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
             application_id=app.id,
             typ="notiz",
             datum=datum,
+            datum_zeit=_to_naive_utc(date_hint),
             titel=titel,
             notiz=notiz or None,
             source="icloud_calls",

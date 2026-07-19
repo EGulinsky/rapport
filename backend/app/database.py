@@ -493,6 +493,25 @@ def _migrate_event_external_id():
     conn.close()
 
 
+def _migrate_event_datum_zeit():
+    """Add datum_zeit column to events if missing (full timestamp alongside
+    the date-only datum, for correct same-day timeline sort ordering)."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "datum_zeit" not in cols:
+        cur.execute("ALTER TABLE events ADD COLUMN datum_zeit DATETIME")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_linkedin_job_id():
     """Add linkedin_job_id column to applications if missing."""
     import sqlite3
@@ -1111,6 +1130,7 @@ def init_db():
     _migrate_contacts_m2m()
     _migrate_attachments()
     _migrate_event_external_id()
+    _migrate_event_datum_zeit()
     _migrate_linkedin_job_id()
     _migrate_pre_rejection_status()
     _migrate_audit_log()

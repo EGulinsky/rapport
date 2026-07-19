@@ -703,6 +703,7 @@ erDiagram
 | `application_id` | INTEGER FK NOT NULL | → `applications.id` |
 | `typ` | VARCHAR | `bewerbung` (application submitted), `status`, `gespräch` (interview), `mail`, `calendar`, `call`, `notiz` (note) |
 | `datum`, `titel`, `notiz`, `autor` | | Date, title, note, author |
+| `datum_zeit` | DATETIME NULL | Full timestamp when the sync source had one (mail, timed calendar events, calls, LinkedIn messages, local files) — naive-but-UTC-semantic (see `_to_naive_utc()` in `sync_common.py`). `datum` stays date-only and is still the source of truth for floors/filters/display everywhere; this exists solely to break same-day ties in the timeline's newest-first sort, which `datum` alone can't do (two same-day events used to fall back to arbitrary DB-insertion order — v4.6.5). `None` when the source is genuinely time-blind: manual entries (no time input in the form), LinkedIn's own relative-date scraping ("3h ago"), or an all-day calendar entry. |
 | `source` | VARCHAR | `gmail`, `gcal`, `icloud_mail`, `icloud_cal`, `calls`, `linkedin` |
 | `external_id` | VARCHAR NULL | Dedup and deep-link key |
 

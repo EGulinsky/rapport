@@ -31,7 +31,7 @@ from app.routers.sync_common import (
     is_synced, mark_synced, purge_source,
     build_firm_index, find_hint_apps,
     init_progress, update_progress, finish_progress,
-    set_batch_result,
+    set_batch_result, _to_naive_utc,
 )
 
 router = APIRouter(prefix="/api/sync/files", tags=["sync"])
@@ -173,6 +173,7 @@ async def _do_local_files(user_id: int) -> dict:
                     external_id=file_id,
                     typ="file",
                     datum=date_hint.date() if date_hint else None,
+                    datum_zeit=_to_naive_utc(date_hint),
                     titel=name,
                     notiz=path,
                     user_id=user_id,

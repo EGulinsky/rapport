@@ -24,7 +24,7 @@ from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db
 from app import models
 from app.routers.applications import _ensure_company_profile
-from app.routers.sync_common import _normalize_name, _predates_bewerbung
+from app.routers.sync_common import _normalize_name, _predates_bewerbung, _to_naive_utc
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
@@ -1709,6 +1709,7 @@ def attach_linkedin_messages_for_contact(db: Session, contact: "models.Contact",
             event = models.Event(
                 application_id=app.id, typ="mail",
                 datum=conv.last_message_date.date() if conv.last_message_date else None,
+                datum_zeit=_to_naive_utc(conv.last_message_date),
                 titel=titel, notiz=notiz or None,
                 source="linkedin_msg", external_id=conv.conversation_id,
                 user_id=user_id,

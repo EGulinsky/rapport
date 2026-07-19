@@ -356,6 +356,18 @@ class Event(Base):
 
     typ             = Column(String)
     datum           = Column(Date, nullable=True)
+    # Full timestamp, when the sync source actually had one (mail, timed
+    # calendar events, calls, LinkedIn messages, local files) -- datum stays
+    # date-only for all existing floor/filter/display logic; this is used
+    # purely to break same-day ties in newest-first sort order, which datum
+    # alone can't do (see docs/ARCHITECTURE.md's timeline-sort note). Always
+    # naive-but-UTC-semantic (see _to_naive_utc() in sync_common.py) --
+    # SQLite/SQLAlchemy discards tzinfo on read-back anyway, so staying
+    # naive avoids a naive/aware mismatch between a freshly-built value and
+    # one just read from the database. None when the source is genuinely
+    # time-blind (manual entries, LinkedIn's own relative-date scraping, or
+    # an all-day calendar entry).
+    datum_zeit      = Column(DateTime, nullable=True)
     titel           = Column(String, nullable=True)
     notiz           = Column(Text, nullable=True)
     autor           = Column(String, nullable=True)   # sender for mail events

@@ -96,10 +96,22 @@ class ContactEventsResponse(BaseModel):
 
 
 def _sort_newest_first(events: List[models.Event]) -> List[models.Event]:
-    """Newest-dated first; undated events sort last. Ties break on id (higher
-    id = synced/created later) rather than created_at, to sidestep comparing
-    naive vs. timezone-aware datetimes across differently-sourced events."""
-    return sorted(events, key=lambda e: (e.datum or date.min, e.id), reverse=True)
+    """Newest-first, preferring the full timestamp (Event.datum_zeit) over
+    the date-only Event.datum so same-day items (e.g. two calls, or a call
+    and a mail, on the same day) sort in real chronological order rather
+    than by coincidental insertion order. datum_zeit is always a naive
+    datetime (see _to_naive_utc() in sync_common.py), so no naive/aware
+    comparison risk; falls back to midnight of `datum` when the source
+    never had time-of-day (manual entries, LinkedIn's own status scraping,
+    all-day calendar entries). Undated events sort last; id is the final
+    tiebreaker for any true tie."""
+    def _key(e: models.Event) -> tuple[datetime, int]:
+        if e.datum_zeit:
+            return (e.datum_zeit, e.id)
+        if e.datum:
+            return (datetime.combine(e.datum, datetime.min.time()), e.id)
+        return (datetime.min, e.id)
+    return sorted(events, key=_key, reverse=True)
 
 
 @router.get("/{contact_id}/events", response_model=ContactEventsResponse)

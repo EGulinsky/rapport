@@ -195,6 +195,11 @@ export interface Event {
   application_id: number
   typ: string
   datum?: string
+  // Full timestamp when the sync source had one (mail, timed calendar
+  // events, calls, LinkedIn messages, local files) -- used only to break
+  // same-day ties in the timeline's newest-first sort; datum itself stays
+  // the source of truth everywhere else (floors, filters, display).
+  datum_zeit?: string
   titel?: string
   notiz?: string
   autor?: string

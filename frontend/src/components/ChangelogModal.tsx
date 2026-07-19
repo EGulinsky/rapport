@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.5',
+    date: '2026-07-19',
+    changes: [
+      'Fixed timeline entries on the same day sometimes showing in the wrong order — mail, calendar, calls, and LinkedIn messages all have an exact time available, but only the date was ever stored, so same-day items fell back to arbitrary order. Now stores the full timestamp when the source provides one and uses it to sort correctly; unaffected for manual entries and LinkedIn\'s own application-status sync, which never had a time to begin with.',
+    ],
+  },
+  {
     version: '4.6.4',
     date: '2026-07-18',
     changes: [

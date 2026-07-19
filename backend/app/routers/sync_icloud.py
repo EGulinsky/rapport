@@ -42,7 +42,7 @@ from app.routers.sync_common import (
     find_hint_apps, find_matching_apps,
     process_item, strip_html, earliest_bewerbung_date, _predates_bewerbung,
     init_progress, update_progress, finish_progress,
-    set_batch_result, vobj_str,
+    set_batch_result, vobj_str, _to_naive_utc,
 )
 
 # In-memory session cache: apple_id -> {'api': ICloudPyService, 'sms_device': dict|None}
@@ -2049,9 +2049,10 @@ async def _do_icloud_calls(user_id: int) -> dict:
             answered: bool = call.get("answered", True)
 
             try:
-                call_date = datetime.fromisoformat(call_date_str).date() if call_date_str else None
+                call_datetime = datetime.fromisoformat(call_date_str) if call_date_str else None
             except ValueError:
-                call_date = None
+                call_datetime = None
+            call_date = call_datetime.date() if call_datetime else None
 
             matched_contacts: list[models.Contact] = []
             if phone_raw:
@@ -2116,6 +2117,7 @@ async def _do_icloud_calls(user_id: int) -> dict:
                     application_id=app_id,
                     typ="anruf",
                     datum=call_date,
+                    datum_zeit=_to_naive_utc(call_datetime),
                     titel=titel,
                     notiz=notiz,
                     source="icloud_calls",

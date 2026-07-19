@@ -11,7 +11,7 @@ import html
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from email.utils import parseaddr
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -26,6 +26,19 @@ from app.logger import get_logger
 
 log = get_logger("sync", source="targeted")
 _TZ_BERLIN = ZoneInfo("Europe/Berlin")
+
+
+def _to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize to a naive datetime representing UTC wall-clock time, for
+    Event.datum_zeit. SQLite/SQLAlchemy already discards tzinfo on read-back
+    regardless of what's written, so staying naive-but-UTC-semantic here
+    (rather than storing an aware value that would only survive until the
+    next query) avoids ever comparing a naive value against an aware one."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=None)
 
 
 def effective_bewerbung_floor(app: models.Application) -> Optional[date]:
@@ -983,6 +996,7 @@ def _save_deterministic_event(
         application_id=det['app_id'],
         typ=det['typ'],
         datum=datum,
+        datum_zeit=_to_naive_utc(date_hint),
         titel=det['titel'] or source,
         notiz=notiz or None,
         autor=autor,
