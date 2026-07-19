@@ -15,6 +15,7 @@ from app.models import MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.audit import add_audit
 from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
+from app.routers.sync_common import _berlin_naive_to_utc_naive
 
 
 def _delete_call_events_for_contact(db: Session, app_id: int, contact: "models.Contact", user_id: Optional[int]) -> int:
@@ -808,6 +809,10 @@ def update_event(
     if not event:
         raise api_error(404, ErrorKey.EVENT_NOT_FOUND, "Event nicht gefunden")
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "datum_zeit":
+            # Manually entered via the timeline event edit form -- arrives as
+            # a naive Europe/Berlin wall-clock reading, not UTC.
+            value = _berlin_naive_to_utc_naive(value)
         old_v = getattr(event, field, None)
         if str(old_v or "") != str(value or ""):
             add_audit(db, "update", "user", app_id=app_id, event_id=event.id,

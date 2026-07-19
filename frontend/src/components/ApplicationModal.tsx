@@ -2374,6 +2374,21 @@ export function compareTimelineEventsNewestFirst(a: Event, b: Event): number {
   return b.id - a.id
 }
 
+// Event.datum_zeit is a naive datetime representing UTC (see _to_naive_utc()
+// in sync_common.py) -- appending "Z" forces the browser to parse it as UTC
+// rather than (per the ECMA-402 default for a timezone-less ISO string) the
+// browser's own local time. Formatted into the app's single hardcoded
+// reference zone (Europe/Berlin, matching _TZ_BERLIN backend-side) for the
+// edit form's <input type="time"> value.
+export function datumZeitToBerlinTimeInput(datumZeit: string | undefined | null): string {
+  if (!datumZeit) return ''
+  const utcDate = new Date(`${datumZeit}Z`)
+  if (isNaN(utcDate.getTime())) return ''
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(utcDate)
+}
+
 function getEventIcon(event: Event): { icon: React.ReactNode; bg: string; fg: string } {
   const sz = 'h-[9px] w-[9px]'
   const src = event.source
@@ -2495,7 +2510,10 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
   const { t } = useTranslation('applications')
   const locale = useLocale()
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState({ typ: event.typ, datum: event.datum ?? '', titel: event.titel ?? '', notiz: event.notiz ?? '' })
+  const [draft, setDraft] = useState({
+    typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(event.datum_zeit),
+    titel: event.titel ?? '', notiz: event.notiz ?? '',
+  })
   const [saving, setSaving] = useState(false)
 
   const styleLabel = t(`eventType.${event.typ}`, { defaultValue: event.typ })
@@ -2514,6 +2532,9 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
       await api.applications.updateEvent(appId, event.id, {
         typ: draft.typ,
         datum: draft.datum || undefined,
+        // Sent as a naive Europe/Berlin wall-clock reading; the backend
+        // converts to UTC before storing (_berlin_naive_to_utc_naive()).
+        datum_zeit: draft.datum && draft.zeit ? `${draft.datum}T${draft.zeit}:00` : null,
         titel: draft.titel || undefined,
         notiz: draft.notiz || undefined,
       })
@@ -2538,7 +2559,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
           <span className={editFg}>{editIcon}</span>
         </div>
         <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <select
               className="rounded-md border border-gray-200 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={draft.typ}
@@ -2553,6 +2574,13 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
               className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={draft.datum}
               onChange={e => setDraft(d => ({ ...d, datum: e.target.value }))}
+            />
+            <input
+              type="time"
+              title={t('timeline.timeOptional')}
+              className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={draft.zeit}
+              onChange={e => setDraft(d => ({ ...d, zeit: e.target.value }))}
             />
           </div>
           <input
@@ -2591,7 +2619,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
         <SourceBadge source={event.source} external_id={event.external_id} />
         <span className="ml-auto hidden group-hover:flex items-center gap-1">
           <button
-            onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}
+            onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(event.datum_zeit), titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}
             className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
             title={t('timeline.editTitle')}
           >

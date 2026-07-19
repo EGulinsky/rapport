@@ -125,6 +125,7 @@
     "titlePlaceholder": "Titel (z.B. Bewerbung eingereicht)",
     "titleOptionalPlaceholder": "Titel (optional)",
     "titlePlaceholderPlain": "Titel",
+    "timeOptional": "Uhrzeit (optional)",
     "noteOptionalPlaceholder": "Notiz (optional)",
     "notePlaceholderPlain": "Notiz",
     "chooseFile": "Datei auswählen…",

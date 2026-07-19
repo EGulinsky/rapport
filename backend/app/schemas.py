@@ -101,6 +101,13 @@ class EventBase(BaseModel):
 class EventUpdate(BaseModel):
     typ: Optional[str] = None
     datum: Optional[date] = None
+    # Naive datetime representing Europe/Berlin wall-clock time (the app's
+    # single hardcoded reference zone) -- converted to naive UTC in
+    # update_event() (applications.py) via _berlin_naive_to_utc_naive()
+    # before being stored, for consistency with sync-derived timestamps.
+    # Sending an explicit null clears a previously-set time; omitting the
+    # field entirely leaves the stored value untouched.
+    datum_zeit: Optional[datetime] = None
     titel: Optional[str] = None
     notiz: Optional[str] = None
 

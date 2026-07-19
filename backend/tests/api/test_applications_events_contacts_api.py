@@ -1,6 +1,6 @@
 """L2 API — Events/Kontakte-Unterrouten, Stats, AI-Assessment und Löschen in
 applications.py, die tests/api/test_applications_api.py nicht abdeckt."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -332,6 +332,67 @@ class TestEvents:
         assert resp.status_code == 200
         db_session.refresh(app)
         assert app.datum_bewerbung == date(2026, 2, 1)
+
+    def test_positiv_datum_zeit_wird_gesetzt_und_nach_utc_konvertiert(self, client, db_session):
+        # The edit form sends a naive Europe/Berlin wall-clock reading; the
+        # backend converts to naive UTC before storing, so it's comparable
+        # with sync-derived Event.datum_zeit values.
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 7, 19))
+        db_session.commit()
+
+        # 2026-07-19 is in CEST (UTC+2).
+        resp = client.patch(
+            f"/api/applications/{app.id}/events/{ev.id}",
+            json={"datum_zeit": "2026-07-19T14:30:00"},
+        )
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit == datetime(2026, 7, 19, 12, 30, 0)
+
+    def test_positiv_datum_zeit_konvertierung_beruecksichtigt_winterzeit(self, client, db_session):
+        # 2026-01-19 is in CET (UTC+1) -- confirms this isn't hardcoded to a
+        # fixed offset.
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 1, 19))
+        db_session.commit()
+
+        resp = client.patch(
+            f"/api/applications/{app.id}/events/{ev.id}",
+            json={"datum_zeit": "2026-01-19T14:30:00"},
+        )
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit == datetime(2026, 1, 19, 13, 30, 0)
+
+    def test_positiv_datum_zeit_kann_explizit_geleert_werden(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 7, 19))
+        ev.datum_zeit = datetime(2026, 7, 19, 12, 30, 0)
+        db_session.commit()
+
+        resp = client.patch(
+            f"/api/applications/{app.id}/events/{ev.id}",
+            json={"datum_zeit": None},
+        )
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit is None
+
+    def test_negativ_datum_zeit_unveraendert_wenn_nicht_im_payload(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 7, 19))
+        ev.datum_zeit = datetime(2026, 7, 19, 12, 30, 0)
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}/events/{ev.id}", json={"titel": "Neuer Titel"})
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit == datetime(2026, 7, 19, 12, 30, 0)
 
 
 class TestContacts:

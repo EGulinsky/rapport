@@ -125,6 +125,7 @@
     "titlePlaceholder": "Title (e.g. Application submitted)",
     "titleOptionalPlaceholder": "Title (optional)",
     "titlePlaceholderPlain": "Title",
+    "timeOptional": "Time (optional)",
     "noteOptionalPlaceholder": "Note (optional)",
     "notePlaceholderPlain": "Note",
     "chooseFile": "Choose file…",

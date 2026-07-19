@@ -41,6 +41,22 @@ def _to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.replace(tzinfo=None)
 
 
+def _berlin_naive_to_utc_naive(dt: Optional[datetime]) -> Optional[datetime]:
+    """A manually-entered Event.datum_zeit (from the timeline event edit
+    form) arrives as a naive datetime representing Europe/Berlin wall-clock
+    time -- the app's single hardcoded reference zone (see _TZ_BERLIN, also
+    used by _time_prefix() for the reverse direction when displaying a
+    synced event's time). Converts to naive UTC so it stays comparable with
+    every sync-derived Event.datum_zeit (see _to_naive_utc()). Any tzinfo
+    the client might have sent is discarded first -- the value is always
+    treated as a bare Berlin wall-clock reading, never as already-UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.replace(tzinfo=None)
+    return dt.replace(tzinfo=_TZ_BERLIN).astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def effective_bewerbung_floor(app: models.Application) -> Optional[date]:
     """Best available 'don't consider anything before this' floor for this
     application: the EARLIEST DATED EVENT already in its timeline — not the

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { compareTimelineEventsNewestFirst } from './ApplicationModal'
+import { compareTimelineEventsNewestFirst, datumZeitToBerlinTimeInput } from './ApplicationModal'
 import type { Event } from '../types'
 
 function ev(overrides: Partial<Event>): Event {
@@ -37,5 +37,25 @@ describe('compareTimelineEventsNewestFirst', () => {
     const dated = ev({ id: 1, datum: '2026-07-18' })
     const undated = ev({ id: 2 })
     expect([undated, dated].sort(compareTimelineEventsNewestFirst)).toEqual([dated, undated])
+  })
+})
+
+describe('datumZeitToBerlinTimeInput', () => {
+  it('returns an empty string for null/undefined/empty input', () => {
+    expect(datumZeitToBerlinTimeInput(undefined)).toBe('')
+    expect(datumZeitToBerlinTimeInput(null)).toBe('')
+    expect(datumZeitToBerlinTimeInput('')).toBe('')
+  })
+
+  it('converts a naive-UTC summer timestamp to Berlin time (CEST, UTC+2)', () => {
+    expect(datumZeitToBerlinTimeInput('2026-07-19T12:30:00')).toBe('14:30')
+  })
+
+  it('converts a naive-UTC winter timestamp to Berlin time (CET, UTC+1)', () => {
+    expect(datumZeitToBerlinTimeInput('2026-01-19T13:30:00')).toBe('14:30')
+  })
+
+  it('returns an empty string for an unparseable value', () => {
+    expect(datumZeitToBerlinTimeInput('not-a-date')).toBe('')
   })
 })

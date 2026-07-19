@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.6',
+    date: '2026-07-19',
+    changes: [
+      'Timeline event edit mode now has a time field next to the date, so any entry\'s time can be set or corrected by hand — not just automatically filled in from a sync source. Leave it blank to keep an entry date-only.',
+    ],
+  },
+  {
     version: '4.6.5',
     date: '2026-07-19',
     changes: [

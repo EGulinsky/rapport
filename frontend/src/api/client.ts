@@ -125,7 +125,7 @@ export const api = {
         method: 'DELETE',
         body: JSON.stringify({ ids }),
       }),
-    updateEvent: (appId: number, eventId: number, data: { typ?: string; datum?: string; titel?: string; notiz?: string }) =>
+    updateEvent: (appId: number, eventId: number, data: { typ?: string; datum?: string; datum_zeit?: string | null; titel?: string; notiz?: string }) =>
       request<Event>(`/applications/${appId}/events/${eventId}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
