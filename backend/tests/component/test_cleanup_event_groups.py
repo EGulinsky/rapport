@@ -9,7 +9,7 @@ gcal-Termin, teils sogar mit identischem external_id). Die alte
 Gruppierung nach (application_id, typ, datum, titel) verlangte exakte
 typ-Gleichheit und übersah dadurch jede dieser Dubletten.
 """
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -205,3 +205,97 @@ class TestApplicationsScopeIncludesEvents:
         result = cleanup.cleanup_preview(db=db_session, scope="applications", current_user=self._user())
 
         assert len(result["events"]) == 1
+
+
+class TestDistinctSameDayCallsAndMessagesNotMerged:
+    """Regression, live-reported: for icloud_calls/linkedin_msg, titel is a
+    fixed template ("Anruf von {name}" / "LinkedIn-Nachricht: {name}") with no
+    per-event distinguishing content, and the grouping key was date-only (no
+    time-of-day) -- so two genuinely different real calls/conversations from
+    the same person on the same day were incorrectly merged as duplicates and
+    one silently deleted. Fixed by adding _dedup_time_component() (genuine,
+    non-placeholder datum_zeit) as an extra key discriminator."""
+
+    def test_negativ_zwei_echte_anrufe_am_selben_tag_unterschiedliche_uhrzeit_kein_match(self, db_session):
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+            titel="Anruf von Natalia Kühne",
+            datum_zeit=datetime(2026, 5, 7, 9, 0), datum_zeit_is_placeholder=False,
+        )
+        event_factory(
+            db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+            titel="Anruf von Natalia Kühne",
+            datum_zeit=datetime(2026, 5, 7, 15, 30), datum_zeit_is_placeholder=False,
+        )
+
+        groups = _find_event_groups(db_session)
+
+        assert groups == []
+
+    def test_negativ_zwei_echte_linkedin_nachrichten_am_selben_tag_kein_match(self, db_session):
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="mail", source="linkedin_msg", datum=date(2026, 6, 1),
+            titel="LinkedIn-Nachricht: Max Mustermann",
+            datum_zeit=datetime(2026, 6, 1, 8, 15), datum_zeit_is_placeholder=False,
+        )
+        event_factory(
+            db_session, app, typ="mail", source="linkedin_msg", datum=date(2026, 6, 1),
+            titel="LinkedIn-Nachricht: Max Mustermann",
+            datum_zeit=datetime(2026, 6, 1, 18, 45), datum_zeit_is_placeholder=False,
+        )
+
+        groups = _find_event_groups(db_session)
+
+        assert groups == []
+
+    def test_positiv_echte_gleiche_uhrzeit_bleibt_dublette(self, db_session):
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+            titel="Anruf von Natalia Kühne",
+            datum_zeit=datetime(2026, 5, 7, 9, 0), datum_zeit_is_placeholder=False,
+        )
+        event_factory(
+            db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+            titel="Anruf von Natalia Kühne",
+            datum_zeit=datetime(2026, 5, 7, 9, 0), datum_zeit_is_placeholder=False,
+        )
+
+        groups = _find_event_groups(db_session)
+
+        assert len(groups) == 1
+        assert len(groups[0]["remove"]) == 1
+
+    def test_negativ_placeholder_zeit_wird_ignoriert_kein_false_non_match(self, db_session):
+        # Ein genuine (non-placeholder) Zeitstempel gegen einen Noon-Backfill-
+        # Platzhalter darf nicht dazu führen, dass ein tatsächliches Duplikat
+        # UNENTDECKT bleibt -- der Platzhalter zählt nicht als "echte" Zeit.
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+            titel="Anruf von Natalia Kühne",
+            datum_zeit=datetime(2026, 5, 7, 12, 0), datum_zeit_is_placeholder=True,
+        )
+        event_factory(
+            db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+            titel="Anruf von Natalia Kühne",
+        )
+
+        groups = _find_event_groups(db_session)
+
+        assert len(groups) == 1
+
+    def test_positiv_historische_events_ohne_zeitstempel_bleiben_dublette(self, db_session):
+        # Rückwärtskompatibel: fehlt datum_zeit komplett (historische Daten vor
+        # v4.6.x), bleibt das alte datumsbasierte Verhalten unverändert.
+        app = application_factory(db_session)
+        event_factory(db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+                       titel="Anruf von Natalia Kühne")
+        event_factory(db_session, app, typ="notiz", source="icloud_calls", datum=date(2026, 5, 7),
+                       titel="Anruf von Natalia Kühne")
+
+        groups = _find_event_groups(db_session)
+
+        assert len(groups) == 1

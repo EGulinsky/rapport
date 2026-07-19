@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.17',
+    date: '2026-07-19',
+    changes: [
+      'Fixed duplicate cleanup sometimes finding the same duplicates every time without ever actually removing them — a leftover filter on the deletion step could reject a row that the search step had already found. Also fixed two same-day phone calls or LinkedIn conversations with the same person sometimes being wrongly treated as duplicates (only one entry would survive) — the cleanup now also compares the exact time of the entry, not just the day, when a precise timestamp is available.',
+    ],
+  },
+  {
     version: '4.6.16',
     date: '2026-07-19',
     changes: [

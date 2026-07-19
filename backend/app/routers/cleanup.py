@@ -231,6 +231,23 @@ def _calendar_filter(q):
     )
 
 
+def _dedup_time_component(e: models.Event) -> str:
+    """Extra grouping-key discriminator so two genuinely distinct same-day
+    events (e.g. two separate calls from the same person, or two distinct
+    LinkedIn conversations) aren't merged as duplicates just because their
+    date-only key and generically-templated titel happen to match.
+
+    Only a genuine per-event timestamp counts -- the v4.6.7 noon backfill's
+    fabricated placeholder (datum_zeit_is_placeholder=True) carries no real
+    information and would itself cause false NON-matches between two events
+    that are actually the same synced item, so it's ignored here exactly like
+    the frontend's own displayableDatumZeit() ignores it for display.
+    """
+    if e.datum_zeit and not e.datum_zeit_is_placeholder:
+        return e.datum_zeit.isoformat()
+    return ""
+
+
 def _find_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
     """Find within-application event duplicates (same source+datum+titel).
 
@@ -247,6 +264,12 @@ def _find_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
     calendar_only=True beschränkt auf echte Kalendereinträge (siehe
     _calendar_filter) — genutzt vom "Bereinigen"-Button in der Kalenderansicht,
     damit dort nicht auch Mail-/Anruf-Duplikate auftauchen.
+
+    Der Key enthält zusätzlich _dedup_time_component(e): für icloud_calls/
+    linkedin_msg hat titel keinen unterscheidenden Inhalt (fixes Template wie
+    "Anruf von {name}"), sodass zwei tatsächlich verschiedene Anrufe/Nachrichten
+    am selben Tag ohne die Uhrzeit fälschlich als Dubletten zusammengefasst
+    würden.
     """
     q = db.query(models.Event)
     if calendar_only:
@@ -260,6 +283,7 @@ def _find_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
             (e.source or "").strip().lower(),
             str(e.datum) if e.datum else "",
             (e.titel or "").strip().lower(),
+            _dedup_time_component(e),
         )
         buckets.setdefault(key, []).append(e)
 
@@ -431,10 +455,17 @@ async def cleanup_run(
         for g in app_groups:
             keeper_id = g["keep"]["id"]
             for rem in g["remove"]:
-                dup = db.query(models.Application).filter_by(id=rem["id"], user_id=current_user.id).first()
+                # No user_id filter here: _find_app_groups() (the finder that
+                # produced rem/keeper) doesn't filter by user_id either, so a
+                # duplicate with a NULL/foreign user_id was still found by
+                # preview -- refetching it more restrictively than the finder
+                # used to find it left it silently un-deleted every run.
+                dup = db.query(models.Application).filter_by(id=rem["id"]).first()
                 if not dup:
                     continue
-                keeper = db.query(models.Application).filter_by(id=keeper_id, user_id=current_user.id).first()
+                keeper = db.query(models.Application).filter_by(id=keeper_id).first()
+                if not keeper:
+                    continue
                 # Reassign via the relationship attribute, not the raw FK column:
                 # Application.events has cascade="all, delete-orphan", so setting
                 # only ev.application_id leaves dup's in-memory events collection
@@ -521,7 +552,9 @@ async def cleanup_run(
         for g in event_groups:
             keeper_id = g["keep"]["id"]
             for rem in g["remove"]:
-                ev = db.query(models.Event).filter_by(id=rem["id"], user_id=current_user.id).first()
+                # No user_id filter: see the matching comment in the Applications
+                # step above -- _find_event_groups() doesn't filter by user_id.
+                ev = db.query(models.Event).filter_by(id=rem["id"]).first()
                 if ev:
                     add_audit(db, "delete", "system", app_id=ev.application_id, event_id=ev.id,
                               old_value=ev.titel,
