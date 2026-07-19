@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { compareTimelineEventsNewestFirst, datumZeitToBerlinTimeInput } from './ApplicationModal'
+import { compareTimelineEventsNewestFirst, datumZeitToBerlinTimeInput, displayableDatumZeit } from './ApplicationModal'
 import type { Event } from '../types'
 
 function ev(overrides: Partial<Event>): Event {
@@ -57,5 +57,17 @@ describe('datumZeitToBerlinTimeInput', () => {
 
   it('returns an empty string for an unparseable value', () => {
     expect(datumZeitToBerlinTimeInput('not-a-date')).toBe('')
+  })
+})
+
+describe('displayableDatumZeit', () => {
+  it('returns undefined for a flagged noon-backfill placeholder, even with a real-looking timestamp', () => {
+    const placeholder = ev({ datum_zeit: '2026-06-01T12:00:00', datum_zeit_is_placeholder: true })
+    expect(displayableDatumZeit(placeholder)).toBeUndefined()
+  })
+
+  it('returns the timestamp unchanged when not flagged as a placeholder', () => {
+    const real = ev({ datum_zeit: '2026-06-01T09:30:00' })
+    expect(displayableDatumZeit(real)).toBe('2026-06-01T09:30:00')
   })
 })

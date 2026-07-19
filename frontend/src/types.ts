@@ -200,6 +200,10 @@ export interface Event {
   // same-day ties in the timeline's newest-first sort; datum itself stays
   // the source of truth everywhere else (floors, filters, display).
   datum_zeit?: string
+  // True when datum_zeit is the v4.6.7 noon-backfill's arbitrary placeholder
+  // rather than a real timestamp -- used to hide it in the timeline instead
+  // of showing a fabricated time as if it were genuine.
+  datum_zeit_is_placeholder?: boolean
   titel?: string
   notiz?: string
   autor?: string

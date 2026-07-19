@@ -431,8 +431,12 @@ def _backfill_event_datum_zeit_noon():
         conn.close()
         return
 
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    placeholder_col = ", datum_zeit_is_placeholder = 1" if "datum_zeit_is_placeholder" in cols else ""
+
     cur.execute(
-        "UPDATE events SET datum_zeit = datum || ' 12:00:00' "
+        f"UPDATE events SET datum_zeit = datum || ' 12:00:00'{placeholder_col} "
         "WHERE datum_zeit IS NULL AND datum IS NOT NULL"
     )
     updated = cur.rowcount
@@ -444,6 +448,68 @@ def _backfill_event_datum_zeit_noon():
 
     if updated:
         print(f"[migration] Backfilled datum_zeit to noon for {updated} event(s)")
+
+
+def _flag_noon_backfill_placeholders():
+    """One-time: retroactively flag datum_zeit values written by
+    _backfill_event_datum_zeit_noon() before datum_zeit_is_placeholder
+    existed, so the frontend can tell a genuine timestamp from an arbitrary
+    noon placeholder instead of showing the latter as if it were real (the
+    regression this closes: literally every pre-existing event started
+    showing a fabricated "14:00" time badge, since the whole datum_zeit
+    column is new and the noon backfill was the only thing that had ever
+    populated it for any of them).
+
+    Correctness relies on one fact verifiable from this deployment's own
+    history: the datum_zeit column -- and any code that could ever write a
+    real value into it -- did not exist before v4.6.5's deploy, completed at
+    2026-07-19T06:47:09Z (CI run 29676785592's Deploy job). Any event
+    created before that instant can only ever have gotten its datum_zeit
+    from the later noon backfill; there is no other code path that could
+    have set it. Guarded by a marker file (one-time only) for the same
+    reason _backfill_event_datum_zeit_noon() is: without it, this would
+    keep re-flagging an event a user has since given a real time by hand
+    via the edit form, since created_at never changes.
+    """
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    marker = os.path.join(os.path.dirname(db_path), ".event_datum_zeit_placeholder_flagged")
+    if os.path.exists(marker):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
+    if not cur.fetchone():
+        conn.close()
+        return
+
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "datum_zeit_is_placeholder" not in cols:
+        conn.close()
+        return
+
+    _DATUM_ZEIT_FEATURE_CUTOFF_UTC = "2026-07-19 06:47:09"
+    cur.execute(
+        "UPDATE events SET datum_zeit_is_placeholder = 1 "
+        "WHERE datum_zeit IS NOT NULL AND created_at < ?",
+        (_DATUM_ZEIT_FEATURE_CUTOFF_UTC,),
+    )
+    updated = cur.rowcount
+    conn.commit()
+    conn.close()
+
+    with open(marker, "w") as f:
+        f.write("done")
+
+    if updated:
+        print(f"[migration] Flagged {updated} noon-backfill placeholder timestamp(s)")
 
 
 def _migrate_sync_settings_files():
@@ -557,6 +623,30 @@ def _migrate_event_datum_zeit():
     cols = {row[1] for row in cur.fetchall()}
     if "datum_zeit" not in cols:
         cur.execute("ALTER TABLE events ADD COLUMN datum_zeit DATETIME")
+    conn.commit()
+    conn.close()
+
+
+def _migrate_event_datum_zeit_is_placeholder():
+    """Add datum_zeit_is_placeholder column to events if missing -- lets the
+    frontend distinguish a genuine timestamp from the v4.6.7 noon backfill's
+    arbitrary placeholder (see _flag_noon_backfill_placeholders())."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "datum_zeit_is_placeholder" not in cols:
+        cur.execute("ALTER TABLE events ADD COLUMN datum_zeit_is_placeholder BOOLEAN")
     conn.commit()
     conn.close()
 
@@ -1180,6 +1270,7 @@ def init_db():
     _migrate_attachments()
     _migrate_event_external_id()
     _migrate_event_datum_zeit()
+    _migrate_event_datum_zeit_is_placeholder()
     _migrate_linkedin_job_id()
     _migrate_pre_rejection_status()
     _migrate_audit_log()
@@ -1204,3 +1295,4 @@ def init_db():
     _backfill_events()
     _migrate_gespraeche_to_events()
     _backfill_event_datum_zeit_noon()
+    _flag_noon_backfill_placeholders()

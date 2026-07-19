@@ -2393,6 +2393,14 @@ export function datumZeitToBerlinTimeInput(datumZeit: string | undefined | null)
   }).format(utcDate)
 }
 
+// datum_zeit_is_placeholder marks a v4.6.7 noon-backfill placeholder rather
+// than a genuine timestamp (see database.py's _flag_noon_backfill_placeholders())
+// -- surfacing it as a real time (e.g. "14:00" for every old entry) would be
+// worse than showing nothing, so treat it the same as "no time known" here.
+export function displayableDatumZeit(event: Event): string | undefined {
+  return event.datum_zeit_is_placeholder ? undefined : event.datum_zeit
+}
+
 function getEventIcon(event: Event): { icon: React.ReactNode; bg: string; fg: string } {
   const sz = 'h-[9px] w-[9px]'
   const src = event.source
@@ -2515,7 +2523,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
   const locale = useLocale()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({
-    typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(event.datum_zeit),
+    typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(displayableDatumZeit(event)),
     titel: event.titel ?? '', notiz: event.notiz ?? '',
   })
   const [saving, setSaving] = useState(false)
@@ -2524,13 +2532,15 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
   const dateStr = event.datum
     ? formatDate(event.datum, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
     : null
-  // Prefer datum_zeit (covers every event with a date, real or backfilled to
-  // noon -- see _backfill_event_datum_zeit_noon() in database.py). Falls back
-  // to the legacy leading-time-in-notiz convention (e.g. "10:30–10:50 Uhr
-  // (20min)") only for the handful of events that still have no datum_zeit
-  // at all (no date to begin with, e.g. LinkedIn's own relative-date scrape).
+  // Prefer datum_zeit when it's a genuine timestamp (real per-event time,
+  // whether sync-derived or user-edited). Falls back to the legacy
+  // leading-time-in-notiz convention (e.g. "10:30–10:50 Uhr (20min)") for
+  // everything else: events with no datum_zeit at all (no date to begin
+  // with, e.g. LinkedIn's own relative-date scrape), and events whose
+  // datum_zeit is just the v4.6.7 noon-backfill placeholder (see
+  // displayableDatumZeit() above).
   const timeStr = (() => {
-    const fromDatumZeit = datumZeitToBerlinTimeInput(event.datum_zeit)
+    const fromDatumZeit = datumZeitToBerlinTimeInput(displayableDatumZeit(event))
     if (fromDatumZeit) return fromDatumZeit
     const m = (event.notiz ?? '').match(/^(\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?\s*Uhr)/)
     return m ? m[1] : null
@@ -2629,7 +2639,7 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
         <SourceBadge source={event.source} external_id={event.external_id} />
         <span className="ml-auto hidden group-hover:flex items-center gap-1">
           <button
-            onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(event.datum_zeit), titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}
+            onClick={() => { setDraft({ typ: event.typ, datum: event.datum ?? '', zeit: datumZeitToBerlinTimeInput(displayableDatumZeit(event)), titel: event.titel ?? '', notiz: event.notiz ?? '' }); setEditing(true) }}
             className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
             title={t('timeline.editTitle')}
           >

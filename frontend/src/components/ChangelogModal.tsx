@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.12',
+    date: '2026-07-19',
+    changes: [
+      'Fixed the timeline showing a fabricated "14:00" time on every entry, including calendar appointments that had a real time all along — the v4.6.7 noon backfill\'s placeholder (used only to fix sort order for old entries) was being displayed as if it were a genuine timestamp. It\'s now hidden instead, and disappears entirely the moment a real time is set by hand.',
+    ],
+  },
+  {
     version: '4.6.11',
     date: '2026-07-19',
     changes: [

@@ -124,9 +124,13 @@ class EventRead(EventBase):
     external_id: Optional[str] = None
     # Full timestamp when the sync source had one -- read-only, used by the
     # frontend timeline to break same-day ties in newest-first sort order
-    # (datum alone can't). Not on EventBase: manual entries stay date-only,
-    # there's no time input in the create/edit form.
+    # (datum alone can't). Not on EventBase: the create form stays date-only;
+    # editing an existing event's time goes through EventUpdate instead.
     datum_zeit: Optional[datetime] = None
+    # True when datum_zeit is the v4.6.7 noon-backfill's arbitrary placeholder
+    # rather than a real timestamp -- the frontend uses this to hide it
+    # instead of showing a fabricated time as if it were genuine.
+    datum_zeit_is_placeholder: Optional[bool] = None
     created_at: Optional[datetime] = None
     attachments: list[AttachmentRead] = []
 

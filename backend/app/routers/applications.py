@@ -813,6 +813,9 @@ def update_event(
             # Manually entered via the timeline event edit form -- arrives as
             # a naive Europe/Berlin wall-clock reading, not UTC.
             value = _berlin_naive_to_utc_naive(value)
+            # No longer an unreviewed noon-backfill placeholder either way --
+            # the user just deliberately set a real time or cleared it.
+            event.datum_zeit_is_placeholder = None
         old_v = getattr(event, field, None)
         if str(old_v or "") != str(value or ""):
             add_audit(db, "update", "user", app_id=app_id, event_id=event.id,

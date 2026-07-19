@@ -368,6 +368,14 @@ class Event(Base):
     # time-blind (manual entries, LinkedIn's own relative-date scraping, or
     # an all-day calendar entry).
     datum_zeit      = Column(DateTime, nullable=True)
+    # True for events whose datum_zeit is the v4.6.7 noon backfill's arbitrary
+    # placeholder (set once, for events that predate the datum_zeit column
+    # entirely, purely to fix same-day sort order) rather than a genuine
+    # timestamp -- lets the frontend hide it instead of showing a fabricated
+    # "14:00" as if it were real (see _flag_noon_backfill_placeholders() in
+    # database.py). None/False for every event with a real timestamp, whether
+    # sync-derived or explicitly set via the edit form.
+    datum_zeit_is_placeholder = Column(Boolean, nullable=True)
     titel           = Column(String, nullable=True)
     notiz           = Column(Text, nullable=True)
     autor           = Column(String, nullable=True)   # sender for mail events

@@ -117,6 +117,7 @@ class TestNoFreshDbGuard:
         "_migrate_linkedin_profile_cache",
         "_migrate_audit_log_entity_type", "_backfill_events",
         "_backfill_event_datum_zeit_noon",
+        "_migrate_event_datum_zeit_is_placeholder", "_flag_noon_backfill_placeholders",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -675,6 +676,17 @@ class TestBackfillEventDatumZeitNoon:
         conn.close()
         assert row[0] == "2026-03-01 12:00:00"
 
+    def test_positiv_markiert_backfillte_zeile_als_platzhalter(self, db_path):
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(db_path, "INSERT INTO events (application_id, typ, datum) VALUES (1, 'notiz', '2026-03-01')")
+
+        db_module._backfill_event_datum_zeit_noon()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit_is_placeholder FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] == 1
+
     def test_negativ_bereits_gesetztes_datum_zeit_bleibt_unveraendert(self, db_path):
         _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
         _exec(
@@ -685,9 +697,10 @@ class TestBackfillEventDatumZeitNoon:
         db_module._backfill_event_datum_zeit_noon()
 
         conn = sqlite3.connect(db_path)
-        row = conn.execute("SELECT datum_zeit FROM events WHERE id=1").fetchone()
+        row = conn.execute("SELECT datum_zeit, datum_zeit_is_placeholder FROM events WHERE id=1").fetchone()
         conn.close()
         assert row[0] == "2026-03-01 08:15:00"
+        assert row[1] is None  # already had a real value -- not touched, not flagged either
 
     def test_negativ_events_ohne_datum_werden_uebersprungen(self, db_path):
         _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
@@ -724,6 +737,109 @@ class TestBackfillEventDatumZeitNoon:
     def test_negativ_datum_zeit_spalte_fehlt_wird_uebersprungen(self, db_path):
         _drop_columns(db_path, "events", "datum_zeit")
         db_module._backfill_event_datum_zeit_noon()  # must not raise
+
+
+class TestMigrateEventDatumZeitIsPlaceholder:
+    def test_positiv_fuegt_spalte_hinzu(self, db_path):
+        _drop_columns(db_path, "events", "datum_zeit_is_placeholder")
+        db_module._migrate_event_datum_zeit_is_placeholder()
+        assert "datum_zeit_is_placeholder" in _cols(db_path, "events")
+
+    def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "events")
+        db_module._migrate_event_datum_zeit_is_placeholder()  # must not raise
+
+
+class TestFlagNoonBackfillPlaceholders:
+    """created_at < the hardcoded v4.6.5 cutoff is the whole discriminator --
+    the datum_zeit column (and any code able to write a real value into it)
+    didn't exist before that deploy, so any such row's datum_zeit can only
+    have come from the noon backfill."""
+
+    _BEFORE_CUTOFF = "2026-07-19 06:00:00"
+    _AFTER_CUTOFF = "2026-07-19 08:00:00"
+
+    def test_positiv_markiert_alte_zeilen_vor_dem_cutoff(self, db_path):
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, datum, datum_zeit, created_at) "
+            "VALUES (1, 'notiz', '2026-03-01', '2026-03-01 12:00:00', ?)",
+            (self._BEFORE_CUTOFF,),
+        )
+
+        db_module._flag_noon_backfill_placeholders()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit_is_placeholder FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] == 1
+
+    def test_negativ_zeilen_nach_dem_cutoff_bleiben_unmarkiert(self, db_path):
+        """An event created after the datum_zeit feature existed either got a
+        real timestamp at sync time or was left NULL on purpose -- neither
+        case is a noon-backfill placeholder, regardless of what datum_zeit
+        happens to contain."""
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, datum, datum_zeit, created_at) "
+            "VALUES (1, 'mail', '2026-07-19', '2026-07-19 09:30:00', ?)",
+            (self._AFTER_CUTOFF,),
+        )
+
+        db_module._flag_noon_backfill_placeholders()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit_is_placeholder FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_negativ_zeilen_ohne_datum_zeit_bleiben_unmarkiert(self, db_path):
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, datum, created_at) VALUES (1, 'notiz', NULL, ?)",
+            (self._BEFORE_CUTOFF,),
+        )
+
+        db_module._flag_noon_backfill_placeholders()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit_is_placeholder FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_corner_case_marker_verhindert_erneutes_markieren_nach_manuellem_setzen(self, db_path):
+        """A user can give an old event a real time by hand via the edit form
+        (v4.6.6), which clears the flag (see update_event() in
+        applications.py) -- a later startup must not silently re-flag it,
+        since created_at never changes and would otherwise match forever."""
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, datum, datum_zeit, created_at) "
+            "VALUES (1, 'notiz', '2026-03-01', '2026-03-01 12:00:00', ?)",
+            (self._BEFORE_CUTOFF,),
+        )
+
+        db_module._flag_noon_backfill_placeholders()
+        _exec(db_path, "UPDATE events SET datum_zeit_is_placeholder = NULL WHERE id=1")  # user set a real time
+
+        db_module._flag_noon_backfill_placeholders()  # second app startup
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit_is_placeholder FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "events")
+        db_module._flag_noon_backfill_placeholders()  # must not raise
+
+    def test_negativ_spalte_fehlt_wird_uebersprungen(self, db_path):
+        _drop_columns(db_path, "events", "datum_zeit_is_placeholder")
+        db_module._flag_noon_backfill_placeholders()  # must not raise
 
 
 class TestInitDb:

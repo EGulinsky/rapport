@@ -394,6 +394,54 @@ class TestEvents:
         db_session.refresh(ev)
         assert ev.datum_zeit == datetime(2026, 7, 19, 12, 30, 0)
 
+    def test_positiv_platzhalter_flag_wird_geleert_wenn_zeit_manuell_gesetzt_wird(self, client, db_session):
+        """An event flagged as a noon-backfill placeholder (see
+        _flag_noon_backfill_placeholders() in database.py) is no longer one
+        once the user deliberately sets a real time by hand."""
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 7, 19))
+        ev.datum_zeit = datetime(2026, 7, 19, 12, 0, 0)
+        ev.datum_zeit_is_placeholder = True
+        db_session.commit()
+
+        resp = client.patch(
+            f"/api/applications/{app.id}/events/{ev.id}",
+            json={"datum_zeit": "2026-07-19T09:00:00"},
+        )
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit_is_placeholder is None
+
+    def test_positiv_platzhalter_flag_wird_auch_beim_expliziten_leeren_entfernt(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 7, 19))
+        ev.datum_zeit = datetime(2026, 7, 19, 12, 0, 0)
+        ev.datum_zeit_is_placeholder = True
+        db_session.commit()
+
+        resp = client.patch(
+            f"/api/applications/{app.id}/events/{ev.id}",
+            json={"datum_zeit": None},
+        )
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit_is_placeholder is None
+
+    def test_negativ_platzhalter_flag_bleibt_wenn_datum_zeit_nicht_im_payload(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="notiz", datum=date(2026, 7, 19))
+        ev.datum_zeit = datetime(2026, 7, 19, 12, 0, 0)
+        ev.datum_zeit_is_placeholder = True
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}/events/{ev.id}", json={"titel": "Neuer Titel"})
+
+        assert resp.status_code == 200
+        db_session.refresh(ev)
+        assert ev.datum_zeit_is_placeholder is True
+
 
 class TestContacts:
     def test_positiv_liste_kontakte(self, client, db_session):
