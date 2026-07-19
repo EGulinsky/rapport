@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.8',
+    date: '2026-07-19',
+    changes: [
+      'Timeline entries now show their time next to the date for every type — notes, applied-events, and everything else, not just interview appointments. Previously the time badge only appeared when it was embedded as text at the start of a note.',
+    ],
+  },
+  {
     version: '4.6.7',
     date: '2026-07-19',
     changes: [

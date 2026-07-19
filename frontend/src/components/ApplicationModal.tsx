@@ -2520,8 +2520,14 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
   const dateStr = event.datum
     ? formatDate(event.datum, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
     : null
-  // Extract leading time from notiz, e.g. "10:30–10:50 Uhr (20min)" or "10:31 Uhr"
+  // Prefer datum_zeit (covers every event with a date, real or backfilled to
+  // noon -- see _backfill_event_datum_zeit_noon() in database.py). Falls back
+  // to the legacy leading-time-in-notiz convention (e.g. "10:30–10:50 Uhr
+  // (20min)") only for the handful of events that still have no datum_zeit
+  // at all (no date to begin with, e.g. LinkedIn's own relative-date scrape).
   const timeStr = (() => {
+    const fromDatumZeit = datumZeitToBerlinTimeInput(event.datum_zeit)
+    if (fromDatumZeit) return fromDatumZeit
     const m = (event.notiz ?? '').match(/^(\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?\s*Uhr)/)
     return m ? m[1] : null
   })()
