@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.7',
+    date: '2026-07-19',
+    changes: [
+      'Backfilled a default time of 12:00 (noon) onto existing timeline entries that only ever had a date, so the same-day sort fix (v4.6.5) benefits historical entries too, not just newly synced ones going forward.',
+    ],
+  },
+  {
     version: '4.6.6',
     date: '2026-07-19',
     changes: [

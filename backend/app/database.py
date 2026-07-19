@@ -397,6 +397,55 @@ def _migrate_gespraeche_to_events():
     conn.close()
 
 
+def _backfill_event_datum_zeit_noon():
+    """One-time: set datum_zeit to noon for events that predate the column
+    (v4.6.5) and so have a datum but no datum_zeit yet.
+
+    Guarded by a marker file rather than the datum_zeit IS NULL condition
+    itself -- that condition is not naturally idempotent, since a user can
+    deliberately clear an event's time via the edit form (v4.6.6). Without
+    the marker, this would re-fire on every startup and silently overwrite
+    that choice back to noon on the next deploy.
+    """
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    marker = os.path.join(os.path.dirname(db_path), ".event_datum_zeit_noon_backfilled")
+    if os.path.exists(marker):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
+    if not cur.fetchone():
+        conn.close()
+        return
+
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "datum_zeit" not in cols:
+        conn.close()
+        return
+
+    cur.execute(
+        "UPDATE events SET datum_zeit = datum || ' 12:00:00' "
+        "WHERE datum_zeit IS NULL AND datum IS NOT NULL"
+    )
+    updated = cur.rowcount
+    conn.commit()
+    conn.close()
+
+    with open(marker, "w") as f:
+        f.write("done")
+
+    if updated:
+        print(f"[migration] Backfilled datum_zeit to noon for {updated} event(s)")
+
+
 def _migrate_sync_settings_files():
     """Add files_enabled column to sync_settings table if missing."""
     import sqlite3
@@ -1154,3 +1203,4 @@ def init_db():
     _backfill_company_profiles()
     _backfill_events()
     _migrate_gespraeche_to_events()
+    _backfill_event_datum_zeit_noon()

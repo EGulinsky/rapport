@@ -116,6 +116,7 @@ class TestNoFreshDbGuard:
         "_migrate_application_ort", "_migrate_add_user_id_columns", "_migrate_user_profile",
         "_migrate_linkedin_profile_cache",
         "_migrate_audit_log_entity_type", "_backfill_events",
+        "_backfill_event_datum_zeit_noon",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -660,6 +661,69 @@ class TestBackfillEvents:
     def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
         _drop_table(db_path, "events")
         db_module._backfill_events()  # must not raise
+
+
+class TestBackfillEventDatumZeitNoon:
+    def test_positiv_setzt_mittag_fuer_events_ohne_datum_zeit(self, db_path):
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(db_path, "INSERT INTO events (application_id, typ, datum) VALUES (1, 'notiz', '2026-03-01')")
+
+        db_module._backfill_event_datum_zeit_noon()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] == "2026-03-01 12:00:00"
+
+    def test_negativ_bereits_gesetztes_datum_zeit_bleibt_unveraendert(self, db_path):
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(
+            db_path,
+            "INSERT INTO events (application_id, typ, datum, datum_zeit) VALUES (1, 'mail', '2026-03-01', '2026-03-01 08:15:00')",
+        )
+
+        db_module._backfill_event_datum_zeit_noon()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] == "2026-03-01 08:15:00"
+
+    def test_negativ_events_ohne_datum_werden_uebersprungen(self, db_path):
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(db_path, "INSERT INTO events (application_id, typ, datum) VALUES (1, 'notiz', NULL)")
+
+        db_module._backfill_event_datum_zeit_noon()  # must not raise
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_corner_case_marker_verhindert_erneutes_ueberschreiben_nach_manuellem_leeren(self, db_path):
+        """A user can deliberately clear an event's time via the edit form
+        (v4.6.6) -- once the one-time backfill has already run, a later
+        startup must NOT silently reinstate noon on that row."""
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        _exec(db_path, "INSERT INTO events (application_id, typ, datum) VALUES (1, 'notiz', '2026-03-01')")
+
+        db_module._backfill_event_datum_zeit_noon()
+        _exec(db_path, "UPDATE events SET datum_zeit = NULL WHERE id=1")  # user clears it by hand
+
+        db_module._backfill_event_datum_zeit_noon()  # second app startup
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT datum_zeit FROM events WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] is None
+
+    def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "events")
+        db_module._backfill_event_datum_zeit_noon()  # must not raise
+
+    def test_negativ_datum_zeit_spalte_fehlt_wird_uebersprungen(self, db_path):
+        _drop_columns(db_path, "events", "datum_zeit")
+        db_module._backfill_event_datum_zeit_noon()  # must not raise
 
 
 class TestInitDb:
