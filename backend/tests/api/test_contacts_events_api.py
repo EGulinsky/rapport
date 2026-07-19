@@ -98,6 +98,22 @@ class TestContactEventsMatching:
         assert len(body["calendar"]) == 1
         assert body["calendar"][0]["titel"] == "Interview"
 
+    def test_positiv_external_url_wird_mitgeliefert(self, client, db_session):
+        # ContactModal's Mails/Calendar tabs need external_url to offer the
+        # same "open in app" link as the application timeline's SourceBadge.
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Fuchs", vorname="Carla", email="carla@contoso.example")
+        app.contacts.append(contact)
+        event = event_factory(db_session, app, source="gcal", typ="gespräch", titel="Interview", datum=date.today())
+        event.autor = "Carla Fuchs <carla@contoso.example>"
+        event.external_url = "https://www.google.com/calendar/event?eid=abc123"
+        db_session.commit()
+
+        resp = client.get(f"/api/contacts/{contact.id}/events")
+
+        assert resp.status_code == 200
+        assert resp.json()["calendar"][0]["external_url"] == "https://www.google.com/calendar/event?eid=abc123"
+
     def test_negativ_kontakt_ohne_email_bekommt_keine_kalendertermine(self, client, db_session):
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Fuchs", vorname="Carla", email=None)

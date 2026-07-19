@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp, ContactEvents, ContactEventItem } from '../types'
 import { CompanyLogo } from './CompanyLogo'
+import { buildDeepLink, SourceBadge } from './ApplicationModal'
 import { PhoneListEditor, type PhoneEntry } from './PhoneListEditor'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
@@ -556,7 +557,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
   )
 }
 
-function EventList({ items, emptyLabel, icon, locale, onOpenApplication }: {
+export function EventList({ items, emptyLabel, icon, locale, onOpenApplication }: {
   items: ContactEventItem[]
   emptyLabel: string
   icon: React.ReactNode
@@ -568,33 +569,53 @@ function EventList({ items, emptyLabel, icon, locale, onOpenApplication }: {
   }
   return (
     <div className="space-y-1.5">
-      {items.map(item => (
-        <button
-          key={item.id}
-          onClick={() => onOpenApplication?.(item.application_id)}
-          className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-start gap-2 min-w-0">
-              <span className="mt-0.5 text-gray-400 shrink-0">{icon}</span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{item.titel || '—'}</p>
-                {(item.company_name || item.rolle) && (
-                  <p className="text-xs text-gray-500 truncate">
-                    {[item.company_name, item.rolle].filter(Boolean).join(' · ')}
-                  </p>
-                )}
-                {item.notiz && (
-                  <p className="text-xs text-gray-400 truncate mt-0.5">{item.notiz}</p>
-                )}
+      {items.map(item => {
+        // Same "click to open" behavior as the application timeline's
+        // SourceBadge: opens the synced item directly (Gmail/Calendar/etc.)
+        // when a deep link is available for this source, falls back to
+        // jumping to the application otherwise (e.g. calls/LinkedIn
+        // messages, which have no external app link to open).
+        const deepLink = buildDeepLink(item.source, item.external_id, item.external_url)
+        function handleActivate() {
+          if (deepLink) window.open(deepLink, '_blank', 'noreferrer')
+          else onOpenApplication?.(item.application_id)
+        }
+        return (
+          <div
+            key={item.id}
+            role="button"
+            tabIndex={0}
+            onClick={handleActivate}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleActivate() } }}
+            className="w-full text-left rounded-lg border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 px-3 py-2 transition-colors cursor-pointer"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2 min-w-0">
+                <span className="mt-0.5 text-gray-400 shrink-0">{icon}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{item.titel || '—'}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                    {(item.company_name || item.rolle) && (
+                      <p className="text-xs text-gray-500 truncate">
+                        {[item.company_name, item.rolle].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                    <span onClick={e => e.stopPropagation()}>
+                      <SourceBadge source={item.source} external_id={item.external_id} external_url={item.external_url} />
+                    </span>
+                  </div>
+                  {item.notiz && (
+                    <p className="text-xs text-gray-400 truncate mt-0.5">{item.notiz}</p>
+                  )}
+                </div>
               </div>
+              {item.datum && (
+                <span className="text-xs text-gray-400 shrink-0">{formatDate(item.datum, locale)}</span>
+              )}
             </div>
-            {item.datum && (
-              <span className="text-xs text-gray-400 shrink-0">{formatDate(item.datum, locale)}</span>
-            )}
           </div>
-        </button>
-      ))}
+        )
+      })}
     </div>
   )
 }

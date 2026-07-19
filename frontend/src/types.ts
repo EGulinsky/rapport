@@ -230,6 +230,7 @@ export interface ContactEventItem {
   notiz?: string
   source?: string
   external_id?: string
+  external_url?: string
   created_at?: string
 }
 

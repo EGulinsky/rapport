@@ -2455,7 +2455,7 @@ export function buildDeepLink(source: string | undefined, external_id: string | 
   }
 }
 
-function SourceBadge({ source, external_id, external_url }: { source?: string; external_id?: string; external_url?: string }) {
+export function SourceBadge({ source, external_id, external_url }: { source?: string; external_id?: string; external_url?: string }) {
   const { t } = useTranslation('applications')
   if (!source) return null
   const meta = SOURCE_META[source]

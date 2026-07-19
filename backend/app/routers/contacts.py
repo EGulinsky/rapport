@@ -84,6 +84,12 @@ class ContactEventItem(BaseModel):
     notiz: Optional[str] = None
     source: Optional[str] = None
     external_id: Optional[str] = None
+    # Ready-to-use deep link for sources whose external_id alone can't be
+    # turned into a working URL (currently only gcal) -- see the
+    # Event.external_url comment in models.py. Included here so the contact
+    # detail view's Mails/Calendar tabs can open the same "open in app" link
+    # as the application timeline (ApplicationModal.tsx's SourceBadge).
+    external_url: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
@@ -160,7 +166,7 @@ def get_contact_events(
         return ContactEventItem(
             id=e.id, application_id=e.application_id, company_name=company_name or app.firma,
             rolle=app.rolle, typ=e.typ, datum=e.datum, titel=e.titel, notiz=e.notiz,
-            source=e.source, external_id=e.external_id, created_at=e.created_at,
+            source=e.source, external_id=e.external_id, external_url=e.external_url, created_at=e.created_at,
         )
 
     display_name = contact.display_name

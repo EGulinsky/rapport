@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.19',
+    date: '2026-07-19',
+    changes: [
+      'Clicking a mail or calendar entry in the contact detail view now opens it in Gmail/Google Calendar/etc., exactly like clicking one on the application timeline — previously it only jumped to the application. Calls and LinkedIn messages (which have no external app to open) keep jumping to the application as before. The badge next to each entry now also matches the timeline\'s look exactly.',
+    ],
+  },
+  {
     version: '4.6.18',
     date: '2026-07-19',
     changes: [
