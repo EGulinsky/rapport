@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.11',
+    date: '2026-07-19',
+    changes: [
+      'Fixed the Gmail sender-info repair (v4.6.10) hitting "too many concurrent requests" partway through and leaving most messages unfixed — smaller batches with a short pause and automatic retries now get through the whole backlog.',
+    ],
+  },
+  {
     version: '4.6.10',
     date: '2026-07-19',
     changes: [

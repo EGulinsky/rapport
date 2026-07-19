@@ -10,6 +10,7 @@ Setup for users:
 from __future__ import annotations
 
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -553,27 +554,46 @@ def backfill_gmail_autor(db: Session, user_id: int) -> dict:
 
     by_id: dict[str, models.Event] = {e.external_id: e for e in events}
     meta_results: dict[str, dict] = {}
-    errors: list[str] = []
+    errors: dict[str, Exception] = {}
 
     def _cb(request_id: str, response: dict | None, exception: Exception | None) -> None:
         if exception is None and response is not None:
             meta_results[request_id] = response
+            errors.pop(request_id, None)
         else:
-            errors.append(f"{request_id}: {exception}")
+            errors[request_id] = exception
 
-    BATCH = 100
+    # A personal Gmail account's concurrent-request limit is much lower than
+    # the 100-per-batch chunk size _do_gmail() uses for its own Phase 1 (fine
+    # there since it's spaced out by the full-body Phase 2 in between) --
+    # blasting 100 sub-requests back-to-back here reliably triggered
+    # "Too many concurrent requests for user" (429) past the first chunk or
+    # so. Smaller chunks + a short pause + a few retries on 429 specifically
+    # clears it without needing to fall back to one request at a time.
+    BATCH = 15
+    MAX_ATTEMPTS = 4
     ids = list(by_id.keys())
-    for start in range(0, len(ids), BATCH):
-        chunk = ids[start:start + BATCH]
-        batch_req = service.new_batch_http_request(callback=_cb)
-        for msg_id in chunk:
-            batch_req.add(
-                service.users().messages().get(
-                    userId="me", id=msg_id, format="metadata", metadataHeaders=["From"],
-                ),
-                request_id=msg_id,
-            )
-        batch_req.execute()
+
+    for attempt in range(MAX_ATTEMPTS):
+        pending = ids if attempt == 0 else list(errors.keys())
+        if not pending:
+            break
+        for start in range(0, len(pending), BATCH):
+            chunk = pending[start:start + BATCH]
+            batch_req = service.new_batch_http_request(callback=_cb)
+            for msg_id in chunk:
+                batch_req.add(
+                    service.users().messages().get(
+                        userId="me", id=msg_id, format="metadata", metadataHeaders=["From"],
+                    ),
+                    request_id=msg_id,
+                )
+            batch_req.execute()
+            time.sleep(1)
+        if errors:
+            time.sleep(2 ** attempt)
+
+    errors_out = [f"{msg_id}: {exc}" for msg_id, exc in errors.items()]
 
     updated = 0
     for msg_id, meta in meta_results.items():
@@ -592,7 +612,7 @@ def backfill_gmail_autor(db: Session, user_id: int) -> dict:
             )
 
     db.commit()
-    return {"updated": updated, "errors": errors}
+    return {"updated": updated, "errors": errors_out}
 
 
 @router.post("/gmail/backfill-autor")

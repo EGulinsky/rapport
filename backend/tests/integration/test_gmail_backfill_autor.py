@@ -17,6 +17,14 @@ from tests.factories import application_factory, contact_factory
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def _no_real_sleep(monkeypatch):
+    """backfill_gmail_autor() sleeps between batches/retries to stay under
+    Gmail's per-user concurrent-request limit -- irrelevant against the fake
+    service, so skip the real delay to keep the suite fast."""
+    monkeypatch.setattr("app.routers.sync_google.time.sleep", lambda _seconds: None)
+
+
 def _gmail_event(db, app, external_id, autor=None, source="gmail"):
     event = models.Event(
         application_id=app.id, typ="mail", datum=date(2026, 6, 1),
@@ -166,3 +174,47 @@ class TestBackfillGmailAutorPositiv:
         assert result == {"updated": 0, "errors": []}
         db_session.refresh(event)
         assert event.autor is None
+
+    def test_negativ_dauerhafter_429_wird_nach_allen_versuchen_als_fehler_gemeldet(
+        self, db_session, google_sync, fake_gmail
+    ):
+        """A message that keeps failing (e.g. a persistent rate limit) must
+        not be silently dropped or retried forever -- it shows up in errors
+        after the retry budget is exhausted, and its event is left untouched."""
+        app = application_factory(db_session)
+        db_session.commit()
+        event = _gmail_event(db_session, app, "msg-rate-limited")
+
+        fake_gmail([], metadata={}, batch_errors={"msg-rate-limited": Exception("429 rate limited")})
+
+        result = backfill_gmail_autor(db_session, user_id=1)
+
+        assert result["updated"] == 0
+        assert len(result["errors"]) == 1
+        assert "msg-rate-limited" in result["errors"][0]
+        db_session.refresh(event)
+        assert event.autor is None
+
+    def test_positiv_mehr_als_eine_batch_wird_vollstaendig_verarbeitet(
+        self, db_session, google_sync, fake_gmail
+    ):
+        """20 affected events (> the 15-per-batch chunk size) must all be
+        covered across multiple batch calls, not just the first chunk."""
+        app = application_factory(db_session, firma="Qorix")
+        db_session.commit()
+        events = [_gmail_event(db_session, app, f"msg-bulk-{i}") for i in range(20)]
+
+        metadata = {
+            f"msg-bulk-{i}": {"id": f"msg-bulk-{i}", "payload": {"headers": [
+                {"name": "From", "value": f"Person {i} <person{i}@qorix.ai>"},
+            ]}}
+            for i in range(20)
+        }
+        fake_gmail([], metadata=metadata)
+
+        result = backfill_gmail_autor(db_session, user_id=1)
+
+        assert result == {"updated": 20, "errors": []}
+        for i, event in enumerate(events):
+            db_session.refresh(event)
+            assert event.autor == f"Person {i} <person{i}@qorix.ai>"
