@@ -100,13 +100,40 @@ def google_sync(db_session):
     return cfg
 
 
+class FakeCalendarBatchRequest:
+    """Test-Double für googleapiclient's BatchHttpRequest, für
+    backfill_gcal_autor()'s batched `events().get()`-Aufrufe -- derselbe
+    Mechanismus wie FakeGmailBatchRequest, nur ohne Metadata-/Full-Unterscheidung
+    (get_events liefert direkt das vollständige Event-Dict pro eventId)."""
+
+    def __init__(self, callback, get_events: dict[str, dict],
+                 errors: dict[str, Exception] | None = None) -> None:
+        self._callback = callback
+        self._get_events = get_events
+        self._errors = errors or {}
+        self._added: list[str] = []
+
+    def add(self, request, request_id=None) -> None:
+        self._added.append(request_id)
+
+    def execute(self) -> None:
+        for request_id in self._added:
+            if request_id in self._errors:
+                self._callback(request_id, None, self._errors[request_id])
+                continue
+            self._callback(request_id, self._get_events.get(request_id), None)
+
+
 class FakeCalendarService:
     """Test-Double für den von `googleapiclient.discovery.build('calendar', ...)`
-    zurückgegebenen Service — deckt nur die hier tatsächlich genutzte Methodenkette
-    `events().list(**kwargs).execute()` ab."""
+    zurückgegebenen Service — deckt `events().list(**kwargs).execute()` (normaler
+    Sync) sowie die gebatchte `events().get()` (backfill_gcal_autor()) ab."""
 
-    def __init__(self, events: list[dict]) -> None:
+    def __init__(self, events: list[dict], get_events: dict[str, dict] | None = None,
+                 batch_errors: dict[str, Exception] | None = None) -> None:
         self._events = events
+        self._get_events = get_events or {}
+        self._batch_errors = batch_errors or {}
         self.list_calls: list[dict] = []
 
     def events(self) -> "FakeCalendarService":
@@ -116,22 +143,31 @@ class FakeCalendarService:
         self.list_calls.append(kwargs)
         return self
 
+    def get(self, calendarId=None, eventId=None):
+        return SimpleNamespace(_event_id=eventId)
+
     def execute(self) -> dict:
         return {"items": self._events}
+
+    def new_batch_http_request(self, callback) -> FakeCalendarBatchRequest:
+        return FakeCalendarBatchRequest(callback, self._get_events, self._batch_errors)
 
 
 @pytest.fixture()
 def fake_google_calendar(monkeypatch):
-    """Liefert eine Factory `set_events(events) -> FakeCalendarService`. Muss vor
-    dem Aufruf von `_do_gcal()` mit den gewünschten Kalender-Events befüllt werden."""
+    """Liefert eine Factory `set_events(events, get_events=None, batch_errors=None)
+    -> FakeCalendarService`. Muss vor dem Aufruf von `_do_gcal()` mit den
+    gewünschten Kalender-Events befüllt werden. `get_events` (eventId -> Event-
+    Dict) ist für backfill_gcal_autor()'s gebatchte `events().get()`-Aufrufe."""
     holder: dict[str, FakeCalendarService] = {}
 
     def _fake_build(serviceName, version, credentials=None, cache_discovery=True):
         assert serviceName == "calendar", f"Nur Calendar gemockt, nicht {serviceName!r}"
         return holder["service"]
 
-    def set_events(events: list[dict]) -> FakeCalendarService:
-        service = FakeCalendarService(events)
+    def set_events(events: list[dict], get_events: dict[str, dict] | None = None,
+                   batch_errors: dict[str, Exception] | None = None) -> FakeCalendarService:
+        service = FakeCalendarService(events, get_events, batch_errors)
         holder["service"] = service
         return service
 

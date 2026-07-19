@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.16',
+    date: '2026-07-19',
+    changes: [
+      'Google Calendar entries synced before the new Calendar tab feature (v4.6.14) can now be repaired with a one-time backfill that re-fetches each entry\'s attendees, so a contact\'s Calendar tab picks up meetings that already happened without needing a full resync.',
+    ],
+  },
+  {
     version: '4.6.15',
     date: '2026-07-19',
     changes: [

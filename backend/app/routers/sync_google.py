@@ -821,6 +821,99 @@ def reset_calendar_sync(db: Session = Depends(get_db), current_user: models.User
         db.commit()
 
 
+def backfill_gcal_autor(db: Session, user_id: int) -> dict:
+    """One-time repair for Google Calendar events created before v4.6.14
+    added Event.autor population for gcal. Analogous to
+    backfill_gmail_autor() in the same file: re-fetches just the organizer/
+    attendees for each affected event via its stored external_id (the
+    Google Calendar event/instance ID), using the same batched-with-retry
+    approach to stay under the API's per-user concurrent-request limit.
+
+    Unlike mail's autor, this never triggers contact auto-creation (see the
+    autor comment in sync_common.py's _save_deterministic_event()) -- it
+    only lets an ALREADY-existing contact's Calendar tab match this event
+    by email, exactly matching what a normal gcal sync does for new events."""
+    cfg = db.query(models.GoogleSync).first()
+    if not cfg or not cfg.refresh_token_enc:
+        return {"updated": 0, "errors": ["Nicht mit Google verbunden."]}
+
+    events = db.query(models.Event).filter(
+        models.Event.source == "gcal",
+        models.Event.autor.is_(None),
+        models.Event.external_id.isnot(None),
+        models.Event.user_id == user_id,
+    ).all()
+    if not events:
+        return {"updated": 0, "errors": []}
+
+    from googleapiclient.discovery import build
+    creds = _refresh_if_needed(cfg, db)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    by_id: dict[str, models.Event] = {e.external_id: e for e in events}
+    results: dict[str, dict] = {}
+    errors: dict[str, Exception] = {}
+
+    def _cb(request_id: str, response: dict | None, exception: Exception | None) -> None:
+        if exception is None and response is not None:
+            results[request_id] = response
+            errors.pop(request_id, None)
+        else:
+            errors[request_id] = exception
+
+    BATCH = 15
+    MAX_ATTEMPTS = 4
+    ids = list(by_id.keys())
+
+    for attempt in range(MAX_ATTEMPTS):
+        pending = ids if attempt == 0 else list(errors.keys())
+        if not pending:
+            break
+        for start in range(0, len(pending), BATCH):
+            chunk = pending[start:start + BATCH]
+            batch_req = service.new_batch_http_request(callback=_cb)
+            for ev_id in chunk:
+                batch_req.add(
+                    service.events().get(calendarId="primary", eventId=ev_id),
+                    request_id=ev_id,
+                )
+            batch_req.execute()
+            time.sleep(1)
+        if errors:
+            time.sleep(2 ** attempt)
+
+    errors_out = [f"{ev_id}: {exc}" for ev_id, exc in errors.items()]
+
+    updated = 0
+    for ev_id, ev_data in results.items():
+        organizer = ev_data.get("organizer") or {}
+        attendees = ev_data.get("attendees") or []
+        participants: list[str] = []
+        org_email = organizer.get("email", "")
+        if org_email:
+            label = organizer.get("displayName", "")
+            participants.append(f"{label} <{org_email}>" if label else org_email)
+        for a in attendees[:8]:
+            if a.get("email"):
+                label = a.get("displayName", "")
+                participants.append(f"{label} <{a['email']}>" if label else a["email"])
+        if not participants:
+            continue
+        by_id[ev_id].autor = ", ".join(participants)
+        updated += 1
+
+    db.commit()
+    return {"updated": updated, "errors": errors_out}
+
+
+@router.post("/calendar/backfill-autor")
+def gcal_backfill_autor(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return backfill_gcal_autor(db, current_user.id)
+
+
 @router.get("/calendar/debug")
 def debug_gcal_events(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = _get_cfg(db)
