@@ -304,7 +304,8 @@ class FakeImapConnection:
     """Test-Double für `imaplib.IMAP4_SSL`. Deckt genau die hier genutzte
     Methodenkette ab: `login()`, `select()`, `search(None, criteria)`,
     `fetch(msg_id_bytes, spec)` (zweiphasig: erst RFC822.HEADER, dann bei
-    Bedarf volles RFC822) und `logout()`."""
+    Bedarf die volle Nachricht via BODY.PEEK[] — see _imap_fetch_full_bytes()
+    in sync_icloud.py for why not the RFC822 macro) und `logout()`."""
 
     def __init__(self, search_response: bytes, messages: dict[bytes, dict[str, bytes]]) -> None:
         self._search_response = search_response

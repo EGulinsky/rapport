@@ -141,6 +141,29 @@ def _imap_connect_select_search(cfg: models.ICloudSync, since: str):
     return imap, msg_ids
 
 
+def _imap_fetch_full_bytes(imap: imaplib.IMAP4_SSL, msg_id_bytes: bytes) -> bytes:
+    """Fetch the complete raw message (headers + body) for msg_id_bytes.
+
+    Uses BODY.PEEK[] rather than the RFC822 macro -- confirmed against a
+    real production iCloud account: RFC822 silently returned an EMPTY fetch
+    response ("<seq> ()") for a message that RFC822.SIZE/FLAGS/HEADER all
+    reported as present and non-empty (8238 bytes), while BODY.PEEK[] (the
+    modern, non-deprecated equivalent -- PEEK so it doesn't mark the
+    message \\Seen as a side effect of merely syncing it) reliably returned
+    the full content. Without this explicit check, indexing the malformed
+    response's bare bytes (e.g. b'1 ()') with [1] silently returns an int
+    (Python 3's bytes.__getitem__ on a single index) instead of raising --
+    which surfaced downstream as a cryptic "'int' object has no attribute
+    'decode'" from email.message_from_bytes(), rather than a clear error
+    right at the fetch site. This one bug meant iCloud Mail sync (bulk,
+    per-application targeted, and the manual "assign to application" flow)
+    had never successfully created a single event."""
+    _, data = imap.fetch(msg_id_bytes, "(BODY.PEEK[])")
+    if not data or not isinstance(data[0], tuple) or len(data[0]) < 2:
+        raise RuntimeError(f"IMAP-Fetch lieferte keinen Inhalt für Nachricht {msg_id_bytes!r}")
+    return data[0][1]
+
+
 def _imap_body(msg) -> str:
     """Extract plain text from an email.Message."""
     if msg.is_multipart():
@@ -357,8 +380,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
 
             # ── Phase 2: full message (only for relevant mails) ────────────
             try:
-                _, data = await asyncio.to_thread(imap.fetch, msg_id_bytes, "(RFC822)")
-                raw_email = data[0][1]
+                raw_email = await asyncio.to_thread(_imap_fetch_full_bytes, imap, msg_id_bytes)
                 msg = email_lib.message_from_bytes(raw_email)
             except Exception as e:
                 errors.append(f"Nachricht {msg_id}: {e}")

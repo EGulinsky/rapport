@@ -238,3 +238,75 @@ class TestManualAssign:
         app = application_factory(db_session)
         resp = client.post(f"/api/sync/targeted/{app.id}/assign", json={"match_id": 999999})
         assert resp.status_code == 404
+
+
+class TestManualAssignIcloudMail:
+    """The icloud_mail branch of manual_assign() fetches the full message via
+    IMAP itself (independent of any prior search) -- regression coverage for
+    a real production bug where the RFC822 fetch macro silently returned an
+    empty response for a message iCloud otherwise reported as present, and
+    the missing content-shape check meant that surfaced as a cryptic
+    "'int' object has no attribute 'decode'" 502 instead of a clean one.
+    See _imap_fetch_full_bytes() in sync_icloud.py."""
+
+    class _FakeImap:
+        def __init__(self, fetch_response):
+            self._fetch_response = fetch_response
+
+        def select(self, mailbox):
+            return ("OK", [b"1"])
+
+        def fetch(self, msg_id_bytes, spec):
+            return ("OK", self._fetch_response)
+
+        def logout(self):
+            return ("BYE", [b"Logging out"])
+
+    def _icloud_cfg(self, db_session):
+        from app.ai.provider import encrypt_api_key
+        cfg = models.ICloudSync(
+            apple_id="test@example.com", icloud_email="test@icloud.com",
+            app_password_enc=encrypt_api_key("test-app-password"), user_id=1,
+        )
+        db_session.add(cfg)
+        db_session.commit()
+        return cfg
+
+    def test_positiv_icloud_mail_wird_ueber_body_peek_geholt_und_angelegt(self, client, db_session, monkeypatch):
+        from email.message import EmailMessage
+        self._icloud_cfg(db_session)
+        app = application_factory(db_session)
+
+        msg = EmailMessage()
+        msg["From"] = "recruiterin@contoso.com"
+        msg["Subject"] = "Einladung zum Interview"
+        msg["Date"] = "Mon, 20 Jul 2026 09:00:00 +0000"
+        msg.set_content("Wir laden Sie herzlich ein.")
+        fake_imap = self._FakeImap([(b"1 (BODY[] {10}", bytes(msg))])
+        monkeypatch.setattr("app.routers.sync_icloud._imap_connect", lambda cfg: fake_imap)
+
+        resp = client.post(
+            f"/api/sync/targeted/{app.id}/assign",
+            json={"match_id": 0, "external_id": "42", "source": "icloud_mail", "titel": "Einladung zum Interview"},
+        )
+
+        assert resp.status_code == 200
+        ev = db_session.query(models.Event).filter_by(application_id=app.id, external_id="42").one()
+        assert ev.titel == "Einladung zum Interview"
+
+    def test_negativ_leere_imap_antwort_liefert_sauberen_502_statt_absturz(self, client, db_session, monkeypatch):
+        # The exact malformed shape observed against production: the server
+        # returns "<seq> ()" as a bare bytes response instead of a
+        # (header, content) tuple.
+        self._icloud_cfg(db_session)
+        app = application_factory(db_session)
+        fake_imap = self._FakeImap([b"1 ()"])
+        monkeypatch.setattr("app.routers.sync_icloud._imap_connect", lambda cfg: fake_imap)
+
+        resp = client.post(
+            f"/api/sync/targeted/{app.id}/assign",
+            json={"match_id": 0, "external_id": "42", "source": "icloud_mail", "titel": "Einladung"},
+        )
+
+        assert resp.status_code == 502
+        assert db_session.query(models.Event).filter_by(application_id=app.id, external_id="42").first() is None

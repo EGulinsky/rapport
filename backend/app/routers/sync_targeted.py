@@ -448,7 +448,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
 # ── iCloud Mail ───────────────────────────────────────────────────────────────
 
 async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
-    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _imap_body, _imap_connect_select
+    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _imap_body, _imap_connect_select, _imap_fetch_full_bytes
     cfg = _get_icloud_cfg(db)
     if not cfg:
         return 0, 0, []
@@ -509,8 +509,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
             skipped += 1
             continue
         try:
-            _, data = await asyncio.to_thread(imap.fetch, msg_id_bytes, "(RFC822)")
-            raw_email = data[0][1]
+            raw_email = await asyncio.to_thread(_imap_fetch_full_bytes, imap, msg_id_bytes)
             msg = email_lib.message_from_bytes(raw_email)
         except Exception as e:
             errors.append(f"icloud_mail/{msg_id}: {e}")
@@ -1920,7 +1919,7 @@ def manual_assign(
 
         elif src == "icloud_mail":
             import email as _email_lib
-            from app.routers.sync_icloud import _imap_connect
+            from app.routers.sync_icloud import _imap_connect, _imap_fetch_full_bytes
             icfg = db.query(models.ICloudSync).first()
             if not icfg or not icfg.app_password_enc:
                 raise HTTPException(400, "iCloud nicht verbunden.")
@@ -1928,8 +1927,7 @@ def manual_assign(
             try:
                 imap = _imap_connect(icfg)
                 imap.select("INBOX")
-                _, fetch_data = imap.fetch(ext_id.encode(), "(RFC822)")
-                raw = fetch_data[0][1] if fetch_data and fetch_data[0] else b""
+                raw = _imap_fetch_full_bytes(imap, ext_id.encode())
                 msg = _email_lib.message_from_bytes(raw)
                 subject = msg.get("Subject", subject)
                 date_str = msg.get("Date", "")

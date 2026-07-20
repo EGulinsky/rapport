@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.26',
+    date: '2026-07-20',
+    changes: [
+      'Fixed iCloud Mail sync (bulk, per-application, and manually assigning a found email) never actually creating a timeline entry: the IMAP fetch for a message\'s full content silently returned empty for some messages, which then failed with an opaque error instead of the email being added. Switched to a more reliable fetch method (also confirmed against real account data) and added a clear error message if a fetch genuinely comes back empty.',
+    ],
+  },
+  {
     version: '4.6.25',
     date: '2026-07-20',
     changes: [

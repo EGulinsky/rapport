@@ -200,7 +200,7 @@ class TestDoIcloudMailFehler:
         self, db_session, icloud_sync, fake_icloud_imap
     ):
         # Der zweiphasige Fetch holt Header + volle Nachricht getrennt — ein
-        # Fehler in der zweiten Phase (RFC822, nicht RFC822.HEADER) muss
+        # Fehler in der zweiten Phase (BODY.PEEK[], nicht RFC822.HEADER) muss
         # ebenso gesammelt werden, ohne den restlichen Sync abzubrechen.
         app = application_factory(db_session, firma="Contoso AG", datum_bewerbung=date.today() - timedelta(days=30))
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
@@ -216,7 +216,7 @@ class TestDoIcloudMailFehler:
         real_fetch = conn.fetch
 
         def _flaky_full_fetch(msg_id_bytes, spec):
-            if spec == "(RFC822)":
+            if spec == "(BODY.PEEK[])":
                 raise RuntimeError("full-fetch-boom")
             return real_fetch(msg_id_bytes, spec)
 
