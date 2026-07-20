@@ -15,10 +15,10 @@
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Rapport">
-        <Component Id="ComposeFile" Guid="*">
+        <Component Id="ComposeFile" Guid="*" Bitness="always64">
           <File Id="ComposeFileYml" Source="docker-compose.yml" KeyPath="yes" />
         </Component>
-        <Component Id="StartScript" Guid="*">
+        <Component Id="StartScript" Guid="*" Bitness="always64">
           <File Id="StartRapportBat" Source="start-rapport.bat" KeyPath="yes" />
         </Component>
       </Directory>
