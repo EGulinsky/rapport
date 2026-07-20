@@ -10,6 +10,12 @@
     <OutputType>Package</OutputType>
     <Version Condition="'$(Version)'==''">0.1.0</Version>
     <DefineConstants>Version=$(Version)</DefineConstants>
+    <!-- Must match the components' Bitness="always64" in Product.wxs (they
+         live under ProgramFiles64Folder); ICE80 validates that the MSI's
+         own summary-information Template field agrees with its components'
+         declared bitness, and this project-level property is what sets it,
+         not an attribute in the .wxs itself. -->
+    <Platform>x64</Platform>
   </PropertyGroup>
 
 </Project>
