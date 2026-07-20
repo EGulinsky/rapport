@@ -14,8 +14,8 @@ containers are up once.
   (Linux).
 - **Windows** — a real Windows Installer package built with the
   [WiX Toolset](https://wixtoolset.org/) (`packaging/windows-wix/`): a
-  Burn bootstrapper (`Rapport-Setup-<version>.exe`) wrapping an MSI, no
-  Python involved at all. See "Windows: WiX installer" below.
+  single MSI (`Rapport-Setup-<version>.msi`), no Python and no extra
+  `.exe` wrapper. See "Windows: WiX installer" below.
 
 ```
 installer/
@@ -35,7 +35,7 @@ installer/
   packaging/
     installer.spec / build_dmg.sh              # macOS: PyInstaller spec -> "Rapport Installer.app" + .dmg
     installer-linux.spec / build_linux.sh       # Linux: PyInstaller spec + build script
-    windows-wix/                                # Windows: WiX MSI + Burn bootstrapper (see below)
+    windows-wix/                                # Windows: a single WiX MSI (see below)
 ```
 
 ## Flow (macOS/Linux)
@@ -67,52 +67,47 @@ everything else.
 ## Windows: WiX installer
 
 Windows gets a real Windows Installer package instead of a Python console
-app — `packaging/windows-wix/`:
+app — `packaging/windows-wix/RapportPackage/`, a single MSI (WiX v5,
+`WixToolset.Sdk`), deliberately **not** wrapped in an extra `.exe`
+bootstrapper:
 
-- **`RapportPackage/`** — an MSI (WiX v5, `WixToolset.Sdk`) that installs
-  `docker-compose.yml` (this build's version already substituted for
-  `__VERSION__`, generated at build time — never checked in) and
-  `start-rapport.bat` into `Program Files\Rapport`, plus a "Start rapport"
-  Start Menu shortcut. Fixed `UpgradeCode` + `MajorUpgrade` means
-  installing a newer version's Setup.exe replaces the old one automatically
-  (genuine version-awareness the old NSIS installer never had). Windows
-  Installer itself provides the Add/Remove Programs entry and uninstaller
-  — nothing to author by hand.
-- **`RapportBundle/`** — a Burn bootstrapper wrapping that MSI into the
-  single `Rapport-Setup-<version>.exe` end users download, using WiX's
-  standard bootstrapper UI (`bal:WixStandardBootstrapperApplication`) for
-  the license/progress/finish wizard. Its finish page's "Launch" checkbox
-  runs `start-rapport.bat` unelevated in the logged-in user's session —
-  important because Docker Desktop's named pipe is only reliably reachable
-  from an interactive user account, not the elevated/SYSTEM context the
-  install itself runs under.
-- **`RapportPackage/start-rapport.bat`** — the actual bootstrap logic:
-  check for Docker, download+silently install Docker Desktop if missing
-  (`curl` + the documented `install --quiet --accept-license` flags,
-  handling the 3010 "restart required" exit code distinctly), wait for the
-  daemon, `docker compose pull && up -d`, poll `/health` via `curl`, then
-  open the browser — the same step sequence as the macOS/Linux Python flow,
-  just as a plain batch script. Runs once automatically right after Setup,
-  and again any time later from the "Start rapport" Start Menu shortcut
+- **`Product.wxs`** — installs `docker-compose.yml` (this build's version
+  already substituted for `__VERSION__`, generated at build time — never
+  checked in) and `start-rapport.bat` into `Program Files\Rapport`, plus a
+  "Start rapport" Start Menu shortcut. Uses `WixUI_InstallDir` for the
+  standard Windows Installer wizard (license → install-directory picker →
+  progress → finish) — the MSI is the whole installer here, so it needs
+  its own UI. Fixed `UpgradeCode` + `MajorUpgrade` means installing a newer
+  version's `Rapport-Setup.msi` replaces the old one automatically (genuine
+  version-awareness the old NSIS installer never had). Windows Installer
+  itself provides the Add/Remove Programs entry, the UAC elevation prompt,
+  and the uninstaller — nothing to author by hand for any of that.
+- **`start-rapport.bat`** — the actual bootstrap logic, run manually from
+  the "Start rapport" Start Menu shortcut after installing (there's no
+  Burn bootstrapper here to auto-launch it right after Setup finishes, so
+  this is a deliberate one extra click compared to macOS/Linux): check for
+  Docker, download+silently install Docker Desktop if missing (`curl` +
+  the documented `install --quiet --accept-license` flags, handling the
+  3010 "restart required" exit code distinctly), wait for the daemon,
+  `docker compose pull && up -d`, poll `/health` via `curl`, then open the
+  browser — the same step sequence as the macOS/Linux Python flow, just as
+  a plain batch script. Can be re-run any time from the same shortcut
   (useful if Docker needed a restart, or containers didn't come back up).
   On any failure the window stays open (`pause`) rather than flashing
   closed, so the error is actually readable.
 - **`build_windows_wix.ps1`** — resolves `docker-compose.yml` and
   generates `License.rtf` (from the repo's real `LICENSE`, so it can never
-  drift out of sync) at build time, then `dotnet build`s the Bundle
-  project (which pulls in the Package project via a project reference).
-  WiX itself is fetched via NuGet `PackageReference`s in the `.wixproj`
-  files — no separate CLI tool install needed, unlike NSIS's `choco
-  install nsis` step.
+  drift out of sync) at build time, then `dotnet build`s the MSI project.
+  WiX itself is fetched via a NuGet `PackageReference` in the `.wixproj`
+  file — no separate CLI tool install needed, unlike NSIS's `choco install
+  nsis` step.
 
-Deliberately **no** Docker-prerequisite chaining at the Burn/MSI level:
-Docker Desktop's own installer binary is a vendor-hosted, frequently-updated
-file with no stable published hash, so pinning it as a Burn `ExePackage`
-payload (which requires a fixed size+hash for verification) would break
-every future install the moment Docker ships an update. Handling it as
-plain batch-script logic in `start-rapport.bat` sidesteps that fragility
-entirely, at the cost of the install happening slightly later (after the
-MSI/Burn UI closes) rather than mid-wizard.
+Deliberately **no** Docker-prerequisite handling at the MSI level: Docker
+Desktop's own installer binary is a vendor-hosted, frequently-updated file,
+awkward to model as MSI-native install logic. Handling it as plain
+batch-script logic in `start-rapport.bat` keeps the MSI itself simple (just
+files + a shortcut) and matches how the macOS/Linux Python flow does the
+same check-and-install.
 
 ## Run locally (macOS/Linux development, no packaging)
 
@@ -173,9 +168,9 @@ failure, via a shell trap) — the working tree is never left dirty by a
 local build.
 
 Result: `installer/packaging/dist/Rapport-Installer-4.3.6.dmg` (macOS),
-`installer/packaging/windows-wix/dist/Rapport-Setup-4.3.6.exe` (Windows — a
-real Windows Installer package: license page, progress, finish wizard with
-a "Launch" checkbox, Start Menu shortcut, version-aware upgrades, and an
+`installer/packaging/windows-wix/dist/Rapport-Setup-4.3.6.msi` (Windows — a
+real Windows Installer package: license page, install-directory picker,
+progress, finish, Start Menu shortcut, version-aware upgrades, and an
 uninstaller registered in Add/Remove Programs, all provided natively by
 WiX/MSI rather than hand-rolled), or `rapport-installer-4.3.6-linux.tar.gz`
 (Linux). macOS/Linux build mechanics (PyInstaller onedir → .dmg/.tar.gz)
@@ -189,7 +184,7 @@ development) — but the toolset explicitly warns "only supports Windows...
 all behavior after this point is undefined" and a minimal, textbook-correct
 `<Directory Name="...">` element fails to compile at all under this
 non-Windows host (confirmed via an isolated reproduction), so the actual
-MSI/Burn compilation can only be proven by `release.yml`'s `windows-latest`
+MSI compilation can only be proven by `release.yml`'s `windows-latest`
 runner. The Docker-install path in `start-rapport.bat` similarly needs a
 real run on a machine with no prior Docker install to fully verify, the
 same "hardware-verified" bar `agent/README.md` documents for its own

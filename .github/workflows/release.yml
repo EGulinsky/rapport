@@ -268,18 +268,19 @@ jobs:
             --clobber
 
   installer-windows:
-    name: Build Rapport Installer Windows Setup.exe
+    name: Build Rapport Installer Windows Setup.msi
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
-      # A real Windows Installer package (WiX Burn bootstrapper wrapping an
-      # MSI) instead of the previous PyInstaller+NSIS approach -- no Python
-      # involved. WiX itself is pulled in via NuGet PackageReferences in the
-      # .wixproj files during `dotnet build`, so no separate CLI tool install
-      # step is needed here (unlike NSIS's choco install above). windows-latest
-      # already has a .NET SDK preinstalled.
+      # A real Windows Installer package (a single MSI, WixUI_InstallDir's own
+      # license/directory/progress/finish wizard) instead of the previous
+      # PyInstaller+NSIS approach -- no Python involved. WiX itself is pulled
+      # in via NuGet PackageReferences in RapportPackage.wixproj during
+      # `dotnet build`, so no separate CLI tool install step is needed here
+      # (unlike NSIS's choco install above). windows-latest already has a
+      # .NET SDK preinstalled.
       - name: Resolve version
         id: version
         shell: bash
@@ -288,7 +289,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build Setup.exe
+      - name: Build Setup.msi
         working-directory: installer/packaging/windows-wix
         shell: pwsh
         run: ./build_windows_wix.ps1 -Version "${{ steps.version.outputs.version }}"
@@ -299,7 +300,7 @@ jobs:
         shell: bash
         run: |
           gh release upload "${{ steps.version.outputs.tag }}" \
-            "installer/packaging/windows-wix/dist/Rapport-Setup-${{ steps.version.outputs.version }}.exe" \
+            "installer/packaging/windows-wix/dist/Rapport-Setup-${{ steps.version.outputs.version }}.msi" \
             --clobber
 
   installer-linux:

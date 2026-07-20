@@ -1,11 +1,11 @@
 # Builds the Windows "Rapport Installer" as a real Windows Installer
-# package: a WiX Burn bootstrapper (Rapport-Setup-<version>.exe) wrapping
-# an MSI (RapportPackage.msi), replacing the previous PyInstaller+NSIS
-# approach entirely -- no Python involved anywhere in the Windows install
-# path. Must run ON Windows (dotnet build produces a native MSI/Burn
-# engine). Requires the .NET SDK on PATH (actions/setup-dotnet on CI,
-# `dotnet --version` locally) -- WiX itself is pulled in automatically via
-# NuGet PackageReferences in the .wixproj files, no separate tool install.
+# package: a single MSI (Rapport-Setup-<version>.msi) built with the WiX
+# Toolset, replacing the previous PyInstaller+NSIS approach entirely -- no
+# Python involved anywhere in the Windows install path. Must run ON Windows
+# (dotnet build produces a native MSI). Requires the .NET SDK on PATH
+# (actions/setup-dotnet on CI, `dotnet --version` locally) -- WiX itself is
+# pulled in automatically via NuGet PackageReferences in RapportPackage.wixproj,
+# no separate tool install.
 #
 # Usage: installer\packaging\windows-wix\build_windows_wix.ps1 [version]
 param(
@@ -16,20 +16,21 @@ $ErrorActionPreference = "Stop"
 $WixDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path (Join-Path $WixDir "..\..\..")
 $InstallerDir = Join-Path $RepoRoot "installer"
+$PackageDir = Join-Path $WixDir "RapportPackage"
 $DistDir = Join-Path $WixDir "dist"
-$SetupName = "Rapport-Setup-$Version.exe"
+$SetupName = "Rapport-Setup-$Version.msi"
 
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 
 Write-Host "==> Resolving docker-compose.yml for version $Version..."
 $ComposeTemplate = Get-Content -Raw -Path (Join-Path $InstallerDir "compose_template.yml")
 $ResolvedCompose = $ComposeTemplate -replace "__VERSION__", $Version
-$ResolvedComposePath = Join-Path $WixDir "RapportPackage\docker-compose.yml"
+$ResolvedComposePath = Join-Path $PackageDir "docker-compose.yml"
 Set-Content -NoNewline -Path $ResolvedComposePath -Value $ResolvedCompose
 
-# WixStandardBootstrapperApplication's license page needs RTF, not plain
-# text -- generated fresh from the repo's actual LICENSE on every build so
-# it can never drift out of sync, rather than a hand-copied duplicate.
+# WixUI_InstallDir's license page needs RTF, not plain text -- generated
+# fresh from the repo's actual LICENSE on every build so it can never
+# drift out of sync, rather than a hand-copied duplicate.
 function ConvertTo-Rtf {
     param([string]$Text)
     $escaped = $Text -replace '\\', '\\\\'
@@ -42,12 +43,12 @@ function ConvertTo-Rtf {
 
 Write-Host "==> Generating License.rtf from repo LICENSE..."
 $LicenseText = Get-Content -Raw -Path (Join-Path $RepoRoot "LICENSE")
-$LicenseRtfPath = Join-Path $WixDir "RapportBundle\License.rtf"
+$LicenseRtfPath = Join-Path $PackageDir "License.rtf"
 Set-Content -NoNewline -Path $LicenseRtfPath -Value (ConvertTo-Rtf $LicenseText)
 
 try {
-    Write-Host "==> Building RapportBundle (dotnet build, pulls in RapportPackage via project reference)..."
-    dotnet build (Join-Path $WixDir "RapportBundle\RapportBundle.wixproj") -c Release -p:Version=$Version
+    Write-Host "==> Building RapportPackage.msi..."
+    dotnet build (Join-Path $PackageDir "RapportPackage.wixproj") -c Release -p:Version=$Version
     if ($LASTEXITCODE -ne 0) {
         Write-Error "dotnet build failed with exit code $LASTEXITCODE"
         exit 1
@@ -57,15 +58,15 @@ try {
     # projects don't follow the usual TFM-subfolder output layout of
     # ordinary .NET SDK projects, so search bin\ for whatever the actual
     # output path turns out to be instead of assuming one.
-    $BuiltExe = Get-ChildItem -Path (Join-Path $WixDir "RapportBundle\bin") -Filter "RapportBundle.exe" -Recurse |
+    $BuiltMsi = Get-ChildItem -Path (Join-Path $PackageDir "bin") -Filter "RapportPackage.msi" -Recurse |
         Select-Object -First 1
-    if (-not $BuiltExe) {
-        Write-Error "RapportBundle.exe not found under RapportBundle\bin\ after dotnet build"
+    if (-not $BuiltMsi) {
+        Write-Error "RapportPackage.msi not found under RapportPackage\bin\ after dotnet build"
         exit 1
     }
 
     $SetupPath = Join-Path $DistDir $SetupName
-    Copy-Item $BuiltExe.FullName $SetupPath -Force
+    Copy-Item $BuiltMsi.FullName $SetupPath -Force
 
     Write-Host "==> Done: $SetupPath"
 } finally {

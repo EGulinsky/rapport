@@ -7,11 +7,19 @@
            Scope="perMachine">
 
     <!-- Fixed UpgradeCode + MajorUpgrade means installing a newer version's
-         Setup.exe automatically replaces an older install, rather than the
-         old NSIS installer's behavior of just overwriting files in place
-         with no version awareness at all. -->
+         Rapport-Setup.msi automatically replaces an older install, rather
+         than the old NSIS installer's behavior of just overwriting files in
+         place with no version awareness at all. -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of Rapport is already installed." />
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- WixUI_InstallDir: license -> install-directory picker -> progress ->
+         finish, the standard Windows Installer wizard experience; this MSI
+         is the whole installer (no Burn/.exe bootstrapper wrapping it), so
+         it needs its own UI rather than relying on an outer bootstrapper's. -->
+    <UIRef Id="WixUI_InstallDir" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Rapport">

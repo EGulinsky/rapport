@@ -1,21 +1,23 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
-  <!-- The actual installed payload: docker-compose.yml, start-rapport.bat,
-       and a Start Menu shortcut. No UI of its own; RapportBundle's Burn
-       bootstrapper (the outer Rapport-Setup.exe) shows the license/progress/
-       finish wizard and runs this MSI silently in the background, so there's
-       nothing here beyond the file/component/feature authoring. -->
+  <!-- The whole Windows installer: a single MSI (Rapport-Setup-<version>.msi)
+       with its own WixUI_InstallDir wizard; docker-compose.yml,
+       start-rapport.bat, and a Start Menu shortcut as payload. -->
 
   <PropertyGroup>
     <OutputType>Package</OutputType>
     <Version Condition="'$(Version)'==''">0.1.0</Version>
     <DefineConstants>Version=$(Version)</DefineConstants>
-    <!-- Must match the components' Bitness="always64" in Product.wxs (they
-         live under ProgramFiles64Folder); ICE80 validates that the MSI's
-         own summary-information Template field agrees with its components'
+    <!-- Must match the components' Bitness="always64" below (they live
+         under ProgramFiles64Folder); ICE80 validates that the MSI's own
+         summary-information Template field agrees with its components'
          declared bitness, and this project-level property is what sets it,
          not an attribute in the .wxs itself. -->
     <Platform>x64</Platform>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+  </ItemGroup>
 
 </Project>
