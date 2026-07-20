@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.24',
+    date: '2026-07-20',
+    changes: [
+      'Fixed the distance-to-job feature (v4.6.23) never showing anything: existing applications never got their location geocoded, since that only ever happened on a create/update with a location in the request — a one-time repair now backfills coordinates for every application that already has a location set.',
+      'Fixed Google Calendar sync missing self-organized appointments with no attendees — e.g. Gmail\'s own "detected event" feature auto-adding an interview invitation straight from an email to your calendar. It now also matches by company name in the event title, the same way Gmail/iCloud Mail sync already do, instead of only matching by attendee email address.',
+    ],
+  },
+  {
     version: '4.6.23',
     date: '2026-07-20',
     changes: [

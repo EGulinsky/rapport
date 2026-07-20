@@ -181,6 +181,45 @@ def _compute_distance_km(app: models.Application, user: models.User) -> Optional
     return haversine_km(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng)
 
 
+async def backfill_ort_geocode(db: Session, user_id: int) -> dict:
+    """One-time repair for the distance-to-job feature (KanbanBoard/
+    ApplicationModal): _geocode_ort() only ever runs when `ort` is actually
+    part of a create/update request, so any application whose `ort` was set
+    before v4.6.23 introduced ort_lat/ort_lng (or hasn't been touched since)
+    is stuck with no cached coordinates forever -- silently showing no
+    distance even once the account's home_location is set, since nothing
+    ever re-triggers the geocode for an untouched row. Paced at ~1
+    request/sec between calls (Nominatim's free usage policy caps lookups
+    at that rate; harmless extra latency if a Google Maps key is configured
+    instead, see _get_maps_api_key())."""
+    import asyncio
+
+    api_key = _get_maps_api_key(db, user_id)
+    apps = db.query(models.Application).filter(
+        models.Application.user_id == user_id,
+        models.Application.ort.isnot(None),
+        models.Application.ort != "",
+        models.Application.ort_lat.is_(None),
+    ).all()
+
+    updated = 0
+    errors: list[str] = []
+    for i, app in enumerate(apps):
+        if i > 0:
+            await asyncio.sleep(1)
+        try:
+            coords = await geocode_one(app.ort, api_key)
+        except Exception as e:
+            errors.append(f"{app.firma}: {e}")
+            continue
+        if coords:
+            app.ort_lat, app.ort_lng = coords
+            updated += 1
+
+    db.commit()
+    return {"total": len(apps), "updated": updated, "errors": errors}
+
+
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 
@@ -998,3 +1037,11 @@ def delete_contact(
                   old_value=contact.display_name, user_id=current_user.id)
         db.delete(contact)
     db.commit()
+
+
+@router.post("/backfill-ort-geocode")
+async def backfill_ort_geocode_endpoint(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return await backfill_ort_geocode(db, current_user.id)

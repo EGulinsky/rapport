@@ -732,3 +732,68 @@ class TestDistanceKm:
 
         assert resp.status_code == 201
         assert resp.json()["distance_km"] is None
+
+
+class TestBackfillOrtGeocode:
+    """POST /api/applications/backfill-ort-geocode -- one-time repair for
+    applications whose `ort` was set before the ort_lat/ort_lng cache
+    existed (or hasn't been touched since): _geocode_ort() only ever runs
+    when `ort` is part of a create/update request, so these rows would
+    otherwise never get coordinates and silently show no distance forever,
+    even once the account's home_location is set."""
+
+    def test_positiv_geokodiert_offene_apps_und_ueberspringt_bereits_geocodete(self, client, db_session, monkeypatch):
+        needs_geocode = application_factory(db_session, ort="München, Deutschland")
+        already_done = application_factory(db_session, ort="Berlin, Deutschland", ort_lat=52.52, ort_lng=13.405)
+        no_ort = application_factory(db_session, ort=None)
+        db_session.commit()
+
+        calls = []
+
+        async def fake_geocode_one(term, api_key):
+            calls.append(term)
+            return (48.1351, 11.5820)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        resp = client.post("/api/applications/backfill-ort-geocode")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["updated"] == 1
+        assert body["errors"] == []
+        assert calls == ["München, Deutschland"]
+
+        db_session.refresh(needs_geocode)
+        assert needs_geocode.ort_lat == 48.1351
+        assert needs_geocode.ort_lng == 11.5820
+
+        db_session.refresh(already_done)
+        assert already_done.ort_lat == 52.52  # untouched, not re-geocoded
+
+        db_session.refresh(no_ort)
+        assert no_ort.ort_lat is None
+
+    def test_negativ_geocoding_fehlschlag_wird_als_fehler_gemeldet_und_bleibt_leer(self, client, db_session, monkeypatch):
+        app = application_factory(db_session, ort="Nirgendwostadt")
+        db_session.commit()
+
+        async def fake_geocode_one(term, api_key):
+            raise RuntimeError("kein Netz")
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        resp = client.post("/api/applications/backfill-ort-geocode")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["updated"] == 0
+        assert len(body["errors"]) == 1
+        db_session.refresh(app)
+        assert app.ort_lat is None
+
+
+async def _fake_sleep(*args, **kwargs):
+    """No-op stand-in for asyncio.sleep(1) so backfill tests don't actually wait."""
+    return None

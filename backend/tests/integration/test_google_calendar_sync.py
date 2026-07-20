@@ -110,6 +110,35 @@ class TestDoGcalNeueTermine:
         assert result["skipped"] == 1
         assert db_session.query(models.Event).filter_by(source="gcal", external_id="evt-2").first() is None
 
+    async def test_positiv_selbst_organisierter_termin_ohne_teilnehmer_matcht_ueber_firmenname(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        # Regression: Gmail's own "detected event" feature auto-adds an
+        # interview invitation straight from an email to the user's Google
+        # Calendar -- such an event is self-organized (organizer == the
+        # account's own address) with an empty attendees list, so it can
+        # NEVER match via address-based matching alone, no matter how many
+        # contacts exist. Only the company name in the summary text can
+        # match it to an application (same combined matcher Gmail/iCloud
+        # Mail sync already use via find_matching_apps()).
+        app = application_factory(db_session, firma="Sulzer GmbH")
+        seed_floor(db_session, app)
+        db_session.commit()
+
+        fake_google_calendar([_cal_event(
+            "evt-self-organized",
+            "Deine Bewerbung bei der Sulzer GmbH Standort Stuttgart - Einladung zum Teams-Interview",
+            "egulinsky@googlemail.com",
+        )])
+
+        result = await _do_gcal(1)
+
+        assert result["errors"] == []
+        assert result["created"] == 1
+        event = db_session.query(models.Event).filter_by(source="gcal", external_id="evt-self-organized").one()
+        assert event.typ == "gespräch"
+        assert event.application_id == app.id
+
     async def test_negativ_calendar_api_fehler_liefert_sauberen_fehler_statt_crash(
         self, db_session, google_sync, fake_google_calendar
     ):

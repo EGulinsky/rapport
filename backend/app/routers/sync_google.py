@@ -694,6 +694,7 @@ async def _do_gcal(user_id: int) -> dict:
         cal_events = events_result.get("items", [])
         contact_domain_index = build_contact_domain_index(db)
         contact_email_index  = build_contact_email_index(db)
+        _, term_to_apps = build_firm_index(db)
 
         total = len(cal_events)
         update_progress("gcal", 0, total, t("appointments_found", lang, count=total))
@@ -740,7 +741,19 @@ async def _do_gcal(user_id: int) -> dict:
             attendees = ev.get("attendees") or []
             org_email = organizer.get("email", "")
             att_emails = ",".join(a.get("email", "") for a in attendees[:20])
-            hint_apps = find_apps_from_addresses(org_email, att_emails, contact_email_index, contact_domain_index)
+            # Combined address + company-name/role-text matcher (same
+            # find_matching_apps() Gmail/iCloud Mail sync already use) --
+            # address-only matching (the previous behavior here) misses
+            # self-organized events with no attendees at all, e.g. Gmail's
+            # own "detected event" feature auto-adding an interview
+            # invitation straight from an email to the calendar: organizer
+            # is the account's own address, attendees is empty, so only the
+            # summary/description text (which does name the company) can
+            # ever match it to an application.
+            hint_apps = find_matching_apps(
+                org_email, att_emails, f"{summary} {desc}",
+                contact_email_index, contact_domain_index, term_to_apps,
+            )
             if not hint_apps:
                 skipped += 1
                 continue
