@@ -128,7 +128,7 @@ backend/app/
     ├── export_pdf.py           GET /api/export/pdf
     ├── attachments.py          File attachments on timeline events
     ├── settings.py             AI settings, logo API key, sync toggles, Ollama models
-    ├── geo.py                   Location autocomplete + forward/reverse geocoding (Google Places/Geocoding, fallback Nominatim), haversine_km() straight-line distance
+    ├── geo.py                   Location autocomplete + forward/reverse geocoding (Google Places/Geocoding, fallback Nominatim), driving_route() car-navigation distance/duration (Google Distance Matrix, fallback OSRM)
     ├── calendar.py             GET /api/calendar/events
     ├── analytics.py            Pipeline funnel and rejection statistics
     ├── audit_log.py            Read/delete audit trail
@@ -551,7 +551,7 @@ Two more fixes (v4.6.17), both live-reported: **(1)** `cleanup_run()`'s per-row 
 - **Excel import/export** — `openpyxl`, "Tracking" sheet, 17 columns, status mapping via `EXCEL_IMPORT_MAP`/`EXCEL_EXPORT_MAP`
 - **Contact upsert from sync** — `upsert_contact_from_sender()`: email address as dedup key, footer extraction for phone/role, `INSERT OR IGNORE` instead of ORM `append()` (avoids autoflush races)
 - **`naechster_schritt` (next step) computation** — not stored in the DB, derived from timeline events + status on every `GET /api/applications/` request
-- **`distance_km` computation** — not stored in the DB, computed on every `GET /api/applications/`/`GET /api/applications/{id}` request via `haversine_km()` (straight-line, not driving distance — avoids a per-request Distance Matrix API call) from the account's `home_lat`/`home_lng` (`users`, set once when `home_location` is saved in Account settings) to the application's cached `ort_lat`/`ort_lng` (re-geocoded only when `ort` changes); `None` if either side is missing a geocode
+- **`drive_distance_km`/`drive_duration_min` computation** — car-navigation distance/duration (`driving_route()`: Google Distance Matrix if a Maps key is configured, else OSRM's free public routing server), cached on `Application` (unlike straight-line distance, a routing call is too slow/costly to make on every list request) via `_update_drive_distance()` whenever `ort` changes. When `home_location` changes instead, every application's cached value is cleared in bulk (one profile save touching every application would mean dozens of routing calls) and repopulated via `POST /api/applications/backfill-drive-distance`, which the frontend triggers automatically right after a successful home-location save. `None` if either side is missing a geocode or the routing call failed.
 - **Review queue** — deterministic status-change suggestions (rejection/offer keywords from mail sync) and cleanup/merge candidates land in `pending_matches`; the user confirms (→ event/status change) or discards. Every such row carries a fixed `confidence=80` literal (not a computed score — see §5.1's note on deterministic vs. AI-based matching)
 
 ---
@@ -674,7 +674,7 @@ erDiagram
 | `linkedin_profile_text` / `linkedin_profile_synced_at` | TEXT NULL / DATETIME NULL | Cached scrape of `linkedin_url`'s own profile page (`POST /api/sync/linkedin/profile`), also fed into AI assessment (§3.6) |
 | `ui_language` | VARCHAR NOT NULL, default `'de'` | `'de'` \| `'en'` — see [§9](#9-internationalization-i18n). New registrations always send an explicit value (`RegisterPayload` default `'en'`); the column default only protects pre-existing rows from the migration |
 | `home_location` | VARCHAR NULL | Free-text label (Settings → Account), either typed via the same autocomplete as `Application.ort` or reverse-geocoded from a "use my location" button |
-| `home_lat` / `home_lng` | FLOAT NULL | Geocoded once when `home_location` changes (`update_profile()`), reused for every `distance_km` calculation rather than re-geocoding per request |
+| `home_lat` / `home_lng` | FLOAT NULL | Geocoded once when `home_location` changes (`update_profile()`), reused as the origin for every application's cached `drive_distance_km`/`drive_duration_min` rather than re-geocoding per request |
 
 #### `email_verification_codes`
 
@@ -704,7 +704,8 @@ erDiagram
 | `salary_expectation_min`/`_max`, `salary_budget_min`/`_max` | INTEGER NULL | Applicant expectation / company budget — single value (`_min` only) or range; each of these 4 slots may additionally carry a `_fixed`/`_bonus` breakdown pair (8 more INTEGER NULL columns) whose sum is kept equal to the plain total (enforced in `applications.py`, not silently rewritten) |
 | `salary_expectation_company_car` / `salary_budget_company_car` | BOOLEAN | Optional "would like"/"offered" company-car flags, informational only — not part of `salary_mismatch` |
 | `salary_mismatch` (property) | — | Computed: best-case budget (its max if a range, else its single value) below the lowest acceptable expectation; flagged in the modal and as a Kanban icon |
-| `ort_lat` / `ort_lng` | FLOAT NULL | Cached geocode of `ort`, re-geocoded only when `ort` changes; used with the account's `home_lat`/`home_lng` (below) for `distance_km` |
+| `ort_lat` / `ort_lng` | FLOAT NULL | Cached geocode of `ort`, re-geocoded only when `ort` changes; used with the account's `home_lat`/`home_lng` as the destination for `drive_distance_km`/`drive_duration_min` |
+| `drive_distance_km` / `drive_duration_min` | FLOAT NULL | Cached car-navigation distance (km) / duration (minutes) from home to `ort` (`driving_route()` in geo.py) — recomputed when `ort` changes; cleared in bulk (not recomputed) when `home_location` changes, see §5.5 |
 | `abgesagt` (property) | — | Computed from `main_status == "rejected"` |
 | `ghosting` (property) | — | Computed: > 14 days with no activity |
 

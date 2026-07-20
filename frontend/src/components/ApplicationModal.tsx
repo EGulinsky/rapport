@@ -8,6 +8,7 @@ import { LocationSearchInput } from './LocationSearchInput'
 import { displayName } from './ContactModal'
 import { CURRENCIES } from '../constants/currencies'
 import { formatCurrencyAmount, formatSalaryRange } from '../utils/salaryFormat'
+import { formatDriveDistance } from '../utils/distanceFormat'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_COLORS,
@@ -1239,8 +1240,8 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
               {field(t('overview.fieldSource'), app?.quelle, 'quelle')}
               {field(
                 t('overview.fieldLocation'),
-                app?.ort && app.distance_km != null
-                  ? `${app.ort} · ${t('overview.distanceKm', { km: Math.round(app.distance_km) })}`
+                app?.ort && app.drive_distance_km != null && app.drive_duration_min != null
+                  ? `${app.ort} · ${formatDriveDistance(app.drive_distance_km, app.drive_duration_min)}`
                   : app?.ort,
                 'ort',
               )}

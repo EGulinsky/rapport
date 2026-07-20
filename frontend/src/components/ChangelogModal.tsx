@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.27',
+    date: '2026-07-20',
+    changes: [
+      'The distance to a job\'s location (Kanban card + application detail view) now shows real car-navigation distance and driving time instead of straight-line ("as the crow flies") distance — e.g. "504 km · 5.2 h" instead of a plain kilometer figure that ignored roads entirely. Saving a new home location in Account settings now also automatically recalculates every application\'s distance in the background.',
+    ],
+  },
+  {
     version: '4.6.26',
     date: '2026-07-20',
     changes: [

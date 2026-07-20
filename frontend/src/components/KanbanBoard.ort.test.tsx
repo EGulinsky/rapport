@@ -47,4 +47,30 @@ describe('KanbanBoard — Ort mit Google-Maps-Link', () => {
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
+
+  it('positiv: cachte Fahrstrecke wird als km/h neben dem Ort angezeigt', () => {
+    const app = makeApp({ id: 3, ort: 'München, Deutschland', drive_distance_km: 504.2, drive_duration_min: 312 })
+    render(
+      <KanbanBoard
+        columns={[{ status: 'applied', items: [app] }]}
+        onSelect={vi.fn()}
+        onChanged={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('· 504 km · 5.2 h')).toBeInTheDocument()
+  })
+
+  it('negativ: ohne Fahrstrecke wird keine Distanz gerendert', () => {
+    const app = makeApp({ id: 4, ort: 'München, Deutschland' })
+    render(
+      <KanbanBoard
+        columns={[{ status: 'applied', items: [app] }]}
+        onSelect={vi.fn()}
+        onChanged={vi.fn()}
+      />
+    )
+
+    expect(screen.queryByText(/km ·/)).not.toBeInTheDocument()
+  })
 })

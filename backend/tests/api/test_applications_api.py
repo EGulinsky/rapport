@@ -679,12 +679,14 @@ class TestOrtGeocoding:
         assert app.ort_lng == 6.5623343
 
 
-class TestDistanceKm:
-    """distance_km on ApplicationListItem/ApplicationRead -- straight-line
-    distance from the account's home_location to the application's ort, both
-    cached geocodes. Uses real_auth_client (real DB user row) since the
-    `client` fixture's current_user is a transient object never persisted,
-    so setting home_lat/lng on it wouldn't be visible to the endpoint."""
+class TestDriveDistance:
+    """drive_distance_km/drive_duration_min on ApplicationListItem/
+    ApplicationRead -- car-navigation distance/duration from the account's
+    home_location to the application's ort, cached on Application (see
+    _update_drive_distance() in applications.py). Uses real_auth_client
+    (real DB user row) since the `client` fixture's current_user is a
+    transient object never persisted, so setting home_lat/lng on it
+    wouldn't be visible to the endpoint."""
 
     def _token(self, real_auth_client, captured_email, email="test@example.com"):
         from tests.api.test_auth_api import _register
@@ -692,7 +694,7 @@ class TestDistanceKm:
         r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
         return r.json()["access_token"]
 
-    def test_positiv_distanz_wird_berechnet_wenn_beide_koordinaten_vorhanden(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_route_wird_berechnet_wenn_beide_koordinaten_vorhanden(self, real_auth_client, captured_email, db_session, monkeypatch):
         from app import models as m
 
         token = self._token(real_auth_client, captured_email)
@@ -705,21 +707,27 @@ class TestDistanceKm:
             return (48.1351, 11.5820)  # Munich
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
 
+        async def fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+            return (504.0, 312.0)
+        monkeypatch.setattr("app.routers.applications.driving_route", fake_driving_route)
+
         create_resp = real_auth_client.post(
             "/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer", "ort": "München"},
             headers=headers,
         )
         assert create_resp.status_code == 201
-        assert create_resp.json()["distance_km"] is not None
-        assert 490 < create_resp.json()["distance_km"] < 520
+        assert create_resp.json()["drive_distance_km"] == 504.0
+        assert create_resp.json()["drive_duration_min"] == 312.0
 
         list_resp = real_auth_client.get("/api/applications/", headers=headers)
-        assert 490 < list_resp.json()[0]["distance_km"] < 520
+        assert list_resp.json()[0]["drive_distance_km"] == 504.0
+        assert list_resp.json()[0]["drive_duration_min"] == 312.0
 
         get_resp = real_auth_client.get(f"/api/applications/{create_resp.json()['id']}", headers=headers)
-        assert 490 < get_resp.json()["distance_km"] < 520
+        assert get_resp.json()["drive_distance_km"] == 504.0
+        assert get_resp.json()["drive_duration_min"] == 312.0
 
-    def test_negativ_keine_distanz_ohne_home_location(self, real_auth_client, captured_email, monkeypatch):
+    def test_negativ_keine_route_ohne_home_location(self, real_auth_client, captured_email, monkeypatch):
         token = self._token(real_auth_client, captured_email)
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -733,9 +741,10 @@ class TestDistanceKm:
         )
 
         assert resp.status_code == 201
-        assert resp.json()["distance_km"] is None
+        assert resp.json()["drive_distance_km"] is None
+        assert resp.json()["drive_duration_min"] is None
 
-    def test_negativ_keine_distanz_ohne_ort(self, real_auth_client, captured_email, db_session):
+    def test_negativ_keine_route_ohne_ort(self, real_auth_client, captured_email, db_session):
         from app import models as m
 
         token = self._token(real_auth_client, captured_email)
@@ -750,7 +759,8 @@ class TestDistanceKm:
         )
 
         assert resp.status_code == 201
-        assert resp.json()["distance_km"] is None
+        assert resp.json()["drive_distance_km"] is None
+        assert resp.json()["drive_duration_min"] is None
 
 
 class TestBackfillOrtGeocode:
@@ -814,6 +824,104 @@ class TestBackfillOrtGeocode:
         assert len(body["errors"]) == 1
         db_session.refresh(app)
         assert app.ort_lat is None
+
+
+class TestBackfillDriveDistance:
+    """POST /api/applications/backfill-drive-distance -- one-time repair
+    recomputing drive_distance_km/drive_duration_min for applications that
+    have ort_lat/lng but no cached route yet (never computed, or cleared in
+    bulk after home_location changed -- see auth.py's update_profile()).
+    Needs a real, persisted User row (home_lat/lng), unlike the `client`
+    fixture's transient one, hence real_auth_client here."""
+
+    def _token(self, real_auth_client, captured_email, email="test@example.com"):
+        from tests.api.test_auth_api import _register
+        _register(real_auth_client, captured_email, email=email)
+        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
+        return r.json()["access_token"]
+
+    def test_positiv_berechnet_offene_routen_und_ueberspringt_bereits_vorhandene(self, real_auth_client, captured_email, db_session, monkeypatch):
+        from app import models as m
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        user = db_session.query(m.User).filter_by(email="test@example.com").one()
+        user.home_lat, user.home_lng = 52.5200, 13.4050  # Berlin
+        db_session.commit()
+
+        needs_route = application_factory(db_session, ort="München", ort_lat=48.1351, ort_lng=11.5820, user_id=user.id)
+        already_done = application_factory(
+            db_session, ort="Hamburg", ort_lat=53.5511, ort_lng=9.9937,
+            drive_distance_km=300.0, drive_duration_min=200.0, user_id=user.id,
+        )
+        no_ort_coords = application_factory(db_session, ort=None, user_id=user.id)
+        db_session.commit()
+
+        calls = []
+
+        async def fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+            calls.append((lat1, lng1, lat2, lng2))
+            return (504.0, 312.0)
+        monkeypatch.setattr("app.routers.applications.driving_route", fake_driving_route)
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        resp = real_auth_client.post("/api/applications/backfill-drive-distance", headers=headers)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["updated"] == 1
+        assert body["errors"] == []
+        assert calls == [(52.5200, 13.4050, 48.1351, 11.5820)]
+
+        db_session.refresh(needs_route)
+        assert needs_route.drive_distance_km == 504.0
+        assert needs_route.drive_duration_min == 312.0
+
+        db_session.refresh(already_done)
+        assert already_done.drive_distance_km == 300.0  # untouched, not recomputed
+
+        db_session.refresh(no_ort_coords)
+        assert no_ort_coords.drive_distance_km is None
+
+    def test_negativ_ohne_home_location_liefert_leeres_ergebnis(self, real_auth_client, captured_email, db_session):
+        from app import models as m
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        user = db_session.query(m.User).filter_by(email="test@example.com").one()
+        application_factory(db_session, ort="München", ort_lat=48.1351, ort_lng=11.5820, user_id=user.id)
+        db_session.commit()
+
+        resp = real_auth_client.post("/api/applications/backfill-drive-distance", headers=headers)
+
+        assert resp.status_code == 200
+        assert resp.json() == {"total": 0, "updated": 0, "errors": []}
+
+    def test_negativ_routing_fehlschlag_wird_als_fehler_gemeldet(self, real_auth_client, captured_email, db_session, monkeypatch):
+        from app import models as m
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        user = db_session.query(m.User).filter_by(email="test@example.com").one()
+        user.home_lat, user.home_lng = 52.5200, 13.4050
+        db_session.commit()
+        app = application_factory(db_session, ort="München", ort_lat=48.1351, ort_lng=11.5820, user_id=user.id)
+        db_session.commit()
+
+        async def fake_driving_route(*a, **kw):
+            raise RuntimeError("kein Netz")
+        monkeypatch.setattr("app.routers.applications.driving_route", fake_driving_route)
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        resp = real_auth_client.post("/api/applications/backfill-drive-distance", headers=headers)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["updated"] == 0
+        assert len(body["errors"]) == 1
+        db_session.refresh(app)
+        assert app.drive_distance_km is None
 
 
 async def _fake_sleep(*args, **kwargs):

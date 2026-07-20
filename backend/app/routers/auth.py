@@ -298,6 +298,16 @@ async def update_profile(
             current_user.home_lat = None
             current_user.home_lng = None
 
+        # Every application's cached drive_distance_km/drive_duration_min
+        # (see models.py) was computed from the OLD home coordinates -- a
+        # live routing call per application here would mean dozens of
+        # requests on a single profile save, so just clear the cache in
+        # bulk; the frontend triggers backfill_drive_distance() right after
+        # a successful save to repopulate it (see AccountPanel.tsx).
+        db.query(models.Application).filter(
+            models.Application.user_id == current_user.id
+        ).update({"drive_distance_km": None, "drive_duration_min": None})
+
     language_changed = payload.ui_language is not None and payload.ui_language != current_user.ui_language
     if payload.ui_language is not None:
         current_user.ui_language = payload.ui_language

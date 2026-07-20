@@ -1181,6 +1181,28 @@ def _migrate_application_ort_coords():
     conn.close()
 
 
+def _migrate_application_drive_distance():
+    """Cached car-navigation distance/duration from home to Application.ort
+    -- see its docstring in models.py."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(applications)")
+    cols = {row[1] for row in cur.fetchall()}
+    for col in ("drive_distance_km", "drive_duration_min"):
+        if col not in cols:
+            cur.execute(f"ALTER TABLE applications ADD COLUMN {col} REAL")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_cv_extracted_text_cache():
     """Cached extraction of the user's CV (see app/cv_extract.py), used by
     the AI assessment prompt alongside the LinkedIn profile cache — see
@@ -1401,6 +1423,7 @@ def init_db():
     _migrate_user_profile()
     _migrate_user_home_location()
     _migrate_application_ort_coords()
+    _migrate_application_drive_distance()
     _migrate_cv_extracted_text_cache()
     _migrate_linkedin_profile_cache()
     _migrate_ui_language()

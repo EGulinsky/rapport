@@ -1,17 +1,19 @@
-"""L1 Unit — haversine_km() + geocode_one()/reverse_geocode_one() in geo.py.
+"""L1 Unit — driving_route() + geocode_one()/reverse_geocode_one() in geo.py.
 
 The distance-to-job feature (KanbanBoard/ApplicationModal) needs a one-time
-forward geocode of Application.ort and User.home_location, and a reverse
-geocode for the "use my location" button in Settings. Mocks httpx at the
-network boundary (same pattern as test_sync_company.py's Wikidata tests),
-never hitting the real Nominatim/Google APIs.
+forward geocode of Application.ort and User.home_location, a reverse
+geocode for the "use my location" button in Settings, and a car-navigation
+route (distance + duration) between the two -- replacing an earlier
+straight-line/haversine calculation. Mocks httpx at the network boundary
+(same pattern as test_sync_company.py's Wikidata tests), never hitting the
+real Nominatim/Google/OSRM APIs.
 """
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
-from app.routers.geo import geocode_one, haversine_km, reverse_geocode_one
+from app.routers.geo import driving_route, geocode_one, reverse_geocode_one
 
 pytestmark = pytest.mark.unit
 
@@ -24,19 +26,75 @@ def _mock_response(json_data, status=200):
     return resp
 
 
-class TestHaversineKm:
-    def test_positiv_bekannte_distanz_berlin_muenchen(self):
-        # Berlin (52.5200, 13.4050) -> Munich (48.1351, 11.5820), ~504 km great-circle.
-        km = haversine_km(52.5200, 13.4050, 48.1351, 11.5820)
-        assert 490 < km < 520
+class TestDrivingRouteGoogle:
+    async def test_positiv_liefert_km_und_minuten(self):
+        data = {
+            "status": "OK",
+            "rows": [{"elements": [{"status": "OK", "distance": {"value": 504000}, "duration": {"value": 18720}}]}],
+        }
 
-    def test_positiv_gleicher_punkt_ist_null(self):
-        assert haversine_km(52.5, 13.4, 52.5, 13.4) == pytest.approx(0.0, abs=1e-9)
+        async def fake_get(self, url, params=None, **kw):
+            assert "distancematrix" in url
+            return _mock_response(data)
 
-    def test_positiv_ist_symmetrisch(self):
-        a = haversine_km(52.5200, 13.4050, 48.1351, 11.5820)
-        b = haversine_km(48.1351, 11.5820, 52.5200, 13.4050)
-        assert a == pytest.approx(b)
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await driving_route(52.52, 13.405, 48.1351, 11.5820, "fake-key")
+
+        assert result == (504.0, 312.0)
+
+    async def test_negativ_element_status_nicht_ok_liefert_none(self):
+        data = {"status": "OK", "rows": [{"elements": [{"status": "ZERO_RESULTS"}]}]}
+
+        async def fake_get(self, url, params=None, **kw):
+            return _mock_response(data)
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await driving_route(52.52, 13.405, 48.1351, 11.5820, "fake-key")
+
+        assert result is None
+
+    async def test_negativ_exception_wird_abgefangen(self):
+        async def fake_get(self, url, params=None, **kw):
+            raise httpx.ConnectError("kein Netz")
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await driving_route(52.52, 13.405, 48.1351, 11.5820, "fake-key")
+
+        assert result is None
+
+
+class TestDrivingRouteOsrmFallback:
+    async def test_positiv_ohne_api_key_wird_osrm_genutzt(self):
+        data = {"code": "Ok", "routes": [{"distance": 504000, "duration": 18720}]}
+
+        async def fake_get(self, url, params=None, **kw):
+            assert "router.project-osrm.org" in url
+            # OSRM's coordinate order is lng,lat -- opposite of Google's.
+            assert "13.405,52.52;11.582,48.1351" in url
+            return _mock_response(data)
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await driving_route(52.52, 13.405, 48.1351, 11.582, None)
+
+        assert result == (504.0, 312.0)
+
+    async def test_negativ_code_nicht_ok_liefert_none(self):
+        async def fake_get(self, url, params=None, **kw):
+            return _mock_response({"code": "NoRoute", "routes": []})
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await driving_route(52.52, 13.405, 48.1351, 11.5820, None)
+
+        assert result is None
+
+    async def test_negativ_exception_wird_abgefangen(self):
+        async def fake_get(self, url, params=None, **kw):
+            raise httpx.ConnectError("kein Netz")
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            result = await driving_route(52.52, 13.405, 48.1351, 11.5820, None)
+
+        assert result is None
 
 
 class TestGeocodeOneGoogle:

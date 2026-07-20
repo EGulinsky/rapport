@@ -2127,6 +2127,12 @@ function AccountPanel() {
       await refreshUser()
       setHomeLocationSaved(true)
       setTimeout(() => setHomeLocationSaved(false), 2000)
+      // A home_location change clears every application's cached drive
+      // distance server-side (see auth.py's update_profile()) -- repopulate
+      // it in the background rather than making the user find a separate
+      // "recompute" button. Not awaited: this is rate-limited (~1 req/sec
+      // per application) and shouldn't block the save UI.
+      api.applications.backfillDriveDistance().catch(() => {})
     } catch (e: unknown) {
       setHomeLocationError(e instanceof Error ? e.message : String(e))
     } finally {

@@ -88,7 +88,8 @@ export interface Application {
   salary_expectation_company_car?: boolean | null
   salary_budget_company_car?: boolean | null
   salary_mismatch: boolean
-  distance_km?: number | null
+  drive_distance_km?: number | null
+  drive_duration_min?: number | null
 }
 
 export interface ContactPhone {

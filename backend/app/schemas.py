@@ -234,8 +234,10 @@ class ApplicationRead(ApplicationBase):
     id: int
     abgesagt: bool
     salary_mismatch: bool
-    # See ApplicationListItem's own distance_km for the computation.
-    distance_km: Optional[float] = None
+    # See ApplicationListItem's own drive_distance_km/drive_duration_min
+    # for the computation.
+    drive_distance_km: Optional[float] = None
+    drive_duration_min: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     company_profile_id: Optional[int] = None
@@ -276,11 +278,13 @@ class ApplicationListItem(BaseModel):
     salary_currency: Optional[str] = None
     salary_expectation_min: Optional[int] = None
     salary_expectation_max: Optional[int] = None
-    # Straight-line distance from the account's home_location to this
-    # application's ort, computed per-request from cached geocodes (see
-    # _compute_distance_km() in applications.py) -- None if either side has
-    # no coordinates yet.
-    distance_km: Optional[float] = None
+    # Car-navigation distance/duration from the account's home_location to
+    # this application's ort -- cached on Application (see
+    # _update_drive_distance() in applications.py), since a live routing
+    # call per request/per card would be far too slow and costly. None if
+    # either side has no coordinates yet, or the routing call failed.
+    drive_distance_km: Optional[float] = None
+    drive_duration_min: Optional[float] = None
     kommentar: Optional[str] = None
     naechster_schritt: Optional[str] = None
     company_profile_id: Optional[int] = None

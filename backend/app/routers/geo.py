@@ -6,8 +6,6 @@ Key bleibt serverseitig — das Frontend ruft ausschließlich diesen Proxy auf.
 Ohne konfigurierten Key fällt die Suche auf Nominatim (OpenStreetMap) zurück,
 das ohne API-Key nutzbar ist, aber keine POIs liefert.
 """
-import math
-
 import httpx
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -21,23 +19,72 @@ router = APIRouter(prefix="/api/geo", tags=["geo"])
 
 GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://maps.googleapis.com/maps/api/place/autocomplete/json"
 GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+GOOGLE_DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json"
+OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = "rapport/1.0 (personal single-user job application tracker)"
 
 
-_EARTH_RADIUS_KM = 6371.0
+async def driving_route(lat1: float, lng1: float, lat2: float, lng2: float, api_key: str | None) -> tuple[float, float] | None:
+    """Car-navigation distance (km) and duration (minutes) between two
+    points, for the distance-to-job feature (Application.drive_distance_km/
+    drive_duration_min). Replaces an earlier straight-line/haversine
+    calculation, which understated real commute distance and gave no time
+    estimate at all. Best-effort: returns None on any failure, same
+    philosophy as geocode_one() below -- a routing hiccup should just leave
+    the cached value unset rather than raise."""
+    if api_key:
+        async with httpx.AsyncClient(timeout=8) as client:
+            try:
+                resp = await client.get(
+                    GOOGLE_DISTANCE_MATRIX_URL,
+                    params={
+                        "origins": f"{lat1},{lng1}",
+                        "destinations": f"{lat2},{lng2}",
+                        "mode": "driving",
+                        "key": api_key,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except (httpx.HTTPError, ValueError):
+                return None
+        if data.get("status") != "OK":
+            return None
+        rows = data.get("rows") or []
+        elements = rows[0].get("elements") if rows else []
+        if not elements or elements[0].get("status") != "OK":
+            return None
+        distance_m = elements[0].get("distance", {}).get("value")
+        duration_s = elements[0].get("duration", {}).get("value")
+        if distance_m is None or duration_s is None:
+            return None
+        return (distance_m / 1000, duration_s / 60)
 
-
-def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Great-circle (straight-line) distance in km -- not driving distance,
-    which would need a Distance Matrix API call (and its own quota/cost) per
-    application rather than a one-time geocode reused for every calculation."""
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    d_phi = math.radians(lat2 - lat1)
-    d_lambda = math.radians(lng2 - lng1)
-    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-    return _EARTH_RADIUS_KM * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    # Free fallback: OSRM's public routing server -- no API key needed, same
+    # spirit as Nominatim for geocoding. Note OSRM's coordinate order is
+    # lng,lat (opposite of every other API used in this file).
+    async with httpx.AsyncClient(timeout=8) as client:
+        try:
+            resp = await client.get(
+                f"{OSRM_ROUTE_URL}/{lng1},{lat1};{lng2},{lat2}",
+                params={"overview": "false"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+    if data.get("code") != "Ok":
+        return None
+    routes = data.get("routes") or []
+    if not routes:
+        return None
+    distance_m = routes[0].get("distance")
+    duration_s = routes[0].get("duration")
+    if distance_m is None or duration_s is None:
+        return None
+    return (distance_m / 1000, duration_s / 60)
 
 
 def _get_maps_api_key(db: Session, user_id: int) -> str | None:

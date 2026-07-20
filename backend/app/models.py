@@ -183,6 +183,16 @@ class Application(Base):
     # every distance calculation. None if geocoding failed or ort is empty.
     ort_lat             = Column(Float, nullable=True)
     ort_lng             = Column(Float, nullable=True)
+    # Cached car-navigation distance/duration from the account's home
+    # location to `ort` (see _update_drive_distance() in applications.py) --
+    # a live routing call per request would be too slow/costly, so this is
+    # recomputed only when `ort` changes or (via backfill_drive_distance())
+    # after home_location changes. Straight-line/haversine was the original
+    # v4.6.23 implementation; replaced because it understated real commute
+    # distance and gave no time estimate at all. None if either coordinate
+    # is missing or the routing call failed.
+    drive_distance_km   = Column(Float, nullable=True)
+    drive_duration_min  = Column(Float, nullable=True)
 
     salary_currency        = Column(String, nullable=True)   # ISO code, e.g. "EUR"
     salary_expectation_min = Column(Integer, nullable=True)

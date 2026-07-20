@@ -14,6 +14,7 @@ import { useStatusLabels } from '../i18n/statusLabels'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
 import { formatSalaryRange } from '../utils/salaryFormat'
+import { formatDriveDistance } from '../utils/distanceFormat'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import type { Application } from '../types'
@@ -168,8 +169,10 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
             >
               <MapPin className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{app.ort}</span>
-              {app.distance_km != null && (
-                <span className="shrink-0 text-indigo-400">· {Math.round(app.distance_km)} km</span>
+              {app.drive_distance_km != null && app.drive_duration_min != null && (
+                <span className="shrink-0 text-indigo-400">
+                  · {formatDriveDistance(app.drive_distance_km, app.drive_duration_min)}
+                </span>
               )}
             </a>
           )}

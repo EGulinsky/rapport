@@ -42,12 +42,21 @@ def _no_live_geocoding(monkeypatch):
     reference), while auth.py's update_profile() imports it fresh from
     app.routers.geo on each call (a local import), so patching geo's own
     attribute covers that second call site.
-    Tests that specifically exercise the geocoding wiring re-patch this
-    fixture's target with their own return value/mock."""
+    Also covers driving_route() (_update_drive_distance()/
+    backfill_drive_distance() in applications.py) for the same reason --
+    without a mocked return, any test where both ort_lat/lng and
+    home_lat/lng end up set would silently hit the live routing API too.
+    Tests that specifically exercise the geocoding/routing wiring re-patch
+    this fixture's target with their own return value/mock."""
     async def _fake_geocode_one(term, api_key):
         return None
     monkeypatch.setattr("app.routers.applications.geocode_one", _fake_geocode_one)
     monkeypatch.setattr("app.routers.geo.geocode_one", _fake_geocode_one)
+
+    async def _fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+        return None
+    monkeypatch.setattr("app.routers.applications.driving_route", _fake_driving_route)
+    monkeypatch.setattr("app.routers.geo.driving_route", _fake_driving_route)
 
 
 @pytest.fixture()

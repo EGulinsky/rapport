@@ -651,3 +651,29 @@ class TestHomeLocation:
         real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland", "vorname": "Ada"}, headers=headers)
 
         assert len(calls) == 1
+
+    def test_positiv_aenderung_loescht_cached_drive_distance_fuer_alle_apps(self, real_auth_client, captured_email, db_session, monkeypatch):
+        # Every application's cached drive_distance_km/drive_duration_min was
+        # computed from the OLD home coordinates -- must be cleared in bulk
+        # so a stale distance never lingers after moving (see
+        # backfill_drive_distance() for how it gets repopulated).
+        from app import models
+        from tests.factories import application_factory
+
+        async def fake_geocode_one(term, api_key):
+            return (52.52, 13.405)
+        monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        user = db_session.query(models.User).filter_by(email="test@example.com").one()
+        app = application_factory(db_session, ort="München", ort_lat=48.1351, ort_lng=11.5820,
+                                   drive_distance_km=504.0, drive_duration_min=312.0, user_id=user.id)
+        db_session.commit()
+
+        resp = real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland"}, headers=headers)
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.drive_distance_km is None
+        assert app.drive_duration_min is None

@@ -17,7 +17,7 @@ from app.audit import add_audit
 from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
 from app.routers.sync_common import _berlin_naive_to_utc_naive
-from app.routers.geo import _get_maps_api_key, geocode_one, haversine_km
+from app.routers.geo import _get_maps_api_key, geocode_one, driving_route
 
 
 def _delete_call_events_for_contact(db: Session, app_id: int, contact: "models.Contact", user_id: Optional[int]) -> int:
@@ -188,10 +188,24 @@ async def _geocode_ort(db: Session, app: models.Application, ort_value: Optional
     app.ort_lng = coords[1] if coords else None
 
 
-def _compute_distance_km(app: models.Application, user: models.User) -> Optional[float]:
+async def _update_drive_distance(db: Session, app: models.Application, user: models.User) -> None:
+    """Recompute the cached car-navigation distance/duration from the
+    account's home location to `app.ort` (Application.drive_distance_km/
+    drive_duration_min — see their docstring in models.py). Callers invoke
+    this only when app.ort_lat/lng just changed (via _geocode_ort), not on
+    every save. When home_location changes instead, every application's
+    cached distance is cleared in bulk (see auth.py's update_profile()) and
+    recomputed via backfill_drive_distance() rather than live here, since
+    that would mean one routing call per application on a single profile
+    save. Best-effort: a routing failure just leaves the cache unset."""
     if app.ort_lat is None or app.ort_lng is None or user.home_lat is None or user.home_lng is None:
-        return None
-    return haversine_km(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng)
+        app.drive_distance_km = None
+        app.drive_duration_min = None
+        return
+    api_key = _get_maps_api_key(db, user.id)
+    route = await driving_route(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng, api_key)
+    app.drive_distance_km = route[0] if route else None
+    app.drive_duration_min = route[1] if route else None
 
 
 async def backfill_ort_geocode(db: Session, user_id: int) -> dict:
@@ -227,6 +241,47 @@ async def backfill_ort_geocode(db: Session, user_id: int) -> dict:
             continue
         if coords:
             app.ort_lat, app.ort_lng = coords
+            updated += 1
+
+    db.commit()
+    return {"total": len(apps), "updated": updated, "errors": errors}
+
+
+async def backfill_drive_distance(db: Session, user_id: int) -> dict:
+    """One-time repair for the distance-to-job feature (KanbanBoard/
+    ApplicationModal): recomputes drive_distance_km/drive_duration_min for
+    every application that has ort_lat/lng but no cached driving distance
+    yet -- either because it was never computed (created before this
+    feature, or before backfill_ort_geocode() filled in ort_lat/lng), or
+    because auth.py's update_profile() just cleared every application's
+    cache after home_location changed. Paced at ~1 request/sec between
+    calls, same reasoning as backfill_ort_geocode()."""
+    import asyncio
+
+    user = db.query(models.User).filter_by(id=user_id).first()
+    if not user or user.home_lat is None or user.home_lng is None:
+        return {"total": 0, "updated": 0, "errors": []}
+
+    api_key = _get_maps_api_key(db, user_id)
+    apps = db.query(models.Application).filter(
+        models.Application.user_id == user_id,
+        models.Application.ort_lat.isnot(None),
+        models.Application.ort_lng.isnot(None),
+        models.Application.drive_distance_km.is_(None),
+    ).all()
+
+    updated = 0
+    errors: list[str] = []
+    for i, app in enumerate(apps):
+        if i > 0:
+            await asyncio.sleep(1)
+        try:
+            route = await driving_route(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng, api_key)
+        except Exception as e:
+            errors.append(f"{app.firma}: {e}")
+            continue
+        if route:
+            app.drive_distance_km, app.drive_duration_min = route
             updated += 1
 
     db.commit()
@@ -368,7 +423,6 @@ def list_applications(
                 last_interviews.get(app.id),
                 today,
             )
-            app.distance_km = _compute_distance_km(app, current_user)
         if fixed_any:
             db.commit()
 
@@ -537,7 +591,6 @@ def get_application(app_id: int, db: Session = Depends(get_db), current_user: mo
             if cp:
                 setattr(app, attr_name, cp.name_display)
                 setattr(app, attr_target, cp.website)
-    app.distance_km = _compute_distance_km(app, current_user)
     return app
 
 
@@ -560,6 +613,7 @@ async def create_application(
     app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
     await _geocode_ort(db, app, app.ort, current_user.id)
+    await _update_drive_distance(db, app, current_user)
     db.add(app)
     db.flush()  # get app.id before creating event
     _ensure_company_profile(db, app)
@@ -578,7 +632,6 @@ async def create_application(
               new_value=event.titel, user_id=current_user.id)
     db.commit()
     db.refresh(app)
-    app.distance_km = _compute_distance_km(app, current_user)
 
     from app.routers.sync_targeted import _do_post_create_sync
     background_tasks.add_task(_do_post_create_sync, app.id, skip_linkedin_sync)
@@ -656,6 +709,7 @@ async def update_application(
 
     if ort_changed:
         await _geocode_ort(db, app, app.ort, current_user.id)
+        await _update_drive_distance(db, app, current_user)
 
     if direct_cp_id is not None:
         # Explizit nach user_id gefiltert statt db.get(): verhindert, dass eine
@@ -710,7 +764,6 @@ async def update_application(
 
     db.commit()
     db.refresh(app)
-    app.distance_km = _compute_distance_km(app, current_user)
     return app
 
 
@@ -1058,3 +1111,11 @@ async def backfill_ort_geocode_endpoint(
     current_user: models.User = Depends(get_current_user),
 ):
     return await backfill_ort_geocode(db, current_user.id)
+
+
+@router.post("/backfill-drive-distance")
+async def backfill_drive_distance_endpoint(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return await backfill_drive_distance(db, current_user.id)

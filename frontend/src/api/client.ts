@@ -135,6 +135,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    backfillOrtGeocode: () =>
+      request<{ total: number; updated: number; errors: string[] }>('/applications/backfill-ort-geocode', { method: 'POST' }),
+    backfillDriveDistance: () =>
+      request<{ total: number; updated: number; errors: string[] }>('/applications/backfill-drive-distance', { method: 'POST' }),
   },
 
   contacts: {
