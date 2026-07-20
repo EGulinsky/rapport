@@ -268,7 +268,7 @@ jobs:
             --clobber
 
   installer-windows:
-    name: Build Rapport Installer Windows .zip
+    name: Build Rapport Installer Windows Setup.exe
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -293,7 +293,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r packaging\requirements-packaging-windows.txt
 
-      - name: Build .zip
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Build Setup.exe
         working-directory: installer
         run: packaging\build_windows.ps1 -Version "${{ steps.version.outputs.version }}"
 
@@ -303,7 +306,7 @@ jobs:
         shell: bash
         run: |
           gh release upload "${{ steps.version.outputs.tag }}" \
-            "installer/packaging/dist/Rapport-Installer-${{ steps.version.outputs.version }}-windows.zip" \
+            "installer/packaging/dist/Rapport-Setup-${{ steps.version.outputs.version }}.exe" \
             --clobber
 
   installer-linux:

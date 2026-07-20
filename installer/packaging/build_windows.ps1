@@ -1,7 +1,10 @@
-# Builds the "Rapport Installer" Windows onedir bundle via PyInstaller, then
-# zips it for distribution. Must run ON Windows — PyInstaller does not
-# cross-compile. Mirrors agent/packaging/build_windows.ps1, plus a
-# version-stamping step for installer/version.py.
+# Builds the "Rapport Installer" Windows setup wizard: a PyInstaller onedir
+# bundle wrapped into a real graphical Setup.exe via NSIS (Nullsoft
+# Scriptable Install System, https://nsis.sourceforge.io/ -- free and open
+# source under the zlib/libpng license), replacing the bare .zip this used
+# to ship as. Must run ON Windows — PyInstaller does not cross-compile.
+# Requires `makensis` on PATH (choco install nsis, or
+# https://nsis.sourceforge.io/Download).
 #
 # Usage (from a venv with requirements-packaging-windows.txt installed):
 #   installer\packaging\build_windows.ps1 [version]
@@ -15,7 +18,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
 $DistDir = Join-Path $ScriptDir "dist"
 $BuildDir = Join-Path $ScriptDir "build"
 $AppDir = Join-Path $DistDir "Rapport Installer"
-$ZipName = "Rapport-Installer-$Version-windows.zip"
+$SetupName = "Rapport-Setup-$Version.exe"
 
 $VersionFile = Join-Path $RepoRoot "installer\version.py"
 $OriginalVersionContent = Get-Content -Raw -Path $VersionFile
@@ -31,15 +34,20 @@ try {
         exit 1
     }
 
-    $ZipPath = Join-Path $DistDir $ZipName
-    if (Test-Path $ZipPath) {
-        Remove-Item $ZipPath
+    $SetupPath = Join-Path $DistDir $SetupName
+    if (Test-Path $SetupPath) {
+        Remove-Item $SetupPath
     }
 
-    Write-Host "==> Zipping to $ZipName..."
-    Compress-Archive -Path $AppDir -DestinationPath $ZipPath
+    Write-Host "==> Building $SetupName with NSIS..."
+    makensis "-DVERSION=$Version" "-DREPO_ROOT=$RepoRoot" "-DDIST_DIR=$DistDir" (Join-Path $ScriptDir "installer-windows.nsi")
 
-    Write-Host "==> Done: $ZipPath"
+    if (-not (Test-Path $SetupPath)) {
+        Write-Error "Expected output not found: $SetupPath"
+        exit 1
+    }
+
+    Write-Host "==> Done: $SetupPath"
 } finally {
     Set-Content -NoNewline -Path $VersionFile -Value $OriginalVersionContent
 }

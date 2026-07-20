@@ -22,9 +22,9 @@ installer/
   version.py                  # INSTALLER_VERSION — stamped by the packaging build scripts, determines
                                # which ghcr.io/egulinsky/rapport-{backend,frontend} tag gets pulled
   packaging/
-    installer.spec / build_dmg.sh              # macOS: PyInstaller spec → "Rapport Installer.app" + .dmg
-    installer-windows.spec / build_windows.ps1  # Windows: PyInstaller spec + build script
-    installer-linux.spec / build_linux.sh        # Linux: PyInstaller spec + build script
+    installer.spec / build_dmg.sh                                      # macOS: PyInstaller spec → "Rapport Installer.app" + .dmg
+    installer-windows.spec / installer-windows.nsi / build_windows.ps1  # Windows: PyInstaller spec + NSIS setup-wizard script + build script
+    installer-linux.spec / build_linux.sh                                # Linux: PyInstaller spec + build script
 ```
 
 ## Flow
@@ -88,7 +88,9 @@ python3 -m venv .venv_build
 PATH="$PWD/.venv_build/bin:$PATH" packaging/build_dmg.sh 4.3.6
 ```
 
-**Windows** (run on Windows — PyInstaller doesn't cross-compile):
+**Windows** (run on Windows — PyInstaller doesn't cross-compile; also
+requires `makensis` on `PATH` — `choco install nsis`, or download from
+https://nsis.sourceforge.io/Download):
 ```powershell
 cd installer
 python -m venv .venv_build
@@ -110,15 +112,23 @@ right before invoking PyInstaller, then reverts it afterward (even on
 failure, via a shell trap) — the working tree is never left dirty by a
 local build.
 
-Result (macOS): `installer/packaging/dist/Rapport-Installer-4.3.6.dmg`.
-Build mechanics (PyInstaller onedir → .dmg/.zip/.tar.gz) verified locally
-on this machine — see `docs/ARCHITECTURE.md` for the full picture. The
-Docker-install path itself (steps 1–2 above) needs a real run on a machine
-with no prior Docker install to fully verify, the same "hardware-verified"
-bar `agent/README.md` documents for its own portability work — CI can only
-prove the packaging succeeds, not that the silent-install path works on a
-genuinely clean machine (GH-hosted runners already have Docker
-pre-installed).
+Result: `installer/packaging/dist/Rapport-Installer-4.3.6.dmg` (macOS),
+`Rapport-Setup-4.3.6.exe` (Windows — a real NSIS setup wizard: license page,
+install-directory picker, progress, Start Menu shortcut, and an uninstaller
+registered in Add/Remove Programs, not just an unzip-and-run bundle), or
+`rapport-installer-4.3.6-linux.tar.gz` (Linux). Build mechanics (PyInstaller
+onedir → .dmg/.tar.gz, `installer-windows.nsi` → NSIS setup wizard) verified
+locally on this machine — see `docs/ARCHITECTURE.md` for the full picture.
+The `.nsi` script itself was verified by compiling it with Linux `makensis`
+against a stand-in bundle directory (this Mac can't run the Windows
+PyInstaller step); the full Windows pipeline (PyInstaller onedir →
+`makensis`) is only exercised for real by `release.yml`'s `windows-latest`
+runner. The Docker-install path itself
+(steps 1–2 above) needs a real run on a machine with no prior Docker install
+to fully verify, the same "hardware-verified" bar `agent/README.md`
+documents for its own portability work — CI can only prove the packaging
+succeeds, not that the silent-install path works on a genuinely clean
+machine (GH-hosted runners already have Docker pre-installed).
 
 ## Image publishing
 

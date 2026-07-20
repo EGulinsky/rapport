@@ -13,8 +13,11 @@ Technical architecture with diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 
 Prebuilt installers for macOS, Windows, and Linux are attached to each
 [GitHub Release](https://github.com/EGulinsky/rapport/releases) — download
-`Rapport-Installer-<version>.{dmg,zip,tar.gz}` for your OS and run it once.
-It installs Docker automatically if it's missing, pulls the prebuilt app
+`Rapport-Installer-<version>.dmg` (macOS), `Rapport-Setup-<version>.exe`
+(Windows — a real setup wizard: license page, install-location picker,
+Start Menu shortcut, and a proper uninstaller), or
+`rapport-installer-<version>-linux.tar.gz` (Linux), and run it once. It
+installs Docker automatically if it's missing, pulls the prebuilt app
 images, starts them, and opens the app in your browser — no manual Docker
 setup or terminal commands needed. See [installer/README.md](installer/README.md)
 for details on what it does under the hood.
