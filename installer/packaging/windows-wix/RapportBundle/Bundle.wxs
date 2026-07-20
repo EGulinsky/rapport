@@ -15,6 +15,7 @@
            matching how most consumer app installers work today) using
            Burn's own built-in ProgramFiles64Folder variable. -->
       <bal:WixStandardBootstrapperApplication
+          Theme="rtfLicense"
           LicenseFile="License.rtf"
           LaunchTarget="[ProgramFiles64Folder]Rapport\start-rapport.bat"
           LaunchWorkingFolder="[ProgramFiles64Folder]Rapport" />
