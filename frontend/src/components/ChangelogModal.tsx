@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.25',
+    date: '2026-07-20',
+    changes: [
+      'Fixed the v4.6.24 distance backfill only reaching some applications: LinkedIn appends "(Hybrid)"/"(On-site)"/"(Remote)" to every job\'s location, and neither Nominatim nor Google\'s Geocoding API can resolve an address with that still attached — it\'s now stripped before geocoding, for both new applications and the backfill.',
+    ],
+  },
+  {
     version: '4.6.24',
     date: '2026-07-20',
     changes: [

@@ -659,6 +659,25 @@ class TestOrtGeocoding:
         assert app.ort_lat is None
         assert app.ort_lng is None
 
+    def test_positiv_linkedin_arbeitsmodus_suffix_wird_vor_geocoding_entfernt(self, client, db_session, monkeypatch):
+        # LinkedIn imports append "(Hybrid)"/"(On-site)"/"(Remote)" to every
+        # job location -- neither Nominatim nor Google's Geocoding API can
+        # resolve an address with that still attached (confirmed against
+        # production data), so it must be stripped before the geocode call.
+        async def fake_geocode_one(term, api_key):
+            assert term == "Krefeld"
+            return (51.3331205, 6.5623343)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer", "ort": "Krefeld (Hybrid)",
+        })
+
+        assert resp.status_code == 201
+        app = db_session.query(models.Application).filter_by(id=resp.json()["id"]).one()
+        assert app.ort_lat == 51.3331205
+        assert app.ort_lng == 6.5623343
+
 
 class TestDistanceKm:
     """distance_km on ApplicationListItem/ApplicationRead -- straight-line
@@ -743,7 +762,10 @@ class TestBackfillOrtGeocode:
     even once the account's home_location is set."""
 
     def test_positiv_geokodiert_offene_apps_und_ueberspringt_bereits_geocodete(self, client, db_session, monkeypatch):
-        needs_geocode = application_factory(db_session, ort="München, Deutschland")
+        # Location includes a LinkedIn work-mode suffix -- must be stripped
+        # before the geocode call (see _strip_work_mode_suffix()), since
+        # neither Nominatim nor Google can resolve it with that attached.
+        needs_geocode = application_factory(db_session, ort="München, Deutschland (Hybrid)")
         already_done = application_factory(db_session, ort="Berlin, Deutschland", ort_lat=52.52, ort_lng=13.405)
         no_ort = application_factory(db_session, ort=None)
         db_session.commit()

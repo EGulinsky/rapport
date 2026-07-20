@@ -1,4 +1,5 @@
 import json
+import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -157,6 +158,18 @@ def _ensure_company_profile(db: Session, app: models.Application) -> None:
         app.target_company_profile_id = zprofile.id
 
 
+_LINKEDIN_WORK_MODE_RE = re.compile(r'\s*\((?:on-site|onsite|hybrid|remote)\)\s*$', re.IGNORECASE)
+
+
+def _strip_work_mode_suffix(ort_value: str) -> str:
+    """Strip a trailing "(On-site)"/"(Hybrid)"/"(Remote)" suffix -- LinkedIn
+    appends this work-mode tag to the location on every job posting it
+    imports, and neither Nominatim nor Google's Geocoding API can resolve an
+    address with it still attached (confirmed against production data: e.g.
+    "Krefeld (Hybrid)" returns zero results, plain "Krefeld" geocodes fine)."""
+    return _LINKEDIN_WORK_MODE_RE.sub('', ort_value)
+
+
 async def _geocode_ort(db: Session, app: models.Application, ort_value: Optional[str], user_id: int) -> None:
     """Geocode `ort`, caching the result in ort_lat/ort_lng for the
     distance-to-job feature (KanbanBoard/ApplicationModal) -- avoids
@@ -170,7 +183,7 @@ async def _geocode_ort(db: Session, app: models.Application, ort_value: Optional
         app.ort_lng = None
         return
     api_key = _get_maps_api_key(db, user_id)
-    coords = await geocode_one(ort_value, api_key)
+    coords = await geocode_one(_strip_work_mode_suffix(ort_value), api_key)
     app.ort_lat = coords[0] if coords else None
     app.ort_lng = coords[1] if coords else None
 
@@ -208,7 +221,7 @@ async def backfill_ort_geocode(db: Session, user_id: int) -> dict:
         if i > 0:
             await asyncio.sleep(1)
         try:
-            coords = await geocode_one(app.ort, api_key)
+            coords = await geocode_one(_strip_work_mode_suffix(app.ort), api_key)
         except Exception as e:
             errors.append(f"{app.firma}: {e}")
             continue
