@@ -1,8 +1,9 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
-  <!-- The whole Windows installer: a single MSI (Rapport-Setup-<version>.msi)
-       with its own WixUI_InstallDir wizard; docker-compose.yml,
-       start-rapport.bat, and a Start Menu shortcut as payload. -->
+  <!-- The whole Windows installer: a single MSI (Rapport-Setup-<version>.msi):
+       docker-compose.yml, start-rapport.bat, and a Start Menu shortcut as
+       payload. No custom WixUI dialog set (see Product.wxs); relies on
+       Windows Installer's own default progress UI and elevation prompt. -->
 
   <PropertyGroup>
     <OutputType>Package</OutputType>
@@ -15,9 +16,5 @@
          not an attribute in the .wxs itself. -->
     <Platform>x64</Platform>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
-  </ItemGroup>
 
 </Project>

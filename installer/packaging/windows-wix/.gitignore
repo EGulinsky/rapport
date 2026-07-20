@@ -2,4 +2,3 @@ bin/
 obj/
 dist/
 RapportPackage/docker-compose.yml
-RapportPackage/License.rtf

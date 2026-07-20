@@ -13,13 +13,13 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of Rapport is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <!-- WixUI_InstallDir: license -> install-directory picker -> progress ->
-         finish, the standard Windows Installer wizard experience; this MSI
-         is the whole installer (no Burn/.exe bootstrapper wrapping it), so
-         it needs its own UI rather than relying on an outer bootstrapper's. -->
-    <UIRef Id="WixUI_InstallDir" />
-    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <!-- No WixUI dialog set: WixUI_InstallDir hits a known, unresolved WiX
+         v5 bug (identifier inaccessible due to protection level; see
+         wixtoolset/issues#7370, closed "not planned") when referenced the
+         standard way via <UIRef>. Windows Installer's own default UI still
+         shows a progress dialog and handles the per-machine UAC elevation
+         prompt without any authoring here; this MSI just skips the custom
+         license/directory-picker wizard pages. -->
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Rapport">

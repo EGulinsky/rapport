@@ -14,8 +14,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $WixDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Resolve-Path (Join-Path $WixDir "..\..\..")
-$InstallerDir = Join-Path $RepoRoot "installer"
+$InstallerDir = Resolve-Path (Join-Path $WixDir "..\..")
 $PackageDir = Join-Path $WixDir "RapportPackage"
 $DistDir = Join-Path $WixDir "dist"
 $SetupName = "Rapport-Setup-$Version.msi"
@@ -27,24 +26,6 @@ $ComposeTemplate = Get-Content -Raw -Path (Join-Path $InstallerDir "compose_temp
 $ResolvedCompose = $ComposeTemplate -replace "__VERSION__", $Version
 $ResolvedComposePath = Join-Path $PackageDir "docker-compose.yml"
 Set-Content -NoNewline -Path $ResolvedComposePath -Value $ResolvedCompose
-
-# WixUI_InstallDir's license page needs RTF, not plain text -- generated
-# fresh from the repo's actual LICENSE on every build so it can never
-# drift out of sync, rather than a hand-copied duplicate.
-function ConvertTo-Rtf {
-    param([string]$Text)
-    $escaped = $Text -replace '\\', '\\\\'
-    $escaped = $escaped -replace '\{', '\{'
-    $escaped = $escaped -replace '\}', '\}'
-    $escaped = $escaped -replace "`r`n", "`n"
-    $lines = ($escaped -split "`n") | ForEach-Object { "$_\par" }
-    return "{\rtf1\ansi\deff0{\fonttbl{\f0 Consolas;}}\f0\fs18 " + ($lines -join "`n") + "}"
-}
-
-Write-Host "==> Generating License.rtf from repo LICENSE..."
-$LicenseText = Get-Content -Raw -Path (Join-Path $RepoRoot "LICENSE")
-$LicenseRtfPath = Join-Path $PackageDir "License.rtf"
-Set-Content -NoNewline -Path $LicenseRtfPath -Value (ConvertTo-Rtf $LicenseText)
 
 try {
     Write-Host "==> Building RapportPackage.msi..."
@@ -71,5 +52,4 @@ try {
     Write-Host "==> Done: $SetupPath"
 } finally {
     Remove-Item $ResolvedComposePath -ErrorAction SilentlyContinue
-    Remove-Item $LicenseRtfPath -ErrorAction SilentlyContinue
 }

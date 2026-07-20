@@ -14,9 +14,9 @@ Technical architecture with diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 Prebuilt installers for macOS, Windows, and Linux are attached to each
 [GitHub Release](https://github.com/EGulinsky/rapport/releases) — download
 `Rapport-Installer-<version>.dmg` (macOS), `Rapport-Setup-<version>.msi`
-(Windows — a real Windows Installer package: license page, install-location
-picker, Start Menu shortcut, and a proper uninstaller registered in
-Add/Remove Programs), or `rapport-installer-<version>-linux.tar.gz` (Linux).
+(Windows — a real Windows Installer package: Start Menu shortcut and a
+proper uninstaller registered in Add/Remove Programs), or
+`rapport-installer-<version>-linux.tar.gz` (Linux).
 On macOS/Linux, running it does everything in one step: installs Docker
 automatically if it's missing, pulls the prebuilt app images, starts them,
 and opens the app in your browser. On Windows, run the `.msi` to install,

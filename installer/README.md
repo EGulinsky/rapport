@@ -74,14 +74,17 @@ bootstrapper:
 - **`Product.wxs`** — installs `docker-compose.yml` (this build's version
   already substituted for `__VERSION__`, generated at build time — never
   checked in) and `start-rapport.bat` into `Program Files\Rapport`, plus a
-  "Start rapport" Start Menu shortcut. Uses `WixUI_InstallDir` for the
-  standard Windows Installer wizard (license → install-directory picker →
-  progress → finish) — the MSI is the whole installer here, so it needs
-  its own UI. Fixed `UpgradeCode` + `MajorUpgrade` means installing a newer
-  version's `Rapport-Setup.msi` replaces the old one automatically (genuine
-  version-awareness the old NSIS installer never had). Windows Installer
-  itself provides the Add/Remove Programs entry, the UAC elevation prompt,
-  and the uninstaller — nothing to author by hand for any of that.
+  "Start rapport" Start Menu shortcut. No custom WixUI dialog set (no
+  license/directory-picker pages) — `WixUI_InstallDir` hit a known,
+  unresolved WiX v5 bug (`wixtoolset/issues#7370`, "identifier inaccessible
+  due to its protection level", closed "not planned") when referenced the
+  standard way via `<UIRef>`, so this MSI relies on Windows Installer's own
+  default progress UI instead. Fixed `UpgradeCode` + `MajorUpgrade` means
+  installing a newer version's `Rapport-Setup.msi` replaces the old one
+  automatically (genuine version-awareness the old NSIS installer never
+  had). Windows Installer itself still provides the UAC elevation prompt,
+  the Add/Remove Programs entry, and the uninstaller — nothing to author
+  by hand for any of that.
 - **`start-rapport.bat`** — the actual bootstrap logic, run manually from
   the "Start rapport" Start Menu shortcut after installing (there's no
   Burn bootstrapper here to auto-launch it right after Setup finishes, so
@@ -169,13 +172,12 @@ local build.
 
 Result: `installer/packaging/dist/Rapport-Installer-4.3.6.dmg` (macOS),
 `installer/packaging/windows-wix/dist/Rapport-Setup-4.3.6.msi` (Windows — a
-real Windows Installer package: license page, install-directory picker,
-progress, finish, Start Menu shortcut, version-aware upgrades, and an
-uninstaller registered in Add/Remove Programs, all provided natively by
-WiX/MSI rather than hand-rolled), or `rapport-installer-4.3.6-linux.tar.gz`
-(Linux). macOS/Linux build mechanics (PyInstaller onedir → .dmg/.tar.gz)
-verified locally on this machine — see `docs/ARCHITECTURE.md` for the full
-picture.
+real Windows Installer package: default progress UI, elevation prompt,
+Start Menu shortcut, version-aware upgrades, and an uninstaller registered
+in Add/Remove Programs, all provided natively by Windows Installer rather
+than hand-rolled), or `rapport-installer-4.3.6-linux.tar.gz` (Linux).
+macOS/Linux build mechanics (PyInstaller onedir → .dmg/.tar.gz) verified
+locally on this machine — see `docs/ARCHITECTURE.md` for the full picture.
 
 The Windows WiX build could only be partially verified on this Mac: WiX v5
 is a cross-platform .NET tool and `dotnet build` does run here, catching
