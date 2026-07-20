@@ -294,7 +294,13 @@ jobs:
           pip install -r packaging\requirements-packaging-windows.txt
 
       - name: Install NSIS
-        run: choco install nsis -y --no-progress
+        run: |
+          choco install nsis -y --no-progress
+          # choco's own PATH update only takes effect for new shells spawned
+          # after this step (a fresh machine-env read) -- $GITHUB_PATH is the
+          # explicit mechanism GH Actions provides to make a binary available
+          # to subsequent steps within the same job.
+          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build Setup.exe
         working-directory: installer
