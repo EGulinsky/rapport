@@ -74,6 +74,7 @@
     "appliedDateHint": "set via a \"Application\" timeline entry",
     "fieldSource": "Source",
     "fieldLocation": "Location",
+    "distanceKm": "{{km}} km from home",
     "fieldAppliedDate": "Application date",
     "fieldLastUpdate": "Last update",
     "fieldTargetCompany": "Target company (HH)",

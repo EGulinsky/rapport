@@ -119,6 +119,7 @@ class TestNoFreshDbGuard:
         "_backfill_event_datum_zeit_noon",
         "_migrate_event_datum_zeit_is_placeholder", "_flag_noon_backfill_placeholders",
         "_migrate_event_external_url", "_backfill_linkedin_message_external_url",
+        "_migrate_user_home_location", "_migrate_application_ort_coords",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -760,6 +761,34 @@ class TestMigrateEventExternalUrl:
     def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
         _drop_table(db_path, "events")
         db_module._migrate_event_external_url()  # must not raise
+
+
+class TestMigrateUserHomeLocation:
+    def test_positiv_fuegt_spalten_hinzu(self, db_path):
+        _drop_columns(db_path, "users", "home_location", "home_lat", "home_lng")
+        db_module._migrate_user_home_location()
+        cols = _cols(db_path, "users")
+        assert {"home_location", "home_lat", "home_lng"} <= cols
+
+    def test_negativ_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
+        db_module._migrate_user_home_location()  # must not raise
+
+
+class TestMigrateApplicationOrtCoords:
+    def test_positiv_fuegt_spalten_hinzu(self, db_path):
+        _drop_columns(db_path, "applications", "ort_lat", "ort_lng")
+        db_module._migrate_application_ort_coords()
+        cols = _cols(db_path, "applications")
+        assert {"ort_lat", "ort_lng"} <= cols
+
+    def test_negativ_applications_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "applications")
+        db_module._migrate_application_ort_coords()  # must not raise
+
+    def test_negativ_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
+        db_module._migrate_application_ort_coords()  # must not raise
 
 
 class TestBackfillLinkedinMessageExternalUrl:

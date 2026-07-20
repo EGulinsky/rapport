@@ -547,6 +547,8 @@ export const api = {
 
   geo: {
     search: (q: string) => request<{ label: string }[]>(`/geo/search?q=${encodeURIComponent(q)}`),
+    reverse: (lat: number, lng: number) =>
+      request<{ label: string | null }>(`/geo/reverse?lat=${lat}&lng=${lng}`),
   },
 
   auth: {
@@ -580,9 +582,9 @@ export const api = {
         method: 'POST', body: JSON.stringify({ old_password, new_password }),
         skipAuthHandling: true, // 401 hier heißt "altes Passwort falsch", nicht "Session abgelaufen"
       }),
-    updateProfile: (vorname: string, nachname: string, linkedin_url: string, ui_language?: string) =>
+    updateProfile: (vorname: string, nachname: string, linkedin_url: string, ui_language?: string, home_location?: string | null) =>
       request<AuthUser>('/auth/profile', {
-        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url, ui_language }),
+        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url, ui_language, home_location }),
       }),
     uploadCv: async (file: File): Promise<AuthUser> => {
       const form = new FormData()
@@ -622,6 +624,9 @@ export interface AuthUser {
   cv_size_bytes: number | null
   linkedin_profile_synced_at: string | null
   ui_language: string
+  home_location: string | null
+  home_lat: number | null
+  home_lng: number | null
 }
 
 export interface StartupCheck {

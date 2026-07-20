@@ -96,12 +96,20 @@ class UserResponse(BaseModel):
     cv_size_bytes: Optional[int] = None
     linkedin_profile_synced_at: Optional[datetime] = None
     ui_language: str = "de"
+    home_location: Optional[str] = None
+    home_lat: Optional[float] = None
+    home_lng: Optional[float] = None
 
 
 class ProfilePayload(BaseModel):
     vorname: Optional[str] = None
     nachname: Optional[str] = None
     linkedin_url: Optional[str] = None
+    # Unconditional overwrite like vorname/nachname/linkedin_url -- but
+    # update_profile() only re-geocodes when this actually changed, so an
+    # unrelated profile save (e.g. just changing vorname) doesn't burn an
+    # extra geocoding API call every time.
+    home_location: Optional[str] = None
     # Optional und nur bei Angabe übernommen (siehe update_profile) — anders als
     # vorname/nachname/linkedin_url, die dieser Endpoint unconditional überschreibt.
     # Ein Profil-Save aus einem anderen Tab (z.B. CV-Upload) darf die Sprache nicht
@@ -121,6 +129,9 @@ def _user_response(user: models.User) -> UserResponse:
         cv_size_bytes=user.cv_size_bytes,
         linkedin_profile_synced_at=user.linkedin_profile_synced_at,
         ui_language=user.ui_language,
+        home_location=user.home_location,
+        home_lat=user.home_lat,
+        home_lng=user.home_lng,
     )
 
 
@@ -274,6 +285,19 @@ async def update_profile(
     current_user.vorname = payload.vorname
     current_user.nachname = payload.nachname
     current_user.linkedin_url = payload.linkedin_url
+
+    if payload.home_location != current_user.home_location:
+        current_user.home_location = payload.home_location
+        if payload.home_location and payload.home_location.strip():
+            from app.routers.geo import _get_maps_api_key, geocode_one
+            api_key = _get_maps_api_key(db, current_user.id)
+            coords = await geocode_one(payload.home_location, api_key)
+            current_user.home_lat = coords[0] if coords else None
+            current_user.home_lng = coords[1] if coords else None
+        else:
+            current_user.home_lat = None
+            current_user.home_lng = None
+
     language_changed = payload.ui_language is not None and payload.ui_language != current_user.ui_language
     if payload.ui_language is not None:
         current_user.ui_language = payload.ui_language

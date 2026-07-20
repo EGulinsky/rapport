@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.23',
+    date: '2026-07-20',
+    changes: [
+      'Kanban cards now show your salary expectation directly (not just a mismatch warning icon), in red when it doesn\'t line up with the company\'s budget.',
+      'New "Home location" field in Account settings, set by typing with the same autocomplete used for an application\'s location, or via a "use my current location" button. Once set, every application with a location now shows the distance from home in both the Kanban card and the application detail view.',
+    ],
+  },
+  {
     version: '4.6.22',
     date: '2026-07-19',
     changes: [

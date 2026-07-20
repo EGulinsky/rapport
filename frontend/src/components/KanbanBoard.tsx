@@ -6,13 +6,14 @@ import {
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle } from 'lucide-react'
+import { MapPin, AlertTriangle, Wallet } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
+import { formatSalaryRange } from '../utils/salaryFormat'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import type { Application } from '../types'
@@ -102,10 +103,21 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
         <p className="text-xs text-gray-400 mt-1">{subStatusLabel(app.sub_status)}</p>
       )}
       {app.ghosting && <span className="text-xs">👻</span>}
-      {app.salary_mismatch && (
-        <span title={t('salary.mismatchWarning')} className="inline-block ml-1 align-text-bottom">
-          <AlertTriangle className="inline-block h-3.5 w-3.5 text-red-500" />
-        </span>
+      {app.salary_expectation_min != null && (
+        <p className={clsx(
+          'flex items-center gap-1 text-[10px] mt-1 leading-tight font-medium',
+          app.salary_mismatch ? 'text-red-600' : 'text-gray-500'
+        )}>
+          <Wallet className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">
+            {formatSalaryRange(app.salary_expectation_min, app.salary_expectation_max, app.salary_currency, locale)}
+          </span>
+          {app.salary_mismatch && (
+            <span title={t('salary.mismatchWarning')} className="shrink-0">
+              <AlertTriangle className="h-3 w-3 text-red-500" />
+            </span>
+          )}
+        </p>
       )}
       {!app.abgesagt && app.ai_color && (
         <div className="mt-1.5 space-y-0.5">
@@ -156,6 +168,9 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
             >
               <MapPin className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{app.ort}</span>
+              {app.distance_km != null && (
+                <span className="shrink-0 text-indigo-400">· {Math.round(app.distance_km)} km</span>
+              )}
             </a>
           )}
         </div>

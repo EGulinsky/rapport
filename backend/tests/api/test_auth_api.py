@@ -16,21 +16,6 @@ TESTPW_WRONG = "not-a-real-secret-fixture-WRONG"
 TESTPW_TOO_SHORT = "abcd123"
 
 
-@pytest.fixture()
-def captured_email(monkeypatch):
-    """Fängt jeden 'gesendeten' Bestätigungscode ab, statt echtes SMTP zu nutzen."""
-    box: dict = {}
-
-    def fake_send(to_email, code, purpose, ui_language="de"):
-        box["to"] = to_email
-        box["code"] = code
-        box["purpose"] = purpose
-        box["ui_language"] = ui_language
-
-    monkeypatch.setattr("app.routers.auth.send_verification_code", fake_send)
-    return box
-
-
 def _register(real_auth_client, captured_email, email="test@example.com", password=TESTPW_ORIGINAL):
     resp = real_auth_client.post("/api/auth/register", json={"email": email, "password": password})
     return resp
@@ -579,3 +564,90 @@ class TestProfileAndCv:
         assert resp.status_code == 204
         db_session.refresh(user)
         assert user.cv_extracted_text is None
+
+
+class TestHomeLocation:
+    """Home address for the distance-to-job feature (KanbanBoard/
+    ApplicationModal) -- geocoded once when home_location changes (see
+    update_profile() in auth.py), not on every profile save."""
+
+    def _token(self, real_auth_client, captured_email, email="test@example.com"):
+        _register(real_auth_client, captured_email, email=email)
+        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
+        return r.json()["access_token"]
+
+    def test_positiv_speichern_geocodiert_und_setzt_koordinaten(self, real_auth_client, captured_email, db_session, monkeypatch):
+        from app import models
+
+        async def fake_geocode_one(term, api_key):
+            assert term == "Berlin, Deutschland"
+            return (52.52, 13.405)
+        monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
+
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile", json={"home_location": "Berlin, Deutschland"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["home_location"] == "Berlin, Deutschland"
+        user = db_session.query(models.User).filter_by(email="test@example.com").one()
+        assert user.home_lat == 52.52
+        assert user.home_lng == 13.405
+
+    def test_negativ_geocoding_fehlschlag_laesst_koordinaten_leer(self, real_auth_client, captured_email, db_session, monkeypatch):
+        from app import models
+
+        async def fake_geocode_one(term, api_key):
+            return None
+        monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
+
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile", json={"home_location": "Nirgendwostadt"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        user = db_session.query(models.User).filter_by(email="test@example.com").one()
+        assert user.home_lat is None
+        assert user.home_lng is None
+
+    def test_positiv_leeren_loescht_koordinaten(self, real_auth_client, captured_email, db_session, monkeypatch):
+        from app import models
+
+        async def fake_geocode_one(term, api_key):
+            return (52.52, 13.405)
+        monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland"}, headers=headers)
+
+        resp = real_auth_client.patch("/api/auth/profile", json={"home_location": None}, headers=headers)
+
+        assert resp.status_code == 200
+        user = db_session.query(models.User).filter_by(email="test@example.com").one()
+        assert user.home_location is None
+        assert user.home_lat is None
+        assert user.home_lng is None
+
+    def test_negativ_unveraenderte_home_location_geokodiert_nicht_erneut(self, real_auth_client, captured_email, monkeypatch):
+        """A profile save that doesn't touch home_location (e.g. just vorname)
+        must not burn an extra geocoding call every time."""
+        calls = []
+
+        async def fake_geocode_one(term, api_key):
+            calls.append(term)
+            return (52.52, 13.405)
+        monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland"}, headers=headers)
+        assert len(calls) == 1
+
+        real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland", "vorname": "Ada"}, headers=headers)
+
+        assert len(calls) == 1

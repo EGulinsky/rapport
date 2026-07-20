@@ -30,6 +30,26 @@ def _reset_db():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _no_live_geocoding(monkeypatch):
+    """create_application()/update_application() (Application.ort) and
+    update_profile() (User.home_location) geocode best-effort via a real
+    outbound network call (Nominatim, or Google if a Maps key is configured)
+    -- without this, any test that merely sets `ort`/`home_location` on a
+    plain string would silently hit the live network, making the suite slow,
+    flaky, and dependent on internet access in CI. Patched in both modules:
+    applications.py imports geocode_one at module load time (its own bound
+    reference), while auth.py's update_profile() imports it fresh from
+    app.routers.geo on each call (a local import), so patching geo's own
+    attribute covers that second call site.
+    Tests that specifically exercise the geocoding wiring re-patch this
+    fixture's target with their own return value/mock."""
+    async def _fake_geocode_one(term, api_key):
+        return None
+    monkeypatch.setattr("app.routers.applications.geocode_one", _fake_geocode_one)
+    monkeypatch.setattr("app.routers.geo.geocode_one", _fake_geocode_one)
+
+
 @pytest.fixture()
 def db_session():
     """Direkte DB-Session für L1-Component-Tests (ohne HTTP-Layer)."""
@@ -100,3 +120,22 @@ def real_auth_client(db_session):
 def _deterministic_faker():
     """Fester Seed pro Test — Fehlschläge sind reproduzierbar."""
     Faker.seed(1234)
+
+
+@pytest.fixture()
+def captured_email(monkeypatch):
+    """Fängt jeden 'gesendeten' Bestätigungscode ab, statt echtes SMTP zu nutzen.
+
+    Shared across test modules (originally lived only in test_auth_api.py) --
+    any test using real_auth_client's real register/verify-email/login flow
+    (e.g. tests/api/test_applications_api.py::TestDistanceKm) needs this too."""
+    box: dict = {}
+
+    def fake_send(to_email, code, purpose, ui_language="de"):
+        box["to"] = to_email
+        box["code"] = code
+        box["purpose"] = purpose
+        box["ui_language"] = ui_language
+
+    monkeypatch.setattr("app.routers.auth.send_verification_code", fake_send)
+    return box

@@ -234,6 +234,8 @@ class ApplicationRead(ApplicationBase):
     id: int
     abgesagt: bool
     salary_mismatch: bool
+    # See ApplicationListItem's own distance_km for the computation.
+    distance_km: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     company_profile_id: Optional[int] = None
@@ -268,6 +270,17 @@ class ApplicationListItem(BaseModel):
     abgesagt: bool
     ghosting: bool
     salary_mismatch: bool
+    # Applicant's salary demand, so the Kanban card can show it directly
+    # instead of just the mismatch flag -- absent from ApplicationListItem
+    # before v4.7.0, so the Kanban board never actually received these.
+    salary_currency: Optional[str] = None
+    salary_expectation_min: Optional[int] = None
+    salary_expectation_max: Optional[int] = None
+    # Straight-line distance from the account's home_location to this
+    # application's ort, computed per-request from cached geocodes (see
+    # _compute_distance_km() in applications.py) -- None if either side has
+    # no coordinates yet.
+    distance_km: Optional[float] = None
     kommentar: Optional[str] = None
     naechster_schritt: Optional[str] = None
     company_profile_id: Optional[int] = None

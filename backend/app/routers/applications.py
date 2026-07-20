@@ -16,6 +16,7 @@ from app.audit import add_audit
 from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
 from app.routers.sync_common import _berlin_naive_to_utc_naive
+from app.routers.geo import _get_maps_api_key, geocode_one, haversine_km
 
 
 def _delete_call_events_for_contact(db: Session, app_id: int, contact: "models.Contact", user_id: Optional[int]) -> int:
@@ -156,6 +157,30 @@ def _ensure_company_profile(db: Session, app: models.Application) -> None:
         app.target_company_profile_id = zprofile.id
 
 
+async def _geocode_ort(db: Session, app: models.Application, ort_value: Optional[str], user_id: int) -> None:
+    """Geocode `ort`, caching the result in ort_lat/ort_lng for the
+    distance-to-job feature (KanbanBoard/ApplicationModal) -- avoids
+    re-geocoding on every distance calculation. Callers only invoke this when
+    `ort` is actually part of the request (new application, or `ort` present
+    in an update payload), not on every save. Best-effort: a geocoding
+    failure (or no Maps key + Nominatim miss) just leaves the coordinates
+    unset rather than blocking the save."""
+    if not ort_value or not ort_value.strip():
+        app.ort_lat = None
+        app.ort_lng = None
+        return
+    api_key = _get_maps_api_key(db, user_id)
+    coords = await geocode_one(ort_value, api_key)
+    app.ort_lat = coords[0] if coords else None
+    app.ort_lng = coords[1] if coords else None
+
+
+def _compute_distance_km(app: models.Application, user: models.User) -> Optional[float]:
+    if app.ort_lat is None or app.ort_lng is None or user.home_lat is None or user.home_lng is None:
+        return None
+    return haversine_km(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng)
+
+
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 
@@ -291,6 +316,7 @@ def list_applications(
                 last_interviews.get(app.id),
                 today,
             )
+            app.distance_km = _compute_distance_km(app, current_user)
         if fixed_any:
             db.commit()
 
@@ -459,11 +485,12 @@ def get_application(app_id: int, db: Session = Depends(get_db), current_user: mo
             if cp:
                 setattr(app, attr_name, cp.name_display)
                 setattr(app, attr_target, cp.website)
+    app.distance_km = _compute_distance_km(app, current_user)
     return app
 
 
 @router.post("/", response_model=schemas.ApplicationRead, status_code=201)
-def create_application(
+async def create_application(
     payload: schemas.ApplicationCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -480,6 +507,7 @@ def create_application(
         _validate_salary_breakdown(data.get(f"{slot}_fixed"), data.get(f"{slot}_bonus"), data.get(slot), label)
     app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
+    await _geocode_ort(db, app, app.ort, current_user.id)
     db.add(app)
     db.flush()  # get app.id before creating event
     _ensure_company_profile(db, app)
@@ -498,6 +526,7 @@ def create_application(
               new_value=event.titel, user_id=current_user.id)
     db.commit()
     db.refresh(app)
+    app.distance_km = _compute_distance_km(app, current_user)
 
     from app.routers.sync_targeted import _do_post_create_sync
     background_tasks.add_task(_do_post_create_sync, app.id, skip_linkedin_sync)
@@ -506,7 +535,7 @@ def create_application(
 
 
 @router.patch("/{app_id}", response_model=schemas.ApplicationRead)
-def update_application(
+async def update_application(
     app_id: int,
     payload: schemas.ApplicationUpdate,
     db: Session = Depends(get_db),
@@ -569,8 +598,12 @@ def update_application(
     direct_tcp_id = update_data.pop("target_company_profile_id", None)
 
     firma_changed = "firma" in update_data or "zielfirma_bei_hh" in update_data or "is_headhunter" in update_data
+    ort_changed = "ort" in update_data
     for field, value in update_data.items():
         setattr(app, field, value)
+
+    if ort_changed:
+        await _geocode_ort(db, app, app.ort, current_user.id)
 
     if direct_cp_id is not None:
         # Explizit nach user_id gefiltert statt db.get(): verhindert, dass eine
@@ -625,6 +658,7 @@ def update_application(
 
     db.commit()
     db.refresh(app)
+    app.distance_km = _compute_distance_km(app, current_user)
     return app
 
 

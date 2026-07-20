@@ -558,3 +558,177 @@ class TestBulkDeleteAppContacts:
 
         assert resp.status_code == 200
         assert resp.json()["deleted"] == 0
+
+
+class TestOrtGeocoding:
+    """create_application()/update_application() geocode `ort` best-effort,
+    caching the result in ort_lat/ort_lng for the distance-to-job feature.
+    The conftest.py `_no_live_geocoding` fixture patches geocode_one to
+    return None by default -- tests here re-patch it with a fake, deliberately
+    exercising the real geocode_one() call (not a raw httpx mock), to prove
+    it's actually being invoked from applications.py."""
+
+    def test_positiv_anlegen_mit_ort_geokodiert(self, client, db_session, monkeypatch):
+        async def fake_geocode_one(term, api_key):
+            assert term == "München, Deutschland"
+            return (48.1351, 11.5820)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer", "ort": "München, Deutschland",
+        })
+
+        assert resp.status_code == 201
+        app = db_session.query(models.Application).filter_by(id=resp.json()["id"]).one()
+        assert app.ort_lat == 48.1351
+        assert app.ort_lng == 11.5820
+
+    def test_negativ_anlegen_ohne_ort_geokodiert_nicht(self, client, db_session, monkeypatch):
+        calls = []
+
+        async def fake_geocode_one(term, api_key):
+            calls.append(term)
+            return (48.1351, 11.5820)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = client.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})
+
+        assert resp.status_code == 201
+        assert calls == []
+        app = db_session.query(models.Application).filter_by(id=resp.json()["id"]).one()
+        assert app.ort_lat is None
+        assert app.ort_lng is None
+
+    def test_positiv_aktualisieren_mit_neuem_ort_geokodiert(self, client, db_session, monkeypatch):
+        app = application_factory(db_session, ort="Berlin, Deutschland", ort_lat=52.52, ort_lng=13.405)
+        db_session.commit()
+
+        async def fake_geocode_one(term, api_key):
+            assert term == "Hamburg, Deutschland"
+            return (53.5511, 9.9937)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"ort": "Hamburg, Deutschland"})
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.ort_lat == 53.5511
+        assert app.ort_lng == 9.9937
+
+    def test_negativ_aktualisieren_ohne_ort_im_payload_geokodiert_nicht_erneut(self, client, db_session, monkeypatch):
+        app = application_factory(db_session, ort="Berlin, Deutschland", ort_lat=52.52, ort_lng=13.405)
+        db_session.commit()
+        calls = []
+
+        async def fake_geocode_one(term, api_key):
+            calls.append(term)
+            return (0.0, 0.0)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"kommentar": "just a note"})
+
+        assert resp.status_code == 200
+        assert calls == []
+        db_session.refresh(app)
+        assert app.ort_lat == 52.52
+        assert app.ort_lng == 13.405
+
+    def test_positiv_ort_leeren_loescht_koordinaten(self, client, db_session):
+        app = application_factory(db_session, ort="Berlin, Deutschland", ort_lat=52.52, ort_lng=13.405)
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"ort": None})
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.ort is None
+        assert app.ort_lat is None
+        assert app.ort_lng is None
+
+    def test_negativ_geocoding_fehlschlag_laesst_koordinaten_leer(self, client, db_session, monkeypatch):
+        async def fake_geocode_one(term, api_key):
+            return None
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer", "ort": "Nirgendwostadt",
+        })
+
+        assert resp.status_code == 201
+        app = db_session.query(models.Application).filter_by(id=resp.json()["id"]).one()
+        assert app.ort_lat is None
+        assert app.ort_lng is None
+
+
+class TestDistanceKm:
+    """distance_km on ApplicationListItem/ApplicationRead -- straight-line
+    distance from the account's home_location to the application's ort, both
+    cached geocodes. Uses real_auth_client (real DB user row) since the
+    `client` fixture's current_user is a transient object never persisted,
+    so setting home_lat/lng on it wouldn't be visible to the endpoint."""
+
+    def _token(self, real_auth_client, captured_email, email="test@example.com"):
+        from tests.api.test_auth_api import _register
+        _register(real_auth_client, captured_email, email=email)
+        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
+        return r.json()["access_token"]
+
+    def test_positiv_distanz_wird_berechnet_wenn_beide_koordinaten_vorhanden(self, real_auth_client, captured_email, db_session, monkeypatch):
+        from app import models as m
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        user = db_session.query(m.User).filter_by(email="test@example.com").one()
+        user.home_lat, user.home_lng = 52.5200, 13.4050  # Berlin
+        db_session.commit()
+
+        async def fake_geocode_one(term, api_key):
+            return (48.1351, 11.5820)  # Munich
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        create_resp = real_auth_client.post(
+            "/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer", "ort": "München"},
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        assert create_resp.json()["distance_km"] is not None
+        assert 490 < create_resp.json()["distance_km"] < 520
+
+        list_resp = real_auth_client.get("/api/applications/", headers=headers)
+        assert 490 < list_resp.json()[0]["distance_km"] < 520
+
+        get_resp = real_auth_client.get(f"/api/applications/{create_resp.json()['id']}", headers=headers)
+        assert 490 < get_resp.json()["distance_km"] < 520
+
+    def test_negativ_keine_distanz_ohne_home_location(self, real_auth_client, captured_email, monkeypatch):
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        async def fake_geocode_one(term, api_key):
+            return (48.1351, 11.5820)
+        monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
+
+        resp = real_auth_client.post(
+            "/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer", "ort": "München"},
+            headers=headers,
+        )
+
+        assert resp.status_code == 201
+        assert resp.json()["distance_km"] is None
+
+    def test_negativ_keine_distanz_ohne_ort(self, real_auth_client, captured_email, db_session):
+        from app import models as m
+
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        user = db_session.query(m.User).filter_by(email="test@example.com").one()
+        user.home_lat, user.home_lng = 52.5200, 13.4050
+        db_session.commit()
+
+        resp = real_auth_client.post(
+            "/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"},
+            headers=headers,
+        )
+
+        assert resp.status_code == 201
+        assert resp.json()["distance_km"] is None

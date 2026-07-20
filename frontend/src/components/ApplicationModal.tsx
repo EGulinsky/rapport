@@ -7,6 +7,7 @@ import { CompanyLogo } from './CompanyLogo'
 import { LocationSearchInput } from './LocationSearchInput'
 import { displayName } from './ContactModal'
 import { CURRENCIES } from '../constants/currencies'
+import { formatCurrencyAmount, formatSalaryRange } from '../utils/salaryFormat'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_COLORS,
@@ -22,18 +23,6 @@ function parentPath(p: string): string {
   const parts = p.replace(/\/$/, '').split('/')
   if (parts.length <= 1) return '/'
   return parts.slice(0, -1).join('/') || '/'
-}
-
-function formatCurrencyAmount(value: number, currency: string | null | undefined, locale: string): string {
-  const fmt = new Intl.NumberFormat(locale, { style: 'currency', currency: currency || 'EUR', maximumFractionDigits: 0 })
-  return fmt.format(value)
-}
-
-function formatSalaryRange(min: number | null | undefined, max: number | null | undefined, currency: string | null | undefined, locale: string): string | null {
-  if (min == null) return null
-  return max == null
-    ? formatCurrencyAmount(min, currency, locale)
-    : `${formatCurrencyAmount(min, currency, locale)} – ${formatCurrencyAmount(max, currency, locale)}`
 }
 
 interface Props {
@@ -1248,7 +1237,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
           ) : (
             <dl className="grid grid-cols-2 gap-3">
               {field(t('overview.fieldSource'), app?.quelle, 'quelle')}
-              {field(t('overview.fieldLocation'), app?.ort, 'ort')}
+              {field(
+                t('overview.fieldLocation'),
+                app?.ort && app.distance_km != null
+                  ? `${app.ort} · ${t('overview.distanceKm', { km: Math.round(app.distance_km) })}`
+                  : app?.ort,
+                'ort',
+              )}
               {field(t('overview.fieldAppliedDate'), app?.datum_bewerbung)}
               {field(t('overview.fieldLastUpdate'), app?.letztes_update)}
               {field(t('overview.fieldTargetCompany'), app?.zielfirma_bei_hh, 'zielfirma_bei_hh')}

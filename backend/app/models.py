@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, Text, DateTime, ForeignKey, Table, Index
+from sqlalchemy import Column, Integer, String, Date, Boolean, Text, DateTime, Float, ForeignKey, Table, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -178,6 +178,11 @@ class Application(Base):
     quelle              = Column(String, nullable=True)
     wurde_besetzt_von   = Column(String, nullable=True)
     ort                 = Column(String, nullable=True)
+    # Cached geocode of `ort`, set/cleared whenever `ort` changes (see
+    # _geocode_ort() in applications.py) -- avoids re-geocoding on
+    # every distance calculation. None if geocoding failed or ort is empty.
+    ort_lat             = Column(Float, nullable=True)
+    ort_lng             = Column(Float, nullable=True)
 
     salary_currency        = Column(String, nullable=True)   # ISO code, e.g. "EUR"
     salary_expectation_min = Column(Integer, nullable=True)
@@ -692,6 +697,16 @@ class User(Base):
     # bestehende Zeilen bei der Migration — neue Registrierungen setzen den Wert
     # immer explizit über RegisterPayload.ui_language (Default dort: 'en').
     ui_language      = Column(String, nullable=False, server_default="de")
+
+    # Home address for the distance-to-job feature (KanbanBoard/ApplicationModal).
+    # home_location is the free-text label shown in Settings (either picked from
+    # the same autocomplete used for Application.ort, or reverse-geocoded from
+    # the browser's own geolocation); home_lat/home_lng are geocoded once when
+    # home_location is set/changed (see update_profile() in routers/auth.py) and
+    # reused for every distance calculation rather than re-geocoding per request.
+    home_location    = Column(String, nullable=True)
+    home_lat         = Column(Float, nullable=True)
+    home_lng         = Column(Float, nullable=True)
 
 
 class EmailVerificationCode(Base):
