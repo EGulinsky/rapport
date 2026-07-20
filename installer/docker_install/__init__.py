@@ -1,9 +1,13 @@
-"""Cross-platform Docker install dispatch — mirrors agent/service.py's
-per-OS dispatcher shape.
+"""Cross-platform Docker install dispatch for the macOS/Linux Python
+installer flow — mirrors agent/service.py's per-OS dispatcher shape.
 
 macOS: Docker Desktop, MDM-style silent install (docker_install/macos.py)
-Windows: Docker Desktop, --quiet install (docker_install/windows.py)
 Linux: Docker Engine via the get.docker.com convenience script (docker_install/linux.py)
+
+Windows isn't dispatched here at all: the Windows installer is a WiX
+MSI/Burn bootstrapper (installer/packaging/windows-wix/) that chains the
+official Docker Desktop installer as a prerequisite package directly, no
+Python involved. See installer/README.md.
 """
 from __future__ import annotations
 
@@ -15,9 +19,6 @@ def _get_impl():
     if system == "Darwin":
         from installer.docker_install import macos
         return macos
-    elif system == "Windows":
-        from installer.docker_install import windows
-        return windows
     elif system == "Linux":
         from installer.docker_install import linux
         return linux

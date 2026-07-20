@@ -1,15 +1,18 @@
-"""Rapport Installer entry point: a one-shot bootstrap, not a persistent
-service (unlike agent/tray.py) — Docker Desktop's own restart-at-login
-plus docker-compose's `restart: unless-stopped` keep the app running
-across reboots once containers are up once, so there's nothing further
-for this process to supervise.
+"""Rapport Installer entry point (macOS/Linux) — a one-shot bootstrap, not
+a persistent service (unlike agent/tray.py): Docker Desktop's own
+restart-at-login plus docker-compose's `restart: unless-stopped` keep the
+app running across reboots once containers are up once, so there's
+nothing further for this process to supervise.
+
+Windows has its own installer entirely — a WiX MSI/Burn bootstrapper
+(installer/packaging/windows-wix/), not this Python flow at all. See
+installer/README.md.
 
 Flow: check Docker -> install it if missing -> write the resolved compose
 file -> `docker compose pull && up -d` -> poll /health -> open the browser.
 """
 from __future__ import annotations
 
-import platform
 import subprocess
 import sys
 
@@ -67,11 +70,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # Windows gets the graphical wizard (installer/gui.py) — the console
-    # flow above stays exactly as-is for macOS/Linux, and for the existing
-    # installer/tests/test_main.py coverage of main() itself.
-    if platform.system() == "Windows":
-        from installer.gui import main as gui_main
-
-        sys.exit(gui_main())
     sys.exit(main())

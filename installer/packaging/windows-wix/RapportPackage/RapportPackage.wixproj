@@ -1,0 +1,15 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- The actual installed payload: docker-compose.yml, start-rapport.bat,
+       and a Start Menu shortcut. No UI of its own; RapportBundle's Burn
+       bootstrapper (the outer Rapport-Setup.exe) shows the license/progress/
+       finish wizard and runs this MSI silently in the background, so there's
+       nothing here beyond the file/component/feature authoring. -->
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <Version Condition="'$(Version)'==''">0.1.0</Version>
+    <DefineConstants>Version=$(Version)</DefineConstants>
+  </PropertyGroup>
+
+</Project>

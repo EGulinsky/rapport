@@ -1,0 +1,28 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+
+  <Bundle Name="Rapport Setup"
+          Manufacturer="Eugen Gulinsky"
+          Version="$(var.Version)"
+          UpgradeCode="7a4e8235-1037-4e8a-bba1-1987160176ec">
+
+    <BootstrapperApplication>
+      <!-- LicenseFile is generated at build time from the repo-root LICENSE
+           file (see build_windows_wix.ps1); not checked in, since it's
+           a plain mechanical text->RTF conversion of a file that already
+           lives in the repo. LaunchTarget/LaunchWorkingFolder point at the
+           fixed install location (no directory-picker page in this wizard,
+           matching how most consumer app installers work today) using
+           Burn's own built-in ProgramFiles64Folder variable. -->
+      <bal:WixStandardBootstrapperApplication
+          LicenseFile="License.rtf"
+          LaunchTarget="[ProgramFiles64Folder]Rapport\start-rapport.bat"
+          LaunchWorkingFolder="[ProgramFiles64Folder]Rapport" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage Id="RapportPackage" SourceFile="$(var.RapportPackage.TargetPath)" Vital="yes" />
+    </Chain>
+
+  </Bundle>
+</Wix>

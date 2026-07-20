@@ -1,0 +1,48 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="Rapport"
+           Manufacturer="Eugen Gulinsky"
+           Version="$(var.Version)"
+           UpgradeCode="ee5e6336-5a47-45ac-93c6-e754efe03cc3"
+           Scope="perMachine">
+
+    <!-- Fixed UpgradeCode + MajorUpgrade means installing a newer version's
+         Setup.exe automatically replaces an older install, rather than the
+         old NSIS installer's behavior of just overwriting files in place
+         with no version awareness at all. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Rapport is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Rapport">
+        <Component Id="ComposeFile" Guid="*">
+          <File Id="ComposeFileYml" Source="docker-compose.yml" KeyPath="yes" />
+        </Component>
+        <Component Id="StartScript" Guid="*">
+          <File Id="StartRapportBat" Source="start-rapport.bat" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppProgramsFolder" Name="Rapport">
+        <Component Id="ShortcutStart" Guid="*">
+          <Shortcut Id="StartMenuShortcut"
+                    Name="Start rapport"
+                    Description="Pull, start, and open rapport"
+                    Target="[INSTALLFOLDER]start-rapport.bat"
+                    WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="RemoveAppProgramsFolder" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\Rapport" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Rapport" Level="1">
+      <ComponentRef Id="ComposeFile" />
+      <ComponentRef Id="StartScript" />
+      <ComponentRef Id="ShortcutStart" />
+    </Feature>
+
+  </Package>
+</Wix>

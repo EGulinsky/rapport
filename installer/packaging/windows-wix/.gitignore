@@ -1,0 +1,5 @@
+bin/
+obj/
+dist/
+RapportPackage/docker-compose.yml
+RapportBundle/License.rtf
