@@ -3,9 +3,11 @@
 # Must be run ON Windows (PyInstaller does not cross-compile):
 #   pyinstaller installer/packaging/installer-windows.spec --distpath installer/packaging/dist --workpath installer/packaging/build
 #
-# console=True — this is a one-shot bootstrap the user watches run (Docker
-# check/install, image pull, health poll), not a background service, so a
-# visible console window with progress messages is the point.
+# console=False — on Windows this is a graphical wizard (installer/gui.py,
+# dispatched to from main.py's __main__ block) that walks the user through
+# the Docker check/install, image pull, and health poll with a status line,
+# progress bar, and log box, rather than a bare console window. macOS/Linux
+# still use the plain console flow in main.py — this spec is Windows-only.
 import os
 
 REPO_ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))

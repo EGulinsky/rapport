@@ -9,6 +9,7 @@ file -> `docker compose pull && up -d` -> poll /health -> open the browser.
 """
 from __future__ import annotations
 
+import platform
 import subprocess
 import sys
 
@@ -66,4 +67,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows gets the graphical wizard (installer/gui.py) — the console
+    # flow above stays exactly as-is for macOS/Linux, and for the existing
+    # installer/tests/test_main.py coverage of main() itself.
+    if platform.system() == "Windows":
+        from installer.gui import main as gui_main
+
+        sys.exit(gui_main())
     sys.exit(main())

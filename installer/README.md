@@ -9,7 +9,10 @@ across reboots once the containers are up once.
 
 ```
 installer/
-  main.py                # orchestrates the flow below, prints progress to a visible console
+  main.py                # orchestrates the flow below; console progress on macOS/Linux,
+                          # dispatches to gui.py on Windows (see "Windows: graphical wizard" below)
+  gui.py                  # Windows-only Tkinter wizard: status line, progress bar, log box,
+                          # runs the same flow as main.py in a background thread
   docker_check.py        # docker CLI + daemon detection, the sudo-fallback command prefix
   docker_install/
     macos.py              # Docker Desktop, MDM-style silent install (mount .dmg, run install --accept-license)
@@ -54,6 +57,25 @@ self-registration like the agent has. Once the containers are up, Docker's
 own restart policy plus Docker Desktop's own login-item setting handle
 everything else.
 
+## Windows: graphical wizard
+
+On Windows the packaged executable runs `gui.py` instead of `main.py`'s
+console flow (dispatched from `main.py`'s `__main__` block based on
+`platform.system()` — `main()` itself is untouched, so it's still what
+runs on macOS/Linux and what `tests/test_main.py` exercises). `gui.py` is
+a self-contained Tkinter window — not a refactor of `main()`, a parallel
+implementation of the same step sequence — showing a live status line, a
+progress bar, and a scrollable log (existing `print()` output from
+`docker_install/windows.py` is captured via a small `sys.stdout`
+redirection, `_QueueWriter`, so that module didn't need to change). The
+bootstrap work runs on a background thread and reports back to the GUI
+thread through a `queue.Queue` drained on a `root.after()` timer, since
+Tkinter itself isn't thread-safe. On failure the window stays open with a
+Retry button rather than a console that might flash-close; on success, an
+"Open rapport" button re-opens the browser. `packaging/installer-windows.spec`
+builds with `console=False` for this reason — macOS/Linux specs are
+unaffected and keep `console=True`.
+
 ## Run locally (development, no packaging)
 
 ```bash
@@ -76,7 +98,11 @@ python3 -m venv .venv_test
 ```
 
 All Docker/network interaction is mocked — no real installs or containers
-touched by the test suite.
+touched by the test suite. `tests/test_gui.py` needs a Tk-enabled Python
+(the stock python.org builds Windows CI uses have this; some Homebrew
+Python formulas on macOS don't and need the sibling `python-tk` formula,
+e.g. `brew install python-tk@3.14`) — it skips itself via
+`pytest.importorskip` rather than failing if Tk isn't available.
 
 ## Build the installer
 
