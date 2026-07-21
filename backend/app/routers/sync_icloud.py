@@ -387,7 +387,12 @@ async def _do_icloud_mail(user_id: int) -> dict:
                 continue
 
             body = _imap_body(msg)[:1500]
-            raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
+            # "An:" (To+Cc, cleaned of the stray comma the "to,cc" concatenation
+            # above leaves when either side is empty) lets sync_common.py tell
+            # sent mail from received mail and show the actual recipient
+            # instead of the account owner's own name for sent mail.
+            to_recipients = ", ".join(p.strip() for p in to_cc.split(",") if p.strip())
+            raw = f"Von: {sender}\nAn: {to_recipients}\nBetreff: {subject}\n\n{body}"
             hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps)
 
             try:

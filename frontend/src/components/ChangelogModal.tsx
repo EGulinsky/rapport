@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.28',
+    date: '2026-07-21',
+    changes: [
+      'Timeline entries for mail and calendar sources now always show the full message/description, collapsed by default with a "Show content" toggle instead of an always-visible snippet.',
+      'Mail entries now show a direction arrow (sent vs. received), and a sent mail\'s entry shows the recipient instead of repeating your own name.',
+      'Fixed synced calls on macOS almost always showing as "missed" even when they were answered: calls relayed to the Mac via Continuity from the iPhone frequently have no answered/missed flag at all in the system call history, which was previously treated as missed by default. The sync now also falls back to call duration to tell the two apart.',
+    ],
+  },
+  {
     version: '4.6.27',
     date: '2026-07-20',
     changes: [

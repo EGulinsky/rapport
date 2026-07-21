@@ -99,15 +99,23 @@ class MacCallsProvider(CallsProvider):
             result = []
             for r in rows:
                 phone = (r[2] or "").strip()
+                duration = int(r[1] or 0)
+                # ZANSWERED is frequently NULL (not 0) for calls relayed to
+                # this Mac via Continuity rather than answered/placed
+                # natively on it -- bool(None) is False, which silently
+                # mislabeled real, completed calls as missed. Duration is
+                # the reliable fallback: a real call has ZDURATION > 0
+                # regardless of whether ZANSWERED was ever populated.
+                answered = bool(r[5]) if r[5] is not None else duration > 0
                 result.append({
                     "id":         _uid("phone", f"{r[0]}:{phone}"),
                     "source":     "phone",
                     "date":       _ts(r[0]),
-                    "duration_s": int(r[1] or 0),
+                    "duration_s": duration,
                     "phone":      phone,
                     "name":       (r[3] or "").strip() or None,
                     "direction":  "outgoing" if r[4] else "incoming",
-                    "answered":   bool(r[5]),
+                    "answered":   answered,
                     "service":    r[6] or "Phone",
                 })
             return result

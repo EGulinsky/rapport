@@ -141,7 +141,10 @@
     "editTitle": "Edit",
     "deleteTitle": "Delete",
     "removeTitle": "Remove",
-    "openInApp": "Open in app"
+    "openInApp": "Open in app",
+    "showContent": "Show content",
+    "sentMail": "Sent",
+    "receivedMail": "Received"
   },
   "attachments": {
     "documents": "Documents",

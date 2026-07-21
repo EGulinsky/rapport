@@ -1,6 +1,7 @@
 """L0 — macOS-Provider-Adapter: subprocess/osascript-Aufrufe gemockt, damit
 Tests nicht wirklich native Dialoge öffnen oder auf echte Systemdaten
 zugreifen."""
+import datetime
 import json
 from unittest.mock import MagicMock, patch
 
@@ -118,3 +119,93 @@ class TestMacCallsProvider:
         provider = MacCallsProvider()
         health = provider.health()
         assert health == {"ok": True, "phone_accessible": True, "whatsapp_accessible": False}
+
+    def _make_phone_db(self, path, rows):
+        """rows: list of (zdate, zduration, zaddress, zname, zoriginated, zanswered)."""
+        import sqlite3
+        conn = sqlite3.connect(str(path))
+        conn.execute("""
+            CREATE TABLE ZCALLRECORD (
+                ZDATE REAL, ZDURATION REAL, ZADDRESS TEXT, ZNAME TEXT,
+                ZORIGINATED INTEGER, ZANSWERED INTEGER,
+                ZSERVICE_PROVIDER TEXT, ZCALLTYPE INTEGER
+            )
+        """)
+        for zdate, zduration, zaddress, zname, zoriginated, zanswered in rows:
+            conn.execute(
+                "INSERT INTO ZCALLRECORD (ZDATE, ZDURATION, ZADDRESS, ZNAME, ZORIGINATED, ZANSWERED) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (zdate, zduration, zaddress, zname, zoriginated, zanswered),
+            )
+        conn.commit()
+        conn.close()
+
+    def test_positiv_zanswered_explizit_gesetzt_wird_direkt_uebernommen(self, tmp_path, monkeypatch):
+        import agent.providers.mac.calls as calls_module
+        db_path = tmp_path / "calls.db"
+        recent_zdate = (
+            datetime.datetime.now() - calls_module._EPOCH
+        ).total_seconds() - 60
+        self._make_phone_db(db_path, [(recent_zdate, 120, "+491234", "Alice", 1, 1)])
+        monkeypatch.setattr(calls_module, "PHONE_DB", str(db_path))
+        monkeypatch.setattr(calls_module, "WA_CALLS", str(tmp_path / "keine_wa.sqlite"))
+
+        calls = MacCallsProvider().list_calls(90)
+
+        assert len(calls) == 1
+        assert calls[0]["answered"] is True
+        assert calls[0]["direction"] == "outgoing"
+
+    def test_negativ_zanswered_explizit_null_und_keine_dauer_bleibt_verpasst(self, tmp_path, monkeypatch):
+        import agent.providers.mac.calls as calls_module
+        db_path = tmp_path / "calls.db"
+        recent_zdate = (
+            datetime.datetime.now() - calls_module._EPOCH
+        ).total_seconds() - 60
+        self._make_phone_db(db_path, [(recent_zdate, 0, "+491234", "Bob", 0, 0)])
+        monkeypatch.setattr(calls_module, "PHONE_DB", str(db_path))
+        monkeypatch.setattr(calls_module, "WA_CALLS", str(tmp_path / "keine_wa.sqlite"))
+
+        calls = MacCallsProvider().list_calls(90)
+
+        assert len(calls) == 1
+        assert calls[0]["answered"] is False
+        assert calls[0]["direction"] == "incoming"
+
+    def test_positiv_zanswered_none_aber_echte_dauer_gilt_als_beantwortet(self, tmp_path, monkeypatch):
+        """Reproduces the real bug: calls relayed to the Mac via Continuity
+        commonly leave ZANSWERED as SQL NULL rather than 0/1 -- bool(None)
+        is False, which previously mislabeled a real, completed call as
+        missed. ZDURATION > 0 is the reliable signal that the call connected."""
+        import agent.providers.mac.calls as calls_module
+        db_path = tmp_path / "calls.db"
+        recent_zdate = (
+            datetime.datetime.now() - calls_module._EPOCH
+        ).total_seconds() - 60
+        self._make_phone_db(db_path, [(recent_zdate, 245, "+491234", "Carol", 0, None)])
+        monkeypatch.setattr(calls_module, "PHONE_DB", str(db_path))
+        monkeypatch.setattr(calls_module, "WA_CALLS", str(tmp_path / "keine_wa.sqlite"))
+
+        calls = MacCallsProvider().list_calls(90)
+
+        assert len(calls) == 1
+        assert calls[0]["answered"] is True
+        assert calls[0]["duration_s"] == 245
+
+    def test_negativ_zanswered_none_und_keine_dauer_bleibt_verpasst(self, tmp_path, monkeypatch):
+        """Same NULL-ZANSWERED case as above, but a genuinely missed call
+        (ZDURATION 0) must still be reported as missed, not flipped to
+        answered just because ZANSWERED is NULL."""
+        import agent.providers.mac.calls as calls_module
+        db_path = tmp_path / "calls.db"
+        recent_zdate = (
+            datetime.datetime.now() - calls_module._EPOCH
+        ).total_seconds() - 60
+        self._make_phone_db(db_path, [(recent_zdate, 0, "+491234", "Dave", 0, None)])
+        monkeypatch.setattr(calls_module, "PHONE_DB", str(db_path))
+        monkeypatch.setattr(calls_module, "WA_CALLS", str(tmp_path / "keine_wa.sqlite"))
+
+        calls = MacCallsProvider().list_calls(90)
+
+        assert len(calls) == 1
+        assert calls[0]["answered"] is False

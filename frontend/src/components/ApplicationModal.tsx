@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle, Car, Linkedin } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle, Car, Linkedin, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -2478,6 +2478,11 @@ export function SourceBadge({ source, external_id, external_url }: { source?: st
 
 const EVENT_TYPES = ['bewerbung', 'status', 'notiz', 'gespräch', 'mail', 'anruf', 'angebot', 'absage'] as const
 
+// Mail/calendar bodies can be long (a full email, a calendar description) --
+// shown collapsed by default via <details> rather than always expanded like
+// short manual notes/call titles.
+const MAIL_CALENDAR_SOURCES = new Set(['gmail', 'icloud_mail', 'gcal', 'icloud_cal'])
+
 function FileRow({ event, appId, onDeleted }: { event: Event; appId: number; onDeleted: () => void }) {
   const { t } = useTranslation('applications')
   const [opening, setOpening] = useState(false)
@@ -2661,8 +2666,34 @@ function TimelineEvent({ event, appId, onUpdated }: { event: Event; appId: numbe
         </span>
       </div>
       {event.titel && <p className="text-sm font-medium text-gray-800">{event.titel}</p>}
-      {event.autor && <p className="text-xs text-gray-500 italic">{event.autor}</p>}
-      {event.notiz && <p className="text-sm text-gray-600 whitespace-pre-wrap">{event.notiz}</p>}
+      {event.autor && (
+        <p className="text-xs text-gray-500 italic flex items-center gap-1">
+          {event.mail_direction === 'sent' && (
+            <span title={t('timeline.sentMail')} className="shrink-0">
+              <ArrowUpRight className="h-3 w-3 text-gray-400" aria-label={t('timeline.sentMail')} />
+            </span>
+          )}
+          {event.mail_direction === 'received' && (
+            <span title={t('timeline.receivedMail')} className="shrink-0">
+              <ArrowDownLeft className="h-3 w-3 text-gray-400" aria-label={t('timeline.receivedMail')} />
+            </span>
+          )}
+          {event.autor}
+        </p>
+      )}
+      {event.notiz && (
+        MAIL_CALENDAR_SOURCES.has(event.source ?? '') ? (
+          <details className="group mt-0.5">
+            <summary className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600 list-none">
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+              {t('timeline.showContent')}
+            </summary>
+            <p className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">{event.notiz}</p>
+          </details>
+        ) : (
+          <p className="text-sm text-gray-600 whitespace-pre-wrap">{event.notiz}</p>
+        )
+      )}
       {(event.attachments ?? []).length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {event.attachments!.map(att => (

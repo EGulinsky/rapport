@@ -675,6 +675,31 @@ def _migrate_event_external_url():
     conn.close()
 
 
+def _migrate_event_mail_direction():
+    """Add mail_direction column to events if missing -- "sent"/"received"
+    for mail events, None for everything else, computed at sync time by
+    comparing the mail's From header against the account's own synced
+    addresses."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(events)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "mail_direction" not in cols:
+        cur.execute("ALTER TABLE events ADD COLUMN mail_direction TEXT")
+    conn.commit()
+    conn.close()
+
+
 def _backfill_linkedin_message_external_url():
     """Populate external_url for linkedin_msg events created before v4.6.20
     added it -- a pure local join against linkedin_messages (the account's
@@ -1405,6 +1430,7 @@ def init_db():
     _migrate_event_datum_zeit()
     _migrate_event_datum_zeit_is_placeholder()
     _migrate_event_external_url()
+    _migrate_event_mail_direction()
     _migrate_linkedin_job_id()
     _migrate_pre_rejection_status()
     _migrate_audit_log()

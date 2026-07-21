@@ -458,7 +458,12 @@ async def _do_gmail(user_id: int) -> dict:
 
             subject, sender, to_cc, date_hint, _phase1_hint_apps = phase2_meta[msg_id]
             body = _gmail_body(msg_full["payload"])[:1500]
-            raw = f"Von: {sender}\nBetreff: {subject}\n\n{body}"
+            # "An:" (To+Cc, cleaned of the stray comma the "to,cc" concatenation
+            # above leaves when either side is empty) lets sync_common.py tell
+            # sent mail from received mail and show the actual recipient
+            # instead of the account owner's own name for sent mail.
+            to_recipients = ", ".join(p.strip() for p in to_cc.split(",") if p.strip())
+            raw = f"Von: {sender}\nAn: {to_recipients}\nBetreff: {subject}\n\n{body}"
             # Re-check with the full body — always a superset of the phase-1
             # (subject-only) result, since raw only adds text; can surface a
             # company/role mentioned only in the body, not the subject.

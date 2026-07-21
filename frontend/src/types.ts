@@ -208,7 +208,13 @@ export interface Event {
   datum_zeit_is_placeholder?: boolean
   titel?: string
   notiz?: string
+  // The *other party* for mail events: the sender for received mail, the
+  // recipient(s) for mail the account owner sent themselves (see
+  // mail_direction) -- never the owner's own name/address either way. The
+  // organizer+attendee list for calendar events.
   autor?: string
+  // "sent"/"received", mail events only (undefined for every other source).
+  mail_direction?: 'sent' | 'received'
   source?: string
   external_id?: string
   // Ready-to-use deep link for sources whose external_id alone can't be

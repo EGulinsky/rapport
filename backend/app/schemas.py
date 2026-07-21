@@ -121,6 +121,10 @@ class EventCreate(EventBase):
 class EventRead(EventBase):
     id: int
     application_id: int
+    # "sent"/"received", mail events only (None otherwise) -- sync-computed,
+    # not user-settable via EventCreate/EventUpdate. See the Event.mail_direction
+    # comment in models.py.
+    mail_direction: Optional[str] = None
     external_id: Optional[str] = None
     # Ready-to-use deep link for sources whose external_id alone can't be
     # turned into a working URL client-side (currently only gcal -- see the

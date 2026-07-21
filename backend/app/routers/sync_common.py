@@ -905,6 +905,31 @@ def _extract_title_from_raw(raw_text: str) -> str:
     return ''
 
 
+def _mail_autor_and_direction(db: Session, raw_text: str) -> tuple[Optional[str], Optional[str]]:
+    """Returns (autor, mail_direction) for a gmail/icloud_mail raw_text.
+
+    autor is the *other party* -- the sender for received mail, or the
+    recipient(s) for mail the account owner sent themselves -- never the
+    owner's own name/address, so the timeline always shows who's actually
+    being corresponded with. Direction is "sent"/"received", determined by
+    comparing the From address against the account's own synced addresses
+    (_get_owner_emails())."""
+    sender_raw: Optional[str] = None
+    recipient_raw: Optional[str] = None
+    for line in raw_text.splitlines():
+        if sender_raw is None and (line.startswith("Von: ") or line.startswith("From: ")):
+            sender_raw = line.split(": ", 1)[1].strip() or None
+        elif recipient_raw is None and (line.startswith("An: ") or line.startswith("To: ")):
+            recipient_raw = line.split(": ", 1)[1].strip() or None
+        if sender_raw is not None and recipient_raw is not None:
+            break
+
+    _, sender_addr = parseaddr(sender_raw or "")
+    if sender_addr and sender_addr.lower().strip() in _get_owner_emails(db):
+        return (recipient_raw or sender_raw), "sent"
+    return sender_raw, "received"
+
+
 def _extract_body_preview(raw_text: str, max_len: int = 300) -> Optional[str]:
     """Return text after the first blank line (body after headers)."""
     lines = raw_text.splitlines()
@@ -963,6 +988,11 @@ def _classify_deterministic(
         notiz: Optional[str] = None
         if source == 'icloud_notes':
             notiz = _extract_body_preview(raw_text, max_len=300)
+        elif source in ('gmail', 'icloud_mail'):
+            # Full captured body (already capped to 1500 chars when raw_text
+            # was built), not just a short preview — the timeline shows this
+            # collapsed by default, so there's no reason to truncate further.
+            notiz = _extract_body_preview(raw_text, max_len=1500)
         return {
             'app_id': hint_apps[0]['id'],
             'typ': typ,
@@ -978,6 +1008,8 @@ def _classify_deterministic(
     notiz: Optional[str] = None
     if source == 'icloud_notes':
         notiz = _extract_body_preview(raw_text, max_len=300)
+    elif source in ('gmail', 'icloud_mail'):
+        notiz = _extract_body_preview(raw_text, max_len=1500)
     return {
         'app_id': first_app['id'],
         'typ': typ,
@@ -1022,21 +1054,18 @@ def _save_deterministic_event(
     elif time_pfx:
         notiz = time_pfx.rstrip('\n') or None
 
-    # Sender header ("Von: "/"From: ") for mail events, or the participant
-    # list ("Teilnehmer: ") for calendar events — stored on the event itself
-    # (Event.autor) so a contact's Mails/Calendar tab (ContactModal.tsx) can
-    # later match past events back to them by email address (see
-    # GET /api/contacts/{id}/events in contacts.py); also used below to
-    # auto-create a contact from a mail sender, as before -- NOT done for
-    # calendar participants, since that line can list several people and
-    # isn't a reliable "this application belongs to this person" signal the
-    # way a mail's actual sender is.
+    # Sender/recipient (mail events) or the participant list ("Teilnehmer: ",
+    # calendar events) — stored on the event itself (Event.autor) so a
+    # contact's Mails/Calendar tab (ContactModal.tsx) can later match past
+    # events back to them by email address (see GET /api/contacts/{id}/events
+    # in contacts.py); also used below to auto-create a contact, as before --
+    # NOT done for calendar participants, since that line can list several
+    # people and isn't a reliable "this application belongs to this person"
+    # signal the way a mail's other party is.
     autor: Optional[str] = None
+    mail_direction: Optional[str] = None
     if source in ('gmail', 'icloud_mail'):
-        for line in raw_text.splitlines():
-            if line.startswith("Von: ") or line.startswith("From: "):
-                autor = line.split(": ", 1)[1].strip() or None
-                break
+        autor, mail_direction = _mail_autor_and_direction(db, raw_text)
     elif source in ('gcal', 'icloud_cal'):
         for line in raw_text.splitlines():
             if line.startswith("Teilnehmer: "):
@@ -1052,6 +1081,7 @@ def _save_deterministic_event(
         titel=det['titel'] or source,
         notiz=notiz or None,
         autor=autor,
+        mail_direction=mail_direction,
         source=source,
         external_id=external_id,
         external_url=external_url,
@@ -1063,11 +1093,15 @@ def _save_deterministic_event(
               new_value=new_event.titel, reason=det.get('reason'), user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
-    # Auto-create contact from sender (mail events only -- not calendar
-    # participants, see the autor comment above)
-    if autor and source in ('gmail', 'icloud_mail'):
+    # Auto-create contact from the other party (mail events only -- not
+    # calendar participants, see the autor comment above). autor may list
+    # several recipients for sent mail ("An: a@x.com, b@x.com") -- only the
+    # first is used here (parseaddr() only handles a single address), the
+    # full list is still shown as-is in the timeline.
+    contact_source = autor.split(",", 1)[0].strip() if autor else autor
+    if contact_source and source in ('gmail', 'icloud_mail'):
         upsert_contact_from_sender(
-            db, autor,
+            db, contact_source,
             app_id=det['app_id'],
             firma=app.firma,
             is_headhunter=app.is_headhunter,
@@ -1162,11 +1196,15 @@ def save_classified_event(
         mark_synced(db, source, external_id, user_id)
         return False
 
-    autor = None
-    for line in raw_text.splitlines():
-        if line.startswith("Von: ") or line.startswith("From: "):
-            autor = line.split(": ", 1)[1].strip() or None
-            break
+    autor: Optional[str] = None
+    mail_direction: Optional[str] = None
+    if source in ('gmail', 'icloud_mail'):
+        autor, mail_direction = _mail_autor_and_direction(db, raw_text)
+    else:
+        for line in raw_text.splitlines():
+            if line.startswith("Von: ") or line.startswith("From: "):
+                autor = line.split(": ", 1)[1].strip() or None
+                break
 
     if date_hint:
         datum = date_hint.date()
@@ -1204,6 +1242,7 @@ def save_classified_event(
         titel=result.get("titel") or source,
         notiz=notiz,
         autor=autor,
+        mail_direction=mail_direction,
         source=source,
         external_id=external_id,
         user_id=user_id,
@@ -1219,10 +1258,14 @@ def save_classified_event(
               new_value=new_event.titel, reason=ai_reason, user_id=user_id)
     mark_synced(db, source, external_id, user_id)
 
-    # Auto-create contact from sender, extract phone/role from mail footer
-    if autor:
+    # Auto-create contact from the other party, extract phone/role from mail
+    # footer. autor may list several recipients for sent mail (parseaddr()
+    # only handles a single address) -- only the first is used here, the
+    # full list is still shown as-is in the timeline.
+    contact_source = autor.split(",", 1)[0].strip() if autor else autor
+    if contact_source:
         upsert_contact_from_sender(
-            db, autor,
+            db, contact_source,
             app_id=target_app["id"],
             firma=target_app.get("firma", ""),
             is_headhunter=target_app.get("is_headhunter", False),

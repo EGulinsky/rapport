@@ -119,6 +119,7 @@ class TestNoFreshDbGuard:
         "_backfill_event_datum_zeit_noon",
         "_migrate_event_datum_zeit_is_placeholder", "_flag_noon_backfill_placeholders",
         "_migrate_event_external_url", "_backfill_linkedin_message_external_url",
+        "_migrate_event_mail_direction",
         "_migrate_user_home_location", "_migrate_application_ort_coords",
         "_migrate_application_drive_distance",
     ])
@@ -762,6 +763,22 @@ class TestMigrateEventExternalUrl:
     def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
         _drop_table(db_path, "events")
         db_module._migrate_event_external_url()  # must not raise
+
+
+class TestMigrateEventMailDirection:
+    def test_positiv_fuegt_spalte_hinzu(self, db_path):
+        _drop_columns(db_path, "events", "mail_direction")
+        db_module._migrate_event_mail_direction()
+        assert "mail_direction" in _cols(db_path, "events")
+
+    def test_negativ_events_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "events")
+        db_module._migrate_event_mail_direction()  # must not raise
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_event_mail_direction()
+        db_module._migrate_event_mail_direction()  # must not raise
+        assert "mail_direction" in _cols(db_path, "events")
 
 
 class TestMigrateUserHomeLocation:

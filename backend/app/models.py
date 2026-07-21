@@ -393,7 +393,16 @@ class Event(Base):
     datum_zeit_is_placeholder = Column(Boolean, nullable=True)
     titel           = Column(String, nullable=True)
     notiz           = Column(Text, nullable=True)
-    autor           = Column(String, nullable=True)   # sender for mail events
+    # For mail events: the *other party* -- the sender for received mail, or
+    # the recipient for mail the account owner sent themselves (see
+    # mail_direction below). Not the account owner's own name/address either
+    # way, so the timeline always shows who's actually being corresponded
+    # with rather than "me" for half of the conversation.
+    autor           = Column(String, nullable=True)
+    # "sent" or "received", mail events only (None for every other source) --
+    # determined by comparing the mail's From header against the account's
+    # own synced addresses (_get_owner_emails() in sync_common.py).
+    mail_direction  = Column(String, nullable=True)
     source          = Column(String, nullable=True)   # "gmail","gcal","notes","call"
     external_id     = Column(String, nullable=True)   # original ID from sync source (for deep links)
     # Ready-to-use deep link for sources whose external_id alone can't be
