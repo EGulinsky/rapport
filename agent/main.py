@@ -13,8 +13,7 @@ from agent.auth import require_token
 from agent.config import AgentConfig, platform_name
 from agent.providers.base import CallsProvider, FilesProvider, NotesProvider
 from agent.routers import backup, calls, config as config_router, files, notes
-
-__version__ = "0.1.0"
+from agent.version import __version__
 
 
 def create_app(

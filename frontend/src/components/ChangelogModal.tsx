@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.29',
+    date: '2026-07-21',
+    changes: [
+      'Rapport Agent now has an "About" item in its menu bar / tray menu, showing the actual running version, platform, and port — the agent used to report a hardcoded, never-updated version internally, so this also fixes that.',
+      'The app now warns at startup if the installed Rapport Agent is too old for this version of Rapport (shown the same way as "agent not reachable"), instead of silently risking a mismatch.',
+    ],
+  },
+  {
     version: '4.6.28',
     date: '2026-07-21',
     changes: [

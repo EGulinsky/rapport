@@ -5,28 +5,29 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.agent_client import MIN_AGENT_VERSION
 from app import models
 
 pytestmark = pytest.mark.api
 
 
-def _agent_health_response(reachable=True, modules=None):
+def _agent_health_response(reachable=True, modules=None, version=MIN_AGENT_VERSION):
     resp = MagicMock(status_code=200 if reachable else 500)
     resp.json.return_value = {
-        "status": "ok", "version": "0.1.0", "platform": "Darwin",
+        "status": "ok", "version": version, "platform": "Darwin",
         "modules": modules or {"files": {"ok": True}, "notes": {"ok": True}, "calls": {"ok": True}},
     }
     return resp
 
 
-def _fake_get(reachable=True, modules=None):
+def _fake_get(reachable=True, modules=None, version=MIN_AGENT_VERSION):
     # Muss eine echte Coroutine-Funktion sein: httpx.AsyncClient.get wird mit
     # `await` aufgerufen — eine Lambda liefert kein awaitable Objekt zurück
     # und würde die Exception im try/except von agent_health() verschlucken,
     # wodurch der Test fälschlich den "nicht erreichbar"-Pfad testet (live an
     # dieser Datei selbst passiert, bevor es aufgefallen ist).
     async def fake(self, url, **kw):
-        return _agent_health_response(reachable=reachable, modules=modules)
+        return _agent_health_response(reachable=reachable, modules=modules, version=version)
     return fake
 
 
@@ -103,3 +104,37 @@ class TestStartupCheck:
 
         assert resp.json()["all_ok"] is True
         assert resp.json()["errors"] == []
+
+    def test_negativ_veraltete_agent_version_meldet_extra_check(self, client):
+        with patch("httpx.AsyncClient.get", new=_fake_get(version="0.1.0")):
+            resp = client.get("/api/startup-check")
+
+        checks = {c["name"]: c for c in resp.json()["checks"]}
+        assert checks["Agent: Version"]["ok"] is False
+        assert "0.1.0" in checks["Agent: Version"]["message"]
+        assert MIN_AGENT_VERSION in checks["Agent: Version"]["message"]
+
+    def test_positiv_kompatible_agent_version_ohne_extra_check(self, client):
+        with patch("httpx.AsyncClient.get", new=_fake_get(version=MIN_AGENT_VERSION)):
+            resp = client.get("/api/startup-check")
+
+        names = {c["name"] for c in resp.json()["checks"]}
+        assert "Agent: Version" not in names
+
+    def test_negativ_fehlende_agent_version_meldet_extra_check(self, client):
+        with patch("httpx.AsyncClient.get", new=_fake_get(version=None)):
+            resp = client.get("/api/startup-check")
+
+        checks = {c["name"]: c for c in resp.json()["checks"]}
+        assert checks["Agent: Version"]["ok"] is False
+        assert "unbekannt" in checks["Agent: Version"]["message"]
+
+    def test_negativ_agent_nicht_erreichbar_kein_version_check(self, client):
+        async def raise_conn_error(self, url, **kw):
+            raise ConnectionError("kein Agent")
+
+        with patch("httpx.AsyncClient.get", new=raise_conn_error):
+            resp = client.get("/api/startup-check")
+
+        names = {c["name"] for c in resp.json()["checks"]}
+        assert "Agent: Version" not in names

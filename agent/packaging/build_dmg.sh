@@ -17,6 +17,7 @@ DMG_NAME="Rapport-Agent-${VERSION}.dmg"
 STAGING_DIR="$SCRIPT_DIR/dmg_staging"
 
 echo "==> Baue ${APP_NAME} mit PyInstaller…"
+export AGENT_VERSION="$VERSION"
 pyinstaller "$SCRIPT_DIR/agent.spec" --distpath "$DIST_DIR" --workpath "$BUILD_DIR" --noconfirm
 
 if [ ! -d "$DIST_DIR/$APP_NAME" ]; then

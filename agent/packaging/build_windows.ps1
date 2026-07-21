@@ -16,6 +16,7 @@ $AppDir = Join-Path $DistDir "Rapport Agent"
 $ZipName = "Rapport-Agent-$Version-windows.zip"
 
 Write-Host "==> Building Rapport Agent.exe with PyInstaller..."
+$env:AGENT_VERSION = $Version
 pyinstaller (Join-Path $ScriptDir "agent-windows.spec") --distpath $DistDir --workpath $BuildDir --noconfirm
 
 if (-not (Test-Path $AppDir)) {

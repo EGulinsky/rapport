@@ -3,7 +3,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.agent_client import agent_health, get_agent_token, get_agent_url
+from app.agent_client import (
+    MIN_AGENT_VERSION,
+    _parse_version,
+    agent_health,
+    get_agent_token,
+    get_agent_url,
+    is_agent_version_compatible,
+)
 from app.ai.provider import encrypt_api_key
 from app import models
 
@@ -75,3 +82,41 @@ class TestAgentHealth:
         with patch("httpx.AsyncClient.get", new=fake_get):
             result = await agent_health(db_session)
         assert result["reachable"] is False
+
+
+class TestParseVersion:
+    def test_positiv_drei_teile(self):
+        assert _parse_version("4.6.29") == (4, 6, 29)
+
+    def test_negativ_none_liefert_null_tupel(self):
+        assert _parse_version(None) == (0, 0, 0)
+
+    def test_negativ_leerer_string_liefert_null_tupel(self):
+        assert _parse_version("") == (0, 0, 0)
+
+    def test_negativ_nicht_numerischer_teil_wird_null(self):
+        assert _parse_version("dev") == (0, 0, 0)
+
+    def test_corner_case_fehlende_teile_werden_aufgefuellt(self):
+        assert _parse_version("4.6") == (4, 6, 0)
+
+    def test_corner_case_zusaetzliche_teile_werden_ignoriert(self):
+        assert _parse_version("4.6.29.1") == (4, 6, 29)
+
+
+class TestIsAgentVersionCompatible:
+    def test_positiv_exakte_min_version_ist_kompatibel(self):
+        assert is_agent_version_compatible(MIN_AGENT_VERSION) is True
+
+    def test_positiv_neuere_version_ist_kompatibel(self):
+        major, minor, patch = _parse_version(MIN_AGENT_VERSION)
+        assert is_agent_version_compatible(f"{major}.{minor}.{patch + 1}") is True
+
+    def test_negativ_aeltere_version_ist_inkompatibel(self):
+        assert is_agent_version_compatible("0.1.0") is False
+
+    def test_negativ_fehlende_version_ist_inkompatibel(self):
+        assert is_agent_version_compatible(None) is False
+
+    def test_negativ_dev_fallback_ist_inkompatibel(self):
+        assert is_agent_version_compatible("dev") is False

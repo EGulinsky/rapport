@@ -53,6 +53,7 @@ e2e-report/
 *.dmg
 agent/packaging/dmg_staging/
 installer/packaging/dmg_staging/
+agent/packaging/VERSION
 backup/
 backend/jobtracker.db
 .claude/

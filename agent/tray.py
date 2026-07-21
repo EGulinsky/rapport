@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 
+from agent.about import show_about_dialog
 from agent.config import AgentConfig, app_data_dir
 from agent import service
 from agent.strings import t
@@ -88,6 +89,9 @@ def run_tray_app(config: AgentConfig) -> None:
     def on_open_logs(icon, item):
         _open_logs()
 
+    def on_about(icon, item):
+        show_about_dialog(config)
+
     def on_quit(icon, item):
         icon.stop()
 
@@ -96,6 +100,7 @@ def run_tray_app(config: AgentConfig) -> None:
         pystray.MenuItem(t("copy_token", lang), on_copy_token),
         pystray.MenuItem(t("open_logs", lang), on_open_logs),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem(t("about", lang), on_about),
         pystray.MenuItem(t("quit", lang), on_quit),
     )
 

@@ -35,13 +35,22 @@ import os
 REPO_ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
 AGENT_DIR = os.path.join(REPO_ROOT, "agent")
 
+# Passed in by build_linux.sh (itself given the version as a CLI arg —
+# either a release git tag in CI or typed by hand for a local rebuild).
+# Stamped into a bundled resource file rather than a source file so there's
+# exactly one place a human sets the version (see agent/version.py).
+AGENT_VERSION = os.environ.get("AGENT_VERSION", "dev")
+_VERSION_STAMP = os.path.join(SPECPATH, "VERSION")
+with open(_VERSION_STAMP, "w") as _f:
+    _f.write(AGENT_VERSION)
+
 block_cipher = None
 
 a = Analysis(
     [os.path.join(AGENT_DIR, "tray.py")],
     pathex=[REPO_ROOT],
     binaries=[],
-    datas=[],
+    datas=[(_VERSION_STAMP, ".")],
     hiddenimports=[
         "uvicorn.logging",
         "uvicorn.loops", "uvicorn.loops.auto",

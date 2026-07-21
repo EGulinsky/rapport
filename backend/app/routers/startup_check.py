@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.agent_client import agent_health
+from app.agent_client import MIN_AGENT_VERSION, agent_health, is_agent_version_compatible
 from app.database import get_db, get_first_user_id, set_session_user
 from app import models
 
@@ -35,6 +35,18 @@ async def _check_agent_modules(db: Session) -> list[dict]:
         results.append({
             "name": label, "group": "bridges", "ok": ok,
             "message": None if ok else (mod.get("error") or "Nicht verfügbar"),
+        })
+
+    agent_version = health.get("version")
+    if not is_agent_version_compatible(agent_version):
+        results.append({
+            "name": "Agent: Version",
+            "group": "bridges",
+            "ok": False,
+            "message": (
+                f"Agent-Version veraltet ({agent_version or 'unbekannt'}, "
+                f"mindestens {MIN_AGENT_VERSION} erforderlich) — bitte Rapport Agent aktualisieren"
+            ),
         })
     return results
 

@@ -16,6 +16,40 @@ from app.ai.provider import decrypt_api_key
 
 DEFAULT_AGENT_URL = os.getenv("AGENT_URL", "http://host.docker.internal:9996")
 
+# The oldest Rapport Agent version this backend is known to work correctly
+# with — bumped only when the agent/backend contract actually changes (a new
+# required field, a behavior fix the backend now depends on), not on every
+# release, since most releases don't touch agent/ at all and the agent is a
+# manually rebuilt native app (see CLAUDE.md), not something that updates
+# itself alongside a Docker rebuild. First introduced in v4.6.29 together
+# with the agent actually reporting a real version for the first time (it
+# used to always report the hardcoded, never-bumped "0.1.0") — so every
+# agent build older than this is, correctly, reported as needing an update.
+MIN_AGENT_VERSION = "4.6.29"
+
+
+def _parse_version(version: str | None) -> tuple[int, int, int]:
+    """Tolerant dotted-version parser: non-numeric or missing components
+    become 0 rather than raising, since an unparseable/absent version
+    (e.g. the "dev" fallback a non-frozen agent run reports) should compare
+    as older than any real release, not crash the compatibility check."""
+    if not version:
+        return (0, 0, 0)
+    parts = version.split(".")
+    nums: list[int] = []
+    for part in parts[:3]:
+        try:
+            nums.append(int(part))
+        except ValueError:
+            nums.append(0)
+    while len(nums) < 3:
+        nums.append(0)
+    return (nums[0], nums[1], nums[2])
+
+
+def is_agent_version_compatible(version: str | None) -> bool:
+    return _parse_version(version) >= _parse_version(MIN_AGENT_VERSION)
+
 
 def _get_cfg(db: Session) -> Optional[models.AgentSettings]:
     return db.query(models.AgentSettings).first()

@@ -17,6 +17,7 @@ APP_DIR="$DIST_DIR/rapport-agent"
 TARBALL_NAME="rapport-agent-${VERSION}-linux.tar.gz"
 
 echo "==> Building rapport-agent with PyInstaller…"
+export AGENT_VERSION="$VERSION"
 pyinstaller "$SCRIPT_DIR/agent-linux.spec" --distpath "$DIST_DIR" --workpath "$BUILD_DIR" --noconfirm
 
 if [ ! -d "$APP_DIR" ]; then

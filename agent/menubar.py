@@ -11,6 +11,7 @@ from __future__ import annotations
 import subprocess
 
 from agent import launchd
+from agent.about import about_message
 from agent.config import AgentConfig, app_data_dir
 from agent.strings import t
 
@@ -35,6 +36,7 @@ def run_menubar_app(config: AgentConfig) -> None:
                 rumps.MenuItem(t("copy_token", lang), callback=self.copy_token),
                 rumps.MenuItem(t("open_logs", lang), callback=self.open_logs),
                 None,
+                rumps.MenuItem(t("about", lang), callback=self.show_about),
                 rumps.MenuItem(t("uninstall", lang), callback=self.uninstall),
                 rumps.MenuItem(t("quit", lang), callback=self.quit),
             ]
@@ -45,6 +47,9 @@ def run_menubar_app(config: AgentConfig) -> None:
 
         def open_logs(self, _):
             subprocess.Popen(["open", str(log_path)])
+
+        def show_about(self, _):
+            rumps.alert(title=t("about", lang), message=about_message(config))
 
         def uninstall(self, _):
             if rumps.alert(

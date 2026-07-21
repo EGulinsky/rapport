@@ -37,5 +37,7 @@ class TestHealth:
         assert body["modules"]["calls"]["ok"] is True
 
     def test_positiv_health_meldet_version(self, client):
+        from agent.version import __version__
+
         resp = client.get("/health")
-        assert "version" in resp.json()
+        assert resp.json()["version"] == __version__

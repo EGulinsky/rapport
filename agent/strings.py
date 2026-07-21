@@ -18,6 +18,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uninstall_confirm_message": "Entfernt den Autostart-Eintrag und beendet den Agenten.",
         "uninstall_confirm_ok": "Deinstallieren",
         "uninstall_confirm_cancel": "Abbrechen",
+        "about": "Über Rapport Agent",
+        "about_message": "Version {version}\nPlattform: {platform}\nPort: {port}",
     },
     "en": {
         "running_on_port": "Running on port {port}",
@@ -31,6 +33,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uninstall_confirm_message": "Removes the autostart entry and stops the agent.",
         "uninstall_confirm_ok": "Uninstall",
         "uninstall_confirm_cancel": "Cancel",
+        "about": "About Rapport Agent",
+        "about_message": "Version {version}\nPlatform: {platform}\nPort: {port}",
     },
 }
 
