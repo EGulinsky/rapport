@@ -52,5 +52,27 @@
       <ComponentRef Id="ShortcutStart" />
     </Feature>
 
+    <!-- Setup itself does the Docker check/install/pull/start/open-browser
+         work; no separate manual step after Setup finishes, no Start Menu
+         click required (the shortcut above still exists so it can be re-run
+         later, e.g. if Docker needed a restart). WixQuietExec (from the Util
+         extension) is the standard WiX mechanism for running an external
+         command from a CustomAction; it always reads its command line from
+         the fixed property name WixQuietExecCmdLine, so the SetProperty
+         immediately before it is what actually carries the command. -->
+    <SetProperty Id="WixQuietExecCmdLine"
+                 Value="&quot;[INSTALLFOLDER]start-rapport.bat&quot;"
+                 Before="RunStartRapport"
+                 Sequence="execute" />
+    <CustomAction Id="RunStartRapport"
+                  BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+                  DllEntry="WixQuietExec"
+                  Execute="immediate"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RunStartRapport" After="InstallFiles">NOT Installed</Custom>
+    </InstallExecuteSequence>
+
   </Package>
 </Wix>

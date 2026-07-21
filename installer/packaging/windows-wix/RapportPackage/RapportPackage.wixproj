@@ -1,9 +1,10 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
-  <!-- The whole Windows installer: a single MSI (Rapport-Setup-<version>.msi):
-       docker-compose.yml, start-rapport.bat, and a Start Menu shortcut as
-       payload. No custom WixUI dialog set (see Product.wxs); relies on
-       Windows Installer's own default progress UI and elevation prompt. -->
+  <!-- The whole Windows installer: a single MSI (Rapport-Setup-<version>.msi).
+       Setup itself runs the Docker check/install/pull/start/open-browser
+       work via a WixQuietExec CustomAction (see Product.wxs); no separate
+       manual step after Setup finishes. No custom WixUI dialog set; relies
+       on Windows Installer's own default progress UI and elevation prompt. -->
 
   <PropertyGroup>
     <OutputType>Package</OutputType>
@@ -16,5 +17,11 @@
          not an attribute in the .wxs itself. -->
     <Platform>x64</Platform>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Provides the WixQuietExec CustomAction used to run start-rapport.bat
+         automatically during Setup. -->
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
 
 </Project>

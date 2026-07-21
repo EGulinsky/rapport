@@ -1,9 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
-REM Runs once right after Setup finishes (via the Burn bootstrapper's
-REM "Launch" checkbox on the finish page), and again any time from the
-REM "Start rapport" Start Menu shortcut. %~dp0 always resolves to this
-REM script's own folder, independent of the current working directory.
+REM Runs automatically during Setup (via the RunStartRapport CustomAction in
+REM Product.wxs, using WixQuietExec) and again any time later from the
+REM "Start rapport" Start Menu shortcut (e.g. if Docker needed a restart, or
+REM containers didn't come back up). WixQuietExec runs this with no visible
+REM console and nobody able to press a key, so unlike an interactively-run
+REM script this must never `pause` on error -- it just exits non-zero and
+REM lets the caller (or the next manual re-run) notice. %~dp0 always
+REM resolves to this script's own folder, independent of the current
+REM working directory.
 set "COMPOSE_FILE=%~dp0docker-compose.yml"
 
 docker info >nul 2>nul
@@ -21,7 +26,6 @@ curl -L -o "%DOCKER_INSTALLER%" "https://desktop.docker.com/win/main/%DOCKER_ARC
 if errorlevel 1 (
     echo Download failed. Check your internet connection and try again, or
     echo install Docker manually from https://www.docker.com/get-started/.
-    pause
     exit /b 1
 )
 
@@ -34,12 +38,10 @@ if "%INSTALL_RESULT%"=="3010" (
     echo Docker Desktop needs your computer to restart to finish installing
     echo ^(this happens the first time WSL2 is enabled^). Please restart, then
     echo run "Start rapport" again from the Start Menu.
-    pause
     exit /b 1
 )
 if not "%INSTALL_RESULT%"=="0" (
     echo Docker Desktop installation failed ^(exit code %INSTALL_RESULT%^).
-    pause
     exit /b 1
 )
 
@@ -62,7 +64,6 @@ for /l %%i in (1,1,60) do (
 if "%DOCKER_READY%"=="0" (
     echo Docker didn't start in time. Please make sure Docker Desktop is
     echo running, then run "Start rapport" again from the Start Menu.
-    pause
     exit /b 1
 )
 
@@ -71,7 +72,6 @@ echo Pulling rapport images ^(this can take a few minutes the first time^)...
 docker compose -f "%COMPOSE_FILE%" pull
 if errorlevel 1 (
     echo Failed to pull rapport images. Check your internet connection and try again.
-    pause
     exit /b 1
 )
 
@@ -79,7 +79,6 @@ echo Starting rapport...
 docker compose -f "%COMPOSE_FILE%" up -d
 if errorlevel 1 (
     echo Failed to start rapport.
-    pause
     exit /b 1
 )
 
@@ -97,14 +96,8 @@ for /l %%i in (1,1,30) do (
 
 if "%APP_READY%"=="0" (
     echo rapport didn't become healthy in time. Run "docker compose -f "%COMPOSE_FILE%" logs" for details.
-    pause
     exit /b 1
 )
 
 echo rapport is running - opening in your browser: http://localhost:3000
 start "" http://localhost:3000
-
-echo.
-echo You can close this window. rapport keeps running in the background
-echo (managed by Docker) and restarts automatically when your computer restarts.
-timeout /t 5 >nul

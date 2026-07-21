@@ -85,32 +85,48 @@ bootstrapper:
   had). Windows Installer itself still provides the UAC elevation prompt,
   the Add/Remove Programs entry, and the uninstaller — nothing to author
   by hand for any of that.
-- **`start-rapport.bat`** — the actual bootstrap logic, run manually from
-  the "Start rapport" Start Menu shortcut after installing (there's no
-  Burn bootstrapper here to auto-launch it right after Setup finishes, so
-  this is a deliberate one extra click compared to macOS/Linux): check for
-  Docker, download+silently install Docker Desktop if missing (`curl` +
-  the documented `install --quiet --accept-license` flags, handling the
-  3010 "restart required" exit code distinctly), wait for the daemon,
-  `docker compose pull && up -d`, poll `/health` via `curl`, then open the
-  browser — the same step sequence as the macOS/Linux Python flow, just as
-  a plain batch script. Can be re-run any time from the same shortcut
-  (useful if Docker needed a restart, or containers didn't come back up).
-  On any failure the window stays open (`pause`) rather than flashing
-  closed, so the error is actually readable.
-- **`build_windows_wix.ps1`** — resolves `docker-compose.yml` and
-  generates `License.rtf` (from the repo's real `LICENSE`, so it can never
-  drift out of sync) at build time, then `dotnet build`s the MSI project.
-  WiX itself is fetched via a NuGet `PackageReference` in the `.wixproj`
-  file — no separate CLI tool install needed, unlike NSIS's `choco install
-  nsis` step.
+- **Setup runs `start-rapport.bat` itself, automatically** — a
+  `RunStartRapport` CustomAction (`WixQuietExec`, from `WixToolset.Util.wixext`,
+  the standard WiX mechanism for running an external command from a
+  CustomAction) is sequenced right after `InstallFiles`, so the entire
+  Docker check/install/pull/start/open-browser sequence happens as part of
+  Setup itself — no separate manual step, no "now go click this" instruction.
+  The Start Menu shortcut still exists so the same script can be re-run
+  later (e.g. if Docker needed a restart, or containers didn't come back
+  up), but it's no longer required for the first run to happen at all.
+  Because `WixQuietExec` runs the script with no visible console, the script
+  itself must never `pause` on error (unlike a script a user runs
+  interactively) — it just exits non-zero and lets the next re-run (or the
+  MSI log, if verbose logging is enabled) surface what happened.
+- **`start-rapport.bat`** — check for Docker, download+silently install
+  Docker Desktop if missing (`curl` + the documented `install --quiet
+  --accept-license` flags, handling the 3010 "restart required" exit code
+  distinctly), wait for the daemon, `docker compose pull && up -d`, poll
+  `/health` via `curl`, then open the browser — the same step sequence as
+  the macOS/Linux Python flow, just as a plain batch script (rather than a
+  compiled MSI CustomAction DLL) since it needs to shell out to
+  `docker`/`curl`/the Docker Desktop installer either way — no installer
+  technology speaks Docker natively.
+- **`build_windows_wix.ps1`** — resolves `docker-compose.yml` at build time,
+  then `dotnet build`s the MSI project. WiX itself is fetched via NuGet
+  `PackageReference`s in the `.wixproj` file — no separate CLI tool install
+  needed, unlike NSIS's `choco install nsis` step.
 
-Deliberately **no** Docker-prerequisite handling at the MSI level: Docker
-Desktop's own installer binary is a vendor-hosted, frequently-updated file,
-awkward to model as MSI-native install logic. Handling it as plain
-batch-script logic in `start-rapport.bat` keeps the MSI itself simple (just
-files + a shortcut) and matches how the macOS/Linux Python flow does the
-same check-and-install.
+One real UX tradeoff of running everything inside a single CustomAction:
+Windows Installer's default progress bar doesn't know how to reflect
+`start-rapport.bat`'s own internal steps, so on a machine that needs a
+fresh Docker Desktop download+install, Setup can appear to sit at the same
+point in its progress bar for several minutes while that happens in the
+background — expected, not stuck, but worth knowing going in.
+
+**Verification limits, on top of the ones already noted below**: even
+`release.yml`'s `windows-latest` runner can only prove the MSI *compiles*
+and the CustomAction is wired correctly — GitHub-hosted Windows runners
+don't have Docker Desktop installed, so the actual `start-rapport.bat`
+Docker-install-and-compose-up behavior, now running automatically during
+Setup instead of via a manually-launched shortcut, has not been exercised
+end-to-end against a real Docker Desktop instance. That needs a real
+Windows machine.
 
 ## Run locally (macOS/Linux development, no packaging)
 
