@@ -71,7 +71,7 @@
                   Return="ignore" />
 
     <InstallExecuteSequence>
-      <Custom Action="RunStartRapport" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="RunStartRapport" After="InstallFiles"><![CDATA[NOT Installed]]></Custom>
     </InstallExecuteSequence>
 
   </Package>
