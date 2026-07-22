@@ -267,17 +267,22 @@ class Application(Base):
 
     @property
     def ghosting(self) -> bool:
-        # list_applications sets _ghosting_override before overwriting letztes_update
+        # Real callers (list_applications, get_application, analytics,
+        # export_excel) always inject a precise, event-based value via
+        # _apply_ghosting_overrides() in routers/applications.py — see there
+        # for the actual algorithm. This branch is a degraded, DB-query-free
+        # fallback for the rare case something reads .ghosting directly off
+        # an ORM object without that bulk pass (e.g. a bare unit test).
         if hasattr(self, '_ghosting_override'):
             return self._ghosting_override
-        if self.main_status in ("signed", "negotiating", "prospecting"):
+        if self.main_status in ("signed", "prospecting"):
             return False
         if self.main_status == "rejected":
             # Ghosted-then-rejected: gap of >= 14 days between application and rejection
             if self.datum_bewerbung and self.letztes_update:
                 return (self.letztes_update - self.datum_bewerbung).days >= 14
             return False
-        # Active application: no activity for > 14 days
+        # Active application (incl. negotiating): no activity for > 14 days
         from datetime import date
         last = self.letztes_update or self.datum_bewerbung
         if last is None:

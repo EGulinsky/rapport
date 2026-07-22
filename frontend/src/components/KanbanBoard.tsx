@@ -141,7 +141,7 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
           )}
         </div>
       )}
-      {!app.abgesagt && !app.ai_color && app.naechster_schritt && (
+      {!app.abgesagt && app.naechster_schritt && (
         <p className={`text-[10px] mt-1.5 leading-tight font-medium ${
           app.naechster_schritt.startsWith('Gespräch') ? 'text-indigo-600' :
           app.naechster_schritt.startsWith('Kein Feedback') || app.naechster_schritt.startsWith('Keine Reaktion') ? 'text-orange-600' :

@@ -8,6 +8,7 @@ from app.database import get_db
 from app import models
 from app.models import MAIN_STATUS_LABELS
 from app.auth.dependencies import get_current_user
+from app.routers.applications import apply_ghosting_overrides
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -139,6 +140,8 @@ def analytics_summary(db: Session = Depends(get_db), current_user: models.User =
             "by_employee_range": [],
             "by_role_category": [],
         }
+
+    apply_ghosting_overrides(db, apps)
 
     total = len(apps)
     rejected_apps = [a for a in apps if a.main_status == "rejected"]

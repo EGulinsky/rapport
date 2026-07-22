@@ -70,6 +70,57 @@ def _status_label(main: str, sub: str | None) -> str:
     return label
 
 
+def apply_ghosting_overrides(db: Session, apps: list) -> None:
+    """Sets Application._ghosting_override on each app from real timeline
+    activity instead of the manually-editable letztes_update field.
+
+    A "status" Event is created unconditionally (regardless of audit-log
+    settings) every time main_status/sub_status changes — both in
+    update_application() below and review.py's PendingMatch-approval flow —
+    so its datum reliably marks the moment an application was switched to
+    "rejected". It's excluded from "last activity" itself: otherwise the
+    gap-to-rejection would always be zero, since that bookkeeping event is
+    always dated the same day as the rejection.
+    """
+    if not apps:
+        return
+    app_ids = [a.id for a in apps]
+    today = date.today()
+
+    last_status_dates = dict(
+        db.query(models.Event.application_id, func.max(models.Event.datum))
+        .filter(models.Event.application_id.in_(app_ids), models.Event.typ == "status")
+        .group_by(models.Event.application_id)
+        .all()
+    )
+    activity_dates: dict[int, list[date]] = {}
+    for app_id, datum in (
+        db.query(models.Event.application_id, models.Event.datum)
+        .filter(models.Event.application_id.in_(app_ids), models.Event.typ != "status")
+        .all()
+    ):
+        if datum:
+            activity_dates.setdefault(app_id, []).append(datum)
+
+    for app in apps:
+        if app.main_status in ("signed", "prospecting"):
+            app._ghosting_override = False
+            continue
+
+        cutoff = last_status_dates.get(app.id) if app.main_status == "rejected" else today
+        candidates = [d for d in activity_dates.get(app.id, []) if cutoff is None or d <= cutoff]
+        last_activity = max(candidates) if candidates else app.datum_bewerbung
+
+        if app.main_status == "rejected":
+            app._ghosting_override = (
+                last_activity is not None and cutoff is not None
+                and (cutoff - last_activity).days >= 14
+            )
+        else:
+            # Active application (incl. negotiating): no real activity for > 14 days
+            app._ghosting_override = last_activity is not None and (today - last_activity).days > 14
+
+
 def _compute_naechster_schritt(
     app,
     next_interview: Optional[date],
@@ -410,10 +461,6 @@ def list_applications(
                               field="datum_bewerbung", old_value=None, new_value=str(eb),
                               reason_key="date_from_earliest_event",
                               user_id=current_user.id)
-            # Compute ghosting from DB letztes_update BEFORE overwriting it in-memory.
-            # A "Bewerbung eingereicht" event with datum=today (set by sync) would
-            # otherwise push letztes_update to today and suppress ghosting.
-            app._ghosting_override = app.ghosting
             md = max_event_dates.get(app.id)
             if md:
                 app.letztes_update = md
@@ -425,6 +472,8 @@ def list_applications(
             )
         if fixed_any:
             db.commit()
+
+        apply_ghosting_overrides(db, apps)
 
     # Attach company website + display name for logo display and name override
     cp_ids = {a.company_profile_id for a in apps if a.company_profile_id}
@@ -591,6 +640,7 @@ def get_application(app_id: int, db: Session = Depends(get_db), current_user: mo
             if cp:
                 setattr(app, attr_name, cp.name_display)
                 setattr(app, attr_target, cp.website)
+    apply_ghosting_overrides(db, [app])
     return app
 
 

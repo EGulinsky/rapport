@@ -10,6 +10,7 @@ from app.database import get_db
 from app import models
 from app.models import EXCEL_EXPORT_MAP
 from app.auth.dependencies import get_current_user
+from app.routers.applications import apply_ghosting_overrides
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -38,6 +39,7 @@ def export_excel(
     if not show_rejected:
         q = q.filter(models.Application.main_status != "rejected")
     apps = q.order_by(models.Application.datum_bewerbung.desc()).all()
+    apply_ghosting_overrides(db, apps)
 
     wb = openpyxl.Workbook()
     ws = wb.active

@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.30',
+    date: '2026-07-22',
+    changes: [
+      'The "ghosting" flag now includes applications in negotiation, not just applied/HR/dept./decision — previously excluded on the assumption an offer stage always has active back-and-forth.',
+      'Ghosting is now measured against actual timeline activity (mail, calls, interviews, notes, …) instead of the manually-editable "last update" date: for open applications, the gap between the last real timeline event and today; for rejected ones, the gap between the last real event and the moment the application was marked rejected — both need to exceed 14 days.',
+      'Restored the "next step" hint on Kanban cards (e.g. "Interview on…", "Awaiting feedback") — it had gone silently missing for any application with an AI assessment, since the traffic-light block was replacing it instead of appearing alongside it.',
+    ],
+  },
+  {
     version: '4.6.29',
     date: '2026-07-21',
     changes: [
