@@ -1,0 +1,17 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# xcodegen-generated project stays committed (project.yml is the source of
+# truth for regeneration, but committing the .xcodeproj means a fresh clone
+# builds immediately without requiring xcodegen to be installed first)
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+.DS_Store
