@@ -266,6 +266,18 @@ class TestIcloudMailLiveCandidates:
         assert any('SUBJECT "Contoso"' in c for c in conn.search_calls)
         assert any('FROM "Contoso"' in c for c in conn.search_calls)
 
+    def test_positiv_suchbegriff_mit_sonderzeichen_wirft_keinen_unicode_fehler(self, db_session, icloud_sync, fake_icloud_imap):
+        # Regression (live-reported, app #225): a search box query containing
+        # a non-ASCII character like ® used to crash with
+        # `'ascii' codec can't encode character '\xae'...` — see
+        # _imap_search_utf8() in sync_targeted.py.
+        conn = fake_icloud_imap([])
+
+        out = _icloud_mail_live_candidates("Contoso® GmbH", 1, set(), db_session)
+
+        assert out == []
+        assert any("Contoso® GmbH" in c for c in conn.search_calls)
+
     def test_negativ_icloud_nicht_verbunden_liefert_leere_liste(self, db_session):
         assert _icloud_mail_live_candidates("Contoso", 1, set(), db_session) == []
 

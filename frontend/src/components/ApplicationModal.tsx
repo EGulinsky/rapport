@@ -113,7 +113,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>({})
-  const [syncResult, setSyncResult] = useState<{ created: number; errors: string[] } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null)
   const [liStatus, setLiStatus] = useState<LinkedInSyncStatus | null>(null)
   const syncMenuRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -157,10 +157,10 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
     setSyncMenuOpen(false)
     try {
       const result = await api.targeted.resetForApp(appId)
-      setSyncResult({ created: -(result.deleted_events ?? 0), errors: [] })
+      setSyncResult({ created: -(result.deleted_events ?? 0), skipped: 0, errors: [] })
       onSaved()
     } catch (e: unknown) {
-      setSyncResult({ created: 0, errors: [errorMessage(e, t)] })
+      setSyncResult({ created: 0, skipped: 0, errors: [errorMessage(e, t)] })
     }
   }
 
@@ -223,7 +223,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
 
         const result = await api.targeted.getResult(appId)
         if (result.done && !liRunning) {
-          setSyncResult({ created: result.created ?? 0, errors: result.errors ?? [] })
+          setSyncResult({ created: result.created ?? 0, skipped: result.skipped ?? 0, errors: result.errors ?? [] })
           await refreshContacts()
           onSaved()
           onReviewOpen?.()
@@ -239,7 +239,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
         }
 
         if (result.done && !liRunning) {
-          setSyncResult({ created: result.created ?? 0, errors: result.errors ?? [] })
+          setSyncResult({ created: result.created ?? 0, skipped: result.skipped ?? 0, errors: result.errors ?? [] })
           await refreshContacts()
           onSaved()
           onReviewOpen?.()
@@ -247,7 +247,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
         }
       }
     } catch (e: unknown) {
-      setSyncResult({ created: 0, errors: [errorMessage(e, t)] })
+      setSyncResult({ created: 0, skipped: 0, errors: [errorMessage(e, t)] })
     } finally {
       stopPolling()
       setSyncing(false)
@@ -1133,7 +1133,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
                 ? t('sync.resultError', { message: syncResult.errors[0] })
                 : syncResult.created < 0
                   ? t('sync.resultDeleted', { count: Math.abs(syncResult.created) })
-                  : `${t('sync.resultDone', { count: syncResult.created })}${liStatus && liStatus.status === 'done' ? t('sync.resultLinkedinSuggestions', { count: liStatus.updated }) : ''}`}
+                  : `${t('sync.resultDone', { count: syncResult.created })}${syncResult.skipped > 0 ? t('sync.resultSkipped', { count: syncResult.skipped }) : ''}${liStatus && liStatus.status === 'done' ? t('sync.resultLinkedinSuggestions', { count: liStatus.updated }) : ''}`}
             </span>
             <button onClick={() => { setSyncResult(null); setLiStatus(null) }} className="ml-2 opacity-60 hover:opacity-100">✕</button>
           </div>

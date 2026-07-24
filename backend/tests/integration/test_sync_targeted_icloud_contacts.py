@@ -28,7 +28,7 @@ class TestSyncContactsForApp:
 
         monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
 
-        created, total, errors = await _sync_contacts_for_app(app, ["Contoso AG", "Contoso"], db_session)
+        created, skipped, total, errors = await _sync_contacts_for_app(app, ["Contoso AG", "Contoso"], db_session)
 
         assert errors == []
         assert created == 1
@@ -45,7 +45,7 @@ class TestSyncContactsForApp:
 
         monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
 
-        created, total, errors = await _sync_contacts_for_app(app, ["Contoso AG", "Contoso"], db_session)
+        created, skipped, total, errors = await _sync_contacts_for_app(app, ["Contoso AG", "Contoso"], db_session)
 
         assert created == 1
         contact = db_session.query(models.Contact).filter_by(email="erika@privat.de").one()
@@ -61,7 +61,7 @@ class TestSyncContactsForApp:
 
         monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
 
-        created, total, errors = await _sync_contacts_for_app(app, ["Contoso AG", "Contoso"], db_session)
+        created, skipped, total, errors = await _sync_contacts_for_app(app, ["Contoso AG", "Contoso"], db_session)
 
         assert created == 0
         assert db_session.query(models.Contact).filter_by(email="irgendwer@irgendwas.de").first() is None
@@ -76,7 +76,7 @@ class TestSyncContactsForApp:
 
         monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
 
-        created, total, errors = await _sync_contacts_for_app(app, ["Contoso AG"], db_session)
+        created, skipped, total, errors = await _sync_contacts_for_app(app, ["Contoso AG"], db_session)
 
         assert created == 0
 
@@ -84,9 +84,9 @@ class TestSyncContactsForApp:
         app = application_factory(db_session, firma="Contoso AG")
         db_session.commit()
 
-        created, total, errors = await _sync_contacts_for_app(app, ["Contoso AG"], db_session)
+        created, skipped, total, errors = await _sync_contacts_for_app(app, ["Contoso AG"], db_session)
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_carddav_fehler_liefert_sauberen_fehler(self, db_session, icloud_sync, monkeypatch):
         app = application_factory(db_session, firma="Contoso AG")
@@ -97,7 +97,7 @@ class TestSyncContactsForApp:
 
         monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
 
-        created, total, errors = await _sync_contacts_for_app(app, ["Contoso AG"], db_session)
+        created, skipped, total, errors = await _sync_contacts_for_app(app, ["Contoso AG"], db_session)
 
         assert created == 0
         assert any("CardDAV" in e for e in errors)

@@ -300,7 +300,10 @@ function GoogleSyncPanel() {
           {lastResult && (
             <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 space-y-1">
               <p className="font-semibold">{t('google.syncDoneTitle', { target: lastResult.target === 'gmail' ? t('google.gmail') : t('google.calendar') })}</p>
-              <p>{t('google.syncStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}</p>
+              <p>
+                {t('google.syncStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}
+                {!!lastResult.updated && ` · ${t('shared.updatedCount', { count: lastResult.updated })}`}
+              </p>
               {lastResult.errors.length > 0 && (
                 <p className="text-red-600">{lastResult.errors.slice(0, 3).join(' | ')}</p>
               )}
@@ -913,7 +916,10 @@ function ICloudSyncPanel() {
           {lastResult && !needs2fa && (
             <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 space-y-1">
               <p className="font-semibold">{t('icloud.syncDoneTitle', { target: lastResult.target })}</p>
-              <p>{t('shared.processedStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}</p>
+              <p>
+                {t('shared.processedStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}
+                {!!lastResult.updated && ` · ${t('shared.updatedCount', { count: lastResult.updated })}`}
+              </p>
               {lastResult.errors.length > 0 && <p className="text-red-600">{lastResult.errors.slice(0, 3).join(' | ')}</p>}
             </div>
           )}

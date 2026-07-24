@@ -11,6 +11,7 @@ from app.routers.sync_targeted import (
     _company_domains_for_app,
     _contact_mentioned_in_app,
     _domain_from_website,
+    _imap_search_utf8,
     _make_live_candidate,
     _query_safe,
     _search_terms,
@@ -179,6 +180,68 @@ class TestQuerySafe:
 
     def test_positiv_klammern_werden_entfernt(self):
         assert _query_safe("Backend (Senior) [DE]") == "Backend Senior DE"
+
+
+class TestImapSearchUtf8:
+    """Regression (live-reported, app #225): a company/contact/role name
+    with a non-ASCII character like ® crashed IMAP sync with
+    `'ascii' codec can't encode character '\\xae'...` — imaplib.IMAP4.search()
+    re-encodes str criteria as ASCII by default. _imap_search_utf8()
+    encodes the query as UTF-8 bytes (bypassing that re-encode) and
+    advertises CHARSET UTF-8, falling back to an ASCII-transliterated query
+    if the server rejects UTF-8 as a charset."""
+
+    def test_positiv_utf8_pfad_erhaelt_bytes_und_charset(self):
+        calls = []
+
+        class FakeImap:
+            def search(self, charset, criteria):
+                calls.append((charset, criteria))
+                return ("OK", [b"1 2"])
+
+        result = _imap_search_utf8(FakeImap(), 'TEXT "Contoso® GmbH"')
+
+        assert result == ("OK", [b"1 2"])
+        assert len(calls) == 1
+        charset, criteria = calls[0]
+        assert charset == "UTF-8"
+        assert isinstance(criteria, bytes)
+        assert criteria == 'TEXT "Contoso® GmbH"'.encode("utf-8")
+
+    def test_positiv_faellt_bei_utf8_ablehnung_auf_ascii_translit_zurueck(self):
+        calls = []
+
+        class FakeImap:
+            error = Exception
+
+            def search(self, charset, criteria):
+                calls.append((charset, criteria))
+                if charset == "UTF-8":
+                    raise Exception("NO [BADCHARSET] charset not supported")
+                return ("OK", [b"3"])
+
+        result = _imap_search_utf8(FakeImap(), 'TEXT "Café® GmbH"')
+
+        assert result == ("OK", [b"3"])
+        assert len(calls) == 2
+        assert calls[0][0] == "UTF-8"
+        second_charset, second_criteria = calls[1]
+        assert second_charset is None
+        assert isinstance(second_criteria, str)
+        assert "®" not in second_criteria
+        assert "Café" in second_criteria or "Cafe" in second_criteria
+
+    def test_positiv_reines_ascii_funktioniert_unveraendert(self):
+        calls = []
+
+        class FakeImap:
+            def search(self, charset, criteria):
+                calls.append((charset, criteria))
+                return ("OK", [b""])
+
+        _imap_search_utf8(FakeImap(), 'TEXT "Contoso AG"')
+
+        assert calls == [("UTF-8", b'TEXT "Contoso AG"')]
 
 
 class TestVobjStr:

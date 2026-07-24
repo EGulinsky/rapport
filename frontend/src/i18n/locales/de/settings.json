@@ -24,7 +24,8 @@
     "notReachable": "nicht erreichbar",
     "resyncAll": "Alles neu",
     "sync": "Sync",
-    "processedStats": "{{processed}} verarbeitet · {{created}} erstellt · {{skipped}} übersprungen"
+    "processedStats": "{{processed}} verarbeitet · {{created}} erstellt · {{skipped}} übersprungen",
+    "updatedCount": "{{count}} aktualisiert"
   },
   "google": {
     "credentialsTitle": "Google OAuth 2.0 Credentials",

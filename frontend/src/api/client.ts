@@ -315,7 +315,7 @@ export const api = {
 
   sync: {
     progress: () => request<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>('/sync/google/progress'),
-    batchResults: () => request<Record<string, { done: boolean; processed?: number; created?: number; skipped?: number; errors?: string[] }>>('/sync/google/batch/results'),
+    batchResults: () => request<Record<string, { done: boolean; processed?: number; created?: number; skipped?: number; updated?: number; errors?: string[] }>>('/sync/google/batch/results'),
     googleStatus: () => request<GoogleSyncStatus>('/sync/google/status'),
     googleSaveCredentials: (data: { client_id: string; client_secret: string }) =>
       request<GoogleSyncStatus>('/sync/google/credentials', { method: 'POST', body: JSON.stringify(data) }),
@@ -356,7 +356,7 @@ export const api = {
   targeted: {
     syncForApp: (appId: number) => request<SyncResult>(`/sync/targeted/${appId}`, { method: 'POST' }),
     resetForApp: (appId: number) => request<{ deleted_events: number; deleted_items: number }>(`/sync/targeted/${appId}/reset`, { method: 'POST' }),
-    getResult: (appId: number) => request<{ done: boolean; created?: number; processed?: number; errors?: string[] }>(`/sync/targeted/${appId}/result`),
+    getResult: (appId: number) => request<{ done: boolean; created?: number; skipped?: number; processed?: number; errors?: string[] }>(`/sync/targeted/${appId}/result`),
     candidates: (appId: number, q?: string) => request<ManualCandidate[]>(`/sync/targeted/${appId}/candidates${q ? `?q=${encodeURIComponent(q)}` : ''}`),
     assign: (appId: number, data: { match_id: number; external_id?: string; source?: string; event_type?: string; datum?: string; titel?: string; remove_from_other?: boolean }) =>
       request<{ conflict: boolean; conflict_app_id?: number; conflict_app_firma?: string; conflict_event_id?: number; event_id?: number }>(`/sync/targeted/${appId}/assign`, { method: 'POST', body: JSON.stringify(data) }),

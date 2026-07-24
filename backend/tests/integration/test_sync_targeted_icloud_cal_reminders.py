@@ -27,7 +27,7 @@ class TestSyncIcloudCalForApp:
         )
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        created, total, errors = await _sync_icloud_cal_for_app(
+        created, skipped, total, errors = await _sync_icloud_cal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
@@ -48,7 +48,7 @@ class TestSyncIcloudCalForApp:
         )
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        created, total, errors = await _sync_icloud_cal_for_app(
+        created, skipped, total, errors = await _sync_icloud_cal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
@@ -61,21 +61,21 @@ class TestSyncIcloudCalForApp:
         ev = icloud_calendar_event("evt-3", "Irrelevant", datetime.now(timezone.utc), organizer_email="x@y.de")
         fake_caldav([FakeCaldavCalendar("Kalender", events=[ev])])
 
-        created, total, errors = await _sync_icloud_cal_for_app(
+        created, skipped, total, errors = await _sync_icloud_cal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_icloud_nicht_verbunden_liefert_leeres_ergebnis(self, db_session):
         app = application_factory(db_session, firma="Contoso AG")
         db_session.commit()
 
-        created, total, errors = await _sync_icloud_cal_for_app(
+        created, skipped, total, errors = await _sync_icloud_cal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_caldav_fehler_liefert_sauberen_fehler(self, db_session, icloud_sync, fake_caldav):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
@@ -84,7 +84,7 @@ class TestSyncIcloudCalForApp:
         db_session.commit()
         fake_caldav(error=RuntimeError("401 Unauthorized"))
 
-        created, total, errors = await _sync_icloud_cal_for_app(
+        created, skipped, total, errors = await _sync_icloud_cal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
@@ -102,7 +102,7 @@ class TestSyncIcloudRemindersForApp:
         )
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
 
-        created, total, errors = await _sync_icloud_reminders_for_app(
+        created, skipped, total, errors = await _sync_icloud_reminders_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
         )
 
@@ -119,18 +119,18 @@ class TestSyncIcloudRemindersForApp:
         todo = icloud_reminder("todo-2", "Milch kaufen")
         fake_caldav([FakeCaldavCalendar("Erinnerungen", todos=[todo])])
 
-        created, total, errors = await _sync_icloud_reminders_for_app(
+        created, skipped, total, errors = await _sync_icloud_reminders_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_icloud_nicht_verbunden_liefert_leeres_ergebnis(self, db_session):
         app = application_factory(db_session, firma="Contoso AG")
         db_session.commit()
 
-        created, total, errors = await _sync_icloud_reminders_for_app(
+        created, skipped, total, errors = await _sync_icloud_reminders_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG"], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])

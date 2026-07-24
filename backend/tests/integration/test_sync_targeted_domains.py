@@ -128,7 +128,7 @@ class TestSyncGmailForApp:
         )
         service = fake_gmail_direct([{"messages": [{"id": "msg-1"}]}], messages_full={"msg-1": msg})
 
-        created, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma, "rolle": None, "is_headhunter": False}, [], db_session)
+        created, skipped, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma, "rolle": None, "is_headhunter": False}, [], db_session)
 
         assert errors == []
         assert created == 1
@@ -146,9 +146,9 @@ class TestSyncGmailForApp:
         db_session.commit()
         service = fake_gmail_direct([])
 
-        created, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
+        created, skipped, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert service.list_calls == []  # gar keine Anfrage — Abbruch vor dem API-Call
 
     async def test_positiv_ohne_domain_aber_mit_suchbegriffen_wird_trotzdem_gesucht(self, db_session, google_sync, fake_gmail_direct):
@@ -161,11 +161,11 @@ class TestSyncGmailForApp:
         db_session.commit()
         service = fake_gmail_direct([])
 
-        created, total, errors = await _sync_gmail_for_app(
+        created, skipped, total, errors = await _sync_gmail_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso", "Backend Engineer"], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert len(service.list_calls) == 1
         query = service.list_calls[0]["q"]
         assert '"Contoso AG"' in query
@@ -197,7 +197,7 @@ class TestSyncGmailForApp:
         }
         fake_gmail_direct(list_pages, messages_full=messages_full)
 
-        created, total, errors = await _sync_gmail_for_app(
+        created, skipped, total, errors = await _sync_gmail_for_app(
             app, {"id": app.id, "firma": app.firma, "rolle": None, "is_headhunter": False}, [], db_session,
         )
 
@@ -227,7 +227,7 @@ class TestSyncGmailForApp:
         )
         fake_gmail_direct([{"messages": [{"id": "msg-unrelated"}]}], messages_full={"msg-unrelated": msg})
 
-        created, total, errors = await _sync_gmail_for_app(
+        created, skipped, total, errors = await _sync_gmail_for_app(
             app, {"id": app.id, "firma": app.firma, "rolle": None, "is_headhunter": False}, [], db_session,
         )
 
@@ -239,9 +239,9 @@ class TestSyncGmailForApp:
         app = application_factory(db_session, firma="Contoso AG")
         db_session.commit()
 
-        created, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
+        created, skipped, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_gmail_api_fehler_bei_list_liefert_sauberen_fehler(self, db_session, google_sync, fake_gmail_direct):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
@@ -250,7 +250,7 @@ class TestSyncGmailForApp:
         db_session.commit()
         fake_gmail_direct([], list_error=RuntimeError("500 Internal Server Error"))
 
-        created, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
+        created, skipped, total, errors = await _sync_gmail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
 
         assert created == 0
         assert any("Gmail API" in e for e in errors)
@@ -282,7 +282,7 @@ class TestSyncGcalForApp:
         db_session.commit()
         fake_google_calendar([_cal_event("evt-1", "Interview Runde 1", "recruiterin@contoso.de")])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
@@ -315,7 +315,7 @@ class TestSyncGcalForApp:
             _cal_event("evt-old", "Altes Gespräch", "recruiterin@contoso.de", days_from_now=-60),
         ])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
@@ -341,7 +341,7 @@ class TestSyncGcalForApp:
             _cal_event("evt-prep", "Vorbereitungsgespräch", "recruiterin@contoso.de", days_from_now=-35),
         ])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
@@ -368,7 +368,7 @@ class TestSyncGcalForApp:
         db_session.commit()
         fake_google_calendar([_cal_event("evt-snapshot", "Interview", "recruiterin@sideeffect.example")])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False, "_domain_snapshot": []}, [], db_session,
         )
 
@@ -382,11 +382,11 @@ class TestSyncGcalForApp:
         db_session.commit()
         fake_google_calendar([_cal_event("evt-2", "Zahnarzttermin", "praxis@unbekannt.de")])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert db_session.query(models.Event).filter_by(source="gcal", external_id="evt-2").first() is None
 
     async def test_negativ_ohne_firmendomain_wird_uebersprungen(self, db_session, google_sync, fake_google_calendar):
@@ -394,11 +394,11 @@ class TestSyncGcalForApp:
         db_session.commit()
         service = fake_google_calendar([_cal_event("evt-3", "Irrelevant", "x@y.de")])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": False}, [], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert service.list_calls == []
 
     async def test_negativ_headhunter_bewerbung_nutzt_ziel_und_hh_domain(self, db_session, google_sync, fake_google_calendar):
@@ -412,7 +412,7 @@ class TestSyncGcalForApp:
         db_session.commit()
         fake_google_calendar([_cal_event("evt-4", "Interview", "recruiterin@headhunter-gmbh.de")])
 
-        created, total, errors = await _sync_gcal_for_app(
+        created, skipped, total, errors = await _sync_gcal_for_app(
             app, {"id": app.id, "firma": app.firma, "is_headhunter": True}, [], db_session,
         )
 

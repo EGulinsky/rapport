@@ -334,6 +334,7 @@ export interface SyncResult {
   processed: number
   created: number
   skipped: number
+  updated?: number
   errors: string[]
   requires_2fa?: boolean
 }

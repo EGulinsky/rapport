@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.33',
+    date: '2026-07-24',
+    changes: [
+      'Fixed a sync crash on companies/contacts/roles containing non-ASCII characters (e.g. "Contoso® GmbH"): iCloud Mail search now correctly sends these as UTF-8 to the mail server instead of raising an encoding error and aborting the run.',
+      'Sync results (both the "Sync all" summary and a single application\'s sync) now show how many items were skipped/already existed or updated in place, not just how many were newly created — previously that count was computed internally but thrown away, so a quiet run looked identical to one that checked hundreds of items and found nothing new.',
+      'iCloud Contacts sync now appears in the "Sync all" summary and reports a real updated-count for existing contacts that gained a new application link, instead of being silently left out of the results entirely.',
+    ],
+  },
+  {
     version: '4.6.32',
     date: '2026-07-24',
     changes: [

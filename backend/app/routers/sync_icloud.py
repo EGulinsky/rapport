@@ -884,7 +884,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
     lang = resolve_ui_language(db, user_id)
-    processed = created = skipped = 0
+    processed = created = skipped = updated = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.ICloudSync).first()
@@ -951,12 +951,17 @@ async def _do_icloud_cal(user_id: int) -> dict:
             if uid in synced_ids:
                 # Check if the event changed (date or title)
                 new_datum = date_hint.date() if date_hint else None
+                changed = False
                 if new_datum:
                     existing = db.query(models.Event).filter_by(source="icloud_cal", external_id=uid).first()
                     if existing and (existing.datum != new_datum or existing.titel != summary):
                         existing.datum = new_datum
                         existing.titel = summary
-                skipped += 1
+                        changed = True
+                if changed:
+                    updated += 1
+                else:
+                    skipped += 1
                 continue
 
             combined_lower = (summary + " " + desc).lower()
@@ -979,10 +984,10 @@ async def _do_icloud_cal(user_id: int) -> dict:
                 ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
             except AINotConfigured as e:
                 finish_progress("icloud_cal", lang=lang)
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
+                return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors + [str(e)]}
             except AIRateLimited as e:
                 finish_progress("icloud_cal", lang=lang)
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [t("ai_daily_limit", lang, error=e)]}
+                return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors + [t("ai_daily_limit", lang, error=e)]}
             except Exception as e:
                 errors.append(f"{summary or uid}: {e}")
                 continue
@@ -1018,10 +1023,10 @@ async def _do_icloud_cal(user_id: int) -> dict:
         cfg.calendar_last_sync = datetime.now(timezone.utc)
         db.commit()
         finish_progress("icloud_cal", lang=lang)
-        return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
+        return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors}
     except Exception as e:
         finish_progress("icloud_cal", lang=lang)
-        return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
+        return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors + [str(e)]}
     finally:
         db.close()
 
@@ -1298,13 +1303,17 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
     if not cfg:
         raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
 
+    set_batch_result("icloud_contacts", {"done": False})
     init_progress("icloud_contacts", t("label_icloud_contacts", current_user.ui_language), t("loading_contacts", current_user.ui_language), lang=current_user.ui_language)
     created, errors = await _sync_contacts_http(cfg, db, current_user.id)
 
-    # Backfill missing application links for already-imported contacts (mention-based)
+    # Backfill missing application links for already-imported contacts (mention-based) —
+    # a real "updated" (an existing contact gained a new application link), not
+    # a skip or an error, so it's counted as such rather than stuffed as free text
+    # into the errors list the way it used to be.
     update_progress("icloud_contacts", 0, 1, t("updating_links", current_user.ui_language))
     all_contacts = db.query(models.Contact).all()
-    backfilled = 0
+    updated = 0
     for c in all_contacts:
         mention_ids = _find_apps_where_contact_mentioned(c.name, c.email, db)
         linked_ids = {a.id for a in c.applications}
@@ -1313,19 +1322,16 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
                 app = db.query(models.Application).get(app_id)
                 if app:
                     c.applications.append(app)
-                    backfilled += 1
+                    updated += 1
 
     db.commit()
     cfg.contacts_last_sync = datetime.now(timezone.utc)
     db.commit()
     finish_progress("icloud_contacts", lang=current_user.ui_language)
 
-    return schemas.SyncResult(
-        processed=created,
-        created=created,
-        skipped=0,
-        errors=errors + ([f"{backfilled} bestehende Kontakte verknüpft"] if backfilled else []),
-    )
+    result = schemas.SyncResult(processed=created, created=created, skipped=0, updated=updated, errors=errors)
+    set_batch_result("icloud_contacts", {**result.model_dump(), "done": True})
+    return result
 
 
 async def fetch_all_vcards(cfg: models.ICloudSync) -> list[str]:

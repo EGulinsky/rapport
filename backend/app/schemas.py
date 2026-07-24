@@ -321,6 +321,7 @@ class SyncResult(BaseModel):
     processed: int
     created: int
     skipped: int
+    updated: int = 0
     errors: List[str] = []
     requires_2fa: bool = False
 

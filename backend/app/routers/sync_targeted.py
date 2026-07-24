@@ -13,6 +13,7 @@ import asyncio
 import email as email_lib
 import hashlib
 import re as _re
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -173,13 +174,32 @@ def _query_safe(term: str) -> str:
     return clean
 
 
+def _imap_search_utf8(imap, query: str):
+    """IMAP SEARCH whose criteria may contain non-ASCII characters — a
+    company/contact name with an umlaut, ®, etc. imaplib.IMAP4.search()
+    naively re-encodes str arguments as ASCII (imaplib.IMAP4._command()
+    always does `bytes(arg, self._encoding)` with self._encoding='ascii'
+    unless the server negotiated UTF8=ACCEPT, which we never do here), so
+    any non-ASCII search term crashes the whole sync with an unhandled-
+    looking UnicodeEncodeError (live-reported for a company name containing
+    '\xae'). Passing pre-encoded UTF-8 bytes bypasses that re-encode step
+    entirely, and CHARSET UTF-8 tells the server how to interpret them per
+    RFC 3501 §6.4.4. Falls back to an ASCII-transliterated query if the
+    server rejects UTF-8 as a charset (some IMAP servers don't support it)."""
+    try:
+        return imap.search("UTF-8", query.encode("utf-8"))
+    except Exception:
+        ascii_query = unicodedata.normalize("NFKD", query).encode("ascii", "ignore").decode("ascii")
+        return imap.search(None, ascii_query)
+
+
 # ── Gmail ─────────────────────────────────────────────────────────────────────
 
-async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.routers.sync_google import _get_cfg as _get_google_cfg, _refresh_if_needed, _gmail_body
     cfg = _get_google_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     from googleapiclient.discovery import build
     creds = _refresh_if_needed(cfg, db)
@@ -193,7 +213,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     text_terms = [w for w in (_query_safe(term) for term in terms) if w]
     if not app_domains and not text_terms:
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
 
     since = effective_bewerbung_floor(app)
     if since is None:
@@ -201,7 +221,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
         # anchor to judge relevance against, so don't sync at all rather
         # than guess with an arbitrary lookback window.
         log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
     after_ts = int(datetime(since.year, since.month, since.day, tzinfo=timezone.utc).timestamp())
     # Domain clause (from:/to:) plus company-name/role phrase clause — a mail
     # mentioning the company or role by name from a sender with no known
@@ -224,7 +244,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
             if not page_token:
                 break
     except Exception as e:
-        return 0, 0, [f"Gmail API: {e}"]
+        return 0, 0, 0, [f"Gmail API: {e}"]
 
     log.debug("{} {} Nachrichten gefunden", pfx, len(messages))
     lang = resolve_ui_language(db, user_id)
@@ -278,7 +298,7 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
     if len(pending) > _MAX_TARGETED_MAIL_MATCHES:
         log.warning("{} {} Treffer übersteigt das Limit ({}) — Suchbegriffe vermutlich zu generisch, Lauf abgebrochen",
                     pfx, len(pending), _MAX_TARGETED_MAIL_MATCHES)
-        return 0, total, [t("targeted_mail_too_many_matches", lang, count=len(pending), limit=_MAX_TARGETED_MAIL_MATCHES)]
+        return 0, 0, total, [t("targeted_mail_too_many_matches", lang, count=len(pending), limit=_MAX_TARGETED_MAIL_MATCHES)]
 
     for i, item in enumerate(pending):
         update_progress("targeted_gmail", i, len(pending), t("gmail_progress", lang, current=i + 1, total=len(pending)))
@@ -292,16 +312,16 @@ async def _sync_gmail_for_app(app: models.Application, app_dict: dict, terms: li
             errors.append(f"gmail/{item['id']}: {e}")
 
     log.debug("{} fertig: {} erstellt, {} übersprungen, {} fehler", pfx, created, skipped, len(errors))
-    return created, total, errors
+    return created, skipped, total, errors
 
 
 # ── Google Calendar ───────────────────────────────────────────────────────────
 
-async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.routers.sync_google import _get_cfg as _get_google_cfg, _refresh_if_needed
     cfg = _get_google_cfg(db)
     if not cfg or not cfg.refresh_token_enc:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     from googleapiclient.discovery import build
     creds = _refresh_if_needed(cfg, db)
@@ -314,12 +334,12 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         app_domains = _company_domains_for_app(app, terms, db)
     if not app_domains:
         log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
 
     since = effective_bewerbung_floor(app)
     if since is None:
         log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
     now = datetime.now(timezone.utc)
     try:
         events_result = service.events().list(
@@ -329,7 +349,7 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
             singleEvents=True, orderBy="startTime", maxResults=500,
         ).execute()
     except Exception as e:
-        return 0, 0, [f"Google Calendar: {e}"]
+        return 0, 0, 0, [f"Google Calendar: {e}"]
 
     def _ev_matches_domain(ev: dict) -> bool:
         emails = [((ev.get("organizer") or {}).get("email") or "")]
@@ -442,16 +462,16 @@ async def _sync_gcal_for_app(app: models.Application, app_dict: dict, terms: lis
         except Exception as e:
             errors.append(f"gcal/{summary}: {e}")
 
-    return created, len(cal_events), errors
+    return created, skipped, len(cal_events), errors
 
 
 # ── iCloud Mail ───────────────────────────────────────────────────────────────
 
-async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _imap_body, _imap_connect_select, _imap_fetch_full_bytes
     cfg = _get_icloud_cfg(db)
     if not cfg:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     app_id = app.id
     pfx = f"[SYNC #{app_id} icloud_mail]"
@@ -461,7 +481,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     text_terms = [w for w in (_query_safe(term) for term in terms) if w]
     if not app_domains and not text_terms:
         log.debug("{} keine Unternehmens-Domain und keine Suchbegriffe → übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
 
     def _imap_or(criteria: list[str]) -> str:
         if len(criteria) == 1:
@@ -482,7 +502,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     since = effective_bewerbung_floor(app)
     if since is None:
         log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
     imap_query = f'(SINCE "{since.strftime("%d-%b-%Y")}" {imap_query})'
     log.debug("{} domains: {} terms: {}  query: {}", pfx, app_domains, text_terms, imap_query)
 
@@ -491,10 +511,10 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
 
     try:
         imap = await asyncio.to_thread(_imap_connect_select, cfg)
-        _, msg_ids = await asyncio.to_thread(imap.search, None, imap_query)
+        _, msg_ids = await asyncio.to_thread(_imap_search_utf8, imap, imap_query)
         ids = msg_ids[0].split() if msg_ids[0] else []
     except Exception as e:
-        return 0, 0, [f"iCloud Mail IMAP: {e}"]
+        return 0, 0, 0, [f"iCloud Mail IMAP: {e}"]
 
     total = len(ids)
     log.debug("{} {} Nachrichten gefunden", pfx, total)
@@ -546,7 +566,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
     if len(pending) > _MAX_TARGETED_MAIL_MATCHES:
         log.warning("{} {} Treffer übersteigt das Limit ({}) — Suchbegriffe vermutlich zu generisch, Lauf abgebrochen",
                     pfx, len(pending), _MAX_TARGETED_MAIL_MATCHES)
-        return 0, total, [t("targeted_mail_too_many_matches", lang, count=len(pending), limit=_MAX_TARGETED_MAIL_MATCHES)]
+        return 0, 0, total, [t("targeted_mail_too_many_matches", lang, count=len(pending), limit=_MAX_TARGETED_MAIL_MATCHES)]
 
     for i, item in enumerate(pending):
         update_progress("targeted_icloud_mail", i, len(pending), t("icloud_mail_progress", lang, current=i + 1, total=len(pending)))
@@ -560,7 +580,7 @@ async def _sync_icloud_mail_for_app(app: models.Application, app_dict: dict, ter
             errors.append(f"icloud_mail/{item['id']}: {e}")
 
     log.debug("{} fertig: {} erstellt, {} übersprungen, {} fehler", pfx, created, skipped, len(errors))
-    return created, total, errors
+    return created, skipped, total, errors
 
 
 _vobj_str = vobj_str  # lokaler Alias, historisch unter diesem Namen hier verwendet
@@ -568,16 +588,16 @@ _vobj_str = vobj_str  # lokaler Alias, historisch unter diesem Namen hier verwen
 
 # ── iCloud Calendar ───────────────────────────────────────────────────────────
 
-async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _caldav_calendars
     cfg = _get_icloud_cfg(db)
     if not cfg:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     try:
         import caldav  # noqa: F401 -- import-only check for the friendlier "not installed" message below
     except ImportError:
-        return 0, 0, ["caldav nicht installiert"]
+        return 0, 0, 0, ["caldav nicht installiert"]
 
     app_id = app.id
     pfx = f"[SYNC #{app_id} icloud_cal]"
@@ -586,7 +606,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
         app_domains = _company_domains_for_app(app, terms, db)
     if not app_domains:
         log.debug("{} keine Unternehmens-Domain → übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
 
     def _ev_matches_domain_icloud(vevent) -> bool:
         emails: list[str] = []
@@ -605,7 +625,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     since = effective_bewerbung_floor(app)
     if since is None:
         log.debug("{} keine datierten Ereignisse → kein Floor, übersprungen", pfx)
-        return 0, 0, []
+        return 0, 0, 0, []
     now = datetime.now(timezone.utc)
     start_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
 
@@ -615,7 +635,7 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
     try:
         calendars = await asyncio.to_thread(_caldav_calendars, cfg)
     except Exception as e:
-        return 0, 0, [f"iCloud CalDAV: {e}"]
+        return 0, 0, 0, [f"iCloud CalDAV: {e}"]
 
     log.debug("{} domains: {}", pfx, app_domains)
 
@@ -753,12 +773,12 @@ async def _sync_icloud_cal_for_app(app: models.Application, app_dict: dict, term
             errors.append(f"icloud_cal/{summary}: {e}")
             continue
     log.debug("{} fertig: {} erstellt, {} übersprungen, {} fehler", pfx, created, skipped, len(errors))
-    return created, len(matched_events), errors
+    return created, skipped, len(matched_events), errors
 
 
 # ── iCloud Notes ──────────────────────────────────────────────────────────────
 
-async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.agent_client import agent_get
 
     pfx = f"[SYNC #{app.id} icloud_notes]"
@@ -768,10 +788,10 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
     try:
         resp = await agent_get(db, "/notes", timeout=30)
         if resp.status_code != 200:
-            return 0, 0, [f"Agent (Notizen): {resp.text[:200]}"]
+            return 0, 0, 0, [f"Agent (Notizen): {resp.text[:200]}"]
         notes = resp.json()
     except Exception as e:
-        return 0, 0, [f"Rapport Agent nicht erreichbar: {e}"]
+        return 0, 0, 0, [f"Rapport Agent nicht erreichbar: {e}"]
 
     # Smart filter: always include text-matching notes (company/role in title/body) +
     # the 30 most recent notes (relevant notes often don't mention the company by name).
@@ -814,25 +834,25 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
             skipped += 1
 
     log.debug("{} fertig: {} erstellt, {} übersprungen, {} fehler", pfx, created, skipped, len(errors))
-    return created, len(candidates), errors
+    return created, skipped, len(candidates), errors
 
 
 # ── iCloud Contacts ───────────────────────────────────────────────────────────
 
-async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, fetch_all_vcards, _normalize_phone
     cfg = _get_icloud_cfg(db)
     if not cfg:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     try:
         import vobject
         vcards_raw = await fetch_all_vcards(cfg)
     except Exception as e:
-        return 0, 0, [f"CardDAV: {e}"]
+        return 0, 0, 0, [f"CardDAV: {e}"]
 
     if not vcards_raw:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     lang = resolve_ui_language(db, user_id)
     created = skipped = 0
@@ -902,6 +922,7 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
             match_reason = t("mentioned_in_app_text_or_email", lang) if name_in_app_text else t("company_matches_application", lang, org=org_val, app=app.firma)
 
             if existing:
+                skipped += 1
                 if linkedin_url and not existing.linkedin_url:
                     add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
                               field="linkedin_url", old_value=None, new_value=linkedin_url,
@@ -959,7 +980,7 @@ async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: 
         except Exception as e:
             errors.append(f"Kontakt {name if 'name' in dir() else '?'}: {e}")
 
-    return created, len(vcards_raw), errors
+    return created, skipped, len(vcards_raw), errors
 
 
 def _contact_mentioned_in_app(name: str, email: Optional[str], app: models.Application, db: Session) -> bool:
@@ -986,17 +1007,17 @@ def _contact_mentioned_in_app(name: str, email: Optional[str], app: models.Appli
 
 # ── iCloud Reminders ─────────────────────────────────────────────────────────
 
-async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, _caldav_calendars
     pfx = f"[SYNC #{app.id} icloud_todo]"
     cfg = _get_icloud_cfg(db)
     if not cfg:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     try:
         import caldav  # noqa: F401 -- import-only check for the friendlier "not installed" message below
     except ImportError:
-        return 0, 0, ["caldav nicht installiert"]
+        return 0, 0, 0, ["caldav nicht installiert"]
 
     created = skipped = 0
     errors: list[str] = []
@@ -1004,7 +1025,7 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
     try:
         calendars = await asyncio.to_thread(_caldav_calendars, cfg)
     except Exception as e:
-        return 0, 0, [f"iCloud Reminders CalDAV: {e}"]
+        return 0, 0, 0, [f"iCloud Reminders CalDAV: {e}"]
 
     def _collect_and_match_todos(calendars) -> tuple[list, list]:
         """Synchronous per-calendar todos() + text-match, run via
@@ -1073,12 +1094,12 @@ async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict
             skipped += 1
 
     log.debug("{} fertig: {} erstellt, {} übersprungen, {} fehler", pfx, created, skipped, len(errors))
-    return created, len(matched_todos), errors
+    return created, skipped, len(matched_todos), errors
 
 
 # ── Calls ─────────────────────────────────────────────────────────────────────
 
-async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Session, user_id: Optional[int] = None) -> tuple[int, int, list[str]]:
+async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
     from app.agent_client import agent_get
 
     created = skipped = 0
@@ -1087,7 +1108,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
     # Phone numbers of contacts linked to this application
     contacts = app.contacts or []
     if not contacts:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     from app.routers.sync_icloud import _normalize_phone, _phones_match
 
@@ -1099,15 +1120,15 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
                 contact_phones.append((n, c.display_name))
 
     if not contact_phones:
-        return 0, 0, []
+        return 0, 0, 0, []
 
     try:
         resp = await agent_get(db, "/calls", timeout=15)
         if resp.status_code != 200:
-            return 0, 0, [f"Agent (Anrufe): {resp.text[:200]}"]
+            return 0, 0, 0, [f"Agent (Anrufe): {resp.text[:200]}"]
         calls = resp.json()
     except Exception as e:
-        return 0, 0, [f"Rapport Agent nicht erreichbar: {e}"]
+        return 0, 0, 0, [f"Rapport Agent nicht erreichbar: {e}"]
 
     for call in calls:
         phone_raw = str(call.get("phone") or "")
@@ -1124,6 +1145,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
                 break
 
         if not matched_contact:
+            skipped += 1
             continue
 
         # Prefer our own contact record's (enriched, vorname+name) display
@@ -1193,7 +1215,7 @@ async def _sync_calls_for_app(app: models.Application, app_dict: dict, db: Sessi
         mark_synced(db, "icloud_calls", call_key, user_id)
         created += 1
 
-    return created, len(calls), errors
+    return created, skipped, len(calls), errors
 
 
 # ── Task result store ────────────────────────────────────────────────────────
@@ -1244,7 +1266,7 @@ async def _do_sync(app_id: int) -> dict:
     try:
         app = db.query(models.Application).get(app_id)
         if not app:
-            return {"created": 0, "processed": 0, "errors": [f"App {app_id} nicht gefunden"]}
+            return {"created": 0, "skipped": 0, "processed": 0, "errors": [f"App {app_id} nicht gefunden"]}
         user_id = app.user_id
         if user_id is not None:
             set_session_user(db, user_id)
@@ -1264,6 +1286,7 @@ async def _do_sync(app_id: int) -> dict:
         # Stashed on app_dict since every source already receives it uniformly.
         app_dict["_domain_snapshot"] = _company_domains_for_app(app, terms, db)
         total_created = 0
+        total_skipped = 0
         total_processed = 0
         all_errors: list[str] = []
 
@@ -1284,14 +1307,14 @@ async def _do_sync(app_id: int) -> dict:
         for _, pk, _ in sources:
             init_progress(pk, pk.replace("targeted_", "").replace("_", " ").title(), lang=lang)
 
-        async def _run_source(label: str, prog_key: str, fn) -> tuple[int, int, list[str]]:
+        async def _run_source(label: str, prog_key: str, fn) -> tuple[int, int, int, list[str]]:
             try:
-                c, p, errs = await fn(app, app_dict, terms, db, user_id)
+                c, s, p, errs = await fn(app, app_dict, terms, db, user_id)
                 finish_progress(prog_key, lang=lang)
-                return c, p, errs
+                return c, s, p, errs
             except Exception as e:
                 finish_progress(prog_key, lang=lang)
-                return 0, 0, [f"{label}: {e}"]
+                return 0, 0, 0, [f"{label}: {e}"]
 
         ai_results = await asyncio.gather(
             *[_run_source(lbl, pk, fn) for lbl, pk, fn in sources],
@@ -1301,8 +1324,9 @@ async def _do_sync(app_id: int) -> dict:
             if isinstance(r, Exception):
                 all_errors.append(str(r))
             else:
-                c, p, errs = r
+                c, s, p, errs = r
                 total_created += c
+                total_skipped += s
                 total_processed += p
                 all_errors.extend(errs)
         db.commit()
@@ -1312,8 +1336,9 @@ async def _do_sync(app_id: int) -> dict:
         try:
             # Refresh app so SQLAlchemy sees the newly committed events
             db.refresh(app)
-            c, p, errs = await _sync_contacts_for_app(app, terms, db, user_id)
+            c, s, p, errs = await _sync_contacts_for_app(app, terms, db, user_id)
             total_created += c
+            total_skipped += s
             total_processed += p
             all_errors.extend(errs)
         except Exception as e:
@@ -1324,8 +1349,9 @@ async def _do_sync(app_id: int) -> dict:
         # 3. Calls (no AI)
         init_progress("targeted_calls", t("label_call_list", lang), lang=lang)
         try:
-            c, p, errs = await _sync_calls_for_app(app, app_dict, db, user_id)
+            c, s, p, errs = await _sync_calls_for_app(app, app_dict, db, user_id)
             total_created += c
+            total_skipped += s
             total_processed += p
             all_errors.extend(errs)
         except Exception as e:
@@ -1333,8 +1359,8 @@ async def _do_sync(app_id: int) -> dict:
         finish_progress("targeted_calls", lang=lang)
 
         db.commit()
-        log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} geprüft, {} Fehler ━━━",
-                 app_id, label, total_created, total_processed, len(all_errors))
+        log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} übersprungen, {} geprüft, {} Fehler ━━━",
+                 app_id, label, total_created, total_skipped, total_processed, len(all_errors))
 
         # AI assessment after sync
         try:
@@ -1360,7 +1386,7 @@ async def _do_sync(app_id: int) -> dict:
         except Exception as e:
             log.warning("AI-Bewertung fehlgeschlagen für #{}: {}", app_id, e)
 
-        return {"created": total_created, "processed": total_processed, "errors": all_errors}
+        return {"created": total_created, "skipped": total_skipped, "processed": total_processed, "errors": all_errors}
     finally:
         db.close()
 
@@ -1410,7 +1436,7 @@ async def sync_for_app(
         try:
             result = await _do_sync(app_id)
         except Exception as e:
-            result = {"created": 0, "processed": 0, "errors": [str(e)]}
+            result = {"created": 0, "skipped": 0, "processed": 0, "errors": [str(e)]}
         result["done"] = True
         _task_results[str(app_id)] = result
         finish_progress(f"targeted_{app_id}", lang=current_user.ui_language)
@@ -1692,8 +1718,8 @@ def _icloud_mail_live_candidates(q: str, app_id: int, seen_external: set, db) ->
         imap = _imap_connect(cfg)
         imap.select("INBOX")
         # Search by subject OR from
-        _, ids_sub = imap.search(None, f'SUBJECT "{q}"')
-        _, ids_frm = imap.search(None, f'FROM "{q}"')
+        _, ids_sub = _imap_search_utf8(imap, f'SUBJECT "{q}"')
+        _, ids_frm = _imap_search_utf8(imap, f'FROM "{q}"')
         ids_set: set[bytes] = set()
         for part in [ids_sub[0], ids_frm[0]]:
             if part:

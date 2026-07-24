@@ -320,7 +320,19 @@ class FakeImapConnection:
         return ("OK", [b"1"])
 
     def search(self, charset, criteria):
-        self.search_calls.append(criteria)
+        # Mirrors real imaplib.IMAP4._command(): a str argument is always
+        # re-encoded as ASCII (self._encoding) regardless of the declared
+        # charset unless it's already bytes — so a non-ASCII str criteria
+        # with charset=None reproduces the real UnicodeEncodeError, while
+        # pre-encoded UTF-8 bytes (the fix in sync_targeted.py's
+        # _imap_search_utf8()) pass through untouched, exactly like the
+        # real imaplib. search_calls always keeps a str, whichever path was
+        # taken, so existing substring assertions on it keep working.
+        if isinstance(criteria, str):
+            criteria.encode("ascii")
+            self.search_calls.append(criteria)
+        else:
+            self.search_calls.append(criteria.decode("utf-8"))
         return ("OK", [self._search_response])
 
     def fetch(self, msg_id_bytes, spec):

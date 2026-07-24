@@ -15,6 +15,7 @@ interface SourceResult {
   created: number
   processed: number
   skipped: number
+  updated: number
   errors: string[]
 }
 
@@ -34,7 +35,7 @@ interface ProgressEntry {
   done: boolean
 }
 
-const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'local_files']
+const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'icloud_contacts', 'local_files']
 
 export function SyncButton({ onSynced, onReviewOpen }: Props) {
   const { t } = useTranslation('sync')
@@ -156,7 +157,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
       }))
 
       // Combined polling: batch sources + LinkedIn (max 20 min)
-      let batchData: Record<string, { done: boolean; processed?: number; created?: number; skipped?: number; errors?: string[] }> = {}
+      let batchData: Record<string, { done: boolean; processed?: number; created?: number; skipped?: number; updated?: number; errors?: string[] }> = {}
       for (let i = 0; i < 600; i++) {
         await new Promise(r => setTimeout(r, 2000))
 
@@ -195,6 +196,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
             created: r.created ?? 0,
             processed: r.processed ?? 0,
             skipped: r.skipped ?? 0,
+            updated: r.updated ?? 0,
             errors: r.errors ?? [],
           }
           sources.push(src)
@@ -209,6 +211,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
           created: finalLi.created ?? 0,
           processed: finalLi.total ?? 0,
           skipped: finalLi.skipped ?? 0,
+          updated: finalLi.updated ?? 0,
           errors: finalLi.errors ?? [],
         }
         if (liSrc.processed > 0 || liSrc.errors.length > 0) {
@@ -390,8 +393,8 @@ function SyncSummaryModal({
   const { sources, totalCreated, newPending, totalErrors } = summary
 
   // Only show sources that actually ran (appeared in results)
-  const activeSources = sources.filter(s => s.processed > 0 || s.created > 0 || s.errors.length > 0)
-  const quietSources  = sources.filter(s => s.processed === 0 && s.created === 0 && s.errors.length === 0)
+  const activeSources = sources.filter(s => s.processed > 0 || s.created > 0 || s.updated > 0 || s.errors.length > 0)
+  const quietSources  = sources.filter(s => s.processed === 0 && s.created === 0 && s.updated === 0 && s.errors.length === 0)
 
   return (
     <div
@@ -489,7 +492,13 @@ function SourceRow({ src }: { src: SourceResult }) {
           {src.created > 0 && (
             <span className="font-semibold text-indigo-600">+{src.created}</span>
           )}
+          {src.updated > 0 && (
+            <span className="font-medium text-amber-600">{t('summary.updated', { count: src.updated })}</span>
+          )}
           <span>{t('summary.processed', { count: src.processed })}</span>
+          {src.skipped > 0 && (
+            <span>{t('summary.skipped', { count: src.skipped })}</span>
+          )}
           {src.errors.length > 0 && (
             <button
               onClick={() => setErrOpen(o => !o)}

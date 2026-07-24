@@ -24,6 +24,7 @@
     "resultDeleted_one": "{{count}} Sync-Event gelöscht",
     "resultDeleted_other": "{{count}} Sync-Events gelöscht",
     "resultDone": "Sync abgeschlossen — {{count}} neue Einträge",
+    "resultSkipped": ", {{count}} bereits vorhanden",
     "resultLinkedinSuggestions": ", LI: {{count}} Vorschläge"
   },
   "pipeline": {

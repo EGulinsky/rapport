@@ -173,7 +173,9 @@ class TestDoGcalAenderungserkennungUndVerwaisteTermine:
 
         result = await _do_gcal(1)
 
-        assert result["skipped"] == 1  # bereits synced, aber Titel wird trotzdem aktualisiert
+        # bereits synced, aber Titel/Datum ändern sich -> "updated", nicht "skipped"
+        assert result["updated"] == 1
+        assert result["skipped"] == 0
         db_session.refresh(existing)
         assert existing.titel == "Neues Thema (verschoben)"
 

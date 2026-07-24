@@ -39,7 +39,7 @@ class TestSyncIcloudNotesForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_icloud_notes_for_app(
+        created, skipped, total, errors = await _sync_icloud_notes_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
         )
 
@@ -59,11 +59,11 @@ class TestSyncIcloudNotesForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_icloud_notes_for_app(
+        created, skipped, total, errors = await _sync_icloud_notes_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso"], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_agent_nicht_erreichbar_liefert_sauberen_fehler(self, db_session, monkeypatch):
         app = application_factory(db_session, firma="Contoso AG")
@@ -73,7 +73,7 @@ class TestSyncIcloudNotesForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", raise_conn_error)
 
-        created, total, errors = await _sync_icloud_notes_for_app(
+        created, skipped, total, errors = await _sync_icloud_notes_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG"], db_session,
         )
 
@@ -88,7 +88,7 @@ class TestSyncIcloudNotesForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_icloud_notes_for_app(
+        created, skipped, total, errors = await _sync_icloud_notes_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG"], db_session,
         )
 
@@ -108,9 +108,9 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert called is False
 
     async def test_positiv_anruf_von_bekannter_telefonnummer_wird_angelegt(self, db_session, monkeypatch):
@@ -131,7 +131,7 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
         assert errors == []
         assert created == 1
@@ -188,7 +188,7 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
         assert errors == []
         assert created == 1
@@ -219,7 +219,7 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
         assert errors == []
         assert created == 1
@@ -250,7 +250,7 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
         assert errors == []
         assert created == 0
@@ -269,7 +269,7 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", fake_get)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
         assert created == 0
         assert db_session.query(models.Event).filter_by(source="icloud_calls").first() is None
@@ -285,7 +285,7 @@ class TestSyncCallsForApp:
 
         monkeypatch.setattr("httpx.AsyncClient.get", raise_conn_error)
 
-        created, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
+        created, skipped, total, errors = await _sync_calls_for_app(app, {"id": app.id}, db_session)
 
         assert created == 0
         assert any("nicht erreichbar" in e for e in errors)

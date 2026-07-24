@@ -17,6 +17,7 @@
     "icloud_notes": "iCloud Notes",
     "icloud_reminders": "iCloud Reminders",
     "icloud_calls": "Call log",
+    "icloud_contacts": "iCloud Contacts",
     "local_files": "Documents"
   },
   "summary": {
@@ -29,6 +30,8 @@
     "reviewButton": "Review {{count}}",
     "close": "Close",
     "processed": "{{count}} processed",
+    "skipped": "{{count}} skipped",
+    "updated": "{{count}} updated",
     "errorsCount_one": "{{count}} error",
     "errorsCount_other": "{{count}} errors"
   }

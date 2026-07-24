@@ -666,7 +666,7 @@ async def _do_gcal(user_id: int) -> dict:
     db = SessionLocal()
     set_session_user(db, user_id)
     lang = resolve_ui_language(db, user_id)
-    processed = created = skipped = 0
+    processed = created = skipped = updated = 0
     errors: list[str] = []
     try:
         cfg = db.query(models.GoogleSync).first()
@@ -733,13 +733,19 @@ async def _do_gcal(user_id: int) -> dict:
                 # missing its deep link from before v4.6.18 added external_url
                 new_datum = date_hint.date() if date_hint else None
                 existing = db.query(models.Event).filter_by(source="gcal", external_id=ev_id).first()
+                changed = False
                 if existing:
                     if new_datum and (existing.datum != new_datum or existing.titel != summary):
                         existing.datum = new_datum
                         existing.titel = summary
+                        changed = True
                     if html_link and not existing.external_url:
                         existing.external_url = html_link
-                skipped += 1
+                        changed = True
+                if changed:
+                    updated += 1
+                else:
+                    skipped += 1
                 continue
 
             organizer = ev.get("organizer") or {}
@@ -784,10 +790,10 @@ async def _do_gcal(user_id: int) -> dict:
                 ok = await process_item(db, "gcal", ev_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id, external_url=html_link)
             except AINotConfigured as e:
                 finish_progress("gcal", lang=lang)
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
+                return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors + [str(e)]}
             except AIRateLimited as e:
                 finish_progress("gcal", lang=lang)
-                return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [f"AI-Tageslimit: {e}"]}
+                return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors + [f"AI-Tageslimit: {e}"]}
             except Exception as e:
                 errors.append(f"{summary or ev_id}: {e}")
                 continue
@@ -823,10 +829,10 @@ async def _do_gcal(user_id: int) -> dict:
         cfg.gcal_last_sync = datetime.now(timezone.utc)
         db.commit()
         finish_progress("gcal", lang=lang)
-        return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
+        return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors}
     except Exception as e:
         finish_progress("gcal", lang=lang)
-        return {"processed": processed, "created": created, "skipped": skipped, "errors": errors + [str(e)]}
+        return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors + [str(e)]}
     finally:
         db.close()
 

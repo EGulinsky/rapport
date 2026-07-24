@@ -33,12 +33,13 @@ class TestSyncIcloudMailForApp:
         )
         conn = fake_icloud_imap(["1"], {msg_id: msg})
 
-        created, total, errors = await _sync_icloud_mail_for_app(
+        created, skipped, total, errors = await _sync_icloud_mail_for_app(
             app, {"id": app.id, "firma": app.firma}, [], db_session,
         )
 
         assert errors == []
         assert created == 1
+        assert skipped == 0
         assert total == 1
         assert any("contoso.de" in c for c in conn.search_calls)
         event = db_session.query(models.Event).filter_by(source="icloud_mail", external_id="1").one()
@@ -53,9 +54,9 @@ class TestSyncIcloudMailForApp:
         db_session.commit()
         conn = fake_icloud_imap([])
 
-        created, total, errors = await _sync_icloud_mail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
+        created, skipped, total, errors = await _sync_icloud_mail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert conn.search_calls == []
 
     async def test_positiv_ohne_domain_aber_mit_suchbegriffen_wird_trotzdem_gesucht(self, db_session, icloud_sync, fake_icloud_imap):
@@ -68,11 +69,11 @@ class TestSyncIcloudMailForApp:
         db_session.commit()
         conn = fake_icloud_imap([])
 
-        created, total, errors = await _sync_icloud_mail_for_app(
+        created, skipped, total, errors = await _sync_icloud_mail_for_app(
             app, {"id": app.id, "firma": app.firma}, ["Contoso AG", "Contoso", "Backend Engineer"], db_session,
         )
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
         assert len(conn.search_calls) == 1
         query = conn.search_calls[0]
         assert '"Contoso AG"' in query
@@ -81,13 +82,34 @@ class TestSyncIcloudMailForApp:
         assert '"Backend"' not in query
         assert '"Engineer"' not in query
 
+    async def test_positiv_firmenname_mit_sonderzeichen_wirft_keinen_unicode_fehler(self, db_session, icloud_sync, fake_icloud_imap):
+        # Regression (live-reported, app #225): "Contoso® GmbH" crashed the
+        # whole sync with `'ascii' codec can't encode character '\xae'...` —
+        # imaplib.IMAP4.search() re-encodes str criteria as ASCII by default,
+        # and a company name (or role/contact term) with a non-ASCII
+        # character like ® was passed straight through unencoded. See
+        # _imap_search_utf8() in sync_targeted.py.
+        app = application_factory(db_session, firma="Contoso® GmbH", company_profile_id=None, rolle="")
+        seed_floor(db_session, app)
+        db_session.commit()
+        conn = fake_icloud_imap([])
+
+        created, skipped, total, errors = await _sync_icloud_mail_for_app(
+            app, {"id": app.id, "firma": app.firma}, ["Contoso® GmbH"], db_session,
+        )
+
+        assert errors == []
+        assert (created, skipped, total) == (0, 0, 0)
+        assert len(conn.search_calls) == 1
+        assert "Contoso® GmbH" in conn.search_calls[0]
+
     async def test_negativ_icloud_nicht_verbunden_liefert_leeres_ergebnis(self, db_session):
         app = application_factory(db_session, firma="Contoso AG")
         db_session.commit()
 
-        created, total, errors = await _sync_icloud_mail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
+        created, skipped, total, errors = await _sync_icloud_mail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
 
-        assert (created, total, errors) == (0, 0, [])
+        assert (created, skipped, total, errors) == (0, 0, 0, [])
 
     async def test_negativ_imap_fehler_liefert_sauberen_fehler(self, db_session, icloud_sync, monkeypatch):
         profile = company_profile_factory(db_session, website="https://www.contoso.de/")
@@ -100,7 +122,7 @@ class TestSyncIcloudMailForApp:
 
         monkeypatch.setattr("imaplib.IMAP4_SSL", _raise)
 
-        created, total, errors = await _sync_icloud_mail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
+        created, skipped, total, errors = await _sync_icloud_mail_for_app(app, {"id": app.id, "firma": app.firma}, [], db_session)
 
         assert created == 0
         assert any("IMAP" in e for e in errors)
