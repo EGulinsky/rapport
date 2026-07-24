@@ -30,7 +30,7 @@ from app.routers.sync_common import (
     build_contact_email_index, find_apps_from_addresses, find_matching_apps,
     process_item, earliest_bewerbung_date, upsert_contact_from_sender,
     init_progress, update_progress, finish_progress, get_all_progress,
-    set_batch_result, get_batch_results,
+    set_batch_result, get_batch_results, queue_orphaned_calendar_event,
 )
 
 router = APIRouter(prefix="/api/sync/google", tags=["sync"])
@@ -812,15 +812,12 @@ async def _do_gcal(user_id: int) -> dict:
                 )
                 .all()
             )
-            deleted_count = 0
+            queued_count = 0
             for orphan in orphaned:
                 if orphan.external_id not in uid_set:
-                    db.query(models.SyncedItem).filter_by(
-                        source="gcal", external_id=orphan.external_id, user_id=user_id
-                    ).delete()
-                    db.delete(orphan)
-                    deleted_count += 1
-            if deleted_count:
+                    if queue_orphaned_calendar_event(db, "gcal", orphan, user_id):
+                        queued_count += 1
+            if queued_count:
                 db.commit()
 
         cfg.gcal_last_sync = datetime.now(timezone.utc)

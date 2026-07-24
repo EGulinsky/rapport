@@ -43,6 +43,7 @@ from app.routers.sync_common import (
     process_item, strip_html, earliest_bewerbung_date, _predates_bewerbung,
     init_progress, update_progress, finish_progress,
     set_batch_result, vobj_str, vobj_participants, _to_naive_utc,
+    queue_orphaned_calendar_event,
 )
 
 # In-memory session cache: apple_id -> {'api': ICloudPyService, 'sms_device': dict|None}
@@ -996,7 +997,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
         if uid_set:
             window_start = start.date()
             window_end = end.date()
-            deleted_count = 0
+            queued_count = 0
             orphaned = (
                 db.query(models.Event)
                 .filter(
@@ -1009,12 +1010,9 @@ async def _do_icloud_cal(user_id: int) -> dict:
             )
             for orphan in orphaned:
                 if orphan.external_id not in uid_set:
-                    db.query(models.SyncedItem).filter_by(
-                        source="icloud_cal", external_id=orphan.external_id, user_id=user_id
-                    ).delete()
-                    db.delete(orphan)
-                    deleted_count += 1
-            if deleted_count:
+                    if queue_orphaned_calendar_event(db, "icloud_cal", orphan, user_id):
+                        queued_count += 1
+            if queued_count:
                 db.commit()
 
         cfg.calendar_last_sync = datetime.now(timezone.utc)

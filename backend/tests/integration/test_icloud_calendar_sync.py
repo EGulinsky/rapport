@@ -12,6 +12,7 @@ sondern Keyword- (JOB_KEYWORDS) bzw. Firmenname-Textmatching auf Titel+
 Beschreibung.
 """
 import asyncio
+import json
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -303,9 +304,13 @@ class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
         db_session.refresh(existing)
         assert existing.titel == "Neues Thema (Interview verschoben)"
 
-    async def test_positiv_verwaister_termin_ausserhalb_des_aktuellen_kalenders_wird_geloescht(
+    async def test_positiv_verwaister_termin_ausserhalb_des_aktuellen_kalenders_wird_zur_pruefung_vorgeschlagen(
         self, db_session, icloud_sync, fake_caldav
     ):
+        # A vanished calendar entry is no longer deleted outright — it's
+        # queued as a PendingMatch for the user to confirm in the review
+        # modal, same as every other sync-induced deletion (see
+        # queue_orphaned_calendar_event() in sync_common.py).
         app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
         orphan = models.Event(
             application_id=app.id, typ="gespräch", titel="Abgesagtes Interview",
@@ -322,8 +327,14 @@ class TestDoIcloudCalAenderungserkennungUndVerwaisteTermine:
 
         await _do_icloud_cal(1)
 
-        assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is None
-        assert db_session.query(models.SyncedItem).filter_by(source="icloud_cal", external_id="evt-orphan").first() is None
+        assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is not None
+        assert db_session.query(models.SyncedItem).filter_by(source="icloud_cal", external_id="evt-orphan").first() is not None
+        match = db_session.query(models.PendingMatch).filter_by(
+            source="icloud_cal", event_type="orphaned_calendar_event", review_status="pending",
+        ).first()
+        assert match is not None
+        assert match.suggested_app_id == app.id
+        assert json.loads(match.raw_content)["event_id"] == orphan.id
 
 
 class TestDoIcloudCalDoesNotBlockEventLoop:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import PendingMatch, Event, Application, Contact, User
+from app.models import PendingMatch, Event, Application, Contact, User, SyncedItem
 from app.routers.applications import _status_label
 from app.schemas import PendingMatchRead, ApproveMatch
 from app.audit import add_audit
@@ -130,6 +130,31 @@ async def approve_match(
             if ev:
                 add_audit(db, "delete", "user", app_id=app.id, event_id=ev.id,
                           old_value=ev.titel, reason_key="duplicate_cleaned_manually", user_id=current_user.id)
+                db.delete(ev)
+        match.review_status = "approved"
+        db.commit()
+        return {"status": "approved", "event_id": None}
+
+    if match.event_type == "orphaned_calendar_event":
+        # Confirmed deletion of a timeline event whose gcal/icloud_cal source
+        # entry no longer exists (see queue_orphaned_calendar_event() in
+        # sync_common.py) — also clears the matching SyncedItem tracking row,
+        # same as the immediate auto-delete this replaced used to.
+        try:
+            payload = json.loads(match.raw_content or "{}")
+            orphan_event_id = payload.get("event_id")
+        except Exception:
+            orphan_event_id = None
+        if orphan_event_id:
+            ev = db.query(Event).filter_by(id=orphan_event_id, user_id=current_user.id).first()
+            if ev:
+                if ev.external_id:
+                    db.query(SyncedItem).filter_by(
+                        source=match.source, external_id=ev.external_id, user_id=current_user.id
+                    ).delete()
+                add_audit(db, "delete", "user", app_id=app.id, event_id=ev.id,
+                          old_value=ev.titel, reason_key="orphaned_calendar_event_removed_manually",
+                          user_id=current_user.id)
                 db.delete(ev)
         match.review_status = "approved"
         db.commit()

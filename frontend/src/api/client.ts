@@ -170,10 +170,10 @@ export const api = {
     delete: (appId: number, contactId: number) =>
       authFetch(`${BASE}/applications/${appId}/contacts/${contactId}`, { method: 'DELETE' }),
 
-    bulkDelete: (ids: number[], all = false) =>
+    bulkDelete: (ids: number[]) =>
       request<{ deleted: number }>('/contacts/bulk', {
         method: 'DELETE',
-        body: JSON.stringify({ ids, all }),
+        body: JSON.stringify({ ids }),
       }),
 
     patch: (id: number, data: Omit<Partial<Contact>, 'phones'> & { company_profile_id?: number | null; phones?: { number: string; type: string }[] }) =>
@@ -471,7 +471,7 @@ export const api = {
 
   backup: {
     status: () => request<BackupStatus>('/backup/status'),
-    saveSettings: (data: { enabled: boolean; backup_folder?: string; frequency_hours: number; keep_count: number }) =>
+    saveSettings: (data: { enabled: boolean; backup_folder?: string; frequency_hours: number; keep_count: number; keep_daily: number; keep_weekly: number }) =>
       request<BackupStatus>('/backup/settings', { method: 'POST', body: JSON.stringify(data) }),
     run: () => request<{ success: boolean; filename: string }>('/backup/run', { method: 'POST' }),
     pickFolder: () => request<{ path: string }>('/backup/pick-folder'),

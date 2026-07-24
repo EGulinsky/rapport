@@ -228,13 +228,30 @@ class TestBulkDeleteContacts:
         assert remaining == {"Bleibt"}
         assert db_session.get(models.Contact, keep.id) is not None
 
-    def test_positiv_all_true_loescht_alle_eigenen_aber_nicht_fremde(self, client, db_session):
+    def test_negativ_all_flag_wird_ignoriert_ohne_ids_wird_nichts_geloescht(self, client, db_session):
+        # Regression: a client-supplied "all=true" used to bypass the id list
+        # entirely and delete every contact on the account regardless of any
+        # filter shown in the UI — caused real production data loss
+        # (2026-07-10, 2026-07-21). The field no longer exists on the
+        # endpoint's schema at all; a client still sending it must have zero
+        # effect rather than silently reviving the old bypass.
         contact_factory(db_session, name="Eigener 1", user_id=1)
         contact_factory(db_session, name="Eigener 2", user_id=1)
-        contact_factory(db_session, name="Fremder", user_id=2)
         db_session.commit()
 
         resp = client.request("DELETE", "/api/contacts/bulk", json={"ids": [], "all": True})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"deleted": 0}
+        assert db_session.query(models.Contact).count() == 2
+
+    def test_positiv_alle_eigenen_ids_explizit_loescht_nicht_fremde(self, client, db_session):
+        own1 = contact_factory(db_session, name="Eigener 1", user_id=1)
+        own2 = contact_factory(db_session, name="Eigener 2", user_id=1)
+        contact_factory(db_session, name="Fremder", user_id=2)
+        db_session.commit()
+
+        resp = client.request("DELETE", "/api/contacts/bulk", json={"ids": [own1.id, own2.id, 99999]})
 
         assert resp.status_code == 200
         assert resp.json() == {"deleted": 2}

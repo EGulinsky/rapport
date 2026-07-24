@@ -1719,6 +1719,8 @@ function BackupPanel() {
   const [folder, setFolder] = useState('')
   const [frequencyHours, setFrequencyHours] = useState(24)
   const [keepCount, setKeepCount] = useState(7)
+  const [keepDaily, setKeepDaily] = useState(14)
+  const [keepWeekly, setKeepWeekly] = useState(8)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [running, setRunning] = useState(false)
@@ -1741,6 +1743,8 @@ function BackupPanel() {
       setFolder(s.backup_folder ?? '')
       setFrequencyHours(s.frequency_hours)
       setKeepCount(s.keep_count)
+      setKeepDaily(s.keep_daily)
+      setKeepWeekly(s.keep_weekly)
     }).catch(() => {})
   }, [])
 
@@ -1752,6 +1756,8 @@ function BackupPanel() {
         backup_folder: folder.trim() || undefined,
         frequency_hours: frequencyHours,
         keep_count: keepCount,
+        keep_daily: keepDaily,
+        keep_weekly: keepWeekly,
       })
       setStatus(prev => prev ? { ...prev, ...s } : { ...s, backups: [] })
       setSaved(true)
@@ -1884,7 +1890,7 @@ function BackupPanel() {
         </div>
       </div>
 
-      {/* Frequency + Keep count */}
+      {/* Frequency + retention tiers */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-gray-700">{t('backup.frequency')}</label>
@@ -1906,7 +1912,30 @@ function BackupPanel() {
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
         </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-gray-700">{t('backup.keepDaily')}</label>
+          <input
+            type="number"
+            min={0}
+            max={365}
+            value={keepDaily}
+            onChange={e => setKeepDaily(Number(e.target.value))}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-gray-700">{t('backup.keepWeekly')}</label>
+          <input
+            type="number"
+            min={0}
+            max={104}
+            value={keepWeekly}
+            onChange={e => setKeepWeekly(Number(e.target.value))}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+        </div>
       </div>
+      <p className="text-xs text-gray-400 -mt-2">{t('backup.retentionExplainer')}</p>
 
       {/* Actions */}
       <div className="flex gap-2">

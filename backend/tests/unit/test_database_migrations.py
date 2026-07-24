@@ -121,7 +121,7 @@ class TestNoFreshDbGuard:
         "_migrate_event_external_url", "_backfill_linkedin_message_external_url",
         "_migrate_event_mail_direction",
         "_migrate_user_home_location", "_migrate_application_ort_coords",
-        "_migrate_application_drive_distance",
+        "_migrate_application_drive_distance", "_migrate_backup_retention",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -1011,6 +1011,27 @@ class TestFlagNoonBackfillPlaceholders:
     def test_negativ_spalte_fehlt_wird_uebersprungen(self, db_path):
         _drop_columns(db_path, "events", "datum_zeit_is_placeholder")
         db_module._flag_noon_backfill_placeholders()  # must not raise
+
+
+class TestMigrateBackupRetention:
+    def test_positiv_fuegt_spalten_hinzu(self, db_path):
+        _drop_columns(db_path, "backup_config", "keep_daily", "keep_weekly")
+        db_module._migrate_backup_retention()
+        cols = _cols(db_path, "backup_config")
+        assert {"keep_daily", "keep_weekly"} <= cols
+
+    def test_negativ_backup_config_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "backup_config")
+        db_module._migrate_backup_retention()  # must not raise
+
+    def test_negativ_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
+        db_module._migrate_backup_retention()  # must not raise
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_backup_retention()
+        db_module._migrate_backup_retention()  # must not raise
+        assert {"keep_daily", "keep_weekly"} <= _cols(db_path, "backup_config")
 
 
 class TestInitDb:

@@ -10,6 +10,22 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.32',
+    date: '2026-07-24',
+    changes: [
+      'Fixed a serious bug in the Contacts view\'s "select all + delete": selecting everything shown under a company filter (or the "no linked application" filter) could silently delete every contact on the account, not just the filtered ones — the "delete all" flag sent to the server ignored whatever filter was actually on screen. It now always deletes exactly the contacts you selected, nothing more.',
+      'Backup retention is now tiered instead of a single flat count: beyond the most recent backups, one snapshot per day and per week is kept too, so a mistake stays recoverable even if it\'s only noticed days later (configurable in Settings → Backup).',
+      'Calendar sync (Google/iCloud) no longer silently deletes a timeline entry the moment its source calendar event disappears — it now suggests the deletion in the review queue for confirmation first, like every other sync-detected removal.',
+    ],
+  },
+  {
+    version: '4.6.31',
+    date: '2026-07-22',
+    changes: [
+      'Security: bumped Pillow (agent) and requests (installer) to close 60 open Dependabot alerts — both were only used transitively (tray icon rendering, installer HTTP calls) and had no direct exposure, but the versions were stale enough to accumulate several high/critical CVEs upstream.',
+    ],
+  },
+  {
     version: '4.6.30',
     date: '2026-07-22',
     changes: [

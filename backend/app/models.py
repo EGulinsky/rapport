@@ -668,7 +668,18 @@ class BackupConfig(Base):
     enabled         = Column(Boolean, default=False, nullable=False)
     backup_folder   = Column(String, nullable=True)   # absolute path on host Mac
     frequency_hours = Column(Integer, default=24, nullable=False)
+    # keep_count is the "hourly" tier of a grandfather-father-son retention
+    # scheme (see agent/routers/backup.py's _select_files_to_keep): a flat
+    # "keep newest N" alone only gives a recovery window of N * frequency —
+    # with the old default (7 hourly), that's 7 hours, which turned out to
+    # be far too short to recover from a mistake noticed a day or more later
+    # (real incident: mass contact deletion discovered days after the fact,
+    # every backup from that day long since rotated out). keep_daily/
+    # keep_weekly extend the recoverable window with one snapshot per day/
+    # week beyond the hourly tier.
     keep_count      = Column(Integer, default=7, nullable=False)
+    keep_daily      = Column(Integer, default=14, nullable=False)
+    keep_weekly     = Column(Integer, default=8, nullable=False)
     last_backup     = Column(DateTime(timezone=True), nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())

@@ -92,6 +92,26 @@ class TestDoBackup:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             assert zf.namelist() == ["jobtracker.db"]
 
+    async def test_positiv_keep_daily_und_keep_weekly_werden_an_agent_weitergereicht(self, db_session, tmp_path):
+        _make_sqlite_file(backup_module.DB_PATH)
+        db_session.add(models.BackupConfig(
+            enabled=True, backup_folder="/backups", keep_count=3, keep_daily=9, keep_weekly=2, user_id=1,
+        ))
+        db_session.commit()
+
+        captured = {}
+
+        async def fake_post(self, url, json=None, **kwargs):
+            captured["json"] = json
+            return _mock_response({"success": True, "filename": json["filename"]})
+
+        with patch("httpx.AsyncClient.post", new=fake_post):
+            await backup_module.do_backup(1)
+
+        assert captured["json"]["keep_count"] == 3
+        assert captured["json"]["keep_daily"] == 9
+        assert captured["json"]["keep_weekly"] == 2
+
     async def test_negativ_backup_deaktiviert_wird_nicht_ausgefuehrt(self, db_session):
         db_session.add(models.BackupConfig(enabled=False, backup_folder="/backups", user_id=1))
         db_session.commit()
@@ -288,6 +308,7 @@ class TestSaveSettingsApi:
     def test_positiv_speichert_und_liefert_config_zurueck(self, client, db_session):
         resp = client.post("/api/backup/settings", json={
             "enabled": True, "backup_folder": "/Users/me/Backups", "frequency_hours": 12, "keep_count": 5,
+            "keep_daily": 10, "keep_weekly": 4,
         })
 
         assert resp.status_code == 200
@@ -296,6 +317,8 @@ class TestSaveSettingsApi:
         assert body["backup_folder"] == "/Users/me/Backups"
         assert body["frequency_hours"] == 12
         assert body["keep_count"] == 5
+        assert body["keep_daily"] == 10
+        assert body["keep_weekly"] == 4
 
     def test_corner_case_frequency_und_keep_count_werden_auf_mindestens_1_geklemmt(self, client, db_session):
         resp = client.post("/api/backup/settings", json={
@@ -306,6 +329,24 @@ class TestSaveSettingsApi:
         body = resp.json()
         assert body["frequency_hours"] == 1
         assert body["keep_count"] == 1
+
+    def test_corner_case_keep_daily_und_keep_weekly_werden_auf_mindestens_0_geklemmt(self, client, db_session):
+        resp = client.post("/api/backup/settings", json={
+            "enabled": True, "backup_folder": "/x", "keep_daily": -5, "keep_weekly": -1,
+        })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["keep_daily"] == 0
+        assert body["keep_weekly"] == 0
+
+    def test_positiv_ohne_angabe_greifen_defaults(self, client, db_session):
+        resp = client.post("/api/backup/settings", json={"enabled": True, "backup_folder": "/x"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["keep_daily"] == 14
+        assert body["keep_weekly"] == 8
 
 
 class TestRunBackupApi:

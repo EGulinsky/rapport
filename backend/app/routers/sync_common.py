@@ -511,6 +511,50 @@ def mark_synced(db: Session, source: str, external_id: str, user_id: Optional[in
     db.add(models.SyncedItem(source=source, external_id=external_id, user_id=user_id))
 
 
+def queue_orphaned_calendar_event(
+    db: Session, source: str, orphan: "models.Event", user_id: Optional[int] = None
+) -> bool:
+    """Queue a review suggestion for a timeline event whose source calendar
+    entry (gcal/icloud_cal) no longer exists, instead of deleting it outright.
+
+    Calendar sync used to delete these Event rows immediately and
+    unconditionally the moment the corresponding calendar entry vanished from
+    a sync window — no confirmation, no way to notice before it was gone.
+    That's the same class of bug as the contacts bulk-delete incident this
+    fixes elsewhere: a sync process silently deleting real timeline history
+    with no review step. Now it only suggests the deletion via PendingMatch
+    (review.py's approve_match()/reject_match() already handle every other
+    "duplicate_*" suggestion the same way); review.py performs the actual
+    delete once approved.
+
+    Returns True if a new suggestion was queued, False if one already exists
+    for this event (pending, approved, or rejected — matches the same
+    dedup pattern cleanup.py's duplicate_contact suggestions use, so a
+    rejected suggestion isn't re-queued forever on every subsequent sync)."""
+    import json
+
+    pm_ext_id = f"orphan_event_{orphan.id}"
+    exists = db.query(models.PendingMatch).filter_by(source=source, external_id=pm_ext_id).first()
+    if exists:
+        return False
+
+    lang = resolve_ui_language(db, user_id)
+    source_label = t("label_google_calendar" if source == "gcal" else "label_icloud_calendar", lang)
+    db.add(models.PendingMatch(
+        user_id=user_id,
+        source=source,
+        external_id=pm_ext_id,
+        confidence=90,
+        event_type="orphaned_calendar_event",
+        datum=orphan.datum,
+        titel=t("orphaned_calendar_event_title", lang, titel=orphan.titel or ""),
+        extract=t("orphaned_calendar_event_extract", lang, source_label=source_label),
+        raw_content=json.dumps({"event_id": orphan.id}),
+        suggested_app_id=orphan.application_id,
+    ))
+    return True
+
+
 def purge_source(db: Session, source: str, user_id: Optional[int] = None) -> None:
     """Clear SyncedItem records so items get reprocessed on next sync.
     Events are intentionally kept — deleting them causes permanent data loss

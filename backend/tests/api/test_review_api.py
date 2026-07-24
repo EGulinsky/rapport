@@ -152,6 +152,79 @@ class TestApproveMatchDuplicateEvent:
         assert db_session.get(models.Event, ev.id) is not None  # fremdes Event bleibt
 
 
+class TestApproveMatchOrphanedCalendarEvent:
+    """event_type='orphaned_calendar_event' — replaces the old immediate
+    auto-delete in sync_google.py/sync_icloud.py's orphan-event cleanup:
+    the Event (and its SyncedItem tracking row) are only deleted once the
+    user approves this specific suggestion, never automatically."""
+
+    def test_positiv_verwaister_termin_wird_erst_bei_approve_geloescht(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="gespräch", source="gcal", external_id="evt-orphan")
+        db_session.add(models.SyncedItem(source="gcal", external_id="evt-orphan", user_id=1))
+        db_session.commit()
+
+        pm = models.PendingMatch(
+            source="gcal", external_id=f"orphan_event_{ev.id}",
+            confidence=90, event_type="orphaned_calendar_event",
+            raw_content=json.dumps({"event_id": ev.id}),
+            suggested_app_id=app.id, review_status="pending", user_id=1,
+        )
+        db_session.add(pm)
+        db_session.commit()
+
+        # Not deleted just by existing as a pending suggestion
+        assert db_session.get(models.Event, ev.id) is not None
+
+        resp = client.post(f"/api/review/{pm.id}/approve", json={"application_id": app.id})
+
+        assert resp.status_code == 200
+        assert db_session.get(models.Event, ev.id) is None
+        assert db_session.query(models.SyncedItem).filter_by(source="gcal", external_id="evt-orphan").first() is None
+        db_session.refresh(pm)
+        assert pm.review_status == "approved"
+
+    def test_negativ_reject_behaelt_event(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="gespräch", source="icloud_cal", external_id="evt-orphan-2")
+        db_session.commit()
+
+        pm = models.PendingMatch(
+            source="icloud_cal", external_id=f"orphan_event_{ev.id}",
+            confidence=90, event_type="orphaned_calendar_event",
+            raw_content=json.dumps({"event_id": ev.id}),
+            suggested_app_id=app.id, review_status="pending", user_id=1,
+        )
+        db_session.add(pm)
+        db_session.commit()
+
+        resp = client.delete(f"/api/review/{pm.id}")
+
+        assert resp.status_code == 200
+        assert db_session.get(models.Event, ev.id) is not None
+        db_session.refresh(pm)
+        assert pm.review_status == "rejected"
+
+    def test_negativ_event_aus_anderem_user_wird_nicht_geloescht(self, client, db_session):
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="gespräch", source="gcal", external_id="evt-fremd", user_id=999)
+        db_session.commit()
+
+        pm = models.PendingMatch(
+            source="gcal", external_id=f"orphan_event_{ev.id}",
+            confidence=90, event_type="orphaned_calendar_event",
+            raw_content=json.dumps({"event_id": ev.id}),
+            suggested_app_id=app.id, review_status="pending", user_id=1,
+        )
+        db_session.add(pm)
+        db_session.commit()
+
+        resp = client.post(f"/api/review/{pm.id}/approve", json={"application_id": app.id})
+
+        assert resp.status_code == 200
+        assert db_session.get(models.Event, ev.id) is not None  # fremdes Event bleibt
+
+
 class TestApproveMatchStatusOnly:
     """status_only=True — mutiert app.main_status, erzeugt Status-Event."""
 

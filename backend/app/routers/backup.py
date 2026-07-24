@@ -46,6 +46,8 @@ class BackupSettings(BaseModel):
     backup_folder: str | None = None
     frequency_hours: int = 24
     keep_count: int = 7
+    keep_daily: int = 14
+    keep_weekly: int = 8
 
 
 def _get_or_create(db: Session, user_id: int) -> models.BackupConfig:
@@ -108,6 +110,8 @@ async def do_backup(user_id: int) -> dict:
             "filename": filename,
             "data_b64": data_b64,
             "keep_count": cfg.keep_count,
+            "keep_daily": cfg.keep_daily,
+            "keep_weekly": cfg.keep_weekly,
         })
         if resp.status_code != 200:
             return {"success": False, "error": resp.text}
@@ -132,6 +136,8 @@ async def backup_status(db: Session = Depends(get_db), current_user: models.User
         "backup_folder": cfg.backup_folder,
         "frequency_hours": cfg.frequency_hours,
         "keep_count": cfg.keep_count,
+        "keep_daily": cfg.keep_daily,
+        "keep_weekly": cfg.keep_weekly,
         "last_backup": cfg.last_backup.isoformat() if cfg.last_backup else None,
         "backups": backups,
     }
@@ -148,6 +154,8 @@ def save_settings(
     cfg.backup_folder = body.backup_folder
     cfg.frequency_hours = max(1, body.frequency_hours)
     cfg.keep_count = max(1, body.keep_count)
+    cfg.keep_daily = max(0, body.keep_daily)
+    cfg.keep_weekly = max(0, body.keep_weekly)
     db.commit()
     db.refresh(cfg)
     return {
@@ -155,6 +163,8 @@ def save_settings(
         "backup_folder": cfg.backup_folder,
         "frequency_hours": cfg.frequency_hours,
         "keep_count": cfg.keep_count,
+        "keep_daily": cfg.keep_daily,
+        "keep_weekly": cfg.keep_weekly,
         "last_backup": cfg.last_backup.isoformat() if cfg.last_backup else None,
     }
 

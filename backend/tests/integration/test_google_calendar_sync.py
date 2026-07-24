@@ -2,11 +2,12 @@
 
 Mockt an der Netzwerkgrenze (googleapiclient.discovery.build, siehe
 tests/integration/conftest.py::fake_google_calendar), nicht die eigene
-Sync-Logik — testet damit Kontakt-Matching, Änderungserkennung und die
-Löschung verwaister Termine als vollständigen Fluss. Kalender-Events werden
-laut _classify_deterministic() immer deterministisch (kein AI-Call) als
-"gespräch" klassifiziert, sobald ein Kontakt-Match existiert.
+Sync-Logik — testet damit Kontakt-Matching, Änderungserkennung und das
+Vorschlagen verwaister Termine zur Prüfung als vollständigen Fluss.
+Kalender-Events werden laut _classify_deterministic() immer deterministisch
+(kein AI-Call) als "gespräch" klassifiziert, sobald ein Kontakt-Match existiert.
 """
+import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -202,9 +203,13 @@ class TestDoGcalAenderungserkennungUndVerwaisteTermine:
         db_session.refresh(existing)
         assert existing.external_url == "https://www.google.com/calendar/event?eid=xyz789"
 
-    async def test_positiv_verwaister_termin_ausserhalb_des_aktuellen_kalenders_wird_geloescht(
+    async def test_positiv_verwaister_termin_ausserhalb_des_aktuellen_kalenders_wird_zur_pruefung_vorgeschlagen(
         self, db_session, google_sync, fake_google_calendar
     ):
+        # A vanished calendar entry is no longer deleted outright — it's
+        # queued as a PendingMatch for the user to confirm in the review
+        # modal, same as every other sync-induced deletion (see
+        # queue_orphaned_calendar_event() in sync_common.py).
         app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
         contact = contact_factory(db_session, email="recruiterin@contoso.com")
         app.contacts.append(contact)
@@ -222,5 +227,30 @@ class TestDoGcalAenderungserkennungUndVerwaisteTermine:
 
         await _do_gcal(1)
 
-        assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is None
-        assert db_session.query(models.SyncedItem).filter_by(source="gcal", external_id="evt-orphan").first() is None
+        assert db_session.query(models.Event).filter_by(external_id="evt-orphan").first() is not None
+        assert db_session.query(models.SyncedItem).filter_by(source="gcal", external_id="evt-orphan").first() is not None
+        match = db_session.query(models.PendingMatch).filter_by(
+            source="gcal", event_type="orphaned_calendar_event", review_status="pending",
+        ).first()
+        assert match is not None
+        assert match.suggested_app_id == app.id
+        assert json.loads(match.raw_content)["event_id"] == orphan.id
+
+    async def test_negativ_verwaister_termin_wird_nicht_doppelt_vorgeschlagen(
+        self, db_session, google_sync, fake_google_calendar
+    ):
+        app = application_factory(db_session, datum_bewerbung=date.today() - timedelta(days=30))
+        orphan = models.Event(
+            application_id=app.id, typ="gespräch", titel="Abgesagter Termin",
+            datum=date.today(), source="gcal", external_id="evt-orphan", user_id=1,
+        )
+        db_session.add(orphan)
+        db_session.commit()
+        fake_google_calendar([_cal_event("evt-1", "Interview Runde 1", "recruiterin@contoso.com")])
+
+        await _do_gcal(1)
+        await _do_gcal(1)
+
+        assert db_session.query(models.PendingMatch).filter_by(
+            source="gcal", event_type="orphaned_calendar_event",
+        ).count() == 1

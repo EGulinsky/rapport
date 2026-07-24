@@ -217,11 +217,16 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
 
   async function deleteSelected() {
     if (selected.size === 0) return
-    const isAll = selected.size === contacts.length && search === ''
     if (!confirm(t('view.deleteConfirm', { count: selected.size }))) return
     setDeleting(true)
     try {
-      await api.contacts.bulkDelete(isAll ? [] : [...selected], isAll)
+      // Always send explicit IDs, never the all=true fast path: "select all"
+      // only ever selects what's currently shown (respecting companyFilter/
+      // appsFilter/search), but all=true on the backend deletes literally
+      // every contact on the account regardless of any active filter — a
+      // filtered "select all" silently expanding into an unscoped delete-all
+      // caused real data loss in production (2026-07-10, 2026-07-21).
+      await api.contacts.bulkDelete([...selected])
       await load()
     } finally {
       setDeleting(false)

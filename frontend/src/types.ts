@@ -530,6 +530,8 @@ export interface BackupStatus {
   backup_folder?: string
   frequency_hours: number
   keep_count: number
+  keep_daily: number
+  keep_weekly: number
   last_backup?: string
   backups: BackupEntry[]
 }

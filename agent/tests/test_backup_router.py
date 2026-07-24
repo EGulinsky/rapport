@@ -29,7 +29,14 @@ class TestBackupWriteReadRoundtrip:
                 "/backup/backup-write",
                 json={
                     "folder": str(tmp_path), "filename": f"backup_{i}.zip",
-                    "data_b64": base64.b64encode(b"x").decode(), "keep_count": 3,
+                    "data_b64": base64.b64encode(b"x").decode(),
+                    # daily/weekly tiers disabled: isolates the hourly-tier
+                    # truncation from the GFS daily/weekly carry-over tested
+                    # separately below (all 5 files land on the same
+                    # calendar day/week in this fast-running test, so with
+                    # default keep_daily/keep_weekly one extra file would
+                    # otherwise survive via the daily tier).
+                    "keep_count": 3, "keep_daily": 0, "keep_weekly": 0,
                 },
                 headers=auth_headers,
             )

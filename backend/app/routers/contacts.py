@@ -290,7 +290,6 @@ def patch_contact(
 
 class BulkDeleteBody(BaseModel):
     ids: List[int]
-    all: bool = False
 
 
 @router.delete("/bulk", status_code=200)
@@ -299,11 +298,20 @@ def bulk_delete_contacts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    # No "delete everything" fast path: a client-supplied "all=true" bypassing
+    # the id list (formerly here) meant a "select all" done inside a filtered
+    # view (e.g. one company's contacts) silently deleted every contact on
+    # the account, since the flag ignored whatever filter was actually shown —
+    # this caused real, unrecoverable data loss in production (2026-07-10,
+    # 2026-07-21). Always require explicit ids; a caller that truly wants
+    # everything can fetch all ids first and pass them explicitly.
+    #
     # Bulk-delete() umgeht (wie jedes Query.delete()/.update()) den ORM-Loader
     # und damit den automatischen Mandanten-Filter — daher hier explizit gefiltert.
-    q = db.query(models.Contact).filter(models.Contact.user_id == current_user.id)
-    if not body.all:
-        q = q.filter(models.Contact.id.in_(body.ids))
+    q = db.query(models.Contact).filter(
+        models.Contact.user_id == current_user.id,
+        models.Contact.id.in_(body.ids),
+    )
     to_delete = q.all()
     for c in to_delete:
         add_audit(db, "delete", "user", contact_id=c.id,

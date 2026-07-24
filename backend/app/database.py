@@ -1068,6 +1068,32 @@ def _migrate_application_ort():
     conn.close()
 
 
+def _migrate_backup_retention():
+    """Adds the daily/weekly tiers of the grandfather-father-son backup
+    retention scheme (see agent/routers/backup.py's _select_files_to_keep) —
+    keep_count alone (the old flat "keep newest N") only ever gave a recovery
+    window of N * frequency_hours, too short to recover from a mistake
+    noticed a day or more later."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='backup_config'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(backup_config)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "keep_daily" not in cols:
+        cur.execute("ALTER TABLE backup_config ADD COLUMN keep_daily INTEGER NOT NULL DEFAULT 14")
+    if "keep_weekly" not in cols:
+        cur.execute("ALTER TABLE backup_config ADD COLUMN keep_weekly INTEGER NOT NULL DEFAULT 8")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_salary():
     """Salary tracking (applicant expectation vs. company budget)."""
     import sqlite3
@@ -1460,3 +1486,4 @@ def init_db():
     _backfill_event_datum_zeit_noon()
     _flag_noon_backfill_placeholders()
     _backfill_linkedin_message_external_url()
+    _migrate_backup_retention()
