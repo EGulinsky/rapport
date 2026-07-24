@@ -30,6 +30,7 @@
     "reviewButton": "{{count}} prüfen",
     "close": "Schließen",
     "processed": "{{count}} geprüft",
+    "new": "{{count}} neu",
     "skipped": "{{count}} übersprungen",
     "updated": "{{count}} aktualisiert",
     "errorsCount_one": "{{count}} Fehler",

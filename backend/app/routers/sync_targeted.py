@@ -1310,7 +1310,7 @@ async def _do_sync(app_id: int) -> dict:
         async def _run_source(label: str, prog_key: str, fn) -> tuple[int, int, int, list[str]]:
             try:
                 c, s, p, errs = await fn(app, app_dict, terms, db, user_id)
-                finish_progress(prog_key, lang=lang)
+                finish_progress(prog_key, lang=lang, created=c, skipped=s)
                 return c, s, p, errs
             except Exception as e:
                 finish_progress(prog_key, lang=lang)
@@ -1333,30 +1333,34 @@ async def _do_sync(app_id: int) -> dict:
 
         # 2. Contacts — after events exist, _contact_mentioned_in_app finds names in them
         init_progress("targeted_contacts", t("label_icloud_contacts", lang), lang=lang)
+        contacts_created = contacts_skipped = 0
         try:
             # Refresh app so SQLAlchemy sees the newly committed events
             db.refresh(app)
             c, s, p, errs = await _sync_contacts_for_app(app, terms, db, user_id)
+            contacts_created, contacts_skipped = c, s
             total_created += c
             total_skipped += s
             total_processed += p
             all_errors.extend(errs)
         except Exception as e:
             all_errors.append(t("contacts_error", lang, error=e))
-        finish_progress("targeted_contacts", lang=lang)
+        finish_progress("targeted_contacts", lang=lang, created=contacts_created, skipped=contacts_skipped)
         db.commit()
 
         # 3. Calls (no AI)
         init_progress("targeted_calls", t("label_call_list", lang), lang=lang)
+        calls_created = calls_skipped = 0
         try:
             c, s, p, errs = await _sync_calls_for_app(app, app_dict, db, user_id)
+            calls_created, calls_skipped = c, s
             total_created += c
             total_skipped += s
             total_processed += p
             all_errors.extend(errs)
         except Exception as e:
             all_errors.append(t("call_list_error", lang, error=e))
-        finish_progress("targeted_calls", lang=lang)
+        finish_progress("targeted_calls", lang=lang, created=calls_created, skipped=calls_skipped)
 
         db.commit()
         log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} übersprungen, {} geprüft, {} Fehler ━━━",
@@ -1439,7 +1443,10 @@ async def sync_for_app(
             result = {"created": 0, "skipped": 0, "processed": 0, "errors": [str(e)]}
         result["done"] = True
         _task_results[str(app_id)] = result
-        finish_progress(f"targeted_{app_id}", lang=current_user.ui_language)
+        finish_progress(
+            f"targeted_{app_id}", lang=current_user.ui_language,
+            created=result.get("created", 0), skipped=result.get("skipped", 0),
+        )
 
     background_tasks.add_task(_bg)
     return schemas.SyncResult(processed=0, created=0, skipped=0, errors=[])

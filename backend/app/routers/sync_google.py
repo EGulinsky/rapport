@@ -492,7 +492,7 @@ async def _do_gmail(user_id: int) -> dict:
         db.commit()
         cfg.gmail_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("gmail", lang=lang)
+        finish_progress("gmail", lang=lang, created=created, skipped=skipped)
 
         t_total = _time.perf_counter() - t_start
         perf = {
@@ -828,7 +828,7 @@ async def _do_gcal(user_id: int) -> dict:
 
         cfg.gcal_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("gcal", lang=lang)
+        finish_progress("gcal", lang=lang, created=created, updated=updated, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors}
     except Exception as e:
         finish_progress("gcal", lang=lang)

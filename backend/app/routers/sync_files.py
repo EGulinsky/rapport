@@ -191,7 +191,7 @@ async def _do_local_files(user_id: int) -> dict:
         if created > 0:
             cfg.last_sync = datetime.now(timezone.utc)
             db.commit()
-        finish_progress("local_files", lang=lang)
+        finish_progress("local_files", lang=lang, created=created, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
         finish_progress("local_files", lang=lang)

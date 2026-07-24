@@ -434,6 +434,9 @@ class SyncProgress:
     current: int = 0
     total: int = 0
     done: bool = False
+    created: int = 0
+    updated: int = 0
+    skipped: int = 0
 
 # module-level dict; safe for single-worker uvicorn (this is a single-user app)
 _progress: dict[str, SyncProgress] = {}
@@ -455,11 +458,21 @@ def update_progress(source: str, current: int, total: int, step: str = "") -> No
             p.step = step
 
 
-def finish_progress(source: str, step: Optional[str] = None, lang: str = "de") -> None:
+def finish_progress(
+    source: str, step: Optional[str] = None, lang: str = "de",
+    created: int = 0, updated: int = 0, skipped: int = 0,
+) -> None:
+    """Mark a source's progress as done. created/updated/skipped are the
+    final per-category counts for this run -- surfaced via get_all_progress()
+    so the live progress UI can show e.g. "3 new, 2 already existed" instead
+    of just a checkmark once a source finishes."""
     p = _progress.get(source)
     if p:
         p.done = True
         p.step = step or t("done", lang)
+        p.created = created
+        p.updated = updated
+        p.skipped = skipped
 
 
 def get_batch_results() -> dict:
@@ -483,6 +496,9 @@ def get_all_progress() -> dict:
             "total": p.total,
             "percent": round(p.current / p.total * 100) if p.total else (100 if p.done else 0),
             "done": p.done,
+            "created": p.created,
+            "updated": p.updated,
+            "skipped": p.skipped,
         }
         for src, p in _progress.items()
     }

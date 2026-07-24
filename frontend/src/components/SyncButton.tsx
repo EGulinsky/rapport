@@ -33,6 +33,9 @@ interface ProgressEntry {
   total: number
   percent: number
   done: boolean
+  created: number
+  updated: number
+  skipped: number
 }
 
 const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'icloud_contacts', 'local_files']
@@ -249,6 +252,9 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
     total: liStatus.total || 0,
     percent: liStatus.total > 0 ? Math.round(((liStatus.processed || 0) / liStatus.total) * 100) : 0,
     done: ['done', 'error', 'needs_login'].includes(liStatus.status),
+    created: liStatus.created || 0,
+    updated: liStatus.updated || 0,
+    skipped: liStatus.skipped || 0,
   } : null
 
   const allProgressEntries = liProgressEntry
@@ -355,13 +361,21 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
 // ── Progress row ──────────────────────────────────────────────────────────────
 
 function ProgressRow({ entry }: { entry: ProgressEntry }) {
+  const { t } = useTranslation('sync')
   const pct = entry.done ? 100 : entry.percent
+  const parts: string[] = []
+  if (entry.done) {
+    if (entry.created > 0) parts.push(t('summary.new', { count: entry.created }))
+    if (entry.updated > 0) parts.push(t('summary.updated', { count: entry.updated }))
+    if (entry.skipped > 0) parts.push(t('summary.skipped', { count: entry.skipped }))
+  }
+  const doneLabel = parts.length > 0 ? parts.join(' · ') : '✓'
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-700">{entry.label}</span>
-        <span className="text-xs text-gray-400 tabular-nums">
-          {entry.done ? '✓' : `${pct}%`}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-gray-700 shrink-0">{entry.label}</span>
+        <span className="text-xs text-gray-400 tabular-nums truncate">
+          {entry.done ? doneLabel : `${pct}%`}
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">

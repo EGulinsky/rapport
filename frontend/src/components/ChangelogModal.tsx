@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.34',
+    date: '2026-07-24',
+    changes: [
+      'Live sync progress now shows real per-category counts (e.g. "3 new · 2 already existed") once a source finishes, instead of just a checkmark — for both an individual application\'s sync and the "Sync all" overlay. The previous release only added this to the final summary shown after everything completes; this closes the gap for the live, in-progress view itself.',
+    ],
+  },
+  {
     version: '4.6.33',
     date: '2026-07-24',
     changes: [

@@ -112,7 +112,7 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
   const [aiAssessing, setAiAssessing] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
-  const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean }>>({})
+  const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean; created: number; updated: number; skipped: number }>>({})
   const [syncResult, setSyncResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null)
   const [liStatus, setLiStatus] = useState<LinkedInSyncStatus | null>(null)
   const syncMenuRef = useRef<HTMLDivElement>(null)
@@ -1088,23 +1088,32 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
             <p className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1.5">
               <Crosshair className="h-3 w-3 animate-spin" /> {t('sync.running')}
             </p>
-            {Object.values(syncProgress).map(p => (
-              <div key={p.label} className="space-y-0.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-700">{p.label}</span>
-                  <span className="text-[10px] text-gray-400 tabular-nums">
-                    {p.done ? '✓' : p.total > 0 ? `${p.current}/${p.total}` : '…'}
-                  </span>
+            {Object.values(syncProgress).map(p => {
+              const parts: string[] = []
+              if (p.done) {
+                if (p.created > 0) parts.push(t('sync.categoryNew', { count: p.created }))
+                if (p.updated > 0) parts.push(t('sync.categoryUpdated', { count: p.updated }))
+                if (p.skipped > 0) parts.push(t('sync.categorySkipped', { count: p.skipped }))
+              }
+              const doneLabel = parts.length > 0 ? parts.join(' · ') : '✓'
+              return (
+                <div key={p.label} className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-gray-700 shrink-0">{p.label}</span>
+                    <span className="text-[10px] text-gray-400 tabular-nums truncate">
+                      {p.done ? doneLabel : p.total > 0 ? `${p.current}/${p.total}` : '…'}
+                    </span>
+                  </div>
+                  <div className="h-1 rounded-full bg-indigo-100 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${p.done ? 'bg-green-400' : 'bg-indigo-500'}`}
+                      style={{ width: `${p.done ? 100 : p.total > 0 ? Math.round(p.current / p.total * 100) : 10}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 truncate">{p.step}</p>
                 </div>
-                <div className="h-1 rounded-full bg-indigo-100 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${p.done ? 'bg-green-400' : 'bg-indigo-500'}`}
-                    style={{ width: `${p.done ? 100 : p.total > 0 ? Math.round(p.current / p.total * 100) : 10}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-gray-400 truncate">{p.step}</p>
-              </div>
-            ))}
+              )
+            })}
             {liStatus?.status === 'running' && (
               <div className="space-y-0.5">
                 <div className="flex items-center justify-between">

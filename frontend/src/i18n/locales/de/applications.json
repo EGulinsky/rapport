@@ -25,7 +25,13 @@
     "resultDeleted_other": "{{count}} Sync-Events gelöscht",
     "resultDone": "Sync abgeschlossen — {{count}} neue Einträge",
     "resultSkipped": ", {{count}} bereits vorhanden",
-    "resultLinkedinSuggestions": ", LI: {{count}} Vorschläge"
+    "resultLinkedinSuggestions": ", LI: {{count}} Vorschläge",
+    "categoryNew_one": "{{count}} neu",
+    "categoryNew_other": "{{count}} neu",
+    "categoryUpdated_one": "{{count}} aktualisiert",
+    "categoryUpdated_other": "{{count}} aktualisiert",
+    "categorySkipped_one": "{{count}} bereits vorhanden",
+    "categorySkipped_other": "{{count}} bereits vorhanden"
   },
   "pipeline": {
     "prospecting": "Anbahnung",

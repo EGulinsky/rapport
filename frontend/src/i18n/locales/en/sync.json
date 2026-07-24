@@ -30,6 +30,7 @@
     "reviewButton": "Review {{count}}",
     "close": "Close",
     "processed": "{{count}} processed",
+    "new": "{{count}} new",
     "skipped": "{{count}} skipped",
     "updated": "{{count}} updated",
     "errorsCount_one": "{{count}} error",

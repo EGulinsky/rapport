@@ -25,7 +25,13 @@
     "resultDeleted_other": "{{count}} sync events deleted",
     "resultDone": "Sync complete — {{count}} new entries",
     "resultSkipped": ", {{count}} already existed",
-    "resultLinkedinSuggestions": ", LI: {{count}} suggestions"
+    "resultLinkedinSuggestions": ", LI: {{count}} suggestions",
+    "categoryNew_one": "{{count}} new",
+    "categoryNew_other": "{{count}} new",
+    "categoryUpdated_one": "{{count}} updated",
+    "categoryUpdated_other": "{{count}} updated",
+    "categorySkipped_one": "{{count}} already existed",
+    "categorySkipped_other": "{{count}} already existed"
   },
   "pipeline": {
     "prospecting": "Prospecting",

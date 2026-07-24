@@ -415,7 +415,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
         db.commit()
         cfg.mail_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_mail", lang=lang)
+        finish_progress("icloud_mail", lang=lang, created=created, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
         finish_progress("icloud_mail", lang=lang)
@@ -723,7 +723,7 @@ async def _do_icloud_notes(user_id: int) -> dict:
         db.commit()
         cfg.notes_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_notes", lang=lang)
+        finish_progress("icloud_notes", lang=lang, created=created, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
         finish_progress("icloud_notes", lang=lang)
@@ -1022,7 +1022,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
 
         cfg.calendar_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_cal", lang=lang)
+        finish_progress("icloud_cal", lang=lang, created=created, updated=updated, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "updated": updated, "errors": errors}
     except Exception as e:
         finish_progress("icloud_cal", lang=lang)
@@ -1152,7 +1152,7 @@ async def _do_icloud_reminders(user_id: int) -> dict:
         db.commit()
         cfg.reminders_last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_reminders", lang=lang)
+        finish_progress("icloud_reminders", lang=lang, created=created, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
         finish_progress("icloud_reminders", lang=lang)
@@ -1327,7 +1327,7 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
     db.commit()
     cfg.contacts_last_sync = datetime.now(timezone.utc)
     db.commit()
-    finish_progress("icloud_contacts", lang=current_user.ui_language)
+    finish_progress("icloud_contacts", lang=current_user.ui_language, created=created, updated=updated)
 
     result = schemas.SyncResult(processed=created, created=created, skipped=0, updated=updated, errors=errors)
     set_batch_result("icloud_contacts", {**result.model_dump(), "done": True})
@@ -2172,7 +2172,7 @@ async def _do_icloud_calls(user_id: int) -> dict:
         db.commit()
         calls_cfg.last_sync = datetime.now(timezone.utc)
         db.commit()
-        finish_progress("icloud_calls", lang=lang)
+        finish_progress("icloud_calls", lang=lang, created=created, skipped=skipped)
         return {"processed": processed, "created": created, "skipped": skipped, "errors": errors}
     except Exception as e:
         finish_progress("icloud_calls", lang=lang)
