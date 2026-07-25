@@ -76,8 +76,8 @@ struct SyncResult: Decodable {
 struct GoogleSyncStatus: Decodable {
     var connected: Bool
     var clientId: String?
-    var gmailLastSync: Date?
-    var gcalLastSync: Date?
+    var gmailLastSync: String?
+    var gcalLastSync: String?
 }
 
 struct GoogleCredentialsPayload: Encodable {
@@ -89,11 +89,11 @@ struct ICloudSyncStatus: Decodable {
     var connected: Bool
     var appleId: String?
     var icloudEmail: String?
-    var mailLastSync: Date?
-    var calendarLastSync: Date?
-    var remindersLastSync: Date?
-    var contactsLastSync: Date?
-    var notesLastSync: Date?
+    var mailLastSync: String?
+    var calendarLastSync: String?
+    var remindersLastSync: String?
+    var contactsLastSync: String?
+    var notesLastSync: String?
 }
 
 struct ICloudCredentialsPayload: Encodable {
@@ -117,7 +117,7 @@ struct ICloudWebPasswordPayload: Encodable {
 
 struct CallsStatus: Decodable {
     var enabled: Bool
-    var lastSync: Date?
+    var lastSync: String?
     var bridgeReachable: Bool
 }
 
@@ -151,7 +151,7 @@ struct LinkedInSyncState: Decodable {
 
 struct LinkedInMessagesStatus: Decodable {
     var conversationCount: Int
-    var lastImportedAt: Date?
+    var lastImportedAt: String?
 }
 
 struct LinkedInMessagesImportResult: Decodable {
@@ -176,7 +176,7 @@ struct CompanySyncProfileItem: Decodable, Identifiable {
     var nameDisplay: String?
     var syncStatus: String
     var syncError: String?
-    var lastSyncedAt: Date?
+    var lastSyncedAt: String?
 }
 
 /// `POST /api/sync/company/run`'s response: `message` is only present when
@@ -190,7 +190,7 @@ struct CompanySyncRunResult: Decodable {
 struct FilesSyncStatus: Decodable {
     var enabled: Bool
     var folderPath: String?
-    var lastSync: Date?
+    var lastSync: String?
     var bridgeReachable: Bool
 }
 

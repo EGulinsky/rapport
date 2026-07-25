@@ -22,7 +22,7 @@ struct FilesSettingsView: View {
                     }
                     Section {
                         if let lastSync = viewModel.status?.lastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.sync() } }
                         Button("Reset", role: .destructive) { Task { await viewModel.reset(); await viewModel.load() } }

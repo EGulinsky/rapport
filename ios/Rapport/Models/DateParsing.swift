@@ -58,6 +58,16 @@ enum DateParsing {
         if let d = naiveDateTimeFormatter.date(from: string) { return d }
         return nil
     }
+
+    /// Convenience for display sites that just want "some readable string,
+    /// whatever the source" — tries datetime then date-only parsing, falls
+    /// back to the raw string unchanged if neither matches.
+    static func displayString(_ string: String?) -> String {
+        guard let string else { return "" }
+        if let d = dateTime(string) { return d.formatted() }
+        if let d = date(string) { return d.formatted(date: .abbreviated, time: .omitted) }
+        return string
+    }
 }
 
 private extension ISO8601DateFormatter {

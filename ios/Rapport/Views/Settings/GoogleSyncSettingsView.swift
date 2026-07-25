@@ -26,7 +26,7 @@ struct GoogleSyncSettingsView: View {
 
                     Section("Gmail") {
                         if let lastSync = viewModel.status?.gmailLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncGmail() } }
                         Button("Reset", role: .destructive) { Task { await viewModel.resetGmail() } }
@@ -37,7 +37,7 @@ struct GoogleSyncSettingsView: View {
 
                     Section("Google Calendar") {
                         if let lastSync = viewModel.status?.gcalLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncCalendar() } }
                         Button("Reset", role: .destructive) { Task { await viewModel.resetCalendar() } }

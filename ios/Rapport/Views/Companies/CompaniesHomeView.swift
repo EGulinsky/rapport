@@ -4,6 +4,7 @@ struct CompaniesHomeView: View {
     @Environment(SessionStore.self) private var session
     @State private var viewModel: CompaniesViewModel?
     @State private var showNewCompany = false
+    @State private var showMerge = false
     @Binding var selection: Int?
 
     var body: some View {
@@ -51,6 +52,9 @@ struct CompaniesHomeView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button { showNewCompany = true } label: { Label("New company", systemImage: "plus") }
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button { showMerge = true } label: { Label("Merge duplicates", systemImage: "arrow.triangle.merge") }
+            }
         }
         .task {
             if viewModel == nil {
@@ -62,6 +66,16 @@ struct CompaniesHomeView: View {
             if let viewModel {
                 NewCompanyView(viewModel: viewModel)
             }
+        }
+        .sheet(isPresented: $showMerge) {
+            MergeView(viewModel: MergeViewModel(
+                fetchCandidates: {
+                    try await session.companies.list().map { MergeCandidate(id: $0.id, label: $0.nameDisplay ?? $0.nameNorm) }
+                },
+                performMerge: { winner, losers in
+                    try await session.merge.mergeCompanies(winnerId: winner, loserIds: losers)
+                }
+            ))
         }
     }
 }

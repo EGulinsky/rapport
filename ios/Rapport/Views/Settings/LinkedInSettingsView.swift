@@ -51,7 +51,7 @@ struct LinkedInSettingsView: View {
                         if let status = viewModel.messagesStatus {
                             Text("\(status.conversationCount) conversations imported")
                             if let lastImportedAt = status.lastImportedAt {
-                                Text("Last imported: \(lastImportedAt.formatted())").font(.caption).foregroundStyle(.secondary)
+                                Text("Last imported: \(DateParsing.displayString(lastImportedAt))").font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         Button("Import messages.csv") { showCsvImporter = true }

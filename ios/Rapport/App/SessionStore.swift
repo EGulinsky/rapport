@@ -27,6 +27,9 @@ final class SessionStore {
     var companySync: CompanySyncAPI { CompanySyncAPI(client: client) }
     var targetedSync: TargetedSyncAPI { TargetedSyncAPI(client: client) }
     var backup: BackupAPI { BackupAPI(client: client) }
+    var review: ReviewAPI { ReviewAPI(client: client) }
+    var auditLog: AuditLogAPI { AuditLogAPI(client: client) }
+    var merge: MergeAPI { MergeAPI(client: client) }
 
     private(set) var serverURL: URL?
     private(set) var currentUser: UserResponse?

@@ -32,7 +32,7 @@ struct BackupSettingsView: View {
                     }
                     Section("Manual backup") {
                         if let lastBackup = viewModel.status?.lastBackup {
-                            Text("Last backup: \(lastBackup.formatted())").foregroundStyle(.secondary)
+                            Text("Last backup: \(DateParsing.displayString(lastBackup))").foregroundStyle(.secondary)
                         }
                         Button("Run backup now") { Task { await viewModel.runBackup() } }
                         if let message = viewModel.lastRunMessage {

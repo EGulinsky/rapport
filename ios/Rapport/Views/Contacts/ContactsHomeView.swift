@@ -5,8 +5,10 @@ import SwiftUI
 /// same, shared view model rather than re-fetching, so the view model is
 /// owned by MainSplitView and passed into both this view and the detail one.
 struct ContactsHomeView: View {
+    @Environment(SessionStore.self) private var session
     var viewModel: ContactsViewModel
     @Binding var selection: Int?
+    @State private var showMerge = false
 
     var body: some View {
         List(selection: $selection) {
@@ -44,10 +46,29 @@ struct ContactsHomeView: View {
             Task { await viewModel.load() }
         }
         .navigationTitle("Contacts")
+        .toolbar {
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    showMerge = true
+                } label: {
+                    Label("Merge duplicates", systemImage: "arrow.triangle.merge")
+                }
+            }
+        }
         .task {
             if viewModel.contacts.isEmpty {
                 await viewModel.load()
             }
+        }
+        .sheet(isPresented: $showMerge) {
+            MergeView(viewModel: MergeViewModel(
+                fetchCandidates: {
+                    try await session.contacts.list().map { MergeCandidate(id: $0.id, label: $0.displayName) }
+                },
+                performMerge: { winner, losers in
+                    try await session.merge.mergeContacts(winnerId: winner, loserIds: losers)
+                }
+            ))
         }
     }
 }

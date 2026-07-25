@@ -19,7 +19,7 @@ struct BackupStatus: Decodable {
     var keepCount: Int
     var keepDaily: Int
     var keepWeekly: Int
-    var lastBackup: Date?
+    var lastBackup: String?
     var backups: [BackupEntry]?
 }
 

@@ -30,7 +30,7 @@ struct ICloudSyncSettingsView: View {
 
                     Section("Mail") {
                         if let lastSync = viewModel.status?.mailLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncMail() } }
                         Button("Reset", role: .destructive) { Task { await viewModel.resetMail() } }
@@ -39,7 +39,7 @@ struct ICloudSyncSettingsView: View {
 
                     Section("Calendar") {
                         if let lastSync = viewModel.status?.calendarLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncCalendar() } }
                         Button("Reset", role: .destructive) { Task { await viewModel.resetCalendar() } }
@@ -48,7 +48,7 @@ struct ICloudSyncSettingsView: View {
 
                     Section("Reminders") {
                         if let lastSync = viewModel.status?.remindersLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncReminders() } }
                         if let progress = viewModel.progressStore.progress["icloud_reminders"] { SyncProgressRow(progress: progress) }
@@ -56,14 +56,14 @@ struct ICloudSyncSettingsView: View {
 
                     Section("Contacts") {
                         if let lastSync = viewModel.status?.contactsLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncContacts() } }
                     }
 
                     Section("Notes") {
                         if let lastSync = viewModel.status?.notesLastSync {
-                            Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                            Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                         }
                         Button("Sync now") { Task { await viewModel.syncNotes() } }
                         Button("Reset", role: .destructive) { Task { await viewModel.resetNotes() } }
@@ -85,7 +85,7 @@ struct ICloudSyncSettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(callsStatus.bridgeReachable ? .green : .orange)
                             if let lastSync = callsStatus.lastSync {
-                                Text("Last sync: \(lastSync.formatted())").foregroundStyle(.secondary)
+                                Text("Last sync: \(DateParsing.displayString(lastSync))").foregroundStyle(.secondary)
                             }
                         }
                         Button("Sync now") { Task { await viewModel.syncCalls() } }

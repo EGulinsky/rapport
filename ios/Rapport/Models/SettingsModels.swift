@@ -83,7 +83,7 @@ struct SyncSettingsFlags: Codable {
 struct FilesSettings: Decodable {
     var folderPath: String?
     var enabled: Bool
-    var lastSync: Date?
+    var lastSync: String?
 }
 
 struct FilesSettingsPayload: Encodable {

@@ -6,7 +6,7 @@ import SwiftUI
 /// multitasking — this is the standard SwiftUI pattern for "optimized for
 /// iPad, works everywhere" rather than a bespoke breakpoint system.
 enum MainSection: String, CaseIterable, Identifiable {
-    case applications, contacts, companies, calendar, analytics, settings
+    case applications, contacts, companies, calendar, analytics, review, auditLog, settings
 
     var id: String { rawValue }
 
@@ -17,6 +17,8 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .companies: "Companies"
         case .calendar: "Calendar"
         case .analytics: "Analytics"
+        case .review: "Review"
+        case .auditLog: "Audit Log"
         case .settings: "Settings"
         }
     }
@@ -28,6 +30,8 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .companies: "building.2"
         case .calendar: "calendar"
         case .analytics: "chart.bar"
+        case .review: "checklist"
+        case .auditLog: "list.bullet.clipboard"
         case .settings: "gearshape"
         }
     }
@@ -96,6 +100,10 @@ struct MainSplitView: View {
             CalendarHomeView()
         case .analytics:
             AnalyticsHomeView()
+        case .review:
+            ReviewQueueView()
+        case .auditLog:
+            AuditLogView()
         case .settings:
             SettingsHomeView(selection: $selectedSettingsPanel)
         case nil:

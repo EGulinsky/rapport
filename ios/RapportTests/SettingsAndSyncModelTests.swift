@@ -104,6 +104,21 @@ struct SettingsAndSyncModelTests {
         #expect(health.modules["notes"]?.error == "not authorized")
     }
 
+    // MARK: - Timestamp fields stay String (not Date) — see DateParsing.swift's
+    // rationale. A synthesized Decodable `Date?` property would crash on
+    // these ISO strings since APIClient.decoder has no dateDecodingStrategy
+    // (defaults to expecting a Double) — this test locks in the String
+    // convention actually being followed, not just documented.
+
+    @Test func googleSyncStatusDecodesNonNullTimestampAsPlainString() throws {
+        let json = """
+        {"connected": true, "gmail_last_sync": "2026-07-24T10:15:00Z", "gcal_last_sync": null}
+        """
+        let status = try APIClient.decoder.decode(GoogleSyncStatus.self, from: Data(json.utf8))
+        #expect(status.gmailLastSync == "2026-07-24T10:15:00Z")
+        #expect(DateParsing.displayString(status.gmailLastSync).isEmpty == false)
+    }
+
     // MARK: - BackupStatus with defensively-optional backup entries
 
     @Test func decodesBackupStatusWithBackupsArray() throws {

@@ -8,6 +8,7 @@ struct ApplicationsHomeView: View {
     @State private var viewModel: ApplicationsViewModel?
     @State private var displayMode: DisplayMode = .list
     @State private var showNewApplication = false
+    @State private var showMerge = false
     @Binding var selection: Int?
 
     enum DisplayMode: String, CaseIterable, Identifiable {
@@ -41,6 +42,13 @@ struct ApplicationsHomeView: View {
                     Label("New application", systemImage: "plus")
                 }
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    showMerge = true
+                } label: {
+                    Label("Merge duplicates", systemImage: "arrow.triangle.merge")
+                }
+            }
         }
         .searchable(text: Binding(
             get: { viewModel?.searchText ?? "" },
@@ -59,6 +67,16 @@ struct ApplicationsHomeView: View {
             if let viewModel {
                 NewApplicationView(viewModel: viewModel)
             }
+        }
+        .sheet(isPresented: $showMerge) {
+            MergeView(viewModel: MergeViewModel(
+                fetchCandidates: {
+                    try await session.applications.list().map { MergeCandidate(id: $0.id, label: "\($0.firma) — \($0.rolle)") }
+                },
+                performMerge: { winner, losers in
+                    try await session.merge.mergeApplications(winnerId: winner, loserIds: losers)
+                }
+            ))
         }
     }
 
