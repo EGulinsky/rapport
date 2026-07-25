@@ -15,6 +15,7 @@
 7. [Authentication & Multi-Tenancy](#7-authentication--multi-tenancy)
 8. [CI/CD](#8-cicd)
 9. [Internationalization (i18n)](#9-internationalization-i18n)
+10. [iOS Native App](#10-ios-native-app)
 
 ---
 
@@ -873,12 +874,14 @@ flowchart LR
     A[backend<br/>ruff + pyright + pytest] --> E[E2E<br/>Playwright, docker-compose.test.yml]
     B[frontend<br/>tsc + vitest + vite build] --> E
     G["agent (matrix)<br/>ubuntu/windows/macos-latest, pytest"]
+    I["ios (self-hosted)<br/>xcodegen + xcodebuild test"]
     E --> C[docker<br/>Buildx: playwright-base + backend + frontend]
     C --> D["deploy (self-hosted)<br/>git pull → docker compose up -d --build<br/>health/frontend/login+API smoke → macOS notification"]
     D -.->|on failure| F[notify-failure<br/>macOS notification + log]
     A -.->|on failure| F
     B -.->|on failure| F
     G -.->|on failure| F
+    I -.->|on failure| F
     E -.->|on failure| F
     C -.->|on failure| F
 ```
@@ -888,6 +891,7 @@ flowchart LR
 | `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error), `pytest -m "unit or component or api"` (PR gate) + `pytest -m integration` on push to `main`/manual dispatch |
 | `frontend` | push/PR to `main` | `tsc --noEmit`, `vitest run` (unit/component, incl. the i18n key-parity suite), `vite build` |
 | `agent` | push/PR to `main`, matrix `[ubuntu-latest, windows-latest, macos-latest]` | `pytest` over `agent/tests/` — independent of backend/frontend/e2e/docker/deploy, since the native agent ships and updates separately (see §3.5); all three OS legs run the same suite (mocked providers/service registration) — real-hardware verification of the packaged builds themselves is a separate, manual, non-CI pass (see §3.5) |
+| `ios` | push/PR to `main` (self-hosted — needs Xcode) | `xcodegen generate` (regenerates `Rapport.xcodeproj` from `project.yml`), then `xcodebuild test` for `RapportTests` (unit) and `RapportUITests` (UI, incl. a mocked-backend authenticated flow — see §10) against an iPad Pro 11" simulator; independent of backend/frontend/e2e/docker/deploy, same rationale as `agent` — the native app ships separately |
 | `e2e` | push/PR to `main` or manual dispatch (after backend+frontend) | Build test stack (`docker-compose.test.yml`, own DB/ports), run all 12 Playwright journeys in German; on push to `main`, additionally run a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) in English via the `uiLanguage` fixture |
 | `docker` | push to `main` (after e2e) | Buildx: `Dockerfile.playwright-base`, backend image, frontend image (no push to a registry) |
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
@@ -927,3 +931,21 @@ AI assessment (`ai/tasks.py::assess_application()`/`assess_rejected_application(
 ### 9.4 Native macOS agent
 
 `agent/config.py` persists `ui_language` locally; the backend pushes it via `PATCH /agent-api/config` whenever the profile language changes, and restarts the agent process so the menu bar (`agent/strings.py`) picks it up without a manual relaunch.
+
+## 10. iOS Native App
+
+A separate, native SwiftUI client (`ios/`, branch `feature/ios-native-app`), universal for iPhone/iPad, targeting full feature parity with the web app. Its own project (not part of the Docker stack) talks to the same backend over the same `/api` HTTP surface.
+
+**Project generation.** `ios/project.yml` (xcodegen) is the source of truth for build settings/targets; the generated `Rapport.xcodeproj` is committed too, so a fresh clone builds without installing xcodegen first (`xcodegen generate` regenerates it after editing `project.yml`). Three targets: `Rapport` (app), `RapportTests` (Swift Testing, unit), `RapportUITests` (XCTest/XCUITest, UI).
+
+**Networking layer** (`Rapport/Networking/`). An `actor APIClient` wraps `URLSession`, mirroring the frontend's `api/client.ts`: `/api` prefix, `Authorization: Bearer` when a token is set, `APIError` on non-2xx (handling both the backend's plain-string and `{error_key, message}` `detail` shapes), and a `.rapportUnauthorized` notification on 401 for auto-logout. One `struct ...API` per backend router (`ApplicationsAPI`, `ContactsAPI`, `SyncAPI`/`SettingsAPI`/`BackupAPI`/`ReviewAPI`, …), each a thin wrapper mapping one Swift function per endpoint — no shared base class, since the endpoints' request/response shapes differ too much to generalize usefully.
+
+**Models** (`Rapport/Models/`) mirror `schemas.py`/`types.ts`, with two conventions load-bearing enough to call out:
+- **List-vs-detail shape asymmetry.** Several backend resources return a narrower shape from their list endpoint than their get-by-id endpoint (or vice versa) — e.g. `Application.ghosting` exists only on `ApplicationListItem`, `CompanyProfile.contacts` only on the detail response. Swift's strict `Codable` surfaces a real decode crash where the frontend's non-optional-but-unenforced TypeScript interface would silently paper over it; the rule here is optional-by-default for any field whose presence depends on which endpoint returned it.
+- **Dates stay `String`, not `Date`.** `APIClient`'s `JSONDecoder` has no `dateDecodingStrategy` configured (mixing `date`-only and `datetime` shapes across the same payload isn't worth fighting with one global strategy), so a raw `Date?` property would crash decoding a real non-null timestamp. `DateParsing.swift` documents this and provides `date(_:)`/`dateTime(_:)`/`displayString(_:)` for on-demand parsing at display call sites.
+
+Several backend endpoints return genuinely untyped dicts (no Pydantic `response_model`) with shapes that vary by branch — e.g. `sync_targeted.py`'s `/assign` (created vs. conflict), `sync_company.py`'s `/run` (`message` only present when `started: false`). These are modeled as one Swift struct with the varying fields optional, not split into per-branch types, matching how the backend itself returns one shape with conditionally-absent keys.
+
+**Testing.** `RapportTests` uses `URLProtocolStub` to intercept `URLSession` at the transport layer, letting every `...API`/`...ViewModel` test exercise a real request/decode round-trip against a canned response — this is what caught the two bugs above (and others, e.g. `JSONDecoder`'s `.convertFromSnakeCase` transforming `"requires_2fa"` to `"requires2Fa"`, not the naively-expected `"requires_2fa"` or `"requires2fa"`) before they could ship. `RapportUITests` covers the unauthenticated onboarding/login flow directly against the real app, and the authenticated flows (Applications list/Kanban/detail) via `MockURLProtocol` — a second interception mechanism living in the *app's own code* (`Rapport/App/MockURLProtocol.swift`), gated behind a `-uiTestingMockAPI` launch argument, since XCUITest drives the app as a separate OS process and a test-side `URLProtocol` can't reach across that boundary.
+
+**Localization.** `Rapport/Resources/Localizable.xcstrings` (a String Catalog, Xcode 15+) covers English + German for the app's static UI strings; xcodegen auto-detects the German localization from the catalog and adds it to the project's `knownRegions`. Interpolated strings (a handful of live-count displays, e.g. sync progress) are intentionally left English-only — correctly authoring their format-specifier substitution by hand without Xcode's own extraction tooling risks a silent argument-count mismatch.

@@ -5,6 +5,7 @@ DerivedData/
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
+*.xcresult
 
 # xcodegen-generated project stays committed (project.yml is the source of
 # truth for regeneration, but committing the .xcodeproj means a fresh clone

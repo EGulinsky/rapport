@@ -161,6 +161,31 @@ npm install
 npm run dev                      # http://localhost:5173
 ```
 
+## iOS App
+
+A native SwiftUI client (universal — iPhone + iPad) covering full feature
+parity with the web app: Applications (list + Kanban + detail), Contacts,
+Companies, Calendar, Analytics, Settings (all sync sources, backup, AI/Maps/
+Agent config), the review queue, audit log, and merge-duplicates flows.
+English + German via a String Catalog.
+
+```bash
+cd ios
+xcodegen generate               # regenerates Rapport.xcodeproj from project.yml
+open Rapport.xcodeproj
+```
+
+On first launch, point the app at your running backend's address (e.g.
+`http://192.168.1.50:8000` — the same LAN address you'd use from another
+device, since this isn't served from the same origin as the API the way the
+web app is).
+
+```bash
+# Tests (same suite CI runs)
+xcodebuild -project Rapport.xcodeproj -scheme Rapport \
+  -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' test
+```
+
 ## License
 
 [Business Source License 1.1](LICENSE) — free to use for private, non-commercial purposes. A separate license is required for commercial use.

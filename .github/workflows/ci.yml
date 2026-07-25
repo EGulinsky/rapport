@@ -129,6 +129,52 @@ jobs:
         if: always()
         run: python ../.github/scripts/junit_summary.py test-results.xml "Agent (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
 
+  ios:
+    name: iOS (native app)
+    runs-on: self-hosted
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ios
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate Xcode project (xcodegen)
+        run: xcodegen generate
+
+      - name: Clean stale result bundles
+        # -resultBundlePath errors if the path already exists; this runner is
+        # persistent (self-hosted), so a bundle left over from a previous run
+        # in this same working directory would otherwise fail every run
+        # after the first.
+        run: rm -rf TestResults-unit.xcresult TestResults-ui.xcresult
+
+      - name: Unit tests (RapportTests)
+        run: |
+          set -o pipefail
+          xcodebuild -project Rapport.xcodeproj -scheme Rapport \
+            -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' \
+            -only-testing:RapportTests test \
+            -resultBundlePath TestResults-unit.xcresult
+
+      - name: UI tests (RapportUITests)
+        run: |
+          set -o pipefail
+          xcodebuild -project Rapport.xcodeproj -scheme Rapport \
+            -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' \
+            -only-testing:RapportUITests test \
+            -resultBundlePath TestResults-ui.xcresult
+
+      - name: Reset simulator language
+        if: always()
+        run: |
+          UDID=$(xcrun simctl list devices | grep "iPad Pro 11-inch (M5)" | grep -oE '[0-9A-F-]{36}' | head -1)
+          if [ -n "$UDID" ]; then
+            xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLanguages -array en || true
+            xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLocale -string en_US || true
+          fi
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
