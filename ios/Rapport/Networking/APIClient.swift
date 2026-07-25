@@ -72,6 +72,48 @@ actor APIClient {
         try await rawRequest(path, method: method, query: query, body: body)
     }
 
+    /// Multipart file upload (CV upload, LinkedIn messages CSV import) —
+    /// the one shape of request the JSON-only `request`/`requestVoid` path
+    /// can't express.
+    func uploadMultipart<Response: Decodable>(
+        _ path: String,
+        fieldName: String,
+        filename: String,
+        mimeType: String,
+        data fileData: Data
+    ) async throws -> Response {
+        guard let baseURL else { throw APIError.notConfigured }
+        let url = baseURL.appendingPathComponent(Self.apiPathPrefix).appendingPathComponent(path)
+        let boundary = "Boundary-\(UUID().uuidString)"
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = body
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError(message: "No HTTP response", errorKey: nil, statusCode: nil)
+        }
+        if http.statusCode == 401 {
+            await MainActor.run { NotificationCenter.default.post(name: .rapportUnauthorized, object: nil) }
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw APIError.from(data: data, statusCode: http.statusCode)
+        }
+        return try Self.decoder.decode(Response.self, from: data)
+    }
+
     private func rawRequest(
         _ path: String,
         method: HTTPMethod,

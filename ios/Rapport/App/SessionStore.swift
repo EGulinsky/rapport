@@ -18,6 +18,15 @@ final class SessionStore {
     var companies: CompaniesAPI { CompaniesAPI(client: client) }
     var calendar: CalendarAPI { CalendarAPI(client: client) }
     var analytics: AnalyticsAPI { AnalyticsAPI(client: client) }
+    var settings: SettingsAPI { SettingsAPI(client: client) }
+    var syncProgress: SyncProgressAPI { SyncProgressAPI(client: client) }
+    var googleSync: GoogleSyncAPI { GoogleSyncAPI(client: client) }
+    var icloudSync: ICloudSyncAPI { ICloudSyncAPI(client: client) }
+    var filesSync: FilesSyncAPI { FilesSyncAPI(client: client) }
+    var linkedinSync: LinkedInSyncAPI { LinkedInSyncAPI(client: client) }
+    var companySync: CompanySyncAPI { CompanySyncAPI(client: client) }
+    var targetedSync: TargetedSyncAPI { TargetedSyncAPI(client: client) }
+    var backup: BackupAPI { BackupAPI(client: client) }
 
     private(set) var serverURL: URL?
     private(set) var currentUser: UserResponse?
@@ -126,5 +135,26 @@ final class SessionStore {
         } catch {
             currentUser = nil
         }
+    }
+
+    // MARK: - Profile
+
+    func updateProfile(_ payload: ProfilePayload) async throws {
+        currentUser = try await client.request("/auth/profile", method: .patch, body: payload)
+    }
+
+    func changePassword(oldPassword: String, newPassword: String) async throws {
+        let _: MessageResponse = try await client.request(
+            "/auth/change-password", method: .post,
+            body: ChangePasswordPayload(oldPassword: oldPassword, newPassword: newPassword)
+        )
+    }
+
+    func uploadCV(data: Data, filename: String, mimeType: String) async throws {
+        currentUser = try await client.uploadMultipart("/auth/cv", fieldName: "file", filename: filename, mimeType: mimeType, data: data)
+    }
+
+    func deleteCV() async throws {
+        currentUser = try await client.request("/auth/cv", method: .delete)
     }
 }

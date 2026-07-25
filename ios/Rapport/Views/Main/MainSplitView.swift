@@ -41,6 +41,7 @@ struct MainSplitView: View {
     @State private var selectedContactId: Int?
     @State private var selectedCompanyId: Int?
     @State private var contactsViewModel: ContactsViewModel?
+    @State private var selectedSettingsPanel: SettingsPanel?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -95,11 +96,13 @@ struct MainSplitView: View {
             CalendarHomeView()
         case .analytics:
             AnalyticsHomeView()
-        case .settings, nil:
+        case .settings:
+            SettingsHomeView(selection: $selectedSettingsPanel)
+        case nil:
             ContentUnavailableView(
-                selectedSection?.title ?? "Rapport",
-                systemImage: selectedSection?.systemImage ?? "square.dashed",
-                description: Text("This section is coming soon.")
+                "Rapport",
+                systemImage: "square.dashed",
+                description: Text("Select a section.")
             )
         }
     }
@@ -125,8 +128,54 @@ struct MainSplitView: View {
             } else {
                 Text("Select a company").foregroundStyle(.secondary)
             }
+        case .settings:
+            settingsDetailContent
         default:
             Text("Select an item").foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var settingsDetailContent: some View {
+        switch selectedSettingsPanel {
+        case .account:
+            AccountSettingsView()
+        case .syncControl:
+            SyncControlSettingsView()
+        case .google:
+            GoogleSyncSettingsView()
+        case .icloud:
+            ICloudSyncSettingsView()
+        case .linkedin:
+            LinkedInSettingsView()
+        case .files:
+            FilesSettingsView()
+        case .backup:
+            BackupSettingsView()
+        case .ai:
+            AiSettingsView()
+        case .maps:
+            ApiKeySettingsView(
+                title: "Maps",
+                helpText: "Google Maps API key, used to compute distance from your home location to each application's site.",
+                hasKey: { $0.hasKey },
+                load: { try await session.settings.mapsSettings() },
+                save: { try await session.settings.updateMapsSettings(MapsSettingsPayload(apiKey: $0)) },
+                delete: { try await session.settings.deleteMapsKey() }
+            )
+        case .logo:
+            ApiKeySettingsView(
+                title: "Company logos",
+                helpText: "Logo.dev API key, used to fetch company logos shown on Kanban cards and company profiles.",
+                supportsDelete: false,
+                hasKey: { $0.apiKey != nil },
+                load: { try await session.settings.logoSettings() },
+                save: { try await session.settings.updateLogoSettings(LogoSettingsPayload(apiKey: $0)) }
+            )
+        case .agent:
+            AgentSettingsView()
+        case nil:
+            Text("Select a settings category").foregroundStyle(.secondary)
         }
     }
 }
