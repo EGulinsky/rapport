@@ -6,7 +6,13 @@ final class AuthFlowUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"]
+        // Pins English explicitly rather than relying on whatever the
+        // Simulator's ambient language happens to be — LocalizationUITests
+        // sets the Simulator's *global* language when it runs (a known
+        // Simulator/XCTest quirk with -AppleLanguages), which would
+        // otherwise leak into these English-text assertions depending on
+        // test run order.
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
     }
 
