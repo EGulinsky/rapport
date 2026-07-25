@@ -52,6 +52,12 @@ struct MainSplitView: View {
             List(MainSection.allCases, selection: $selectedSection) { section in
                 Label(section.title, systemImage: section.systemImage)
                     .tag(section)
+                    // Distinguishes the sidebar row from same-named text
+                    // elsewhere (e.g. the content column's own navigationTitle,
+                    // which can coincidentally overlap the Kanban/List toggle's
+                    // screen coordinates in the collapsed iPad layout) —
+                    // UI tests target this instead of matching on visible text.
+                    .accessibilityIdentifier("sidebar.\(section.rawValue)")
             }
             .navigationTitle("Rapport")
             .safeAreaInset(edge: .bottom) {
