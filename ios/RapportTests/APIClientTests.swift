@@ -4,7 +4,8 @@ import Foundation
 
 /// Boxes a value captured inside URLProtocolStub's @Sendable request handler.
 /// Test-only, single-writer-then-single-reader usage — safe despite @unchecked.
-private final class Captured<T>: @unchecked Sendable {
+/// Not marked `private` so other test files in this target can reuse it.
+final class Captured<T>: @unchecked Sendable {
     var value: T
     init(_ value: T) { self.value = value }
 }

@@ -72,3 +72,28 @@ struct ContactUpdatePayload: Encodable {
     var typ: String?
     var notizen: String?
 }
+
+/// Mirrors contacts.py's ContactEventItem — one row in a contact's
+/// calls/mails/messages/calendar event lists (GET /api/contacts/{id}/events).
+struct ContactEventItem: Codable, Identifiable, Equatable {
+    let id: Int
+    var applicationId: Int
+    var companyName: String?
+    var rolle: String?
+    var typ: String
+    var datum: String?
+    var titel: String?
+    var notiz: String?
+    var source: String?
+    var externalId: String?
+    var externalUrl: String?
+    var createdAt: String?
+}
+
+/// Mirrors contacts.py's response shape for GET /api/contacts/{id}/events.
+struct ContactEvents: Codable, Equatable {
+    var calls: [ContactEventItem]
+    var mails: [ContactEventItem]
+    var messages: [ContactEventItem]
+    var calendar: [ContactEventItem]
+}

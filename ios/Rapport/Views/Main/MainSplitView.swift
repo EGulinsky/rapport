@@ -38,6 +38,9 @@ struct MainSplitView: View {
     @State private var selectedSection: MainSection? = .applications
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var selectedApplicationId: Int?
+    @State private var selectedContactId: Int?
+    @State private var selectedCompanyId: Int?
+    @State private var contactsViewModel: ContactsViewModel?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -68,6 +71,11 @@ struct MainSplitView: View {
         } detail: {
             detailContent
         }
+        .task {
+            if contactsViewModel == nil {
+                contactsViewModel = ContactsViewModel(api: session.contacts)
+            }
+        }
     }
 
     @ViewBuilder
@@ -75,7 +83,15 @@ struct MainSplitView: View {
         switch selectedSection {
         case .applications:
             ApplicationsHomeView(selection: $selectedApplicationId)
-        case .contacts, .companies, .calendar, .analytics, .settings, nil:
+        case .contacts:
+            if let contactsViewModel {
+                ContactsHomeView(viewModel: contactsViewModel, selection: $selectedContactId)
+            } else {
+                ProgressView()
+            }
+        case .companies:
+            CompaniesHomeView(selection: $selectedCompanyId)
+        case .calendar, .analytics, .settings, nil:
             ContentUnavailableView(
                 selectedSection?.title ?? "Rapport",
                 systemImage: selectedSection?.systemImage ?? "square.dashed",
@@ -86,11 +102,27 @@ struct MainSplitView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if selectedSection == .applications, let id = selectedApplicationId {
-            ApplicationDetailView(applicationId: id) { _ in }
-        } else {
-            Text("Select an item")
-                .foregroundStyle(.secondary)
+        switch selectedSection {
+        case .applications:
+            if let id = selectedApplicationId {
+                ApplicationDetailView(applicationId: id) { _ in }
+            } else {
+                Text("Select an item").foregroundStyle(.secondary)
+            }
+        case .contacts:
+            if let id = selectedContactId, let contact = contactsViewModel?.contacts.first(where: { $0.id == id }) {
+                ContactDetailView(contact: contact)
+            } else {
+                Text("Select a contact").foregroundStyle(.secondary)
+            }
+        case .companies:
+            if let id = selectedCompanyId {
+                CompanyDetailView(companyId: id)
+            } else {
+                Text("Select a company").foregroundStyle(.secondary)
+            }
+        default:
+            Text("Select an item").foregroundStyle(.secondary)
         }
     }
 }

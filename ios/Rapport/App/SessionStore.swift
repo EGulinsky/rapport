@@ -14,6 +14,8 @@ final class SessionStore {
     let client: APIClient
 
     var applications: ApplicationsAPI { ApplicationsAPI(client: client) }
+    var contacts: ContactsAPI { ContactsAPI(client: client) }
+    var companies: CompaniesAPI { CompaniesAPI(client: client) }
 
     private(set) var serverURL: URL?
     private(set) var currentUser: UserResponse?
