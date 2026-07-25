@@ -13,6 +13,8 @@ final class SessionStore {
     private let configStore: ServerConfigStore
     let client: APIClient
 
+    var applications: ApplicationsAPI { ApplicationsAPI(client: client) }
+
     private(set) var serverURL: URL?
     private(set) var currentUser: UserResponse?
     var isLoading = false

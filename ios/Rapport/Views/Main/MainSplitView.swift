@@ -37,6 +37,7 @@ struct MainSplitView: View {
     @Environment(SessionStore.self) private var session
     @State private var selectedSection: MainSection? = .applications
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var selectedApplicationId: Int?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -65,8 +66,7 @@ struct MainSplitView: View {
         } content: {
             sectionContent
         } detail: {
-            Text("Select an item")
-                .foregroundStyle(.secondary)
+            detailContent
         }
     }
 
@@ -74,7 +74,7 @@ struct MainSplitView: View {
     private var sectionContent: some View {
         switch selectedSection {
         case .applications:
-            ApplicationsPlaceholderView()
+            ApplicationsHomeView(selection: $selectedApplicationId)
         case .contacts, .companies, .calendar, .analytics, .settings, nil:
             ContentUnavailableView(
                 selectedSection?.title ?? "Rapport",
@@ -83,17 +83,15 @@ struct MainSplitView: View {
             )
         }
     }
-}
 
-/// Stand-in for the Applications feature (task: iOS Applications list/Kanban/detail) —
-/// exists so the navigation shell has something real to show while that's built out.
-private struct ApplicationsPlaceholderView: View {
-    var body: some View {
-        ContentUnavailableView(
-            "Applications",
-            systemImage: "briefcase",
-            description: Text("The applications list is coming soon.")
-        )
+    @ViewBuilder
+    private var detailContent: some View {
+        if selectedSection == .applications, let id = selectedApplicationId {
+            ApplicationDetailView(applicationId: id) { _ in }
+        } else {
+            Text("Select an item")
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
