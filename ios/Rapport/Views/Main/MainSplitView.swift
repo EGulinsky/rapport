@@ -91,7 +91,11 @@ struct MainSplitView: View {
             }
         case .companies:
             CompaniesHomeView(selection: $selectedCompanyId)
-        case .calendar, .analytics, .settings, nil:
+        case .calendar:
+            CalendarHomeView()
+        case .analytics:
+            AnalyticsHomeView()
+        case .settings, nil:
             ContentUnavailableView(
                 selectedSection?.title ?? "Rapport",
                 systemImage: selectedSection?.systemImage ?? "square.dashed",

@@ -16,6 +16,8 @@ final class SessionStore {
     var applications: ApplicationsAPI { ApplicationsAPI(client: client) }
     var contacts: ContactsAPI { ContactsAPI(client: client) }
     var companies: CompaniesAPI { CompaniesAPI(client: client) }
+    var calendar: CalendarAPI { CalendarAPI(client: client) }
+    var analytics: AnalyticsAPI { AnalyticsAPI(client: client) }
 
     private(set) var serverURL: URL?
     private(set) var currentUser: UserResponse?
