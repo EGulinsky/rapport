@@ -496,13 +496,24 @@
         }
       }
     },
-    "Connect to your Rapport server": {
+    "Connect to your server": {
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mit deinem Rapport-Server verbinden"
+            "value": "Mit deinem Server verbinden"
+          }
+        }
+      }
+    },
+    "Your self-hosted job search, tracked from first application to signed offer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine selbst gehostete Bewerbungssuche, vom ersten Antrag bis zum unterschriebenen Angebot."
           }
         }
       }

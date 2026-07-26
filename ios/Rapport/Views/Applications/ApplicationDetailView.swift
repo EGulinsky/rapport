@@ -21,11 +21,7 @@ struct ApplicationDetailView: View {
         Group {
             if let viewModel, let application = viewModel.application {
                 VStack(spacing: 0) {
-                    Picker("Tab", selection: $tab) {
-                        ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding()
+                    DetailTabBar(selection: $tab)
 
                     if let errorMessage = viewModel.errorMessage {
                         Text(errorMessage).foregroundStyle(.red).padding(.horizontal)
@@ -53,6 +49,43 @@ struct ApplicationDetailView: View {
     }
 }
 
+/// Horizontal, left-aligned tab bar with an underline on the selected tab —
+/// replaces the previous `.pickerStyle(.segmented)` control, which squeezed
+/// all 5 tab labels into equal-width slots and truncated on narrower widths.
+/// This scales to more tabs without truncation since labels only take the
+/// width they need and the row scrolls if it ever overflows.
+private struct DetailTabBar: View {
+    @Binding var selection: ApplicationDetailView.Tab
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 20) {
+                ForEach(ApplicationDetailView.Tab.allCases) { tab in
+                    Button {
+                        selection = tab
+                    } label: {
+                        Text(tab.rawValue)
+                            .font(.subheadline.weight(selection == tab ? .semibold : .regular))
+                            .foregroundStyle(selection == tab ? Color.accentColor : .secondary)
+                            .padding(.bottom, 8)
+                            .overlay(alignment: .bottom) {
+                                if selection == tab {
+                                    Rectangle().fill(Color.accentColor).frame(height: 2)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .padding(.top, 10)
+    }
+}
+
 private struct OverviewTab: View {
     let application: Application
     var viewModel: ApplicationDetailViewModel
@@ -77,11 +110,18 @@ private struct OverviewTab: View {
                 if let quelle = application.quelle { LabeledContent("Source", value: quelle) }
             }
             if let ai = application.aiNextStep, !ai.isEmpty {
-                Section("AI next step") {
-                    Text(ai)
-                    if let reasoning = application.aiReasoning, !reasoning.isEmpty {
-                        Text(reasoning).font(.caption).foregroundStyle(.secondary)
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("AI next step", systemImage: "sparkles")
+                            .font(.caption.bold())
+                            .foregroundStyle(Color.accentColor)
+                        Text(ai)
+                        if let reasoning = application.aiReasoning, !reasoning.isEmpty {
+                            Text(reasoning).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.accentColor.opacity(0.08))
                 }
             }
             Section {

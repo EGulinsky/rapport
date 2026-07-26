@@ -17,7 +17,7 @@ final class AuthFlowUITests: XCTestCase {
     }
 
     func testFreshLaunchShowsServerSetup() {
-        XCTAssertTrue(app.staticTexts["Connect to your Rapport server"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Connect to your server"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["serverAddressField"].exists)
         XCTAssertFalse(app.buttons["serverContinueButton"].isEnabled)
     }

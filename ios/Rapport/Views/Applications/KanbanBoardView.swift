@@ -59,8 +59,9 @@ private struct KanbanColumn: View {
     @State private var isTargeted = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Circle().fill(status.color).frame(width: 8, height: 8)
                 Text(status.label).font(.subheadline.bold())
                 Spacer()
                 Text("\(applications.count)")
@@ -70,7 +71,7 @@ private struct KanbanColumn: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(applications) { app in
-                        KanbanCard(application: app)
+                        KanbanCard(application: app, isSelected: selection == app.id)
                             .onTapGesture { selection = app.id }
                             .draggable(KanbanCardTransfer(applicationId: app.id))
                     }
@@ -78,9 +79,9 @@ private struct KanbanColumn: View {
             }
         }
         .frame(width: 260)
-        .padding(8)
+        .padding(10)
         .background(isTargeted ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .dropDestination(for: KanbanCardTransfer.self) { items, _ in
             guard let first = items.first else { return false }
             onDrop(first.applicationId)
@@ -91,32 +92,49 @@ private struct KanbanColumn: View {
 
 private struct KanbanCard: View {
     let application: Application
+    var isSelected: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(application.firma).font(.subheadline.bold())
-            Text(application.rolle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            if let step = application.naechsterSchritt, !step.isEmpty {
-                Text(step).font(.caption2).foregroundStyle(.blue).lineLimit(2)
-            }
-            HStack(spacing: 6) {
+        HStack(alignment: .top, spacing: 8) {
+            CompanyAvatar(name: application.firma, color: application.mainStatus.color)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(application.firma).font(.subheadline.bold()).lineLimit(1)
+                Text(application.rolle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if let step = application.naechsterSchritt, !step.isEmpty {
+                    Text(step).font(.caption2).foregroundStyle(.blue).lineLimit(2)
+                }
                 if application.salaryMismatch {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption2)
+                    Label("Budget below ask", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
                 }
-                if application.ghosting == true {
-                    Image(systemName: "wind").foregroundStyle(.gray).font(.caption2)
-                }
-                if let color = application.aiColor {
-                    Circle()
-                        .fill(aiColor(color))
-                        .frame(width: 8, height: 8)
+                HStack(spacing: 6) {
+                    if application.ghosting == true {
+                        Image(systemName: "wind").foregroundStyle(.gray).font(.caption2)
+                    }
+                    if let color = application.aiColor {
+                        Circle()
+                            .fill(aiColor(color))
+                            .frame(width: 8, height: 8)
+                    }
                 }
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(application.mainStatus.color)
+                .frame(width: 3)
+                .padding(.vertical, 6)
+        }
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor, lineWidth: 2)
+            }
+        }
         .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
     }
 
@@ -127,5 +145,28 @@ private struct KanbanCard: View {
         case "red": .red
         default: .clear
         }
+    }
+}
+
+/// Circular company-initial avatar shared by the Kanban card and the
+/// Applications list row, so both surfaces read as the same design language
+/// instead of the list looking like a plain text row next to a styled card.
+struct CompanyAvatar: View {
+    let name: String
+    var color: Color = .accentColor
+
+    private var initial: String {
+        String(name.trimmingCharacters(in: .whitespaces).first.map(String.init) ?? "?").uppercased()
+    }
+
+    var body: some View {
+        Circle()
+            .fill(color.opacity(0.15))
+            .overlay {
+                Text(initial)
+                    .font(.caption.bold())
+                    .foregroundStyle(color)
+            }
+            .frame(width: 26, height: 26)
     }
 }

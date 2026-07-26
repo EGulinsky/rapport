@@ -24,7 +24,7 @@ final class LocalizationUITests: XCTestCase {
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Mit deinem Rapport-Server verbinden"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Mit deinem Server verbinden"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Weiter"].exists)
     }
 }

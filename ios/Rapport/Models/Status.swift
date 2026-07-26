@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Mirrors backend/app/models.py's MainStatus enum + MAIN_STATUS_LABELS and
 /// frontend/src/i18n/locales/en/status.json's English labels (kept in sync
@@ -24,6 +25,24 @@ enum MainStatus: String, Codable, CaseIterable, Identifiable {
     /// The Kanban board's columns — rejected is shown separately (a toggle
     /// reveals it), matching KanbanBoard.tsx's MAIN_PIPELINE.
     static let pipeline: [MainStatus] = [.prospecting, .applied, .hr, .fb, .waiting, .negotiating, .signed]
+
+    /// Single source of truth for this status's accent color, shared by the
+    /// list row, the Kanban card's left border, and the status pill — the
+    /// prior design used the same color logic copy-pasted in each place,
+    /// which could drift, and the same status looked different on the board
+    /// vs. the list.
+    var color: Color {
+        switch self {
+        case .prospecting: .gray
+        case .applied: .blue
+        case .hr: .orange
+        case .fb: .purple
+        case .waiting: .pink
+        case .negotiating: .green
+        case .signed: .mint
+        case .rejected: .red
+        }
+    }
 }
 
 /// Mirrors backend/app/models.py's SUB_STATUS_LABELS — only meaningful when

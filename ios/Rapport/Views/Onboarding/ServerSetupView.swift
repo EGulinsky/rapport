@@ -5,60 +5,102 @@ import SwiftUI
 /// own Docker host (typically a LAN address like http://192.168.1.50:8000).
 struct ServerSetupView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var discovery = ServerDiscoveryViewModel()
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-
-                VStack(spacing: 8) {
-                    Image(systemName: "server.rack")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.tint)
-                    Text("Connect to your Rapport server")
-                        .font(.title2.bold())
-                    Text("Enter the address of the Rapport instance running on your network, e.g. http://192.168.1.50:8000")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("Server address", text: $input)
-                        .textFieldStyle(.roundedBorder)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .onSubmit(connect)
-                        .accessibilityIdentifier("serverAddressField")
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+            Group {
+                // On iPad (regular width) a single centered column leaves
+                // most of the screen empty. A split layout — branding on
+                // one side, the actual form on the other — uses that width
+                // instead of just floating in the middle of it. iPhone
+                // (compact width) keeps the original stacked layout, where
+                // there's no spare width to split.
+                if horizontalSizeClass == .regular {
+                    HStack(spacing: 0) {
+                        brandingPanel
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.accentColor.opacity(0.1))
+                        formPanel
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            brandingPanel
+                            formPanel
+                        }
+                        .padding(.vertical, 32)
                     }
                 }
-                .padding(.horizontal, 32)
-
-                Button("Continue", action: connect)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .accessibilityIdentifier("serverContinueButton")
-
-                discoverySection
-
-                Spacer()
-                Spacer()
             }
-            .padding()
             .navigationTitle("Setup")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private var brandingPanel: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 48))
+                .foregroundStyle(.tint)
+            Text("Rapport")
+                .font(.title.bold())
+            Text("Your self-hosted job search, tracked from first application to signed offer.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+    }
+
+    private var formPanel: some View {
+        VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Connect to your server")
+                    .font(.title3.bold())
+                Text("Enter the address of the Rapport instance running on your network, e.g. http://192.168.1.50:8000")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Server address", text: $input)
+                    .textFieldStyle(.roundedBorder)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.go)
+                    .onSubmit(connect)
+                    .accessibilityIdentifier("serverAddressField")
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Button("Continue", action: connect)
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+                .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
+                .accessibilityIdentifier("serverContinueButton")
+
+            HStack {
+                Rectangle().fill(.separator).frame(height: 0.5)
+                Text("or").font(.caption).foregroundStyle(.secondary)
+                Rectangle().fill(.separator).frame(height: 0.5)
+            }
+
+            discoverySection
+        }
+        .padding(.horizontal, 40)
+        .frame(maxWidth: 420)
     }
 
     @ViewBuilder
@@ -98,7 +140,6 @@ struct ServerSetupView: View {
                 .buttonStyle(.bordered)
             }
         }
-        .padding(.horizontal, 32)
     }
 
     private func connect() {
