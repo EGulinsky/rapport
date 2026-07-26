@@ -57,6 +57,12 @@ struct MainSplitView: View {
                     // which can coincidentally overlap the Kanban/List toggle's
                     // screen coordinates in the collapsed iPad layout) —
                     // UI tests target this instead of matching on visible text.
+                    // `.accessibilityElement(children: .combine)` is required
+                    // here: without it, the identifier attaches to the SF
+                    // Symbol icon's own leaf accessibility element (which
+                    // XCUITest then reports as "not hittable", since the row's
+                    // real tap target is the merged label, not the bare icon).
+                    .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("sidebar.\(section.rawValue)")
             }
             .navigationTitle("Rapport")

@@ -7,6 +7,7 @@ struct ServerSetupView: View {
     @Environment(SessionStore.self) private var session
     @State private var input = ""
     @State private var errorMessage: String?
+    @State private var discovery = ServerDiscoveryViewModel()
 
     var body: some View {
         NavigationStack {
@@ -49,6 +50,8 @@ struct ServerSetupView: View {
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("serverContinueButton")
 
+                discoverySection
+
                 Spacer()
                 Spacer()
             }
@@ -56,6 +59,46 @@ struct ServerSetupView: View {
             .navigationTitle("Setup")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    @ViewBuilder
+    private var discoverySection: some View {
+        VStack(spacing: 12) {
+            Button {
+                Task { await discovery.scan() }
+            } label: {
+                if discovery.isScanning {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Scanning local network…")
+                    }
+                } else {
+                    Label("Find server on local network", systemImage: "wifi")
+                }
+            }
+            .disabled(discovery.isScanning)
+            .accessibilityIdentifier("discoverServerButton")
+
+            if let errorMessage = discovery.errorMessage {
+                Text(errorMessage).font(.caption).foregroundStyle(.secondary)
+            }
+
+            ForEach(discovery.discoveredServers) { server in
+                Button {
+                    input = server.baseURLString
+                    connect()
+                } label: {
+                    HStack {
+                        Image(systemName: "server.rack")
+                        Text(server.baseURLString)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(.horizontal, 32)
     }
 
     private func connect() {

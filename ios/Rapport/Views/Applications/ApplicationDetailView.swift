@@ -13,7 +13,7 @@ struct ApplicationDetailView: View {
     @State private var tab: Tab = .overview
 
     enum Tab: String, CaseIterable, Identifiable {
-        case overview = "Overview", timeline = "Timeline", contacts = "Contacts", salary = "Salary"
+        case overview = "Overview", timeline = "Timeline", contacts = "Contacts", salary = "Salary", sync = "Sync"
         var id: String { rawValue }
     }
 
@@ -36,6 +36,7 @@ struct ApplicationDetailView: View {
                     case .timeline: TimelineTab(application: application, viewModel: viewModel)
                     case .contacts: ContactsTab(application: application, viewModel: viewModel)
                     case .salary: SalaryTab(application: application, viewModel: viewModel)
+                    case .sync: SyncTab(applicationId: applicationId)
                     }
                 }
             } else {
@@ -274,5 +275,130 @@ private struct SalaryTab: View {
                 Text("\((min ?? max ?? 0).formatted()) \(currencyCode)")
             }
         }
+    }
+}
+
+/// Per-application manual sync + candidate assignment — the native
+/// counterpart to the web app's "targeted sync" flow (sync_targeted.py):
+/// trigger a sync scoped to just this application, or manually attach a
+/// sync-detected item (email/calendar event/...) that automatic matching
+/// missed. A separate "Sync via LinkedIn" trigger targets this one job
+/// posting rather than a full-account LinkedIn sync (see Settings).
+private struct SyncTab: View {
+    let applicationId: Int
+    @Environment(SessionStore.self) private var session
+    @State private var viewModel: ManualSyncViewModel?
+    @State private var linkedInStatusMessage: String?
+    @State private var isLinkedInSyncing = false
+
+    var body: some View {
+        Group {
+            if let viewModel {
+                Form {
+                    Section("Targeted sync") {
+                        Button("Sync now") { Task { await viewModel.triggerSync() } }
+                            .disabled(viewModel.isSyncing)
+                        Button("Reset", role: .destructive) { Task { await viewModel.resetSync() } }
+                        if viewModel.isSyncing {
+                            ProgressView()
+                        }
+                        if let message = viewModel.lastResultMessage {
+                            Text(message).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Section("LinkedIn") {
+                        Button("Sync via LinkedIn") {
+                            Task {
+                                isLinkedInSyncing = true
+                                linkedInStatusMessage = nil
+                                do {
+                                    let state = try await session.linkedinSync.run(targetAppId: applicationId)
+                                    linkedInStatusMessage = state.step
+                                } catch let error as APIError {
+                                    linkedInStatusMessage = error.message
+                                } catch {
+                                    linkedInStatusMessage = error.localizedDescription
+                                }
+                                isLinkedInSyncing = false
+                            }
+                        }
+                        .disabled(isLinkedInSyncing)
+                        if isLinkedInSyncing {
+                            ProgressView()
+                        }
+                        if let linkedInStatusMessage {
+                            Text(linkedInStatusMessage).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Section("Candidates") {
+                        if viewModel.candidates.isEmpty {
+                            Text("No unmatched items found").font(.caption).foregroundStyle(.secondary)
+                        }
+                        ForEach(viewModel.candidates) { candidate in
+                            CandidateRow(candidate: candidate) {
+                                Task { await viewModel.assign(candidate) }
+                            }
+                        }
+                    }
+
+                    if let errorMessage = viewModel.errorMessage {
+                        Section { Text(errorMessage).foregroundStyle(.red) }
+                    }
+                }
+                .refreshable { await viewModel.loadCandidates() }
+                .alert(
+                    "Already assigned elsewhere",
+                    isPresented: Binding(
+                        get: { viewModel.pendingConflict != nil },
+                        set: { if !$0 { viewModel.cancelPendingConflict() } }
+                    ),
+                    presenting: viewModel.pendingConflict
+                ) { pending in
+                    Button("Reassign here", role: .destructive) {
+                        Task { await viewModel.confirmPendingConflict() }
+                    }
+                    Button("Cancel", role: .cancel) { viewModel.cancelPendingConflict() }
+                } message: { pending in
+                    Text("This item is currently linked to \(pending.result.conflictAppFirma ?? "another application"). Reassign it to this one instead?")
+                }
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if viewModel == nil {
+                viewModel = ManualSyncViewModel(api: session.targetedSync, applicationId: applicationId)
+                await viewModel?.loadCandidates()
+            }
+        }
+    }
+}
+
+private struct CandidateRow: View {
+    let candidate: ManualCandidate
+    let onAssign: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(candidate.titel ?? candidate.eventType ?? candidate.source).font(.subheadline.bold())
+                Spacer()
+                Text("\(candidate.confidence)%").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 8) {
+                Text(candidate.source).font(.caption2).foregroundStyle(.secondary)
+                if let datum = candidate.datum {
+                    Text(datum).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            if let extract = candidate.extract, !extract.isEmpty {
+                Text(extract).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Button("Assign", action: onAssign)
+                .font(.caption)
+        }
+        .padding(.vertical, 2)
     }
 }

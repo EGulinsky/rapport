@@ -67,7 +67,7 @@ struct SyncAPITests {
     }
 }
 
-private extension URLRequest {
+extension URLRequest {
     /// URLProtocol-intercepted requests carry the body via `httpBodyStream`
     /// rather than `httpBody` in some URLSession configurations — read
     /// through the stream if the plain property is empty.

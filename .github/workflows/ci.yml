@@ -175,6 +175,45 @@ jobs:
             xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLocale -string en_US || true
           fi
 
+  ios-deploy:
+    name: iOS deploy (CG iPad Air 7)
+    runs-on: self-hosted
+    needs: [ios]
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ios
+    # Free Apple ID personal-team signing (project.yml's DEVELOPMENT_TEAM),
+    # not a paid Developer Program account — no TestFlight/App Store, this
+    # installs straight to one specific paired device over its coredevice
+    # tunnel (works over Wi-Fi once paired, no cable required). Two real
+    # consequences of that choice: (1) this job can only ever succeed while
+    # that exact iPad is reachable from this Mac — if it's off/offline/off
+    # the network, the job fails here, which is expected and not a code
+    # regression; (2) personal-team builds stop launching after ~7 days
+    # until reinstalled, which running this job on every push to main
+    # naturally handles as long as pushes happen at least that often.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate Xcode project (xcodegen)
+        run: xcodegen generate
+
+      - name: Build for device
+        run: |
+          set -o pipefail
+          xcodebuild -project Rapport.xcodeproj -scheme Rapport \
+            -destination 'id=A76C9F8A-CFAF-5C56-9AE6-7FCEB467ABF3' \
+            -allowProvisioningUpdates build
+
+      - name: Install on device
+        run: |
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 5 -iname "Rapport.app" -path "*Debug-iphoneos*" -print -quit)
+          xcrun devicectl device install app --device A76C9F8A-CFAF-5C56-9AE6-7FCEB467ABF3 "$APP_PATH"
+
+      - name: Launch on device
+        run: xcrun devicectl device process launch --device A76C9F8A-CFAF-5C56-9AE6-7FCEB467ABF3 com.rapport.ios
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest

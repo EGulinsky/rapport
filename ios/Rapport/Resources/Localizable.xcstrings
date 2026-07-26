@@ -551,6 +551,17 @@
         }
       }
     },
+    "Couldn't determine the local network — make sure Wi-Fi is on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokales Netzwerk konnte nicht ermittelt werden — bitte WLAN aktivieren."
+          }
+        }
+      }
+    },
     "Couldn't load analytics": {
       "extractionState": "manual",
       "localizations": {
@@ -712,6 +723,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erwartung"
+          }
+        }
+      }
+    },
+    "Find server on local network": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server im lokalen Netzwerk suchen"
           }
         }
       }
@@ -1053,6 +1075,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kein Lebenslauf hochgeladen"
+          }
+        }
+      }
+    },
+    "No Rapport server found on this network.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Rapport-Server in diesem Netzwerk gefunden."
           }
         }
       }
@@ -1515,6 +1548,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einstellungen speichern"
+          }
+        }
+      }
+    },
+    "Scanning local network…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durchsuche lokales Netzwerk…"
           }
         }
       }

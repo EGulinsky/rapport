@@ -8,7 +8,12 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    DEVELOPMENT_TEAM: ""
+    # Free Apple ID personal-team signing (egulinsky@googlemail.com) already
+    # trusted on this Mac — enables on-device installs (real iPad/iPhone,
+    # not just the simulator) without a paid Developer Program membership.
+    # Personal-team builds expire after ~7 days; CI reinstalling on every
+    # push naturally keeps this refreshed.
+    DEVELOPMENT_TEAM: "WGUH67BL77"
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad (universal)
     ENABLE_PREVIEWS: YES
@@ -37,6 +42,11 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true # self-hosted backend often reached via a plain-HTTP LAN address
+        # Required for ServerDiscovery.swift's local-network subnet scan
+        # (used during onboarding to auto-find the backend) — iOS shows a
+        # one-time permission prompt with this text before allowing any
+        # connection to a private/LAN IP address.
+        NSLocalNetworkUsageDescription: "Rapport scans your local network to find your self-hosted Rapport server automatically."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rapport.ios

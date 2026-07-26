@@ -17,6 +17,22 @@ struct BackupSettingsView: View {
                     Section("Configuration") {
                         Toggle("Automatic backups", isOn: $enabled)
                         TextField("Backup folder", text: $folder)
+                        Button("Choose folder…") {
+                            Task {
+                                do {
+                                    folder = try await session.backup.pickFolder()
+                                } catch let error as APIError {
+                                    // The native picker proxies through the macOS
+                                    // Rapport Agent — only reachable when the
+                                    // backend itself runs on a paired Mac, so a
+                                    // failure here is expected on other setups
+                                    // and just falls back to manual text entry.
+                                    viewModel.errorMessage = error.message
+                                } catch {
+                                    viewModel.errorMessage = error.localizedDescription
+                                }
+                            }
+                        }
                         Stepper("Every \(frequencyHours)h", value: $frequencyHours, in: 1...168)
                         Stepper("Keep \(keepCount) hourly", value: $keepCount, in: 0...100)
                         Stepper("Keep \(keepDaily) daily", value: $keepDaily, in: 0...100)
@@ -35,6 +51,19 @@ struct BackupSettingsView: View {
                             Text("Last backup: \(DateParsing.displayString(lastBackup))").foregroundStyle(.secondary)
                         }
                         Button("Run backup now") { Task { await viewModel.runBackup() } }
+                        Button("Restore from file…") {
+                            Task {
+                                do {
+                                    let path = try await session.backup.pickFile()
+                                    _ = try await session.backup.restoreFile(path: path)
+                                    viewModel.lastRunMessage = "Restored from \(path)"
+                                } catch let error as APIError {
+                                    viewModel.errorMessage = error.message
+                                } catch {
+                                    viewModel.errorMessage = error.localizedDescription
+                                }
+                            }
+                        }
                         if let message = viewModel.lastRunMessage {
                             Text(message).font(.caption).foregroundStyle(.secondary)
                         }
