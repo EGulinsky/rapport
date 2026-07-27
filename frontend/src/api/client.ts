@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
+import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
 
 const BASE = '/api'
 
@@ -252,6 +252,10 @@ export const api = {
     testAi: (data?: AiSettingsWrite) => request<{ status: string; message: string }>('/settings/ai/test', {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
+    }),
+    listAiModels: (provider: string, api_key?: string) => request<AiModelsResponse>('/settings/ai/models', {
+      method: 'POST',
+      body: JSON.stringify({ provider, api_key }),
     }),
     getLogo: () => request<{ api_key: string | null }>('/settings/logo'),
     saveLogo: (api_key: string | null) => request<{ api_key: string | null }>('/settings/logo', {

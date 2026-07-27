@@ -298,6 +298,17 @@ export interface AiSettingsWrite {
   enabled: boolean
 }
 
+export interface AiModelInfo {
+  model: string
+  label: string
+}
+
+export interface AiModelsResponse {
+  reachable: boolean
+  models: AiModelInfo[]
+  error: string | null
+}
+
 export interface MapsSettings {
   has_key: boolean
 }

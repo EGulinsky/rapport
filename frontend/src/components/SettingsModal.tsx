@@ -8,7 +8,7 @@ import { LocationSearchInput } from './LocationSearchInput'
 import { SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../i18n'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate, formatDateTime } from '../i18n/formatDate'
-import type { AiSettingsWrite, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, LinkedInMessagesStatus, LinkedInMessagesImportResult, BackupStatus, AgentHealth } from '../types'
+import type { AiSettingsWrite, AiModelInfo, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, LinkedInMessagesStatus, LinkedInMessagesImportResult, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void; onReviewOpen?: () => void }
@@ -73,6 +73,24 @@ const PROVIDERS: AiProvider[] = [
     ],
   },
 ] as const
+
+// Prefer the live, actually-available model list once fetched; fall back to
+// the curated suggestions when there's no key yet, the fetch failed, or the
+// provider returned nothing. A live entry whose model id matches one of the
+// hand-picked suggestions is replaced by that curated entry (nicer label,
+// e.g. "Llama 3.3 70B" instead of the raw "llama-3.3-70b-versatile", plus
+// its sublabel/"recommended"/"cheap" badge) — curation only ever narrows
+// which ids get the polished treatment, never adds a model the live fetch
+// didn't actually return. Exported as a pure function so this merge can be
+// tested directly.
+export function mergeCuratedModels(
+  liveModels: AiModelInfo[] | null,
+  curated: ProviderModel[] | null,
+): ProviderModel[] | null {
+  if (!liveModels || liveModels.length === 0) return curated
+  const curatedByModel = new Map((curated ?? []).map(m => [m.model, m]))
+  return liveModels.map(m => ({ ...m, ...curatedByModel.get(m.model) }))
+}
 
 // ── Google Sync Panel ─────────────────────────────────────────────────────────
 function GoogleSyncPanel() {
@@ -308,15 +326,38 @@ function AiPanel() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [liveModels, setLiveModels] = useState<AiModelInfo[] | null>(null)
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [modelsUnreachable, setModelsUnreachable] = useState(false)
 
   useEffect(() => {
     api.settings.getAi().then(d => {
       setForm({ provider: d.provider, model: d.model, api_key: '', base_url: d.base_url ?? '', enabled: d.enabled })
       setHasStoredKey(d.has_key)
+      if (d.has_key) fetchModels(d.provider)
     }).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const prov = PROVIDERS.find(p => p.id === form.provider) ?? PROVIDERS[0]
+
+  async function fetchModels(providerId: string, apiKey?: string) {
+    setLiveModels(null)
+    setModelsUnreachable(false)
+    setLoadingModels(true)
+    try {
+      const r = await api.settings.listAiModels(providerId, apiKey)
+      if (r.reachable && r.models.length > 0) {
+        setLiveModels(r.models)
+      } else if (!r.reachable && r.error && r.error !== 'No API key configured') {
+        setModelsUnreachable(true)
+      }
+    } catch {
+      setModelsUnreachable(true)
+    } finally {
+      setLoadingModels(false)
+    }
+  }
 
   async function autoSave(patch: Partial<AiSettingsWrite>, currentForm = form) {
     const merged = { ...currentForm, ...patch }
@@ -340,13 +381,18 @@ function AiPanel() {
     setForm(f => ({ ...f, ...patch }))
     setTestResult(null)
     autoSave(patch)
+    // Uses whatever key is already stored for this provider, if any — the
+    // user hasn't typed a new one yet at this point.
+    fetchModels(p.id)
   }
 
   async function saveApiKey() {
     setSaving(true)
     try {
+      const typedKey = form.api_key?.trim()
       await autoSave({}, form)
       setForm(f => ({ ...f, api_key: '' }))
+      if (typedKey) fetchModels(form.provider, typedKey)
     } finally { setSaving(false) }
   }
 
@@ -361,7 +407,7 @@ function AiPanel() {
     } finally { setTesting(false) }
   }
 
-  const providerModels = prov.models ?? null
+  const providerModels = mergeCuratedModels(liveModels, prov.models ?? null)
   const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
 
   if (loading) return <div className="py-8 text-center text-gray-400 text-sm">{t('common:loading')}</div>
@@ -402,7 +448,16 @@ function AiPanel() {
       </div>
 
       <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{t('ai.model')}</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('ai.model')}</p>
+            {loadingModels && <Loader className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+            {!loadingModels && liveModels && liveModels.length > 0 && (
+              <span className="text-xs text-gray-400">{t('ai.liveModels')}</span>
+            )}
+            {!loadingModels && modelsUnreachable && (
+              <span className="text-xs text-gray-400">{t('ai.liveModelsUnavailable')}</span>
+            )}
+          </div>
           {providerModels && (
             <div className="flex flex-wrap gap-2 mb-3">
               {providerModels.map(m => (

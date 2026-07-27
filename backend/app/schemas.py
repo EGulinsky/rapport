@@ -373,6 +373,17 @@ class AiSettingsWrite(BaseModel):
     enabled: bool = True
 
 
+class AiModelsRequest(BaseModel):
+    provider: str
+    api_key: Optional[str] = None   # plain text, not-yet-saved form value; falls back to the
+                                     # stored+decrypted key only if it belongs to the same provider
+
+
+class AiModelInfo(BaseModel):
+    model: str    # full litellm-style model string, e.g. "groq/llama-3.3-70b-versatile"
+    label: str    # human-readable name for the picker
+
+
 class MapsSettingsRead(BaseModel):
     has_key: bool   # true if an encrypted Google Maps API key is stored
 

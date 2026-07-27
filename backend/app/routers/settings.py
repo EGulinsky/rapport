@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 
+import httpx
 import litellm
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -263,6 +264,18 @@ def save_files_config(
     return get_files_config(db, current_user)
 
 
+def _resolve_api_key(db: Session, provider: str, explicit_key: Optional[str]) -> Optional[str]:
+    """Use the explicit (not-yet-saved) key if given, else fall back to the
+    stored key only if it belongs to the same provider (prevents e.g. a Groq
+    key leaking into a test/model-list call for a different provider)."""
+    if explicit_key and explicit_key.strip():
+        return explicit_key.strip()
+    cfg = db.query(models.AiSettings).first()
+    if cfg and cfg.api_key_enc and cfg.provider == provider:
+        return decrypt_api_key(cfg.api_key_enc)
+    return None
+
+
 @router.post("/ai/test")
 async def test_ai(
     payload: Optional[schemas.AiSettingsWrite] = None,
@@ -272,16 +285,7 @@ async def test_ai(
     # If form values are passed, test against them directly (without saving)
     if payload:
         try:
-            # Resolve api_key: use provided key, or fall back to stored key only if
-            # the same provider is being tested (prevents e.g. a Groq key leaking
-            # into a test of a different provider)
-            api_key: Optional[str] = None
-            if payload.api_key and payload.api_key.strip():
-                api_key = payload.api_key.strip()
-            else:
-                cfg = db.query(models.AiSettings).first()
-                if cfg and cfg.api_key_enc and cfg.provider == payload.provider:
-                    api_key = decrypt_api_key(cfg.api_key_enc)
+            api_key = _resolve_api_key(db, payload.provider, payload.api_key)
 
             kwargs: dict = {
                 "model": payload.model,
@@ -322,3 +326,119 @@ async def test_ai(
         if len(msg) > 300:
             msg = msg[:300] + "…"
         raise HTTPException(502, f"Provider-Fehler: {msg}")
+
+
+_MODEL_LIST_TIMEOUT = httpx.Timeout(6.0)
+
+
+async def _fetch_groq_models(api_key: str) -> list[schemas.AiModelInfo]:
+    async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
+        r = await client.get(
+            "https://api.groq.com/openai/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        r.raise_for_status()
+        data = r.json()
+    out = []
+    for m in data.get("data", []):
+        mid = m.get("id", "")
+        # Groq also serves audio (whisper) models under the same endpoint —
+        # not usable for our chat-completion use case.
+        if not mid or "whisper" in mid:
+            continue
+        out.append(schemas.AiModelInfo(model=f"groq/{mid}", label=mid))
+    return sorted(out, key=lambda m: m.label)
+
+
+async def _fetch_anthropic_models(api_key: str) -> list[schemas.AiModelInfo]:
+    async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
+        r = await client.get(
+            "https://api.anthropic.com/v1/models",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        )
+        r.raise_for_status()
+        data = r.json()
+    out = [
+        schemas.AiModelInfo(model=f"anthropic/{m['id']}", label=m.get("display_name") or m["id"])
+        for m in data.get("data", [])
+        if m.get("id")
+    ]
+    return sorted(out, key=lambda m: m.label)
+
+
+async def _fetch_openai_models(api_key: str) -> list[schemas.AiModelInfo]:
+    async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
+        r = await client.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        r.raise_for_status()
+        data = r.json()
+    out = []
+    for m in data.get("data", []):
+        mid = m.get("id", "")
+        # The account-wide /models list also includes embeddings, whisper,
+        # tts, dall-e, and moderation models — none usable for chat completion.
+        if not (mid.startswith(("gpt-", "o1", "o3", "o4", "chatgpt"))):
+            continue
+        out.append(schemas.AiModelInfo(model=mid, label=mid))
+    return sorted(out, key=lambda m: m.label)
+
+
+async def _fetch_gemini_models(api_key: str) -> list[schemas.AiModelInfo]:
+    async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
+        r = await client.get(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            headers={"x-goog-api-key": api_key},
+        )
+        r.raise_for_status()
+        data = r.json()
+    out = []
+    for m in data.get("models", []):
+        if "generateContent" not in m.get("supportedGenerationMethods", []):
+            continue
+        name = m.get("name", "").removeprefix("models/")
+        if not name:
+            continue
+        out.append(schemas.AiModelInfo(model=f"gemini/{name}", label=m.get("displayName") or name))
+    return sorted(out, key=lambda m: m.label)
+
+
+_MODEL_FETCHERS = {
+    "groq": _fetch_groq_models,
+    "anthropic": _fetch_anthropic_models,
+    "openai": _fetch_openai_models,
+    "gemini": _fetch_gemini_models,
+}
+
+
+@router.post("/ai/models")
+async def list_ai_models(
+    payload: schemas.AiModelsRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Live model list for the given provider, using the not-yet-saved form
+    key if present, else the stored key for that same provider. Never raises
+    for "not configured yet"/"unreachable" — mirrors the pre-existing
+    always-200 convention (matches how the removed Ollama-models endpoint
+    behaved), since this is called opportunistically while the user is still
+    filling in the form and a hard error would be noisy UX; the frontend
+    falls back to its curated suggestion list whenever reachable is false.
+    """
+    fetcher = _MODEL_FETCHERS.get(payload.provider)
+    if fetcher is None:
+        return {"reachable": False, "models": [], "error": f"Unknown provider: {payload.provider}"}
+
+    api_key = _resolve_api_key(db, payload.provider, payload.api_key)
+    if not api_key:
+        return {"reachable": False, "models": [], "error": "No API key configured"}
+
+    try:
+        model_list = await fetcher(api_key)
+        return {"reachable": True, "models": model_list, "error": None}
+    except Exception as e:
+        msg = str(e)
+        if len(msg) > 300:
+            msg = msg[:300] + "…"
+        return {"reachable": False, "models": [], "error": msg}

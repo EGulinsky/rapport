@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.37',
+    date: '2026-07-27',
+    changes: [
+      'AI settings now shows the actual models available on your account instead of only a hardcoded suggestion list — picking a provider (or entering an API key) fetches its live model list directly from Groq, Anthropic, OpenAI, or Gemini. Well-known models still get their polished name and "recommended"/"cheap" badge; anything else appears under its raw model id. Falls back to the previous curated suggestions whenever there\'s no key yet or the live list can\'t be reached.',
+    ],
+  },
+  {
     version: '4.6.36',
     date: '2026-07-27',
     changes: [

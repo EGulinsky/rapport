@@ -49,6 +49,8 @@
     "enabledLabel": "AI analysis enabled",
     "provider": "Provider",
     "model": "Model",
+    "liveModels": "Live from your account",
+    "liveModelsUnavailable": "Couldn't load live models — showing suggestions",
     "enterManually": "Or enter manually:",
     "apiKey": "API Key",
     "getKey": "Get key",

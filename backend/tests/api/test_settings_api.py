@@ -324,3 +324,146 @@ class TestAiTest:
 
         assert resp.status_code == 502
         assert resp.json()["detail"].endswith("…")
+
+
+class TestAiModelsList:
+    """POST /api/settings/ai/models — live model list per provider."""
+
+    class _FakeResp:
+        def __init__(self, json_body, status_code=200):
+            self._json = json_body
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+        def json(self):
+            return self._json
+
+    class _FakeClient:
+        def __init__(self, resp):
+            self._resp = resp
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, headers=None):
+            return self._resp
+
+    def test_negativ_ohne_api_key_liefert_reachable_false(self, client):
+        resp = client.post("/api/settings/ai/models", json={"provider": "groq"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["reachable"] is False
+        assert body["models"] == []
+        assert body["error"] == "No API key configured"
+
+    def test_negativ_unbekannter_provider(self, client):
+        resp = client.post("/api/settings/ai/models", json={"provider": "does-not-exist", "api_key": "x"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["reachable"] is False
+        assert "Unknown provider" in body["error"]
+
+    def test_positiv_groq_filtert_whisper_modelle(self, client):
+        fake = self._FakeClient(self._FakeResp({"data": [
+            {"id": "llama-3.3-70b-versatile"},
+            {"id": "distil-whisper-large-v3-en"},
+        ]}))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "groq", "api_key": "gsk-test"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["reachable"] is True
+        assert [m["model"] for m in body["models"]] == ["groq/llama-3.3-70b-versatile"]
+
+    def test_positiv_anthropic_nutzt_display_name(self, client):
+        fake = self._FakeClient(self._FakeResp({"data": [
+            {"id": "claude-haiku-4-5", "display_name": "Claude Haiku 4.5"},
+            {"id": "claude-opus-4-1", "display_name": "Claude Opus 4.1"},
+        ]}))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "anthropic", "api_key": "sk-ant-test"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        labels = {m["model"]: m["label"] for m in body["models"]}
+        assert labels["anthropic/claude-haiku-4-5"] == "Claude Haiku 4.5"
+        assert labels["anthropic/claude-opus-4-1"] == "Claude Opus 4.1"
+
+    def test_positiv_openai_filtert_nicht_chat_modelle(self, client):
+        fake = self._FakeClient(self._FakeResp({"data": [
+            {"id": "gpt-4o"},
+            {"id": "text-embedding-3-small"},
+            {"id": "whisper-1"},
+            {"id": "o1-mini"},
+        ]}))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "openai", "api_key": "sk-test"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(m["model"] for m in body["models"]) == ["gpt-4o", "o1-mini"]
+
+    def test_positiv_gemini_filtert_auf_generate_content(self, client):
+        fake = self._FakeClient(self._FakeResp({"models": [
+            {"name": "models/gemini-2.0-flash", "displayName": "Gemini 2.0 Flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/embedding-001", "displayName": "Embedding 001", "supportedGenerationMethods": ["embedContent"]},
+        ]}))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "gemini", "api_key": "AIza-test"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert [m["model"] for m in body["models"]] == ["gemini/gemini-2.0-flash"]
+
+    def test_positiv_nutzt_gespeicherten_key_bei_gleichem_provider(self, client, db_session):
+        client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "sk-stored", "enabled": True})
+        captured = {}
+
+        class _CapturingClient(self._FakeClient):
+            async def get(self, url, headers=None):
+                captured.update(headers or {})
+                return self._resp
+
+        fake = _CapturingClient(self._FakeResp({"data": [{"id": "llama-3.3-70b-versatile"}]}))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "groq"})
+
+        assert resp.status_code == 200
+        assert resp.json()["reachable"] is True
+        assert captured["Authorization"] == "Bearer sk-stored"
+
+    def test_negativ_gespeicherter_key_anderer_provider_wird_nicht_verwendet(self, client, db_session):
+        client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "sk-stored", "enabled": True})
+
+        resp = client.post("/api/settings/ai/models", json={"provider": "anthropic"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["reachable"] is False
+        assert body["error"] == "No API key configured"
+
+    def test_negativ_provider_fehler_wird_als_reachable_false_gemeldet(self, client):
+        fake = self._FakeClient(self._FakeResp({}, status_code=401))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "groq", "api_key": "bad-key"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["reachable"] is False
+        assert body["models"] == []
+        assert body["error"]
