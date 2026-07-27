@@ -294,44 +294,50 @@ export default function App() {
                 <button
                   data-testid="nav-applications"
                   onClick={() => setMainView('applications')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'applications' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                  title={t('nav.applications')}
+                  className={clsx('flex items-center justify-center px-3 py-1.5 transition-colors', mainView === 'applications' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Briefcase className="h-3.5 w-3.5" /> {t('nav.applications')}
+                  <Briefcase className="h-4 w-4" />
                 </button>
                 <button
                   data-testid="nav-contacts"
                   onClick={() => setMainView('contacts')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'contacts' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                  title={t('nav.contacts')}
+                  className={clsx('flex items-center justify-center px-3 py-1.5 transition-colors', mainView === 'contacts' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Users className="h-3.5 w-3.5" /> {t('nav.contacts')}
+                  <Users className="h-4 w-4" />
                 </button>
                 <button
                   data-testid="nav-companies"
                   onClick={() => setMainView('companies')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'companies' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                  title={t('nav.companies')}
+                  className={clsx('flex items-center justify-center px-3 py-1.5 transition-colors', mainView === 'companies' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Building2 className="h-3.5 w-3.5" /> {t('nav.companies')}
+                  <Building2 className="h-4 w-4" />
                 </button>
                 <button
                   data-testid="nav-calendar"
                   onClick={() => setMainView('calendar')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'calendar' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                  title={t('nav.calendar')}
+                  className={clsx('flex items-center justify-center px-3 py-1.5 transition-colors', mainView === 'calendar' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Calendar className="h-3.5 w-3.5" /> {t('nav.calendar')}
+                  <Calendar className="h-4 w-4" />
                 </button>
                 <button
                   data-testid="nav-analytics"
                   onClick={() => setMainView('analytics')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'analytics' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                  title={t('nav.analytics')}
+                  className={clsx('flex items-center justify-center px-3 py-1.5 transition-colors', mainView === 'analytics' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <BarChart2 className="h-3.5 w-3.5" /> {t('nav.analytics')}
+                  <BarChart2 className="h-4 w-4" />
                 </button>
                 <button
                   data-testid="nav-chat"
                   onClick={() => setMainView('chat')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                  title={t('nav.chat')}
+                  className={clsx('flex items-center justify-center px-3 py-1.5 transition-colors', mainView === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> {t('nav.chat')}
+                  <Sparkles className="h-4 w-4" />
                 </button>
               </div>
             </div>

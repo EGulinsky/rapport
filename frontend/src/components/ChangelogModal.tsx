@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.48',
+    date: '2026-07-27',
+    changes: [
+      'Trimmed the main navigation bar to icon-only buttons (hover for a tooltip with the label) — with rapportGPT added, the six text captions made the toolbar too wide.',
+    ],
+  },
+  {
     version: '4.6.47',
     date: '2026-07-27',
     changes: [
