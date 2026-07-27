@@ -39,6 +39,7 @@ enum MainSection: String, CaseIterable, Identifiable {
 
 struct MainSplitView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedSection: MainSection? = .applications
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var selectedApplicationId: Int?
@@ -49,40 +50,7 @@ struct MainSplitView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(MainSection.allCases, selection: $selectedSection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
-                    // Distinguishes the sidebar row from same-named text
-                    // elsewhere (e.g. the content column's own navigationTitle,
-                    // which can coincidentally overlap the Kanban/List toggle's
-                    // screen coordinates in the collapsed iPad layout) —
-                    // UI tests target this instead of matching on visible text.
-                    // `.accessibilityElement(children: .combine)` is required
-                    // here: without it, the identifier attaches to the SF
-                    // Symbol icon's own leaf accessibility element (which
-                    // XCUITest then reports as "not hittable", since the row's
-                    // real tap target is the merged label, not the bare icon).
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("sidebar.\(section.rawValue)")
-            }
-            .navigationTitle("Rapport")
-            .safeAreaInset(edge: .bottom) {
-                if let user = session.currentUser {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(user.displayName).font(.subheadline.bold())
-                            Text(user.email).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button("Sign out", role: .destructive) {
-                            session.logout()
-                        }
-                        .font(.caption)
-                    }
-                    .padding()
-                    .background(.bar)
-                }
-            }
+            sidebarContent
         } content: {
             sectionContent
         } detail: {
@@ -91,6 +59,111 @@ struct MainSplitView: View {
         .task {
             if contactsViewModel == nil {
                 contactsViewModel = ContactsViewModel(api: session.contacts)
+            }
+        }
+    }
+
+    /// Regular width (iPad, side-by-side multitasking excluded) gets the
+    /// persistent icon-only rail — a fixed 64pt strip is wasted space as a
+    /// full text list once there's a content column right next to it, since
+    /// the icon alone is enough to identify a section you already know.
+    /// Compact width (iPhone, narrow iPad multitasking) keeps the original
+    /// full list: collapsed presentation shows this column at full screen
+    /// width, where a bare icon rail would leave most of the screen empty.
+    @ViewBuilder
+    private var sidebarContent: some View {
+        if horizontalSizeClass == .regular {
+            sidebarRail
+                .navigationSplitViewColumnWidth(min: 64, ideal: 64, max: 64)
+        } else {
+            sidebarList
+        }
+    }
+
+    private var sidebarList: some View {
+        List(MainSection.allCases, selection: $selectedSection) { section in
+            Label(section.title, systemImage: section.systemImage)
+                .tag(section)
+                // Distinguishes the sidebar row from same-named text
+                // elsewhere (e.g. the content column's own navigationTitle,
+                // which can coincidentally overlap the Kanban/List toggle's
+                // screen coordinates in the collapsed iPad layout) —
+                // UI tests target this instead of matching on visible text.
+                // `.accessibilityElement(children: .combine)` is required
+                // here: without it, the identifier attaches to the SF
+                // Symbol icon's own leaf accessibility element (which
+                // XCUITest then reports as "not hittable", since the row's
+                // real tap target is the merged label, not the bare icon).
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("sidebar.\(section.rawValue)")
+        }
+        .navigationTitle("Rapport")
+        .safeAreaInset(edge: .bottom) {
+            userFooter
+        }
+    }
+
+    private var sidebarRail: some View {
+        VStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(Color.accentColor)
+                .frame(width: 30, height: 30)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
+                .accessibilityHidden(true)
+
+            ForEach(MainSection.allCases) { section in
+                Button {
+                    selectedSection = section
+                } label: {
+                    Image(systemName: section.systemImage)
+                        .font(.system(size: 18))
+                        .frame(width: 44, height: 40)
+                        .background(selectedSection == section ? Color.accentColor.opacity(0.15) : Color.clear)
+                        .foregroundStyle(selectedSection == section ? Color.accentColor : Color.secondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(section.title)
+                .accessibilityIdentifier("sidebar.\(section.rawValue)")
+            }
+
+            Spacer()
+
+            if session.currentUser != nil {
+                Button(role: .destructive) {
+                    session.logout()
+                } label: {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 16))
+                        .frame(width: 44, height: 40)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .accessibilityLabel("Sign out")
+                .padding(.bottom, 12)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var userFooter: some View {
+        Group {
+            if let user = session.currentUser {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(user.displayName).font(.subheadline.bold())
+                        Text(user.email).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Sign out", role: .destructive) {
+                        session.logout()
+                    }
+                    .font(.caption)
+                }
+                .padding()
+                .background(.bar)
             }
         }
     }
