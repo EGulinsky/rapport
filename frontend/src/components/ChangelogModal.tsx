@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.39',
+    date: '2026-07-27',
+    changes: [
+      'The live model list can now show "unreachable" for a provider that\'s actually fine — requesting the full model catalog in one call (previous release) takes noticeably longer than the old, smaller request, and the fetch was cutting it off after only 6 seconds. Raised the timeout so a normal full fetch has enough headroom; also logs the underlying error server-side when a live fetch does genuinely fail, to make the next report of this easier to diagnose.',
+    ],
+  },
+  {
     version: '4.6.38',
     date: '2026-07-27',
     changes: [

@@ -11,8 +11,10 @@ from app import models, schemas
 from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured
 from app.ai.tasks import test_connection
 from app.auth.dependencies import get_current_user
+from app.logger import get_logger
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+log = get_logger("settings", source="ai_models")
 
 
 def _to_read(cfg: models.AiSettings) -> schemas.AiSettingsRead:
@@ -328,7 +330,7 @@ async def test_ai(
         raise HTTPException(502, f"Provider-Fehler: {msg}")
 
 
-_MODEL_LIST_TIMEOUT = httpx.Timeout(6.0)
+_MODEL_LIST_TIMEOUT = httpx.Timeout(15.0)
 
 
 async def _fetch_groq_models(api_key: str) -> list[schemas.AiModelInfo]:
@@ -442,6 +444,7 @@ async def list_ai_models(
         model_list = await fetcher(api_key)
         return {"reachable": True, "models": model_list, "error": None}
     except Exception as e:
+        log.warning(f"live model list failed for provider={payload.provider}: {e!r}")
         msg = str(e)
         if len(msg) > 300:
             msg = msg[:300] + "…"
