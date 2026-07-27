@@ -91,6 +91,14 @@ struct SettingsHomeView: View {
                     }
                 }
             }
+
+            Section {
+                Text(AppVersion.displayString)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .listRowBackground(Color.clear)
         }
         .navigationTitle("Settings")
     }
