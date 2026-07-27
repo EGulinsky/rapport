@@ -49,13 +49,17 @@ class AIRateLimited(Exception):
 class AIBadRequest(Exception):
     pass
 
+class AIToolsUnsupported(AIBadRequest):
+    """Configured model/provider doesn't support function/tool calling."""
+    pass
 
-async def complete(
-    db: Session,
-    messages: list[dict],
-    json_mode: bool = True,
-    max_tokens: int = 1024,
-) -> dict | str:
+
+def _build_request_kwargs(db: Session, messages: list[dict], max_tokens: int):
+    """Shared by complete() and complete_with_tools(): loads the active
+    AiSettings row, resolves+decrypts the matching AiProviderKey, and
+    assembles the base litellm kwargs. Raises AINotConfigured if there's no
+    active/enabled config. Returns (kwargs, cfg) — cfg is needed by callers
+    for error messages and tool-support checks."""
     from app.models import AiSettings, AiProviderKey
 
     cfg = db.query(AiSettings).first()
@@ -73,6 +77,16 @@ async def complete(
         kwargs["api_key"] = decrypt_api_key(key_row.api_key_enc)
     if cfg.base_url:
         kwargs["api_base"] = cfg.base_url
+    return kwargs, cfg
+
+
+async def complete(
+    db: Session,
+    messages: list[dict],
+    json_mode: bool = True,
+    max_tokens: int = 1024,
+) -> dict | str:
+    kwargs, cfg = _build_request_kwargs(db, messages, max_tokens)
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
 
@@ -128,3 +142,58 @@ async def complete(
                 "Versuche ein anderes Modell."
             )
     return content
+
+
+async def complete_with_tools(
+    db: Session,
+    messages: list[dict],
+    tools: list[dict],
+    max_tokens: int = 1024,
+    tool_choice: str = "auto",
+):
+    """Like complete(), but supports tool/function calling — returns the raw
+    litellm response *message* object (has .content and .tool_calls), not a
+    parsed dict|str, since the caller (the chat agent loop) needs to branch
+    on whether the model asked to call a tool or produced a final answer."""
+    kwargs, cfg = _build_request_kwargs(db, messages, max_tokens)
+
+    if tools:
+        try:
+            supported = litellm.supports_function_calling(model=cfg.model)
+        except Exception:
+            supported = True  # unknown/custom model (e.g. self-hosted base_url) — don't block, rely on the reactive check below
+        if not supported:
+            raise AIToolsUnsupported(f"Modell '{cfg.model}' unterstützt kein Tool-Calling.")
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = tool_choice
+
+    log.info(
+        "AI chat request | model={model} max_tokens={max_tokens}\n{messages}",
+        model=cfg.model,
+        max_tokens=max_tokens,
+        messages=json.dumps(messages, ensure_ascii=False, indent=2, default=str),
+    )
+
+    try:
+        response = await litellm.acompletion(**kwargs)
+    except litellm.RateLimitError as e:
+        log.warning("AI rate limited: {}", e)
+        raise AIRateLimited(str(e))
+    except litellm.BadRequestError as e:
+        msg = str(e)
+        log.warning("AI bad request: {}", msg)
+        if any(s in msg.lower() for s in ("tool", "function calling", "does not support tools")):
+            raise AIToolsUnsupported(f"Modell '{cfg.model}' unterstützt kein Tool-Calling.")
+        raise AIBadRequest(f"Ungültige Anfrage: {msg[:200]}")
+    except litellm.AuthenticationError as e:
+        log.warning("AI auth error: {}", e)
+        raise AIBadRequest("API-Key ungültig oder abgelaufen.")
+
+    message = response.choices[0].message
+    log.info(
+        "AI chat response | model={model} tool_calls={tool_calls}\n{content}",
+        model=cfg.model,
+        tool_calls=len(message.tool_calls) if message.tool_calls else 0,
+        content=message.content or "",
+    )
+    return message

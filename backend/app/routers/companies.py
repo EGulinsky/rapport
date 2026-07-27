@@ -265,16 +265,11 @@ def list_companies(
     ]
 
 
-@router.get("/{company_id}", response_model=CompanyProfileDetail)
-def get_company(
-    company_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
-    if not profile:
-        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
-
+def build_company_detail(profile: CompanyProfile) -> CompanyProfileDetail:
+    """Assembles the full company detail shape (metadata + subsidiaries +
+    applications + contacts) from a CompanyProfile ORM instance. Shared by
+    the REST endpoint below and the rapportGPT get_company_detail tool
+    (app/ai/chat.py) so both surfaces stay in sync from one implementation."""
     seen = set()
     apps = []
     for a in list(profile.applications) + list(profile.hh_applications):
@@ -336,6 +331,18 @@ def get_company(
         applications=apps,
         contacts=contacts,
     )
+
+
+@router.get("/{company_id}", response_model=CompanyProfileDetail)
+def get_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    profile = db.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
+    if not profile:
+        raise api_error(404, ErrorKey.COMPANY_NOT_FOUND, "Firma nicht gefunden")
+    return build_company_detail(profile)
 
 
 @router.patch("/{company_id}", response_model=CompanyProfileDetail)

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.45',
+    date: '2026-07-27',
+    changes: [
+      'Backend groundwork for "rapportGPT," a new AI chat assistant replacing the traffic-light per-application assessment: a tool-calling agent that can look up your applications, their full timelines, contacts, and company details, plus your CV/LinkedIn profile, to answer open questions rather than produce one fixed verdict per application. This release lays the backend foundation only (data model, provider support for tool-calling, the question-answering endpoint) — no user-facing change yet; the chat tab itself and the removal of the old traffic-light UI follow in the next releases.',
+    ],
+  },
+  {
     version: '4.6.44',
     date: '2026-07-27',
     changes: [

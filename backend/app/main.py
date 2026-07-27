@@ -12,7 +12,7 @@ from app.routers import (
     applications, import_excel, contacts, export_excel, export_pdf, settings,
     sync_google, sync_icloud, sync_targeted, sync_linkedin, sync_files,
     review, cleanup, calendar, attachments, merge, audit_log, backup,
-    analytics, sync_company, companies, startup_check, geo, auth,
+    analytics, sync_company, companies, startup_check, geo, auth, chat,
 )
 
 setup_logging()
@@ -208,6 +208,7 @@ app.include_router(sync_company.router)
 app.include_router(companies.router)
 app.include_router(startup_check.router)
 app.include_router(geo.router)
+app.include_router(chat.router)
 
 
 if os.environ.get("E2E_TESTING"):

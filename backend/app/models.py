@@ -595,6 +595,23 @@ class AiProviderKey(Base):
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class ChatMessage(Base):
+    """Single persisted rapportGPT conversation thread — one thread per
+    account, no thread/session concept. Only user-visible turns are stored
+    (final user text, final assistant text); intermediate tool-call/tool-
+    result messages produced during a turn's agent loop are never persisted,
+    only replayed within that one request (see app/ai/chat.py) — the model
+    can always re-call a tool if it needs the same fact again later."""
+    __tablename__ = "chat_messages"
+
+    id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    role        = Column(String, nullable=False)   # 'user' | 'assistant'
+    content     = Column(Text, nullable=False)
+
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class MapsSettings(Base):
     __tablename__ = "maps_settings"
 

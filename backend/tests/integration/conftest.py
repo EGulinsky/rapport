@@ -14,6 +14,7 @@ sonst hält die eigene Session der Sync-Funktion an SQLite's `busy_timeout`
 einer Minute. Kein `db.flush()`-Ersatz möglich, da Flush keine Locks freigibt."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -43,6 +44,12 @@ class FakeAIProvider:
         self._queue.append(("content", content))
         return self
 
+    def queue_tool_call(self, name: str, arguments: dict, call_id: str = "call_1") -> "FakeAIProvider":
+        """Queues a response where the model asks to call one tool instead of
+        answering directly — for testing app/ai/chat.py's agent loop."""
+        self._queue.append(("tool_call", (name, arguments, call_id)))
+        return self
+
     def queue_error(self, exc: Exception) -> "FakeAIProvider":
         self._queue.append(("error", exc))
         return self
@@ -54,7 +61,14 @@ class FakeAIProvider:
         kind, value = self._queue.pop(0)
         if kind == "error":
             raise value
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=value))])
+        if kind == "tool_call":
+            name, arguments, call_id = value
+            tool_call = SimpleNamespace(
+                id=call_id,
+                function=SimpleNamespace(name=name, arguments=json.dumps(arguments)),
+            )
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[tool_call]))])
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=value, tool_calls=None))])
 
 
 @pytest.fixture()

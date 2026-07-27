@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import date, datetime
 
@@ -465,3 +465,25 @@ class StatsResponse(BaseModel):
     active: int
     rejected: int
     by_status: dict
+
+
+class ChatMessageRead(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChatSendRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
+class ChatSendResponse(BaseModel):
+    user_message: ChatMessageRead
+    assistant_message: ChatMessageRead
+
+
+class ChatHistoryResponse(BaseModel):
+    messages: List[ChatMessageRead]
