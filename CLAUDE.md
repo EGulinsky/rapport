@@ -140,7 +140,7 @@ Guard in `sync_common.py`: `if source not in ('gcal', 'icloud_cal'):`
 ## CI/CD
 
 GitHub Actions self-hosted runner on the Mac.
-Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`, 1206 tests) → `frontend` (tsc + vitest + vite build) → `e2e` (Playwright via docker-compose.test.yml, all 12 journeys in German every push + an English subset on push to `main`, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, 200 L3 integration tests run on push to `main` (`pytest -m integration`).
+Jobs: `backend` (ruff + pyright + `pytest -m "unit or component or api"`) → `frontend` (tsc + vitest + vite build) → `e2e` (Playwright via docker-compose.test.yml, all journeys in German every push + an English subset on push to `main`, main push + workflow_dispatch) → `docker` (buildx, waits for e2e) → `deploy` (self-hosted). In addition, L3 integration tests run on push to `main` (`pytest -m integration`).
 Deploy: `git pull` → Docker Buildx builds new images on the runner → `docker compose up -d --build` → health poll → macOS notification. Details: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md) (test concept, all phases 1–6 complete).
 A push to `main` always triggers test+deploy. Manually (e.g. on a feature branch) via `gh workflow run ci.yml --ref <branch>` to only test, or with `-f deploy=true` to also deploy (this always deploys the `main` head, regardless of the chosen `--ref`).
 
@@ -376,11 +376,11 @@ cec726b CI: E2E-Testreport-Sammlung reparieren (v3.54.1)
 | 5 | Merge dialog (applications via table view) | ✅ |
 | 6 | Targeted sync for one application (mocked sources) | ✅ |
 | 7 | Manual candidate assignment (search → multiselect → import) | ✅ |
-| 8 | AI assessment: "Reassess" → traffic light + reasoning | ✅ |
-| 9 | Batch AI assessment with live progress (+ rate-limit simulation) | ✅ |
-| 10 | Company sync with selection (only the chosen ones) | ✅ |
-| 11 | Configure backup → manual run → restore | ✅ |
-| 12 | Excel import (original format) → export → round-trip comparison | ✅ |
+| 8 | Company sync with selection (only the chosen ones) | ✅ |
+| 9 | Configure backup → manual run → restore | ✅ |
+| 10 | Excel import (original format) → export → round-trip comparison | ✅ |
+
+(Journeys 8–9 in this table's older numbering — per-application "Reassess" and batch AI assessment — were removed when the traffic-light AI assessment feature itself was removed in favor of rapportGPT; see the Work State session log for that release.)
 
 **Notes for implementation:**
 - Put E2E tests in `frontend/e2e/`, follow the pattern in `application-lifecycle.spec.ts`

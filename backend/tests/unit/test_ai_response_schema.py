@@ -1,51 +1,16 @@
 """L0 Unit — AI-Response-Validierung in tasks.py und analytics.py.
 
 Risk: tasks.py vertraut blind auf die JSON-Ausgabe des AI-Modells.
-assess_application() hat nur eine einzige Validierung: color in ("green",
-"yellow", "red"). Alle anderen Felder (reasoning, next_step, event_type,
-confidence, suggested_main_status) werden ohne Schema-Prüfung übernommen.
+classify_for_app() und match_and_classify() geben Felder wie "confidence"
+(soll float [0,1] sein), "suggested_main_status" (soll aus MAIN_STATUS
+sein), "event_type" (soll bestimmte Werte haben) zurück — keins wird validiert.
 
-Dieselbe Lücke betrifft classify_for_app() und match_and_classify() —
-deren Rückgaben enthalten Felder wie "confidence" (soll float [0,1] sein),
-"suggested_main_status" (soll aus MAIN_STATUS sein), "event_type" (soll
-bestimmte Werte haben) — keins wird validiert.
-
-Dieser Test validiert die tatsächliche bestehende Validierung + dokumentiert
-die Lücken durch explizite Negativtests, die KEINE Validierung haben.
+Dieser Test dokumentiert die Lücken durch explizite Negativtests, die
+KEINE Validierung haben.
 """
 import pytest
 
 pytestmark = pytest.mark.unit
-
-
-class TestAssessApplicationColor:
-    """Die einzige existierende Validierung in assess_application()."""
-
-    @staticmethod
-    def _assess_validate(result: dict) -> str:
-        """Spiegelt die Validierung aus tasks.py Line 395-397."""
-        color = result.get("color")
-        if color not in ("green", "yellow", "red"):
-            color = "yellow"
-        return color
-
-    def test_positiv_green_wird_akzeptiert(self):
-        assert self._assess_validate({"color": "green"}) == "green"
-
-    def test_positiv_red_wird_akzeptiert(self):
-        assert self._assess_validate({"color": "red"}) == "red"
-
-    def test_positiv_yellow_wird_akzeptiert(self):
-        assert self._assess_validate({"color": "yellow"}) == "yellow"
-
-    def test_negativ_unbekannte_farbe_faellt_auf_yellow_zurueck(self):
-        assert self._assess_validate({"color": "blue"}) == "yellow"
-
-    def test_negativ_fehlt_color_faellt_auf_yellow(self):
-        assert self._assess_validate({"reasoning": "ok"}) == "yellow"
-
-    def test_negativ_none_color_faellt_auf_yellow(self):
-        assert self._assess_validate({"color": None}) == "yellow"
 
 
 class TestClassifyForAppValidationGap:

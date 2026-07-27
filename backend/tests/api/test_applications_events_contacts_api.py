@@ -1,4 +1,4 @@
-"""L2 API — Events/Kontakte-Unterrouten, Stats, AI-Assessment und Löschen in
+"""L2 API — Events/Kontakte-Unterrouten, Stats und Löschen in
 applications.py, die tests/api/test_applications_api.py nicht abdeckt."""
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
@@ -47,37 +47,6 @@ class TestStats:
         assert body["rejected"] == 1
         assert body["active"] == 2
         assert body["by_status"]["applied"] == 2
-
-
-class TestAiAssessAll:
-    def test_positiv_streamt_start_und_done_events(self, client, db_session):
-        application_factory(db_session, main_status="applied")
-        db_session.commit()
-
-        async def _fake_assess(db, app, lang="de", cv_text=None, linkedin_text=None):
-            return {"color": "green", "reasoning": "gut", "next_step": "abwarten"}
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = client.get("/api/applications/ai-assess-all")
-
-        assert resp.status_code == 200
-        assert '"status": "start"' in resp.text
-        assert '"status": "done"' in resp.text
-
-    def test_negativ_ai_not_configured_stoppt_stream_mit_fehler(self, client, db_session):
-        from app.ai.provider import AINotConfigured
-
-        application_factory(db_session, main_status="applied")
-        db_session.commit()
-
-        async def _fake_assess(db, app, lang="de", cv_text=None, linkedin_text=None):
-            raise AINotConfigured("kein Provider konfiguriert")
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = client.get("/api/applications/ai-assess-all")
-
-        assert resp.status_code == 200
-        assert "error" in resp.text
 
 
 class TestExtractFromLinkedinUrl:
@@ -129,132 +98,6 @@ class TestExtractFromLinkedinUrl:
             resp = client.post("/api/applications/extract-from-linkedin-url", json={"url": "https://linkedin.com/jobs/view/1"})
 
         assert resp.status_code == 429
-
-
-class TestAiAssessSingle:
-    def test_negativ_nicht_gefunden_liefert_404(self, client):
-        resp = client.post("/api/applications/999/ai-assess")
-        assert resp.status_code == 404
-
-    def test_positiv_normale_bewerbung_nutzt_assess_application(self, client, db_session):
-        app = application_factory(db_session, main_status="applied")
-        db_session.commit()
-
-        async def _fake_assess(db, a, lang="de", cv_text=None, linkedin_text=None):
-            return {"color": "green", "reasoning": "gut", "next_step": "abwarten"}
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = client.post(f"/api/applications/{app.id}/ai-assess")
-
-        assert resp.status_code == 200
-        assert resp.json()["color"] == "green"
-        db_session.refresh(app)
-        assert app.ai_color == "green"
-
-    def test_positiv_abgesagte_bewerbung_nutzt_assess_rejected_application(self, client, db_session):
-        app = application_factory(db_session, main_status="rejected")
-        db_session.commit()
-
-        async def _fake_assess_rejected(db, a, lang="de", cv_text=None, linkedin_text=None):
-            return {"color": "red", "reasoning": "abgesagt", "next_step": "weiter bewerben"}
-
-        with patch("app.ai.tasks.assess_rejected_application", new=_fake_assess_rejected):
-            resp = client.post(f"/api/applications/{app.id}/ai-assess")
-
-        assert resp.status_code == 200
-        assert resp.json()["color"] == "red"
-
-    def test_negativ_ai_not_configured_liefert_400(self, client, db_session):
-        from app.ai.provider import AINotConfigured
-
-        app = application_factory(db_session, main_status="applied")
-        db_session.commit()
-
-        async def _fake_assess(db, a, lang="de", cv_text=None, linkedin_text=None):
-            raise AINotConfigured("nicht konfiguriert")
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = client.post(f"/api/applications/{app.id}/ai-assess")
-
-        assert resp.status_code == 400
-
-    def test_negativ_ai_bad_request_liefert_400(self, client, db_session):
-        from app.ai.provider import AIBadRequest
-
-        app = application_factory(db_session, main_status="applied")
-        db_session.commit()
-
-        async def _fake_assess(db, a, lang="de", cv_text=None, linkedin_text=None):
-            raise AIBadRequest("kaputte Antwort")
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = client.post(f"/api/applications/{app.id}/ai-assess")
-
-        assert resp.status_code == 400
-
-
-class TestAiAssessProfileDataWiring:
-    """Verifies applications.py's own glue code — reading the cached
-    cv_extracted_text and linkedin_profile_text columns — actually reaches
-    assess_application()/assess_rejected_application(). Both are read
-    directly from the user row, not re-extracted/re-scraped per assessment
-    (see User.cv_extracted_text's docstring in models.py for why: the
-    original implementation re-parsed the CV's PDF/DOCX on every single
-    "Reassess" click, both slow and — since it ran synchronously inside an
-    `async def` endpoint — blocking the whole app's event loop for everyone
-    while it did). The prompt-building side of this (does the text show up
-    in the LLM prompt) is covered separately in
-    tests/unit/test_ai_assess_profile_block.py. Uses real_auth_client (not
-    the plain `client` fixture) since it needs a real, DB-tracked user row
-    to set cv_extracted_text/linkedin_profile_text on."""
-
-    def _authed_with_app(self, db_session, **user_overrides):
-        from app.auth.security import create_access_token
-
-        user = models.User(
-            email="assess-profile@example.com", password_hash="x", email_verified=True,
-            **user_overrides,
-        )
-        db_session.add(user)
-        db_session.commit()
-        token = create_access_token(user.id)
-        app = application_factory(db_session, main_status="applied", user_id=user.id)
-        db_session.commit()
-        return app, {"Authorization": f"Bearer {token}"}
-
-    def test_positiv_cv_und_linkedin_werden_an_assess_uebergeben(self, real_auth_client, db_session):
-        app, headers = self._authed_with_app(
-            db_session, linkedin_profile_text="LinkedIn summary text", cv_extracted_text="Cached CV content",
-        )
-        captured = {}
-
-        async def _fake_assess(db, a, lang="de", cv_text=None, linkedin_text=None):
-            captured["cv_text"] = cv_text
-            captured["linkedin_text"] = linkedin_text
-            return {"color": "green", "reasoning": "ok", "next_step": "abwarten"}
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = real_auth_client.post(f"/api/applications/{app.id}/ai-assess", headers=headers)
-
-        assert resp.status_code == 200
-        assert captured["cv_text"] == "Cached CV content"
-        assert captured["linkedin_text"] == "LinkedIn summary text"
-
-    def test_negativ_ohne_cv_und_linkedin_wird_none_uebergeben(self, real_auth_client, db_session):
-        app, headers = self._authed_with_app(db_session)
-        captured = {}
-
-        async def _fake_assess(db, a, lang="de", cv_text=None, linkedin_text=None):
-            captured["cv_text"] = cv_text
-            captured["linkedin_text"] = linkedin_text
-            return {"color": "green", "reasoning": "ok", "next_step": "abwarten"}
-
-        with patch("app.ai.tasks.assess_application", new=_fake_assess):
-            resp = real_auth_client.post(f"/api/applications/{app.id}/ai-assess", headers=headers)
-
-        assert resp.status_code == 200
-        assert captured["cv_text"] is None
-        assert captured["linkedin_text"] is None
 
 
 class TestEvents:

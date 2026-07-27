@@ -1,6 +1,6 @@
 # rapport – Test Concept
 
-> Status: **Phases 1–6 complete** (see rollout plan, section 11) — the PR gate with L0/L1/L2 tests runs in CI, L3 integration tests (AI provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) run on push to `main` and on the nightly cron. `linkedin_job_description.py` sits at 82% line coverage (see the marker-bug note in section 0 — it silently didn't run in CI at all until 2026-07-11). All 12 E2E user journeys implemented, each run once in German (every push) and a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) additionally in English on push to `main`, via the `uiLanguage` E2E fixture introduced alongside the account i18n work. L5 smoke job active after deploy (backend health, frontend, login + API). The decisions listed in section 12 remain binding guardrails for further implementation.
+> Status: **Phases 1–6 complete** (see rollout plan, section 11) — the PR gate with L0/L1/L2 tests runs in CI, L3 integration tests (AI provider, Google, LinkedIn, `sync_targeted.py`, iCloud Mail/Calendar/Reminders/Contacts/Notes) run on push to `main` and on the nightly cron. `linkedin_job_description.py` sits at 82% line coverage (see the marker-bug note in section 0 — it silently didn't run in CI at all until 2026-07-11). All 10 E2E user journeys implemented (2 removed alongside the traffic-light AI assessment feature — see section 7.1), each run once in German (every push) and a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) additionally in English on push to `main`, via the `uiLanguage` E2E fixture introduced alongside the account i18n work. L5 smoke job active after deploy (backend health, frontend, login + API). The decisions listed in section 12 remain binding guardrails for further implementation.
 >
 > **Current scale (2026-07-17):** 1451 backend tests (441 unit / 257 component / 552 api / 201 integration) + 93 frontend tests (up from 11 — the bulk of the growth is the i18n project: per-component language-switch tests plus the `locales.test.ts` key-parity/interpolation-placeholder suite) + 133 agent tests (up from 64 — the portability effort's factory/service/Windows/Linux-provider coverage, see section 13), run in CI on a `[ubuntu-latest, windows-latest, macos-latest]` matrix. PR-gate coverage (`unit or component or api`) 75% of `app/` (10603 statements — grew from 10230 with the new salary-tracking feature: 15 nullable `Application` columns — currency, expectation/budget min/max, an optional per-slot fixed+bonus breakdown, and two company-car flags — plus the `salary_mismatch` computed property, a dedicated migration, API validation guards, and a new "Salary" tab in `ApplicationModal.tsx`, shipped across v4.5.0–v4.5.2); including integration tests, 87%. Growth since 2026-07-16 (45 new backend tests) is: 9 unit tests for `salary_mismatch`'s best-case-overlap logic, ~20 API tests for salary create/update/validation (range guards, fixed+bonus-sum guards, company-car persistence, audit logging, EUR default), plus contacts fixes (`Contact.display_name` regression coverage, the calls-sync last-name-only fix, and the contacts search-by-first-name fix) from the same period. See section 10 for the 2026-07-11 per-module breakdown (still broadly representative — subsequent work added test files rather than shifting existing router coverage meaningfully).
 
@@ -145,7 +145,7 @@ Principle: **mock at the network boundary, not at the business-logic boundary** 
 | Dedup/cleanup | `norm_firma`, `dedup_key` | `_find_*_groups()` against test DB with known duplicate patterns | `/cleanup/preview` + `scope` filtering | Full cleanup run incl. merge reassignment | Cleanup button shows the right category |
 | Sync (Gmail/GCal/iCloud) | Parsing helpers (date, footer extraction) | Contact-upsert logic | Targeted-sync endpoint response shape | Full sync run with fixture data → correct events/PendingMatches | — (too slow/fragile for E2E) |
 | LinkedIn import | URL validation, company-name extraction fallbacks | — | `/extract-from-linkedin-url` with mocked Playwright response | Full import flow with HTML fixture → correct company matching | Import button → form pre-filled |
-| AI assessment | Prompt building, response parsing | `assess_application()` with fake provider | `/ai-assess` endpoint error cases (429, no provider configured) | Batch run with multiple fake responses incl. rate-limit simulation | "Reassess" updates UI immediately |
+| rapportGPT chat | Tool executors against a seeded DB (tenant isolation, not-found/ambiguous) | — | `/chat/*` endpoint error mapping (429, tool-unsupported, not configured) | `run_chat_turn()` agent loop: single/multi tool call, iteration cap, tool-error resilience | — (no dedicated journey yet, see section 7.1) |
 | Encryption | `encrypt_api_key`/`decrypt_api_key` round-trip, wrong key | — | Settings endpoint never stores plaintext in the response | — | — |
 | Merge/companies | — | `merge_companies()` reassignment correctness | `/merge/companies` error cases (non-existent ID) | — | Merge dialog end-to-end |
 
@@ -162,11 +162,11 @@ Deliberately expanded beyond the original 5–10, since sync flows, the merge di
 5. Merge dialog (applications/contacts/companies): select → merge → reassignment visible ✅
 6. Targeted sync for one application (with mocked sources): start → progress → events/contacts appear in the timeline ✅
 7. Manual candidate assignment (full-text search → multiselect → assign) ✅
-8. AI assessment: "Reassess" → traffic light + reasoning appear without a manual reload ✅
-9. Batch AI assessment with live progress display (incl. simulated rate-limit case) ✅
-10. Company sync with selection: only selected companies are synced (regression test for the auto-continue poller bug) ✅
-11. Configure backup → manual run → restore from backup file
-12. Excel import (original format) → applications correctly mapped → Excel export → round-trip comparison
+8. Company sync with selection: only selected companies are synced (regression test for the auto-continue poller bug) ✅
+9. Configure backup → manual run → restore from backup file
+10. Excel import (original format) → applications correctly mapped → Excel export → round-trip comparison
+
+Journeys 8–9 (per-application "Reassess" and batch AI assessment) were removed when the traffic-light AI assessment feature itself was removed in favor of rapportGPT (a tool-calling chat assistant) — the count above reflects the current 10 journeys, renumbered after that removal.
 
 ---
 

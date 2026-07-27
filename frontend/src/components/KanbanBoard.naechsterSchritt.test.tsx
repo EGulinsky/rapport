@@ -26,14 +26,14 @@ describe('KanbanBoard — nächster Schritt', () => {
     expect(screen.getByText('→ Warte auf Feedback')).toBeInTheDocument()
   })
 
-  it('positiv: wird auch neben einer vorhandenen KI-Einschätzung angezeigt', () => {
+  it('positiv: alte KI-Einschätzungsfelder auf historischen Zeilen werden nicht mehr gerendert', () => {
     const app = makeApp({ naechster_schritt: 'Warte auf Feedback', ai_color: 'green', ai_next_step: 'Nachfassen' })
     render(
       <KanbanBoard columns={[{ status: 'applied', items: [app] }]} onSelect={vi.fn()} onChanged={vi.fn()} />
     )
 
     expect(screen.getByText('→ Warte auf Feedback')).toBeInTheDocument()
-    expect(screen.getByText('Nachfassen')).toBeInTheDocument()
+    expect(screen.queryByText('Nachfassen')).not.toBeInTheDocument()
   })
 
   it('negativ: bei abgesagten Bewerbungen wird nichts angezeigt', () => {

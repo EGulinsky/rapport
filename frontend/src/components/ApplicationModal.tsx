@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Sparkles, Wallet, AlertTriangle, Car, Linkedin, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Wallet, AlertTriangle, Car, Linkedin, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -109,7 +109,6 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
   const [ecFirmaCreating, setEcFirmaCreating] = useState(false)
   const ecFirmaRef = useRef<HTMLDivElement>(null)
   const [docAttaching, setDocAttaching] = useState<string | null>(null)
-  const [aiAssessing, setAiAssessing] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncProgress, setSyncProgress] = useState<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean; created: number; updated: number; skipped: number }>>({})
@@ -161,34 +160,6 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
       onSaved()
     } catch (e: unknown) {
       setSyncResult({ created: 0, skipped: 0, errors: [errorMessage(e, t)] })
-    }
-  }
-
-  const [aiAssessError, setAiAssessError] = useState<string | null>(null)
-
-  async function runAiAssess() {
-    if (!appId) return
-    setAiAssessing(true)
-    setAiAssessError(null)
-    try {
-      const result = await api.applications.aiAssess(appId)
-      setApp(prev => prev ? {
-        ...prev,
-        ai_color: result.color as 'green' | 'yellow' | 'red',
-        ai_next_step: result.next_step,
-        ai_reasoning: result.reasoning,
-        ai_assessed_at: new Date().toISOString(),
-      } : prev)
-      onSaved()
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
-        setAiAssessError(t('overview.rateLimitError'))
-      } else {
-        setAiAssessError(t('overview.aiFailedError'))
-      }
-    } finally {
-      setAiAssessing(false)
     }
   }
 
@@ -1330,72 +1301,6 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
             </div>
           )}
 
-          {/* KI-Einschätzung */}
-          {!editing && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  {app?.abgesagt ? t('overview.aiRejectionAnalysis') : t('overview.aiAssessment')}
-                </p>
-                <button
-                  onClick={runAiAssess}
-                  disabled={aiAssessing}
-                  data-testid="ai-reassess-button"
-                  className="flex items-center gap-1 text-[10px] text-purple-600 hover:text-purple-800 disabled:opacity-50"
-                >
-                  <Sparkles className={`h-3 w-3 ${aiAssessing ? 'animate-pulse' : ''}`} />
-                  {aiAssessing ? t('overview.analyzing') : t('overview.reassess')}
-                </button>
-              </div>
-              {app?.ai_color ? (
-                <div className={`rounded-lg border px-3 py-2.5 ${
-                  app.ai_color === 'green' ? 'border-green-200 bg-green-50' :
-                  app.ai_color === 'red'   ? 'border-red-200 bg-red-50'     : 'border-yellow-200 bg-yellow-50'
-                }`}>
-                  {!app.abgesagt && (
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${
-                        app.ai_color === 'green' ? 'bg-green-500' :
-                        app.ai_color === 'red'   ? 'bg-red-500'   : 'bg-yellow-400'
-                      }`} />
-                      <span className={`text-xs font-semibold ${
-                        app.ai_color === 'green' ? 'text-green-700' :
-                        app.ai_color === 'red'   ? 'text-red-700'   : 'text-yellow-700'
-                      }`}>
-                        {app.ai_color === 'green' ? t('overview.chanceHigh') :
-                         app.ai_color === 'red'   ? t('overview.chanceLow') : t('overview.chanceMedium')}
-                      </span>
-                    </div>
-                  )}
-                  {app.ai_reasoning && (
-                    <p className="text-xs text-gray-500 leading-snug mb-2 italic">{app.ai_reasoning}</p>
-                  )}
-                  <p className="text-sm text-gray-700 leading-snug font-medium">{app.ai_next_step}</p>
-                  {app.ai_assessed_at && (
-                    <p className="text-[10px] text-gray-400 mt-1.5">
-                      {t('overview.assessedAt', { date: formatDate(app.ai_assessed_at, locale) })}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-sm text-gray-400 italic">{t('overview.noAssessmentYet')}</span>
-                  <button
-                    onClick={runAiAssess}
-                    disabled={aiAssessing}
-                    data-testid="ai-assess-now-button"
-                    className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    {t('overview.assessNow')}
-                  </button>
-                </div>
-              )}
-              {aiAssessError && (
-                <p className="mt-2 text-xs text-red-600">{aiAssessError}</p>
-              )}
-            </div>
-          )}
         </div>
         )}
 

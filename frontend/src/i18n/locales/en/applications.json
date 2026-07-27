@@ -94,19 +94,7 @@
     "commentPlaceholder": "Notes on the application…",
     "noComment": "No comment",
     "interviewNotes": "Interview notes",
-    "interviewNote": "Interview {{n}}",
-    "aiRejectionAnalysis": "AI rejection analysis",
-    "aiAssessment": "AI assessment",
-    "reassess": "Reassess",
-    "analyzing": "Analyzing…",
-    "chanceHigh": "High success chance (>60%)",
-    "chanceLow": "Low success chance (<30%)",
-    "chanceMedium": "Medium success chance (30–60%)",
-    "assessedAt": "Assessed on {{date}}",
-    "noAssessmentYet": "No AI assessment yet",
-    "assessNow": "Assess now",
-    "rateLimitError": "Rate limit reached — please wait 30–60 seconds and try again.",
-    "aiFailedError": "AI analysis failed."
+    "interviewNote": "Interview {{n}}"
   },
   "timeline": {
     "period": "Period:",
@@ -265,9 +253,6 @@
     "applied": "Applied",
     "update": "Update",
     "assessment": "Assessment",
-    "rejectedSuffix": "Rejected",
-    "confidenceHigh": "High",
-    "confidenceLow": "Low",
-    "confidenceMedium": "Medium"
+    "rejectedSuffix": "Rejected"
   }
 }

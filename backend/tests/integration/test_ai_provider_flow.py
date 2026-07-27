@@ -11,148 +11,68 @@ import pytest
 from app import models
 from app.ai.provider import AIBadRequest, AINotConfigured, AIRateLimited
 from app.ai.tasks import (
-    assess_application,
-    assess_rejected_application,
     classify_batch_for_app,
     classify_for_app,
     extract_application_from_text,
     match_and_classify,
     test_connection as ai_test_connection,
 )
-from tests.factories import application_factory, event_factory
+from tests.factories import application_factory
 from tests.integration.conftest import load_fixture
 
 pytestmark = pytest.mark.integration
 
 
 class TestCompleteErrorMapping:
-    """Deckt die Fehlerzweige von app/ai/provider.py::complete() ab, die die
-    bisherigen assess_application()-Tests nicht erreichen — insbesondere die
-    drei unterschiedlichen BadRequestError-Nachrichten und die beiden
-    AINotConfigured-Auslöser (keine/deaktivierte Konfiguration)."""
+    """Deckt die Fehlerzweige von app/ai/provider.py::complete() ab — insbesondere
+    die drei unterschiedlichen BadRequestError-Nachrichten und die beiden
+    AINotConfigured-Auslöser (keine/deaktivierte Konfiguration). Nutzt
+    test_connection() als einfachsten complete()-Aufrufer, da sie kein
+    Application-Objekt braucht."""
 
     async def test_negativ_keine_ai_konfiguration_wirft_ainotconfigured(self, db_session):
-        app = application_factory(db_session)
         # bewusst KEIN ai_settings-Fixture — es existiert keine Zeile in der Tabelle
         with pytest.raises(AINotConfigured):
-            await assess_application(db_session, app)
+            await ai_test_connection(db_session)
 
     async def test_negativ_deaktivierter_ai_provider_wirft_ainotconfigured(self, db_session):
-        app = application_factory(db_session)
         db_session.add(models.AiSettings(provider="groq", model="groq/llama-3.3-70b-versatile", enabled=False))
         db_session.commit()
 
         with pytest.raises(AINotConfigured):
-            await assess_application(db_session, app)
+            await ai_test_connection(db_session)
 
     async def test_negativ_authentication_error_wirft_aibadrequest(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
         fake_ai_provider.queue_error(
             litellm.AuthenticationError(message="invalid api key", llm_provider="groq", model=ai_settings.model)
         )
 
         with pytest.raises(AIBadRequest, match="API-Key ungültig"):
-            await assess_application(db_session, app)
+            await ai_test_connection(db_session)
 
     async def test_negativ_json_modus_nicht_unterstuetzt_wirft_hilfreiche_meldung(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
         fake_ai_provider.queue_error(
             litellm.BadRequestError(message="json_validate_failed: model refused", model=ai_settings.model, llm_provider="groq")
         )
 
         with pytest.raises(AIBadRequest, match="unterstützt keinen JSON-Modus"):
-            await assess_application(db_session, app)
+            await ai_test_connection(db_session)
 
     async def test_negativ_modell_nicht_gefunden_wirft_hilfreiche_meldung(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
         fake_ai_provider.queue_error(
             litellm.BadRequestError(message="The model does not exist", model=ai_settings.model, llm_provider="groq")
         )
 
         with pytest.raises(AIBadRequest, match="nicht gefunden beim Anbieter"):
-            await assess_application(db_session, app)
+            await ai_test_connection(db_session)
 
     async def test_negativ_sonstiger_bad_request_wird_gekuerzt_durchgereicht(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
         fake_ai_provider.queue_error(
             litellm.BadRequestError(message="context_length_exceeded: too many tokens", model=ai_settings.model, llm_provider="groq")
         )
 
         with pytest.raises(AIBadRequest, match="Ungültige Anfrage"):
-            await assess_application(db_session, app)
-
-
-class TestAssessApplication:
-    async def test_positiv_gruene_bewertung_wird_durchgereicht(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session, firma="Contoso AG", rolle="Backend Engineer")
-        event_factory(db_session, app, typ="gespräch", titel="Erstgespräch HR")
-        fake_ai_provider.queue_content(load_fixture("assess_green.json"))
-
-        result = await assess_application(db_session, app)
-
-        assert result["color"] == "green"
-        assert "Gespräche" in result["reasoning"] or "Feedback" in result["reasoning"]
-        assert len(fake_ai_provider.calls) == 1
-
-    async def test_positiv_rote_bewertung_wird_durchgereicht(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session, firma="Contoso AG", rolle="Backend Engineer")
-        fake_ai_provider.queue_content(load_fixture("assess_red.json"))
-
-        result = await assess_application(db_session, app)
-
-        assert result["color"] == "red"
-        assert result["next_step"]
-
-    async def test_negativ_ungueltige_farbe_faellt_auf_yellow_zurueck(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
-        fake_ai_provider.queue_content('{"color": "blau", "reasoning": "x", "next_step": "y"}')
-
-        result = await assess_application(db_session, app)
-
-        assert result["color"] == "yellow"
-
-    async def test_negativ_rate_limit_propagiert_als_airatelimited(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
-        fake_ai_provider.queue_error(
-            litellm.RateLimitError(message="rate limited", llm_provider="groq", model=ai_settings.model)
-        )
-
-        with pytest.raises(AIRateLimited):
-            await assess_application(db_session, app)
-
-    async def test_negativ_kaputtes_json_wirft_aibadrequest(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
-        fake_ai_provider.queue_content(load_fixture("malformed.txt"))
-
-        with pytest.raises(AIBadRequest):
-            await assess_application(db_session, app)
-
-    async def test_negativ_leere_antwort_wirft_aibadrequest(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
-        fake_ai_provider.queue_content("")
-
-        with pytest.raises(AIBadRequest):
-            await assess_application(db_session, app)
-
-    async def test_positiv_default_sprache_ist_deutsch(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
-        fake_ai_provider.queue_content(load_fixture("assess_green.json"))
-
-        await assess_application(db_session, app)
-
-        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
-        assert 'auf Deutsch' in prompt
-        assert 'in English' not in prompt
-
-    async def test_positiv_ui_language_en_steuert_die_prompt_sprachanweisung(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session)
-        fake_ai_provider.queue_content(load_fixture("assess_green.json"))
-
-        await assess_application(db_session, app, ui_language="en")
-
-        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
-        assert 'in English' in prompt
-        assert 'auf Deutsch' not in prompt
+            await ai_test_connection(db_session)
 
 
 class TestMatchAndClassify:
@@ -345,50 +265,6 @@ class TestTestConnection:
         assert "Unerwartete Antwort" in result
 
 
-class TestAssessRejectedApplication:
-    async def test_positiv_liefert_immer_rote_farbe(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(
-            db_session, firma="Contoso AG", rolle="Backend Engineer", main_status="rejected",
-            kommentar="Sehr guter Eindruck im ersten Gespräch",
-            gespraech_1="HR-Gespräch war positiv",
-        )
-        event_factory(
-            db_session, app, typ="mail", titel="Absage",
-            notiz="Leider haben wir uns für einen anderen Kandidaten entschieden.",
-            autor='"HR Contoso" <hr@contoso.com>',
-        )
-        fake_ai_provider.queue_content(
-            '{"color": "red", "reasoning": "Absage nach erstem Gespräch, Konkurrenz bevorzugt.", '
-            '"next_step": "Beim nächsten Mal mehr auf Fachfragen vorbereiten."}'
-        )
-
-        result = await assess_rejected_application(db_session, app)
-
-        assert result["color"] == "red"
-        assert result["reasoning"]
-        assert result["next_step"]
-
-    async def test_negativ_fehlende_felder_werden_zu_leerstring(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session, main_status="rejected")
-        fake_ai_provider.queue_content('{"color": "red"}')
-
-        result = await assess_rejected_application(db_session, app)
-
-        assert result["color"] == "red"
-        assert result["reasoning"] == ""
-        assert result["next_step"] == ""
-
-    async def test_positiv_ui_language_en_steuert_die_prompt_sprachanweisung(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(db_session, main_status="rejected")
-        fake_ai_provider.queue_content('{"color": "red", "reasoning": "x", "next_step": "y"}')
-
-        await assess_rejected_application(db_session, app, ui_language="en")
-
-        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
-        assert 'in English' in prompt
-        assert 'auf Deutsch' not in prompt
-
-
 class TestExtractApplicationFromText:
     async def test_positiv_direkter_arbeitgeber(self, db_session, ai_settings, fake_ai_provider):
         fake_ai_provider.queue_content(
@@ -427,38 +303,6 @@ class TestExtractApplicationFromText:
         assert result["is_headhunter"] is False
         assert result["zielfirma_bei_hh"] is None
         assert result["kommentar"] is None
-
-
-class TestAssessApplicationMetaFields:
-    """Deckt die optionalen meta_parts-Zweige ab (quelle, headhunter, kommentar, gespraeche,
-    autor/titel/notiz-Formatierung in der Timeline) — bislang nur implizit über Applications
-    ohne diese Felder getestet."""
-
-    async def test_positiv_alle_optionalen_meta_felder_gesetzt(self, db_session, ai_settings, fake_ai_provider):
-        app = application_factory(
-            db_session, firma="Contoso AG", rolle="Backend Engineer",
-            quelle="LinkedIn", is_headhunter=True, zielfirma_bei_hh="Globex AG",
-            kommentar="Sehr interessante Rolle",
-            gespraech_1="Erstes Gespräch lief gut", gespraech_2="Zweites Gespräch auch",
-        )
-        event_factory(
-            db_session, app, typ="mail", titel="Rückmeldung",
-            notiz="Wir melden uns nächste Woche.",
-            autor='"Jane Doe" <jane@contoso.com>',
-        )
-        fake_ai_provider.queue_content(load_fixture("assess_green.json"))
-
-        await assess_application(db_session, app)
-
-        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
-        assert "Quelle: LinkedIn" in prompt
-        assert "Headhunter für: Globex AG" in prompt
-        assert "Kommentar: Sehr interessante Rolle" in prompt
-        assert "Gesprächsnotiz 1: Erstes Gespräch lief gut" in prompt
-        assert "Gesprächsnotiz 2: Zweites Gespräch auch" in prompt
-        assert "von: Jane Doe" in prompt
-        assert "Betreff: Rückmeldung" in prompt
-        assert "Inhalt: Wir melden uns nächste Woche." in prompt
 
 
 class TestMatchAndClassifyFormatting:

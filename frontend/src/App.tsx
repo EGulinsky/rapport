@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud, X } from 'lucide-react'
 import { CompanySearchInput } from './components/CompanySearchInput'
-import { api, authFetch } from './api/client'
+import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
 import { KanbanBoard } from './components/KanbanBoard'
 import { ApplicationModal } from './components/ApplicationModal'
@@ -102,8 +102,6 @@ export default function App() {
   const [showAuditLog, setShowAuditLog] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
-  const [aiAssessingAll, setAiAssessingAll] = useState(false)
-  const [aiAssessProgress, setAiAssessProgress] = useState<{ done: number; total: number } | null>(null)
   const [showNewMenu, setShowNewMenu] = useState(false)
   const [showLinkedInImport, setShowLinkedInImport] = useState(false)
   const [newApplicationPrefill, setNewApplicationPrefill] = useState<NewApplicationPrefill | null>(null)
@@ -341,49 +339,6 @@ export default function App() {
             <div className="flex items-center gap-2">
               <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={checkReviewAfterSync} />
               <ImportExportMenu onImported={load} />
-              <button
-                onClick={async () => {
-                  setAiAssessingAll(true)
-                  setAiAssessProgress(null)
-                  try {
-                    const resp = await authFetch(api.applications.aiAssessAllUrl())
-                    if (!resp.body) throw new Error('Kein Stream')
-                    const reader = resp.body.getReader()
-                    const decoder = new TextDecoder()
-                    let buf = ''
-                    while (true) {
-                      const { done, value } = await reader.read()
-                      if (done) break
-                      buf += decoder.decode(value, { stream: true })
-                      const lines = buf.split('\n')
-                      buf = lines.pop() ?? ''
-                      for (const line of lines) {
-                        if (!line.startsWith('data: ')) continue
-                        try {
-                          const d = JSON.parse(line.slice(6))
-                          if (d.status === 'start') setAiAssessProgress({ done: 0, total: d.total })
-                          if (d.status === 'progress') {
-                            setAiAssessProgress({ done: d.done, total: d.total })
-                            load()
-                          }
-                        } catch { /* ignore parse errors */ }
-                      }
-                    }
-                    load()
-                  }
-                  catch (e) { console.error('AI assess all failed', e) }
-                  finally { setAiAssessingAll(false); setAiAssessProgress(null) }
-                }}
-                disabled={aiAssessingAll}
-                title={t('aiAssessAll.title')}
-                data-testid="ai-assess-all-button"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 disabled:opacity-50 transition-colors"
-              >
-                <Sparkles className={`h-3.5 w-3.5 ${aiAssessingAll ? 'animate-pulse' : ''}`} />
-                {aiAssessingAll
-                  ? (aiAssessProgress ? t('aiAssessAll.runningProgress', aiAssessProgress) : t('aiAssessAll.running'))
-                  : t('aiAssessAll.button')}
-              </button>
               <button
                 onClick={() => setShowCleanup(true)}
                 title={cleanupScope ? t('cleanup.titleScoped', { scope: cleanupScopeLabel }) : t('cleanup.titleUnscoped')}

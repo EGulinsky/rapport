@@ -1366,30 +1366,6 @@ async def _do_sync(app_id: int) -> dict:
         log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} übersprungen, {} geprüft, {} Fehler ━━━",
                  app_id, label, total_created, total_skipped, total_processed, len(all_errors))
 
-        # AI assessment after sync
-        try:
-            from app.ai.tasks import assess_application
-            from app.ai.provider import AINotConfigured, AIRateLimited
-            from sqlalchemy.orm import joinedload as _jl
-            from datetime import datetime as _dt
-            app_with_events = (
-                db.query(models.Application)
-                .options(_jl(models.Application.events))
-                .filter(models.Application.id == app_id)
-                .first()
-            )
-            if app_with_events:
-                result = await assess_application(db, app_with_events, lang)
-                app_with_events.ai_color = result["color"]
-                app_with_events.ai_next_step = result["next_step"]
-                app_with_events.ai_reasoning = result.get("reasoning", "")
-                app_with_events.ai_assessed_at = _dt.utcnow()
-                db.commit()
-        except (AINotConfigured, AIRateLimited):
-            pass
-        except Exception as e:
-            log.warning("AI-Bewertung fehlgeschlagen für #{}: {}", app_id, e)
-
         return {"created": total_created, "skipped": total_skipped, "processed": total_processed, "errors": all_errors}
     finally:
         db.close()

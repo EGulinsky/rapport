@@ -1,13 +1,11 @@
-import json
 import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date
 
 from app.database import get_db
 from app import models, schemas
@@ -516,67 +514,6 @@ def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends
     )
 
 
-@router.get("/ai-assess-all")
-async def ai_assess_all(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    import asyncio
-    from app.models import AiSettings
-    from app.ai.tasks import assess_application
-    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
-
-    cfg = db.query(AiSettings).first()
-    # Throttle: Gemini free tier = 15 RPM, Groq = 30 RPM — use 5s gap to stay safe
-    provider_id = (cfg.provider if cfg else "") or ""
-    delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
-
-    # Both cached on the user row (extracted/scraped once at upload/sync
-    # time, not per assessment) — see User.cv_extracted_text's docstring in
-    # models.py for why re-extracting per assessment was a real problem.
-    cv_text = current_user.cv_extracted_text
-    linkedin_text = current_user.linkedin_profile_text
-
-    async def _stream():
-        apps = (
-            db.query(models.Application)
-            .options(joinedload(models.Application.events))
-            .filter(models.Application.main_status != "rejected")
-            .all()
-        )
-        total = len(apps)
-        updated = 0
-        errors: list[str] = []
-        yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
-        for i, app in enumerate(apps):
-            if i > 0:
-                await asyncio.sleep(delay_s)
-            try:
-                old_color = app.ai_color
-                result = await assess_application(db, app, current_user.ui_language, cv_text, linkedin_text)
-                app.ai_color = result["color"]
-                app.ai_next_step = result["next_step"]
-                app.ai_reasoning = result.get("reasoning", "")
-                app.ai_assessed_at = datetime.utcnow()
-                if str(old_color or "") != str(app.ai_color or ""):
-                    add_audit(db, "update", "user", app_id=app.id,
-                              field="ai_color", old_value=old_color, new_value=app.ai_color,
-                              reason_key="ai_assessment_with_reason" if app.ai_reasoning else "ai_assessment",
-                              reason_params={"reasoning": app.ai_reasoning[:200]} if app.ai_reasoning else None,
-                              user_id=current_user.id)
-                db.commit()
-                updated += 1
-                yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma})}\n\n"
-            except (AINotConfigured, AIRateLimited, AIBadRequest) as e:
-                errors.append(str(e))
-                yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma, 'error': str(e)})}\n\n"
-                break
-            except Exception as e:
-                errors.append(f"#{app.id} {app.firma}: {e}")
-                yield f"data: {json.dumps({'status': 'progress', 'done': i + 1, 'total': total, 'firma': app.firma, 'error': str(e)})}\n\n"
-        db.commit()
-        yield f"data: {json.dumps({'status': 'done', 'updated': updated, 'errors': errors})}\n\n"
-
-    return StreamingResponse(_stream(), media_type="text/event-stream")
-
-
 @router.post("/extract-from-linkedin-url")
 async def extract_from_linkedin_url(
     payload: schemas.ExtractFromUrlRequest,
@@ -830,51 +767,6 @@ def delete_application(
               old_value=f"{app.firma} – {app.rolle}", user_id=current_user.id)
     db.delete(app)
     db.commit()
-
-
-# ── AI Assessment ────────────────────────────────────────────────────────
-@router.post("/{app_id}/ai-assess")
-async def ai_assess_single(
-    app_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    app = (
-        db.query(models.Application)
-        .options(joinedload(models.Application.events))
-        .filter(models.Application.id == app_id)
-        .first()
-    )
-    if not app:
-        raise api_error(404, ErrorKey.APPLICATION_NOT_FOUND, "Bewerbung nicht gefunden")
-    from app.ai.tasks import assess_application, assess_rejected_application
-    from app.ai.provider import AINotConfigured, AIRateLimited, AIBadRequest
-    cv_text = current_user.cv_extracted_text
-    linkedin_text = current_user.linkedin_profile_text
-    try:
-        if app.abgesagt:
-            result = await assess_rejected_application(db, app, current_user.ui_language, cv_text, linkedin_text)
-        else:
-            result = await assess_application(db, app, current_user.ui_language, cv_text, linkedin_text)
-    except AINotConfigured as e:
-        raise HTTPException(400, str(e))
-    except AIRateLimited:
-        raise api_error(429, ErrorKey.AI_RATE_LIMIT, "Rate-Limit des KI-Anbieters erreicht — bitte in 30–60 Sekunden nochmal versuchen.")
-    except AIBadRequest as e:
-        raise HTTPException(400, str(e))
-    old_color = app.ai_color
-    app.ai_color = result["color"]
-    app.ai_next_step = result["next_step"]
-    app.ai_reasoning = result.get("reasoning", "")
-    app.ai_assessed_at = datetime.utcnow()
-    if str(old_color or "") != str(app.ai_color or ""):
-        add_audit(db, "update", "user", app_id=app.id,
-                  field="ai_color", old_value=old_color, new_value=app.ai_color,
-                  reason_key="ai_assessment_with_reason" if app.ai_reasoning else "ai_assessment",
-                  reason_params={"reasoning": app.ai_reasoning[:200]} if app.ai_reasoning else None,
-                  user_id=current_user.id)
-    db.commit()
-    return result
 
 
 # ── Events ──────────────────────────────────────────────────────────────

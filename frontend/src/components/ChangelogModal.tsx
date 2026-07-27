@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.47',
+    date: '2026-07-27',
+    changes: [
+      'Removed the old per-application AI assessment (the traffic-light color + reasoning + next-step blurb, and the "Assess with AI" batch button) now that rapportGPT is live — it answers the same kinds of questions conversationally and can look at your whole application history at once, rather than one fixed verdict per application computed in isolation. Historical assessment values are kept in the database and untouched, just no longer shown or refreshed anywhere in the UI.',
+    ],
+  },
+  {
     version: '4.6.46',
     date: '2026-07-27',
     changes: [

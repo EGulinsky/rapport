@@ -110,15 +110,17 @@ backend/app/
 ├── logger.py                  Loguru setup, JSON log + Seq sink (CLEF)
 ├── linkedin_job_description.py  Load job description + company name from a LinkedIn URL (Playwright)
 ├── ai/
-│   ├── provider.py          litellm wrapper, Fernet cryptography, AINotConfigured/AIRateLimited/AIBadRequest
-│   └── tasks.py              Classification/assessment/extraction prompts (assess_application, extract_application_from_text, match_and_classify, …)
+│   ├── provider.py          litellm wrapper (incl. tool-calling via complete_with_tools()), Fernet cryptography, AINotConfigured/AIRateLimited/AIBadRequest/AIToolsUnsupported
+│   ├── tasks.py              Classification/extraction prompts (match_and_classify, extract_application_from_text, …)
+│   └── chat.py                rapportGPT: tools + agent loop (run_chat_turn())
 ├── auth/
 │   ├── security.py          Password hashing (bcrypt), JWT encode/decode, 6-digit confirmation codes
 │   ├── dependencies.py       get_current_user() – dependency, reads bearer token, activates tenant filter
 │   └── email.py               SMTP delivery of confirmation codes (registration/password reset)
 └── routers/
     ├── auth.py                Registration, email confirmation, login, password reset, account (see §7)
-    ├── applications.py       CRUD + events + contacts + AI assessment + LinkedIn import
+    ├── applications.py       CRUD + events + contacts + LinkedIn import
+    ├── chat.py                  rapportGPT: GET /api/chat/history, POST /api/chat/messages, DELETE /api/chat
     ├── contacts.py            Global contact management
     ├── companies.py           Company profiles: CRUD, logo, contact linking
     ├── merge.py                Merge applications/companies/contacts
@@ -149,7 +151,7 @@ backend/app/
 
 ```
 frontend/src/
-├── App.tsx                 Root component: tabs (Applications/Contacts/Companies/Calendar/Analytics), toolbar, modal orchestration
+├── App.tsx                 Root component: tabs (Applications/Contacts/Companies/Calendar/Analytics/rapportGPT), toolbar, modal orchestration
 ├── AppRoutes.tsx             Routing: /login, /register, /verify-email, /forgot-password, /reset-password, protected root route
 ├── types.ts                 TypeScript types, status labels/colors, constants
 ├── api/client.ts             Fetch wrapper for all backend calls, grouped by namespace; attaches bearer token, handles 401 centrally
@@ -160,7 +162,8 @@ frontend/src/
     ├── RequireAuth.tsx          Route guard: redirects to /login when not signed in
     ├── ApplicationTable.tsx    Sortable table view
     ├── KanbanBoard.tsx          Kanban with drag & drop
-    ├── ApplicationModal.tsx     Detail/edit modal: lifecycle bar, timeline, attachments, contacts, salary, AI assessment
+    ├── ApplicationModal.tsx     Detail/edit modal: lifecycle bar, timeline, attachments, contacts, salary
+    ├── ChatView.tsx               rapportGPT: chat UI (history load, optimistic send, clear conversation)
     ├── CalendarView.tsx          Calendar view (day/week/month)
     ├── StatsBar.tsx               KPI tiles
     ├── StatusBadge.tsx            Colored status badges
@@ -212,13 +215,11 @@ All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/
 |---|---|---|
 | `GET` | `/api/applications/` | List (filters: `main_status`, `search`, `company_profile_id`, `show_rejected`) |
 | `GET` | `/api/applications/stats` | KPI numbers |
-| `GET` | `/api/applications/ai-assess-all` | AI assessment of all active applications (SSE stream with progress) |
 | `POST` | `/api/applications/extract-from-linkedin-url` | Load job posting from LinkedIn URL, extract fields via AI, match/create company |
 | `GET` | `/api/applications/{id}` | Detail with events + contacts |
 | `POST` | `/api/applications/` | Create new (automatically creates a `bewerbung` event) |
 | `PATCH` | `/api/applications/{id}` | Update fields (creates an event on status change) |
 | `DELETE` | `/api/applications/{id}` | Delete (cascades events + contact_application) |
-| `POST` | `/api/applications/{id}/ai-assess` | Single assessment (success chance green/yellow/red + reasoning + next step) |
 
 ### Events (Timeline) & Contacts (per Application)
 
@@ -355,14 +356,18 @@ Both use the same login/2FA/consent helpers. Session cookies are cached in `link
 - **Packaging:** PyInstaller onedir bundles built per-OS from `agent/packaging/agent-{mac,windows,linux}.spec` (PyInstaller doesn't cross-compile — each must run on its own OS); `tray.py` is the single cross-platform entry point (pystray tray icon on Windows/Linux, rumps menu bar via `menubar.py` on macOS), self-registering the OS service on first launch, then starting the FastAPI server in a background thread
 - **Hardware verification (2026-07-13):** build → first-launch self-registration → server startup → `/health` walked end-to-end on real Windows 11 (Parallels VM) and on Linux (Debian container with GTK/AppIndicator libs) — not just unit-tested with mocks. Two bugs only visible on real Windows: (1) `schtasks /create` returns Access Denied under a normal (UAC-filtered) user token even for a task that only runs at the current user's own logon, so the original Task-Scheduler-based registration silently never worked outside an elevated shell — replaced with the HKCU `Run` registry key (`registry_run.py`), the same no-elevation approach macOS's launchd LaunchAgent and Linux's `systemctl --user` already used; (2) a packaged windowed (`console=False`) build has no usable `sys.stdout`/`sys.stderr`, which crashed uvicorn's logging setup and silently killed the server thread — fixed by redirecting stdio to `app_data_dir()/logs/agent.log` whenever a real console isn't present (`tray.py`'s `_redirect_stdio_if_headless()`). One bug only visible on real Linux: pystray's backend selection connects to X11 *at import time*, and a missing display raises `Xlib.error.DisplayNameError` rather than `ImportError` — the existing "fall back to headless" logic only caught `ImportError`, so the whole agent crashed on any display-less Linux machine (server, SSH session, container) instead of degrading gracefully; broadened to catch any exception (`tray.py`'s `run_tray_app()`). Same-night follow-up #1: drove the packaged Windows build's `tkinter` folder-picker dialog interactively via the VM's own screen (real `/files/pick-folder` call) — it opens correctly (real title, real folder contents, navigation all work), so the PyInstaller Tcl/Tk-data-bundling footgun `agent-windows.spec` used to warn about does not apply. Completing the OK/Cancel click-through couldn't be driven through screen-automation tooling in this VM — isolated to a synthetic-input-delivery limitation of the automation itself (not an app bug) by reproducing the identical unresponsive-button symptom with a bare unfrozen main-thread script with no FastAPI/threadpool/PyInstaller involved at all, where even the native OS window-close button failed to respond while the file list and text entry worked normally. Same-night follow-up #2: the initial Linux pass ran in a plain Docker container, which has no real systemd/session-bus, so `systemctl --user enable/start` inside `register()` couldn't be confirmed beyond "doesn't crash." Re-ran the full build + first-launch + second-launch flow in a genuine Ubuntu VM (OrbStack machine, real systemd with lingering enabled) and confirmed the unit actually reaches `enabled` + `active (running)`, `/health` responds, and killing the process gets it auto-restarted by systemd's `Restart=always` within seconds (new PID, fresh start timestamp) — the full resiliency story, not just "the file got written."
 
-### 3.6 AI Classification & Assessment (litellm)
+### 3.6 AI Classification & rapportGPT (litellm)
 
-- **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Gemini
-- **Use cases** (`ai/tasks.py`):
+- **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Gemini; each account can store one API key per provider (`AiProviderKey`, unique per user+provider)
+- **Classification use cases** (`ai/tasks.py`):
   - `match_and_classify()` — assign raw data (mail/calendar/note) to an application, determine event type
-  - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead. Optionally folds in the account's own CV text and a cached LinkedIn profile text snapshot as an optional `=== BEWERBERPROFIL ===` prompt section, so the model can weigh candidate/role fit alongside the timeline. Absent for accounts with no CV/synced profile — the prompt looks exactly as before for them. Both are extracted/scraped once and cached, not redone per assessment: CV text is extracted at upload time (`POST /api/auth/cv`) into `User.cv_extracted_text` via `app/cv_extract.py` (`pdfplumber`/`python-docx`, `.doc` unsupported), and the LinkedIn profile snapshot into `User.linkedin_profile_text` via `POST /api/sync/linkedin/profile` (reusing the existing LinkedIn session — see §2 Sync). CV extraction runs in a subprocess bounded to a 20s timeout — some real-world PDFs make `pdfplumber` spin at ~100% CPU for minutes without returning, which once blocked the whole app's startup via the backfill migration for pre-existing uploads (production incident, 2026-07-16); a file that's too slow to parse is now just skipped (no CV text for that assessment) rather than blocking anything.
   - `extract_application_from_text()` — extract company/role/source/headhunter flag from job posting text (LinkedIn import)
-- **Fallback:** on `AINotConfigured` / `AIRateLimited` / `AIBadRequest`, degrades gracefully instead of crashing
+- **rapportGPT** (`ai/chat.py`, `routers/chat.py`) — a tool-calling chat assistant replacing the earlier fixed per-application "AI assessment" feature (`Application.ai_color`/`ai_next_step`/`ai_reasoning`/`ai_assessed_at` columns still exist with historical values, but nothing writes to them anymore). One ongoing conversation thread per account (`ChatMessage`, tenant-scoped), persisted across reloads:
+  - `complete_with_tools()` (`ai/provider.py`) extends the existing `complete()` JSON-mode call with `tools=`/`tool_choice=` passed to `litellm.acompletion()`, fast-failing via `litellm.supports_function_calling(model=...)` before the first call and raising `AIToolsUnsupported` for models/providers that don't support function calling
+  - Four tools available to the model: `list_applications`, `get_application_detail` (full timeline, contacts, company), `get_company_detail`, `get_user_profile` (CV/LinkedIn profile text) — each a plain tenant-scoped ORM query, dispatched via `_execute_tool()` with per-call error isolation
+  - `run_chat_turn()` loops up to `MAX_TOOL_ITERATIONS = 6` tool round-trips per user turn, sending the last `HISTORY_WINDOW_MESSAGES = 20` persisted messages as context; only the final user/assistant text turns are persisted, intermediate tool-call/tool-result messages exist only within that one request
+  - Endpoints: `GET /api/chat/history`, `POST /api/chat/messages`, `DELETE /api/chat` (clear conversation)
+- **Fallback:** on `AINotConfigured` / `AIRateLimited` / `AIBadRequest` / `AIToolsUnsupported`, degrades gracefully instead of crashing
 
 ### 3.7 Company Data Enrichment (`sync_company.py`)
 
@@ -516,21 +521,21 @@ sequenceDiagram
     FE->>U: review form → "Create"
 ```
 
-**Post-create sync (all creation paths):** manual creation, this LinkedIn-import flow, and applications newly created by the periodic bulk LinkedIn scrape all schedule `sync_targeted._do_post_create_sync(app_id, skip_linkedin)` as a fire-and-forget background task right after the row is committed — a targeted sync (Gmail/GCal/iCloud/contacts/calls) plus an initial AI assessment, and (unless `skip_linkedin`) a per-app LinkedIn category search for the matching listing. `skip_linkedin` is `True` whenever the application was itself just sourced from LinkedIn (this import flow, or the bulk scrape) — re-running the LinkedIn search immediately afterward would just re-find the same listing. Best-effort throughout: a failure in either half is logged and never surfaces to the user. The LinkedIn search step also self-limits — `sync_linkedin.py`'s sync state is a process-wide singleton, so it silently no-ops if a sync is already running rather than queuing or erroring.
+**Post-create sync (all creation paths):** manual creation, this LinkedIn-import flow, and applications newly created by the periodic bulk LinkedIn scrape all schedule `sync_targeted._do_post_create_sync(app_id, skip_linkedin)` as a fire-and-forget background task right after the row is committed — a targeted sync (Gmail/GCal/iCloud/contacts/calls), and (unless `skip_linkedin`) a per-app LinkedIn category search for the matching listing. `skip_linkedin` is `True` whenever the application was itself just sourced from LinkedIn (this import flow, or the bulk scrape) — re-running the LinkedIn search immediately afterward would just re-find the same listing. Best-effort throughout: a failure is logged and never surfaces to the user. The LinkedIn search step also self-limits — `sync_linkedin.py`'s sync state is a process-wide singleton, so it silently no-ops if a sync is already running rather than queuing or erroring.
 
-### 5.3 AI Assessment (Success Chance)
+### 5.3 rapportGPT (Chat Assistant)
 
 ```mermaid
 flowchart LR
-    A[User: 'Reassess'] --> B{Application rejected?}
-    B -- no --> C["assess_application()<br/>full timeline + today's date as context"]
-    B -- yes --> D["assess_rejected_application()<br/>rejection-reason analysis + improvement suggestions"]
-    C --> E["ai_color (green/yellow/red)<br/>ai_reasoning, ai_next_step"]
-    D --> E
-    E --> F[Saved to DB + immediately visible in Kanban/table]
+    A[User sends a message] --> B["run_chat_turn()<br/>system prompt + last 20 persisted messages + new turn"]
+    B --> C["complete_with_tools()<br/>litellm.acompletion with tools="]
+    C -->|tool_calls returned| D["_execute_tool()<br/>list_applications / get_application_detail /<br/>get_company_detail / get_user_profile"]
+    D --> C
+    C -->|final text, or 6-iteration cap hit| E[Persist user + assistant ChatMessage rows]
+    E --> F[Returned to the rapportGPT tab, full history reloadable via GET /api/chat/history]
 ```
 
-Batch run ("Assess with AI" in the header) processes all active applications one after another via a Server-Sent-Events stream with live progress, skips rejected applications, throttles automatically for Groq/Gemini (rate limits).
+Replaces the earlier fixed per-application "AI assessment" (traffic-light color + reasoning + next step, generated on demand or in a batch run) — a single conversational assistant with tool access to the full application/contact/company data set instead of one rigid verdict per application. See §3.6 for the tool-calling mechanics.
 
 ### 5.4 Duplicate Cleanup (Context-Sensitive)
 
@@ -705,7 +710,7 @@ erDiagram
 | `datum_bewerbung`, `letztes_update` | DATE NULL | Application date, last update — `letztes_update` is overwritten in-memory on query by `max(events.datum ≤ today)` if larger |
 | `linkedin_job_id`, `stellenanzeige_url` | VARCHAR NULL | For LinkedIn sync matching / import origin (job posting URL) |
 | `company_profile_id` / `target_company_profile_id` | INTEGER FK | → `company_profiles.id` |
-| `ai_color` / `ai_reasoning` / `ai_next_step` / `ai_assessed_at` | VARCHAR/TEXT/VARCHAR/DATETIME | AI assessment |
+| `ai_color` / `ai_reasoning` / `ai_next_step` / `ai_assessed_at` | VARCHAR/TEXT/VARCHAR/DATETIME | Legacy: the removed per-application "AI assessment" feature (replaced by rapportGPT, see §3.6/§5.3) wrote these. Columns and any historical values are kept, but nothing writes to them anymore. |
 | `gespraech_1`…`5` | TEXT NULL | Interview notes (legacy from Excel import) |
 | `salary_currency` | VARCHAR NULL | Shared ISO currency code for both salary figures below |
 | `salary_expectation_min`/`_max`, `salary_budget_min`/`_max` | INTEGER NULL | Applicant expectation / company budget — single value (`_min` only) or range; each of these 4 slots may additionally carry a `_fixed`/`_bonus` breakdown pair (8 more INTEGER NULL columns) whose sum is kept equal to the plain total (enforced in `applications.py`, not silently rewritten) |
@@ -920,7 +925,7 @@ Distinct from error keys: audit-log reasons and sync-progress messages are gener
 - **`add_audit(..., reason_key=..., reason_params=...)`** — preferred when the literal reason lives at the `add_audit()` call site; `add_audit()` resolves `lang` from `user_id` internally.
 - **Threading `lang` through helper functions** — used where the reason/progress text is constructed several calls upstream of `add_audit()`/`update_progress()` (e.g. `sync_common.py`'s deterministic classification, the LinkedIn login/2FA/scraping flow's `_state["step"]`) — `lang` is resolved once near the top of the outermost sync function and passed down, translating inline at the point of construction.
 
-AI assessment (`ai/tasks.py::assess_application()`/`assess_rejected_application()`) follows the same idea via a lighter mechanism: rather than translating the whole prompt template, a single `{lang_note}` interpolation near the end of the prompt instructs the model to write `reasoning`/`next_step` in the account's language — the rest of the prompt (German field labels like "Firma:"/"Stelle:") stays as-is, since LLMs handle mixed-language input correctly.
+rapportGPT (`ai/chat.py::run_chat_turn()`) follows the same idea via a lighter mechanism: the system prompt interpolates `resolve_ui_language(db, user_id)`'s result as a single language instruction near the end of the template, so the model answers in the account's language regardless of what language the underlying data (timeline text, field labels) is in.
 
 **Deliberately out of scope:** the legacy PDF/Excel export formats (`export_pdf.py`, `export_excel.py`) and dynamic user-entered data (job titles, comments, scraped descriptions) — only UI chrome and backend-generated system text are translated.
 

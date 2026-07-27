@@ -94,19 +94,7 @@
     "commentPlaceholder": "Notizen zur Bewerbung…",
     "noComment": "Kein Kommentar",
     "interviewNotes": "Gesprächsnotizen",
-    "interviewNote": "{{n}}. Gespräch",
-    "aiRejectionAnalysis": "KI-Absageanalyse",
-    "aiAssessment": "KI-Einschätzung",
-    "reassess": "Neu bewerten",
-    "analyzing": "Analysiere…",
-    "chanceHigh": "Hohe Erfolgschance (>60 %)",
-    "chanceLow": "Niedrige Erfolgschance (<30 %)",
-    "chanceMedium": "Mittlere Erfolgschance (30–60 %)",
-    "assessedAt": "Bewertet am {{date}}",
-    "noAssessmentYet": "Noch keine KI-Einschätzung",
-    "assessNow": "Jetzt bewerten",
-    "rateLimitError": "Rate-Limit erreicht — bitte 30–60 Sekunden warten und nochmal versuchen.",
-    "aiFailedError": "KI-Analyse fehlgeschlagen."
+    "interviewNote": "{{n}}. Gespräch"
   },
   "timeline": {
     "period": "Zeitraum:",
@@ -265,9 +253,6 @@
     "applied": "Beworben",
     "update": "Update",
     "assessment": "Einschätzung",
-    "rejectedSuffix": "Absage",
-    "confidenceHigh": "Hoch",
-    "confidenceLow": "Niedrig",
-    "confidenceMedium": "Mittel"
+    "rejectedSuffix": "Absage"
   }
 }

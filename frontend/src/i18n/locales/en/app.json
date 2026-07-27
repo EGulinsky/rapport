@@ -8,12 +8,6 @@
     "analytics": "Analytics",
     "chat": "rapportGPT"
   },
-  "aiAssessAll": {
-    "title": "Refresh AI assessment for all active applications",
-    "running": "AI running…",
-    "runningProgress": "AI: {{done}}/{{total}}",
-    "button": "Assess with AI"
-  },
   "cleanup": {
     "titleScoped": "Clean up duplicates in {{scope}}",
     "titleUnscoped": "Clean up duplicates",

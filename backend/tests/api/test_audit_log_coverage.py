@@ -2,7 +2,7 @@
 
 Deckt Lücken ab, bei denen Bewerbungsfelder geändert wurden, aber (vor dem
 zugehörigen Fix) kein AuditLog-Eintrag entstand: PATCH-Felder außerhalb des
-alten AUDIT_FIELDS-Sets, Firmenzuordnung, sub_status-Änderungen, KI-Bewertung,
+alten AUDIT_FIELDS-Sets, Firmenzuordnung, sub_status-Änderungen,
 automatischer Datum-Backfill, LinkedIn-Sync-Backfills, Merge-Feld-Overrides,
 Firmen-Merge pro Bewerbung, sowie automatisches Löschen von Duplikaten beim
 Cleanup. `add_audit()` verwirft "update"-Einträge im Log-Level "normal" —
@@ -61,41 +61,6 @@ class TestPatchAuditVollstaendigkeit:
         assert audit is not None
         assert audit.old_value == "interview_1"
         assert audit.new_value == "interview_2"
-
-
-class TestAiAssessAudit:
-    def test_positiv_geaenderte_ki_einschaetzung_wird_protokolliert(self, client, db_session, monkeypatch):
-        _make_verbose(db_session)
-        app = application_factory(db_session, ai_color="yellow")
-        db_session.commit()
-
-        async def fake_assess(db, application, lang="de", cv_text=None, linkedin_text=None):
-            return {"color": "green", "next_step": "Nachfassen", "reasoning": "..."}
-
-        monkeypatch.setattr("app.ai.tasks.assess_application", fake_assess)
-
-        resp = client.post(f"/api/applications/{app.id}/ai-assess")
-
-        assert resp.status_code == 200
-        audit = db_session.query(models.AuditLog).filter_by(app_id=app.id, field="ai_color").first()
-        assert audit is not None
-        assert audit.old_value == "yellow"
-        assert audit.new_value == "green"
-
-    def test_negativ_unveraenderte_einschaetzung_wird_nicht_protokolliert(self, client, db_session, monkeypatch):
-        _make_verbose(db_session)
-        app = application_factory(db_session, ai_color="green")
-        db_session.commit()
-
-        async def fake_assess(db, application, lang="de", cv_text=None, linkedin_text=None):
-            return {"color": "green", "next_step": "Warten", "reasoning": "..."}
-
-        monkeypatch.setattr("app.ai.tasks.assess_application", fake_assess)
-
-        client.post(f"/api/applications/{app.id}/ai-assess")
-
-        audit = db_session.query(models.AuditLog).filter_by(app_id=app.id, field="ai_color").first()
-        assert audit is None
 
 
 class TestListApplicationsBackfillAudit:
