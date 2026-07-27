@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.35',
+    date: '2026-07-27',
+    changes: [
+      'Fixed the "Sync all" progress overlay showing the same source twice — a leftover entry from an earlier per-application sync (auto-labeled e.g. "Icloud Mail") stayed visible next to the fresh account-wide sync\'s own entry for the same source (e.g. "iCloud Mail"), since the overlay rendered every entry in the shared progress store instead of only the ones for the sync currently running.',
+    ],
+  },
+  {
     version: '4.6.34',
     date: '2026-07-24',
     changes: [

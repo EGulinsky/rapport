@@ -40,6 +40,23 @@ interface ProgressEntry {
 
 const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'icloud_contacts', 'local_files']
 
+// Only ever show progress for this run's own sources (SOURCE_KEYS), never
+// every key in `progress` — that dict is a single process-wide store the
+// backend never clears, and also holds "targeted_*" entries from
+// per-application syncs (sync_targeted.py) with auto-derived labels that
+// collide with these plain keys' real labels (e.g. targeted_icloud_mail →
+// "Icloud Mail" vs. icloud_mail → "iCloud Mail"). Rendering Object.values
+// unfiltered showed a leftover targeted-sync entry alongside the fresh
+// batch one for the same real source — the same source listed twice.
+// Exported as a pure function so this filtering can be tested directly,
+// without driving the whole runSync flow (many API calls + timers) through
+// a full component render.
+export function filterProgressEntries(progress: Record<string, ProgressEntry>): ProgressEntry[] {
+  return SOURCE_KEYS
+    .map(key => progress[key])
+    .filter((p): p is ProgressEntry => !!p && (p.total > 0 || p.done))
+}
+
 export function SyncButton({ onSynced, onReviewOpen }: Props) {
   const { t } = useTranslation('sync')
   const [syncing, setSyncing] = useState(false)
@@ -242,7 +259,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
     }
   }
 
-  const progressEntries = Object.values(progress).filter(p => p.total > 0 || p.done)
+  const progressEntries = filterProgressEntries(progress)
 
   // Synthetic LinkedIn progress entry for the overlay
   const liProgressEntry: ProgressEntry | null = (syncing && liStatus && liStatus.status !== 'idle') ? {
