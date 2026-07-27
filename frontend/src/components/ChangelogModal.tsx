@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.41',
+    date: '2026-07-27',
+    changes: [
+      'Fixed Gemini\'s live model list still failing after the previous fix: production logs showed a real 400 even at a modest page size — turns out AI-Studio-issued Gemini keys need the documented ?key= query parameter, not the x-goog-api-key header this was using. Switched to the documented method.',
+      'Reworked the AI model picker for lists of any size: it\'s now a scrollable, searchable list instead of a fixed grid, and shows each model\'s context window and (for Gemini) maximum output length and description where the provider exposes that information — Groq and Gemini both expose real details; Anthropic and OpenAI\'s APIs don\'t.',
+    ],
+  },
+  {
     version: '4.6.40',
     date: '2026-07-27',
     changes: [

@@ -373,7 +373,7 @@ class TestAiModelsList:
 
     def test_positiv_groq_filtert_whisper_modelle(self, client):
         fake = self._FakeClient(self._FakeResp({"data": [
-            {"id": "llama-3.3-70b-versatile"},
+            {"id": "llama-3.3-70b-versatile", "context_window": 131072},
             {"id": "distil-whisper-large-v3-en"},
         ]}))
 
@@ -384,6 +384,7 @@ class TestAiModelsList:
         body = resp.json()
         assert body["reachable"] is True
         assert [m["model"] for m in body["models"]] == ["groq/llama-3.3-70b-versatile"]
+        assert body["models"][0]["context_window"] == 131072
 
     def test_positiv_anthropic_nutzt_display_name(self, client):
         fake = self._FakeClient(self._FakeResp({"data": [
@@ -417,7 +418,11 @@ class TestAiModelsList:
 
     def test_positiv_gemini_filtert_auf_generate_content(self, client):
         fake = self._FakeClient(self._FakeResp({"models": [
-            {"name": "models/gemini-2.0-flash", "displayName": "Gemini 2.0 Flash", "supportedGenerationMethods": ["generateContent"]},
+            {
+                "name": "models/gemini-2.0-flash", "displayName": "Gemini 2.0 Flash",
+                "description": "Fast and versatile", "inputTokenLimit": 1048576, "outputTokenLimit": 8192,
+                "supportedGenerationMethods": ["generateContent"],
+            },
             {"name": "models/embedding-001", "displayName": "Embedding 001", "supportedGenerationMethods": ["embedContent"]},
         ]}))
 
@@ -427,6 +432,10 @@ class TestAiModelsList:
         assert resp.status_code == 200
         body = resp.json()
         assert [m["model"] for m in body["models"]] == ["gemini/gemini-2.0-flash"]
+        m = body["models"][0]
+        assert m["description"] == "Fast and versatile"
+        assert m["context_window"] == 1048576
+        assert m["max_output_tokens"] == 8192
 
     def test_positiv_gemini_fordert_konservative_seitengroesse_an(self, client):
         # Regression: v1beta/models paginates at a default of 50 models per
@@ -434,12 +443,17 @@ class TestAiModelsList:
         # list before reaching newer models. A follow-up regression: asking
         # for pageSize=1000 in one shot (the docs describe this as the max
         # the server will return) gets rejected outright with a real 400
-        # from Google, so this must ask for a modest size instead.
+        # from Google, so this must ask for a modest size instead. A third
+        # regression, found only via production logs: even a modest
+        # pageSize still 400s when the key is sent via the x-goog-api-key
+        # header — AI-Studio-issued keys need the documented ?key= query
+        # parameter instead.
         captured = {}
 
         class _CapturingClient(self._FakeClient):
             async def get(self, url, headers=None, params=None):
                 captured.update(params or {})
+                assert headers is None
                 return self._resp
 
         fake = _CapturingClient(self._FakeResp({"models": [
@@ -451,6 +465,7 @@ class TestAiModelsList:
 
         assert resp.status_code == 200
         assert captured["pageSize"] == 200
+        assert captured["key"] == "AIza-test"
         assert "pageToken" not in captured
 
     def test_positiv_gemini_folgt_next_page_token(self, client):

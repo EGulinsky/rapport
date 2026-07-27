@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw, Upload, FileText, AlertTriangle, LocateFixed } from 'lucide-react'
+import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw, Upload, FileText, AlertTriangle, LocateFixed, Search } from 'lucide-react'
 import { api } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
 import { useAuth } from '../context/AuthContext'
@@ -20,6 +20,19 @@ interface ProviderModel {
   sublabel?: string
   badge?: string
   badgeColor?: string
+  description?: string | null
+  context_window?: number | null
+  max_output_tokens?: number | null
+}
+
+// "128K", "1M", "900" — compact token-count formatting for context/output limits.
+export function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) {
+    const millions = n / 1_000_000
+    return `${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M`
+  }
+  if (n >= 1_000) return `${Math.round(n / 1000)}K`
+  return `${n}`
 }
 
 interface AiProvider {
@@ -329,6 +342,7 @@ function AiPanel() {
   const [liveModels, setLiveModels] = useState<AiModelInfo[] | null>(null)
   const [loadingModels, setLoadingModels] = useState(false)
   const [modelsUnreachable, setModelsUnreachable] = useState(false)
+  const [modelFilter, setModelFilter] = useState('')
 
   useEffect(() => {
     api.settings.getAi().then(d => {
@@ -380,6 +394,7 @@ function AiPanel() {
     const patch = { provider: p.id, model: p.model, base_url: '' }
     setForm(f => ({ ...f, ...patch }))
     setTestResult(null)
+    setModelFilter('')
     autoSave(patch)
     // Uses whatever key is already stored for this provider, if any — the
     // user hasn't typed a new one yet at this point.
@@ -409,6 +424,11 @@ function AiPanel() {
 
   const providerModels = mergeCuratedModels(liveModels, prov.models ?? null)
   const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
+  const filteredModels = providerModels?.filter(m => {
+    const q = modelFilter.trim().toLowerCase()
+    if (!q) return true
+    return m.label.toLowerCase().includes(q) || m.model.toLowerCase().includes(q)
+  }) ?? null
 
   if (loading) return <div className="py-8 text-center text-gray-400 text-sm">{t('common:loading')}</div>
 
@@ -459,21 +479,29 @@ function AiPanel() {
             )}
           </div>
           {providerModels && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {providerModels.map(m => (
-                <button key={m.model} type="button"
-                  onClick={() => { setForm(f => ({ ...f, model: m.model })); autoSave({ model: m.model }) }}
-                  className={clsx(
-                    'flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-all',
-                    form.model === m.model ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-gray-200 hover:border-gray-300 bg-white'
-                  )}
-                >
-                  <div className="flex items-center gap-1.5">
-                    {form.model === m.model && <Check className="h-3 w-3 text-indigo-600 shrink-0" />}
-                    <span className="text-sm font-medium text-gray-800">{m.label}</span>
-                  </div>
-                  {(m.sublabel || m.badge) && (
-                    <div className="flex items-center gap-1.5 mt-0.5">
+            <div className="mb-3">
+              {providerModels.length > 8 && (
+                <div className="relative mb-2">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                  <input type="text" value={modelFilter} onChange={e => setModelFilter(e.target.value)}
+                    placeholder={t('ai.filterModels')}
+                    className="w-full rounded-lg border border-gray-200 pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              )}
+              <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                {filteredModels && filteredModels.length > 0 ? filteredModels.map(m => (
+                  <button key={m.model} type="button"
+                    onClick={() => { setForm(f => ({ ...f, model: m.model })); autoSave({ model: m.model }) }}
+                    className={clsx(
+                      'flex w-full flex-col items-start px-3 py-2 text-left transition-colors',
+                      form.model === m.model ? 'bg-indigo-50' : 'bg-white hover:bg-gray-50'
+                    )}
+                  >
+                    <div className="flex w-full items-center gap-1.5">
+                      {form.model === m.model
+                        ? <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        : <span className="h-3.5 w-3.5 shrink-0" />}
+                      <span className="text-sm font-medium text-gray-800">{m.label}</span>
                       {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
                       {m.badge && (
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
@@ -481,9 +509,21 @@ function AiPanel() {
                         </span>
                       )}
                     </div>
-                  )}
-                </button>
-              ))}
+                    {(m.context_window || m.max_output_tokens) && (
+                      <p className="ml-5 mt-0.5 text-xs text-gray-400">
+                        {m.context_window && t('ai.contextWindow', { size: formatTokenCount(m.context_window) })}
+                        {m.context_window && m.max_output_tokens && ' · '}
+                        {m.max_output_tokens && t('ai.maxOutput', { size: formatTokenCount(m.max_output_tokens) })}
+                      </p>
+                    )}
+                    {m.description && (
+                      <p className="ml-5 mt-0.5 text-xs text-gray-400 line-clamp-2">{m.description}</p>
+                    )}
+                  </button>
+                )) : (
+                  <p className="px-3 py-3 text-xs text-gray-400 text-center">{t('ai.noModelsMatch')}</p>
+                )}
+              </div>
             </div>
           )}
           {(!providerModels || !isKnownModel) && (

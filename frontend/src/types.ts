@@ -301,6 +301,9 @@ export interface AiSettingsWrite {
 export interface AiModelInfo {
   model: string
   label: string
+  description?: string | null
+  context_window?: number | null
+  max_output_tokens?: number | null
 }
 
 export interface AiModelsResponse {

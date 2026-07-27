@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mergeCuratedModels } from './SettingsModal'
+import { mergeCuratedModels, formatTokenCount } from './SettingsModal'
 
 describe('mergeCuratedModels', () => {
   it('falls back to the curated list when there are no live models', () => {
@@ -55,5 +55,39 @@ describe('mergeCuratedModels', () => {
 
     expect(result?.[0].label).toBe('Llama 3.3 70B')
     expect(result?.[0].badge).toBe('recommended')
+  })
+
+  it('keeps model detail fields (context window, description) intact through the merge', () => {
+    const live = [{
+      model: 'gemini/gemini-2.0-flash', label: 'gemini-2.0-flash',
+      description: 'Fast and versatile', context_window: 1048576, max_output_tokens: 8192,
+    }]
+    const curated = [{ model: 'gemini/gemini-2.0-flash', label: 'Gemini 2.0 Flash', badge: 'recommended' }]
+
+    const result = mergeCuratedModels(live, curated)
+
+    expect(result?.[0]).toMatchObject({
+      label: 'Gemini 2.0 Flash',
+      description: 'Fast and versatile',
+      context_window: 1048576,
+      max_output_tokens: 8192,
+    })
+  })
+})
+
+describe('formatTokenCount', () => {
+  it('formats sub-thousand counts as-is', () => {
+    expect(formatTokenCount(900)).toBe('900')
+  })
+
+  it('formats thousands with a K suffix', () => {
+    expect(formatTokenCount(8192)).toBe('8K')
+    expect(formatTokenCount(131072)).toBe('131K')
+  })
+
+  it('formats millions with an M suffix, dropping a redundant .0', () => {
+    expect(formatTokenCount(1_000_000)).toBe('1M')
+    expect(formatTokenCount(1_048_576)).toBe('1.0M')
+    expect(formatTokenCount(2_097_152)).toBe('2.1M')
   })
 })

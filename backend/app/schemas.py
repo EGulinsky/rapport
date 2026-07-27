@@ -382,6 +382,9 @@ class AiModelsRequest(BaseModel):
 class AiModelInfo(BaseModel):
     model: str    # full litellm-style model string, e.g. "groq/llama-3.3-70b-versatile"
     label: str    # human-readable name for the picker
+    description: Optional[str] = None       # only Gemini's API exposes this
+    context_window: Optional[int] = None    # input token limit; Groq + Gemini expose this
+    max_output_tokens: Optional[int] = None # only Gemini's API exposes this
 
 
 class MapsSettingsRead(BaseModel):

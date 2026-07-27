@@ -348,7 +348,7 @@ async def _fetch_groq_models(api_key: str) -> list[schemas.AiModelInfo]:
         # not usable for our chat-completion use case.
         if not mid or "whisper" in mid:
             continue
-        out.append(schemas.AiModelInfo(model=f"groq/{mid}", label=mid))
+        out.append(schemas.AiModelInfo(model=f"groq/{mid}", label=mid, context_window=m.get("context_window")))
     return sorted(out, key=lambda m: m.label)
 
 
@@ -390,23 +390,20 @@ async def _fetch_openai_models(api_key: str) -> list[schemas.AiModelInfo]:
 async def _fetch_gemini_models(api_key: str) -> list[schemas.AiModelInfo]:
     # v1beta/models paginates (default page size 50) — without following
     # nextPageToken, models beyond the first page (often the newest ones)
-    # silently never show up. A single request with a large pageSize (e.g.
-    # 1000, which the docs describe as the max the server will return) gets
-    # rejected outright with a 400, so this follows real pagination instead
-    # of relying on that documented-but-unenforced ceiling. 200/page keeps
-    # comfortably clear of whatever the real per-request limit is; the loop
-    # cap of 10 pages (2000 models) is just a safety net against a runaway
-    # nextPageToken chain.
+    # silently never show up. The AI-Studio-issued keys this app expects are
+    # only reliably authenticated via the documented ?key= query parameter
+    # (the curl example in Google's own docs); the x-goog-api-key header
+    # this used previously got a bare 400 from the real API the moment any
+    # other query parameter (e.g. pageSize) was present alongside it.
     out = []
     page_token: str | None = None
     async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
         for _ in range(10):
-            params = {"pageSize": 200}
+            params = {"key": api_key, "pageSize": 200}
             if page_token:
                 params["pageToken"] = page_token
             r = await client.get(
                 "https://generativelanguage.googleapis.com/v1beta/models",
-                headers={"x-goog-api-key": api_key},
                 params=params,
             )
             r.raise_for_status()
@@ -417,7 +414,13 @@ async def _fetch_gemini_models(api_key: str) -> list[schemas.AiModelInfo]:
                 name = m.get("name", "").removeprefix("models/")
                 if not name:
                     continue
-                out.append(schemas.AiModelInfo(model=f"gemini/{name}", label=m.get("displayName") or name))
+                out.append(schemas.AiModelInfo(
+                    model=f"gemini/{name}",
+                    label=m.get("displayName") or name,
+                    description=m.get("description"),
+                    context_window=m.get("inputTokenLimit"),
+                    max_output_tokens=m.get("outputTokenLimit"),
+                ))
             page_token = data.get("nextPageToken")
             if not page_token:
                 break
@@ -458,7 +461,8 @@ async def list_ai_models(
         model_list = await fetcher(api_key)
         return {"reachable": True, "models": model_list, "error": None}
     except Exception as e:
-        log.warning(f"live model list failed for provider={payload.provider}: {e!r}")
+        body = getattr(getattr(e, "response", None), "text", None)
+        log.warning(f"live model list failed for provider={payload.provider}: {e!r} body={body!r}")
         msg = str(e)
         if len(msg) > 300:
             msg = msg[:300] + "…"
