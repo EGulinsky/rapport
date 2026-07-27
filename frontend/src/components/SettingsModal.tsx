@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, CheckCircle, XCircle, Loader, Eye, EyeOff, ExternalLink, RefreshCw, Unlink, Phone, Wifi, WifiOff, FolderOpen, Linkedin, Loader2, AlertCircle, Trash2, Database, Save, Download, Check, RotateCcw, Upload, FileText, AlertTriangle, LocateFixed } from 'lucide-react'
-import { api, authFetch } from '../api/client'
+import { api } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
 import { useAuth } from '../context/AuthContext'
 import { LocationSearchInput } from './LocationSearchInput'
@@ -30,15 +30,13 @@ interface AiProvider {
   model: string
   keyPh: string
   keyUrl: string
-  needsUrl: boolean
-  defaultUrl?: string
   models?: ProviderModel[]
 }
 
 const PROVIDERS: AiProvider[] = [
   {
     id: 'groq', name: 'Groq', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
-    model: 'groq/llama-3.3-70b-versatile', keyPh: 'gsk_…', keyUrl: 'https://console.groq.com/keys', needsUrl: false,
+    model: 'groq/llama-3.3-70b-versatile', keyPh: 'gsk_…', keyUrl: 'https://console.groq.com/keys',
     models: [
       { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  sublabel: 'Versatile', badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
       { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',   sublabel: 'Instant',   badge: 'fast',   badgeColor: 'bg-gray-100 text-gray-600' },
@@ -49,7 +47,7 @@ const PROVIDERS: AiProvider[] = [
   },
   {
     id: 'anthropic', name: 'Anthropic Claude', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
-    model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com', needsUrl: false,
+    model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com',
     models: [
       { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'cheap',    badgeColor: 'bg-green-100 text-green-700' },
       { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
@@ -57,7 +55,7 @@ const PROVIDERS: AiProvider[] = [
   },
   {
     id: 'openai', name: 'OpenAI', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
-    model: 'gpt-4o-mini', keyPh: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys', needsUrl: false,
+    model: 'gpt-4o-mini', keyPh: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys',
     models: [
       { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'cheap',    badgeColor: 'bg-green-100 text-green-700' },
       { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
@@ -65,7 +63,7 @@ const PROVIDERS: AiProvider[] = [
   },
   {
     id: 'gemini', name: 'Google Gemini', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
-    model: 'gemini/gemini-2.0-flash', keyPh: 'AIza…', keyUrl: 'https://aistudio.google.com/app/apikey', needsUrl: false,
+    model: 'gemini/gemini-2.0-flash', keyPh: 'AIza…', keyUrl: 'https://aistudio.google.com/app/apikey',
     models: [
       { model: 'gemini/gemini-2.0-flash',               label: 'Gemini 2.0 Flash',      badge: 'recommended',       badgeColor: 'bg-indigo-100 text-indigo-700' },
       { model: 'gemini/gemini-2.0-flash-lite',          label: 'Gemini 2.0 Flash Lite', badge: 'fast',          badgeColor: 'bg-gray-100 text-gray-600' },
@@ -74,30 +72,7 @@ const PROVIDERS: AiProvider[] = [
       { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash',      badge: 'preview',         badgeColor: 'bg-purple-100 text-purple-700' },
     ],
   },
-  {
-    id: 'ollama', name: 'Ollama', badge: 'offline', badgeColor: 'bg-yellow-100 text-yellow-700',
-    model: 'ollama/llama3.2', keyPh: '', keyUrl: 'https://ollama.com', needsUrl: true,
-    defaultUrl: 'http://host.docker.internal:11434',
-  },
 ] as const
-
-interface OllamaModel { name: string; display: string; params: string; size_gb: number }
-interface PullProgress { model: string; status: string; pct: number | null }
-
-const POPULAR_OLLAMA_MODELS: OllamaModel[] = [
-  { name: 'llama3.2',        display: 'Llama 3.2',    params: '3B',   size_gb: 2.0 },
-  { name: 'llama3.2:1b',    display: 'Llama 3.2',    params: '1B',   size_gb: 0.8 },
-  { name: 'llama3.1:8b',    display: 'Llama 3.1',    params: '8B',   size_gb: 4.7 },
-  { name: 'qwen2.5:7b',     display: 'Qwen 2.5',     params: '7B',   size_gb: 4.4 },
-  { name: 'qwen2.5:14b',    display: 'Qwen 2.5',     params: '14B',  size_gb: 9.0 },
-  { name: 'mistral',         display: 'Mistral',       params: '7B',   size_gb: 4.1 },
-  { name: 'mistral-nemo',   display: 'Mistral Nemo',  params: '12B',  size_gb: 7.1 },
-  { name: 'phi4-mini',      display: 'Phi-4 Mini',    params: '3.8B', size_gb: 2.5 },
-  { name: 'phi4',            display: 'Phi-4',         params: '14B',  size_gb: 9.1 },
-  { name: 'gemma3:4b',      display: 'Gemma 3',       params: '4B',   size_gb: 3.3 },
-  { name: 'gemma3:12b',     display: 'Gemma 3',       params: '12B',  size_gb: 8.1 },
-  { name: 'deepseek-r1:7b', display: 'DeepSeek-R1',  params: '7B',   size_gb: 4.7 },
-]
 
 // ── Google Sync Panel ─────────────────────────────────────────────────────────
 function GoogleSyncPanel() {
@@ -333,10 +308,6 @@ function AiPanel() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null)
-  const [ollamaInstalled, setOllamaInstalled] = useState<string[]>([])
-  const [loadingModels, setLoadingModels] = useState(false)
-  const [pulling, setPulling] = useState<PullProgress | null>(null)
 
   useEffect(() => {
     api.settings.getAi().then(d => {
@@ -346,26 +317,6 @@ function AiPanel() {
   }, [])
 
   const prov = PROVIDERS.find(p => p.id === form.provider) ?? PROVIDERS[0]
-
-  const loadOllamaModels = useCallback(async (baseUrl: string) => {
-    setLoadingModels(true)
-    try {
-      const r = await api.settings.listOllamaModels(baseUrl || 'http://host.docker.internal:11434')
-      setOllamaReachable(r.reachable)
-      setOllamaInstalled(r.installed)
-    } catch {
-      setOllamaReachable(false)
-      setOllamaInstalled([])
-    } finally {
-      setLoadingModels(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (form.provider === 'ollama' && !loading) {
-      loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
-    }
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function autoSave(patch: Partial<AiSettingsWrite>, currentForm = form) {
     const merged = { ...currentForm, ...patch }
@@ -385,57 +336,10 @@ function AiPanel() {
   }
 
   function selectProvider(p: AiProvider) {
-    const defaultUrl = p.defaultUrl ?? 'http://host.docker.internal:11434'
-    const baseUrl = p.needsUrl ? (form.base_url || defaultUrl) : ''
-    const patch = { provider: p.id, model: p.model, base_url: baseUrl }
+    const patch = { provider: p.id, model: p.model, base_url: '' }
     setForm(f => ({ ...f, ...patch }))
     setTestResult(null)
     autoSave(patch)
-    if (p.needsUrl) loadOllamaModels(baseUrl)
-  }
-
-  function selectOllamaModel(name: string) {
-    const patch = { model: `ollama/${name}` }
-    setForm(f => ({ ...f, ...patch }))
-    autoSave(patch)
-  }
-
-  async function pullModel(modelName: string) {
-    setPulling({ model: modelName, status: t('ai.startingDownload'), pct: null })
-    const url = api.settings.pullOllamaModel(modelName, form.base_url || 'http://host.docker.internal:11434')
-    try {
-      const resp = await authFetch(url)
-      if (!resp.body) throw new Error(t('ai.noStream'))
-      const reader = resp.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        const lines = buf.split('\n')
-        buf = lines.pop() ?? ''
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const d = JSON.parse(line.slice(6))
-            if (d.status === 'error') { setPulling({ model: modelName, status: t('ai.downloadError', { error: d.error }), pct: null }); return }
-            if (d.status === 'done' || d.status === 'success') {
-              setPulling(null)
-              loadOllamaModels(form.base_url || 'http://host.docker.internal:11434')
-              setForm(f => ({ ...f, model: `ollama/${modelName}` }))
-              return
-            }
-            const pct = d.total ? d.completed / d.total : null
-            setPulling({ model: modelName, status: d.status ?? t('ai.downloading'), pct })
-          } catch { /* ignore parse errors */ }
-        }
-      }
-    } catch (e) {
-      setPulling({ model: modelName, status: t('ai.downloadError', { error: e instanceof Error ? e.message : String(e) }), pct: null })
-    } finally {
-      setPulling(prev => prev?.model === modelName ? null : prev)
-    }
   }
 
   async function saveApiKey() {
@@ -457,8 +361,7 @@ function AiPanel() {
     } finally { setTesting(false) }
   }
 
-  const selectedModelBase = form.model.replace(/^ollama\//, '')
-  const providerModels = prov.needsUrl ? null : (prov.models ?? null)
+  const providerModels = prov.models ?? null
   const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
 
   if (loading) return <div className="py-8 text-center text-gray-400 text-sm">{t('common:loading')}</div>
@@ -498,92 +401,7 @@ function AiPanel() {
         </div>
       </div>
 
-      {/* Ollama: Base URL + Model Picker */}
-      {prov.needsUrl && (
-        <>
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{t('ai.baseUrl')}</p>
-            <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="http://host.docker.internal:11434" value={form.base_url ?? ''}
-              onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
-              onBlur={() => { autoSave({ base_url: form.base_url }); loadOllamaModels(form.base_url || 'http://host.docker.internal:11434') }} />
-            <p className="mt-1 text-xs text-gray-400">{t('ai.baseUrlHint')} <code className="bg-gray-100 px-1 rounded">host.docker.internal:11434</code></p>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('ai.model')}</p>
-              {ollamaReachable === false && <span className="text-xs text-red-500">{t('ai.ollamaUnreachable')}</span>}
-              {loadingModels && <Loader className="h-3.5 w-3.5 animate-spin text-gray-400" />}
-            </div>
-
-            {ollamaInstalled.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs text-gray-400 mb-1.5">{t('ai.installed')}</p>
-                <div className="flex flex-wrap gap-2">
-                  {ollamaInstalled.map(name => (
-                    <button key={name} type="button" onClick={() => selectOllamaModel(name)}
-                      className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all',
-                        selectedModelBase === name ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}>
-                      {selectedModelBase === name && <Check className="h-3.5 w-3.5" />}
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <p className="text-xs text-gray-400 mb-1.5">{t('ai.availableForDownload')}</p>
-              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                {POPULAR_OLLAMA_MODELS
-                  .filter(m => !ollamaInstalled.some(i => i === m.name || i.startsWith(m.name + ':')))
-                  .map(m => {
-                    const isPulling = pulling?.model === m.name
-                    return (
-                      <div key={m.name} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-800">{m.display}</span>
-                            <span className="text-xs text-gray-400 font-mono">{m.params}</span>
-                            <span className="text-xs text-gray-400">{m.size_gb} GB</span>
-                          </div>
-                          {isPulling && (
-                            <div className="mt-1.5 space-y-1">
-                              <p className="text-xs text-indigo-500 truncate">{pulling.status}</p>
-                              {pulling.pct !== null && (
-                                <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                                  <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${(pulling.pct * 100).toFixed(0)}%` }} />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <button type="button" disabled={!!pulling} onClick={() => pullModel(m.name)}
-                          className={clsx('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors shrink-0',
-                            isPulling ? 'bg-indigo-100 text-indigo-500 cursor-wait' : pulling ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700')}>
-                          {isPulling ? <Loader className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                          {isPulling ? t('ai.downloading') : t('ai.download')}
-                        </button>
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <p className="text-xs text-gray-400 mb-1">{t('ai.enterManually')}</p>
-              <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                onBlur={() => autoSave({ model: form.model })} placeholder="ollama/llama3.2" />
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Model (non-Ollama) */}
-      {!prov.needsUrl && (
-        <div>
+      <div>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{t('ai.model')}</p>
           {providerModels && (
             <div className="flex flex-wrap gap-2 mb-3">
@@ -625,11 +443,8 @@ function AiPanel() {
             <p className="text-xs text-gray-400 mt-1 font-mono">{form.model}</p>
           )}
         </div>
-      )}
 
-      {/* API Key (not for Ollama) */}
-      {!prov.needsUrl && (
-        <div>
+      <div>
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('ai.apiKey')}</p>
             {prov.keyUrl && <a href={prov.keyUrl} target="_blank" rel="noreferrer"
@@ -659,7 +474,6 @@ function AiPanel() {
             </div>
           )}
         </div>
-      )}
 
       {testResult && (
         <div className={clsx('flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm',

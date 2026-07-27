@@ -69,7 +69,7 @@ open http://localhost:3000
 | **Local documents** | PDF/DOCX/TXT/MD via the Rapport Agent |
 | **Review queue** | Approve AI suggestions for events and status changes |
 | **Sync control** | Enable/disable sources individually |
-| **AI classification** | Provider-agnostic via LiteLLM (Groq, Ollama, OpenAI, Anthropic) |
+| **AI classification** | Provider-agnostic via LiteLLM (Groq, OpenAI, Anthropic, Gemini) |
 | **AI success assessment** | Traffic light (green/yellow/red) per application incl. reasoning + next step; rejection-reason analysis for rejections |
 | **LinkedIn import** | Paste a job-posting link → company/role/source automatically extracted via AI |
 | **Company profiles** | Dedicated company view with logo, industry, location, employee count (automatically enriched) |
@@ -103,7 +103,6 @@ Requires the Rapport Agent on the Mac (see [agent/README.md](agent/README.md) �
 
 ### AI Provider
 - **Groq** (recommended, free): API key from [console.groq.com](https://console.groq.com), model `groq/llama-3.3-70b-versatile`
-- **Ollama** (local, no API key): base URL `http://host.docker.internal:11434`
 
 ### Location Autocomplete (Optional)
 Without configuration, the "location" search automatically uses Nominatim (free, no POIs). For company locations/POIs: Settings → Maps → enter a Google Places API key.

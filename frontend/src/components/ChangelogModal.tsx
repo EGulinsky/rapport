@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.36',
+    date: '2026-07-27',
+    changes: [
+      'Removed Ollama as an AI provider option — running a local model server alongside the app turned out not to be a practical setup for most users. The AI settings screen now only offers Groq, Anthropic, OpenAI, and Gemini, each with its known-model picker; the base-URL field, install/download UI, and their backend endpoints are gone.',
+    ],
+  },
+  {
     version: '4.6.35',
     date: '2026-07-27',
     changes: [

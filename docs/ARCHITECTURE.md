@@ -44,7 +44,7 @@ flowchart TB
         ICloudMail["iCloud Mail<br/>IMAP :993"]
         ICloudCal["iCloud CalDAV/CardDAV"]
         LinkedIn["LinkedIn<br/>Playwright (headless Chromium)"]
-        AIProvider["AI provider<br/>Groq / Anthropic / OpenAI / Ollama"]
+        AIProvider["AI provider<br/>Groq / Anthropic / OpenAI / Gemini"]
         Enrichment["LinkedIn / Wikidata / Clearbit<br/>company data enrichment"]
     end
 
@@ -127,7 +127,7 @@ backend/app/
     ├── export_excel.py        GET /api/export/excel
     ├── export_pdf.py           GET /api/export/pdf
     ├── attachments.py          File attachments on timeline events
-    ├── settings.py             AI settings, logo API key, sync toggles, Ollama models
+    ├── settings.py             AI settings, logo API key, sync toggles
     ├── geo.py                   Location autocomplete + forward/reverse geocoding (Google Places/Geocoding, fallback Nominatim), driving_route() car-navigation distance/duration (Google Distance Matrix, fallback OSRM)
     ├── calendar.py             GET /api/calendar/events
     ├── analytics.py            Pipeline funnel and rejection statistics
@@ -357,7 +357,7 @@ Both use the same login/2FA/consent helpers. Session cookies are cached in `link
 
 ### 3.6 AI Classification & Assessment (litellm)
 
-- **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Ollama (local)
+- **Provider:** configurable — Groq (default, free), Anthropic, OpenAI, Gemini
 - **Use cases** (`ai/tasks.py`):
   - `match_and_classify()` — assign raw data (mail/calendar/note) to an application, determine event type
   - `assess_application()` / `assess_rejected_application()` — success chance (green/yellow/red) incl. reasoning and next step; for rejections, a rejection-reason analysis instead. Optionally folds in the account's own CV text and a cached LinkedIn profile text snapshot as an optional `=== BEWERBERPROFIL ===` prompt section, so the model can weigh candidate/role fit alongside the timeline. Absent for accounts with no CV/synced profile — the prompt looks exactly as before for them. Both are extracted/scraped once and cached, not redone per assessment: CV text is extracted at upload time (`POST /api/auth/cv`) into `User.cv_extracted_text` via `app/cv_extract.py` (`pdfplumber`/`python-docx`, `.doc` unsupported), and the LinkedIn profile snapshot into `User.linkedin_profile_text` via `POST /api/sync/linkedin/profile` (reusing the existing LinkedIn session — see §2 Sync). CV extraction runs in a subprocess bounded to a 20s timeout — some real-world PDFs make `pdfplumber` spin at ~100% CPU for minutes without returning, which once blocked the whole app's startup via the backfill migration for pre-existing uploads (production incident, 2026-07-16); a file that's too slow to parse is now just skipped (no CV text for that assessment) rather than blocking anything.

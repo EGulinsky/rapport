@@ -1,9 +1,8 @@
 """L2 API — HTTP-Endpunkte in settings.py.
 
-Deckt AI-/Maps-/Agent-/Logo-/Sync-/Files-Einstellungen sowie die
-Ollama-Modell-Endpunkte ab. `/agent/health` und die AI-Test-Endpunkte
-mocken an der jeweiligen Netzwerkgrenze (agent_client.agent_health,
-litellm.acompletion, httpx.AsyncClient).
+Deckt AI-/Maps-/Agent-/Logo-/Sync-/Files-Einstellungen ab. `/agent/health`
+und die AI-Test-Endpunkte mocken an der jeweiligen Netzwerkgrenze
+(agent_client.agent_health, litellm.acompletion).
 """
 import litellm
 import pytest
@@ -207,7 +206,7 @@ class TestAiTest:
 
         with patch.object(litellm, "acompletion", new=_fake_acompletion):
             resp = client.post("/api/settings/ai/test", json={
-                "provider": "ollama", "model": "llama3.2", "base_url": "http://localhost:11434", "enabled": True,
+                "provider": "custom", "model": "some-model", "base_url": "http://localhost:11434", "enabled": True,
             })
 
         assert resp.status_code == 200
@@ -325,88 +324,3 @@ class TestAiTest:
 
         assert resp.status_code == 502
         assert resp.json()["detail"].endswith("…")
-
-
-class TestOllamaModels:
-    def test_positiv_erreichbarer_server_liefert_installierte_modelle(self, client):
-        class _FakeResp:
-            status_code = 200
-            def json(self):
-                return {"models": [{"name": "llama3.2"}]}
-
-        class _FakeClient:
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *a):
-                return False
-            async def get(self, url):
-                return _FakeResp()
-
-        with patch("httpx.AsyncClient", return_value=_FakeClient()):
-            resp = client.get("/api/settings/ollama/models")
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["reachable"] is True
-        assert body["installed"] == ["llama3.2"]
-        assert len(body["popular"]) > 0
-
-    def test_negativ_nicht_erreichbarer_server_liefert_reachable_false(self, client):
-        class _FakeClient:
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *a):
-                return False
-            async def get(self, url):
-                raise RuntimeError("connection refused")
-
-        with patch("httpx.AsyncClient", return_value=_FakeClient()):
-            resp = client.get("/api/settings/ollama/models")
-
-        assert resp.status_code == 200
-        assert resp.json()["reachable"] is False
-        assert resp.json()["installed"] == []
-
-
-class TestOllamaPull:
-    def test_positiv_streamt_fortschritt(self, client):
-        class _FakeStreamResp:
-            async def aiter_lines(self):
-                yield '{"status": "downloading"}'
-                yield '{"status": "success"}'
-
-        class _FakeStreamCtx:
-            async def __aenter__(self):
-                return _FakeStreamResp()
-            async def __aexit__(self, *a):
-                return False
-
-        class _FakeClient:
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *a):
-                return False
-            def stream(self, method, url, json=None):
-                return _FakeStreamCtx()
-
-        with patch("httpx.AsyncClient", return_value=_FakeClient()):
-            resp = client.get("/api/settings/ollama/pull", params={"model": "llama3.2"})
-
-        assert resp.status_code == 200
-        assert "downloading" in resp.text
-        assert "done" in resp.text
-
-    def test_negativ_fehler_beim_pull_wird_als_event_gemeldet(self, client):
-        class _FakeClient:
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *a):
-                return False
-            def stream(self, method, url, json=None):
-                raise RuntimeError("connection refused")
-
-        with patch("httpx.AsyncClient", return_value=_FakeClient()):
-            resp = client.get("/api/settings/ollama/pull", params={"model": "llama3.2"})
-
-        assert resp.status_code == 200
-        assert "error" in resp.text

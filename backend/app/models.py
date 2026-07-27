@@ -564,8 +564,8 @@ class AiSettings(Base):
     user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     provider    = Column(String, nullable=False, default="groq")
     model       = Column(String, nullable=False, default="groq/llama-3.3-70b-versatile")
-    api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted, null for Ollama
-    base_url    = Column(String, nullable=True)  # for Ollama / custom
+    api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted
+    base_url    = Column(String, nullable=True)  # custom/self-hosted endpoint override
     enabled     = Column(Boolean, default=True)
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())

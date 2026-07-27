@@ -4,7 +4,7 @@ Mocking-Grenze ist bewusst `litellm.acompletion` selbst (nicht die eigenen
 `app.ai.*`-Funktionen) — das testet die komplette eigene Logik in
 `app/ai/provider.py::complete()` (JSON-Parsing, leere-Antwort-Erkennung,
 Fehler-Mapping auf AINotConfigured/AIRateLimited/AIBadRequest) end-to-end,
-ohne echte Netzwerkaufrufe an Groq/Anthropic/OpenAI/Ollama.
+ohne echte Netzwerkaufrufe an Groq/Anthropic/OpenAI.
 
 WICHTIG (live gefundene Falle): `_do_gcal()`/`_do_gmail()` etc. öffnen intern
 eine EIGENE `SessionLocal()` statt die Test-`db_session` zu nutzen. Setup-Daten
