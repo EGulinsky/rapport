@@ -186,14 +186,15 @@ xcodebuild -project Rapport.xcodeproj -scheme Rapport \
   -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' test
 ```
 
-CI also auto-deploys the app to a real, paired iPad on every push to `main` (free Apple ID personal-team signing, no App Store/TestFlight involved — see `docs/ARCHITECTURE.md` §8/§10 for how). To do the same manually against your own paired device:
+CI also auto-deploys the app to a real, paired iPad on every push to `main` (free Apple ID personal-team signing, no App Store/TestFlight involved — see `docs/ARCHITECTURE.md` §8/§10 for how). It only installs the updated build; it deliberately doesn't launch it, so the app doesn't force itself to the foreground on the device on every push — open it by hand when you want to see the new build. To do the same manually against your own paired device:
 
 ```bash
 xcodebuild -project Rapport.xcodeproj -scheme Rapport \
   -destination 'id=<your-device-udid>' -allowProvisioningUpdates build
 xcrun devicectl device install app --device <your-device-udid> \
   ~/Library/Developer/Xcode/DerivedData/Rapport-*/Build/Products/Debug-iphoneos/Rapport.app
-xcrun devicectl device process launch --device <your-device-udid> com.rapport.ios
+# Optional — launches the app immediately instead of waiting for you to open it:
+# xcrun devicectl device process launch --device <your-device-udid> com.rapport.ios
 ```
 
 ## License
