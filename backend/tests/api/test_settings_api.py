@@ -428,10 +428,13 @@ class TestAiModelsList:
         body = resp.json()
         assert [m["model"] for m in body["models"]] == ["gemini/gemini-2.0-flash"]
 
-    def test_positiv_gemini_fordert_maximale_seitengroesse_an(self, client):
+    def test_positiv_gemini_fordert_konservative_seitengroesse_an(self, client):
         # Regression: v1beta/models paginates at a default of 50 models per
         # page, so a plain request without pageSize silently truncated the
-        # list before reaching newer models.
+        # list before reaching newer models. A follow-up regression: asking
+        # for pageSize=1000 in one shot (the docs describe this as the max
+        # the server will return) gets rejected outright with a real 400
+        # from Google, so this must ask for a modest size instead.
         captured = {}
 
         class _CapturingClient(self._FakeClient):
@@ -447,7 +450,41 @@ class TestAiModelsList:
             resp = client.post("/api/settings/ai/models", json={"provider": "gemini", "api_key": "AIza-test"})
 
         assert resp.status_code == 200
-        assert captured["pageSize"] == 1000
+        assert captured["pageSize"] == 200
+        assert "pageToken" not in captured
+
+    def test_positiv_gemini_folgt_next_page_token(self, client):
+        class _PaginatingClient(self._FakeClient):
+            def __init__(self):
+                self.calls = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def get(self, url, headers=None, params=None):
+                self.calls.append(dict(params or {}))
+                if "pageToken" not in (params or {}):
+                    return self._FakeResp_outer({"models": [
+                        {"name": "models/gemini-2.0-flash", "displayName": "Gemini 2.0 Flash", "supportedGenerationMethods": ["generateContent"]},
+                    ], "nextPageToken": "page2"})
+                return self._FakeResp_outer({"models": [
+                    {"name": "models/gemini-3.5-flash", "displayName": "Gemini 3.5 Flash", "supportedGenerationMethods": ["generateContent"]},
+                ]})
+
+        fake = _PaginatingClient()
+        fake._FakeResp_outer = self._FakeResp
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "gemini", "api_key": "AIza-test"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(m["model"] for m in body["models"]) == ["gemini/gemini-2.0-flash", "gemini/gemini-3.5-flash"]
+        assert len(fake.calls) == 2
+        assert fake.calls[1]["pageToken"] == "page2"
 
     def test_positiv_nutzt_gespeicherten_key_bei_gleichem_provider(self, client, db_session):
         client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "sk-stored", "enabled": True})

@@ -388,25 +388,39 @@ async def _fetch_openai_models(api_key: str) -> list[schemas.AiModelInfo]:
 
 
 async def _fetch_gemini_models(api_key: str) -> list[schemas.AiModelInfo]:
-    # v1beta/models paginates (default page size 50, hard cap 1000) — without
-    # requesting the max page size, models beyond the first page (often the
-    # newest ones) silently never show up.
-    async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
-        r = await client.get(
-            "https://generativelanguage.googleapis.com/v1beta/models",
-            headers={"x-goog-api-key": api_key},
-            params={"pageSize": 1000},
-        )
-        r.raise_for_status()
-        data = r.json()
+    # v1beta/models paginates (default page size 50) — without following
+    # nextPageToken, models beyond the first page (often the newest ones)
+    # silently never show up. A single request with a large pageSize (e.g.
+    # 1000, which the docs describe as the max the server will return) gets
+    # rejected outright with a 400, so this follows real pagination instead
+    # of relying on that documented-but-unenforced ceiling. 200/page keeps
+    # comfortably clear of whatever the real per-request limit is; the loop
+    # cap of 10 pages (2000 models) is just a safety net against a runaway
+    # nextPageToken chain.
     out = []
-    for m in data.get("models", []):
-        if "generateContent" not in m.get("supportedGenerationMethods", []):
-            continue
-        name = m.get("name", "").removeprefix("models/")
-        if not name:
-            continue
-        out.append(schemas.AiModelInfo(model=f"gemini/{name}", label=m.get("displayName") or name))
+    page_token: str | None = None
+    async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
+        for _ in range(10):
+            params = {"pageSize": 200}
+            if page_token:
+                params["pageToken"] = page_token
+            r = await client.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                headers={"x-goog-api-key": api_key},
+                params=params,
+            )
+            r.raise_for_status()
+            data = r.json()
+            for m in data.get("models", []):
+                if "generateContent" not in m.get("supportedGenerationMethods", []):
+                    continue
+                name = m.get("name", "").removeprefix("models/")
+                if not name:
+                    continue
+                out.append(schemas.AiModelInfo(model=f"gemini/{name}", label=m.get("displayName") or name))
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
     return sorted(out, key=lambda m: m.label)
 
 

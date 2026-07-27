@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.40',
+    date: '2026-07-27',
+    changes: [
+      'Fixed the live model list for Gemini genuinely failing to load: the previous release\'s fix asked Google\'s API for all 1000 possible models in a single request, which — despite what the documentation describes — the API actually rejects outright. Now fetches in modest pages and follows the official next-page token instead, so both the initial page and any later ones load correctly.',
+    ],
+  },
+  {
     version: '4.6.39',
     date: '2026-07-27',
     changes: [
