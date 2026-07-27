@@ -55,5 +55,16 @@ final class SyncProgressStore {
             // Transient network hiccups shouldn't kill the poll loop; the
             // next tick will simply try again.
         }
+        // No caller ever calls `stopWatching` explicitly — a source is only
+        // ever added via `watch()`, never removed, so without this the loop
+        // above would poll forever once anything starts syncing (its exit
+        // condition, `activeSources.isEmpty`, could never become true). Drop
+        // a source here once it's actually finished, so the loop stops as
+        // documented and a fresh sync triggered later starts from a clean
+        // "not watching anything" state instead of layering onto a poller
+        // that never wound down from the previous run.
+        for source in activeSources where isDone(source) {
+            activeSources.remove(source)
+        }
     }
 }
