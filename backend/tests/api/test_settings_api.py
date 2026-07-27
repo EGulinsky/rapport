@@ -351,7 +351,7 @@ class TestAiModelsList:
         async def __aexit__(self, *a):
             return False
 
-        async def get(self, url, headers=None):
+        async def get(self, url, headers=None, params=None):
             return self._resp
 
     def test_negativ_ohne_api_key_liefert_reachable_false(self, client):
@@ -428,12 +428,33 @@ class TestAiModelsList:
         body = resp.json()
         assert [m["model"] for m in body["models"]] == ["gemini/gemini-2.0-flash"]
 
+    def test_positiv_gemini_fordert_maximale_seitengroesse_an(self, client):
+        # Regression: v1beta/models paginates at a default of 50 models per
+        # page, so a plain request without pageSize silently truncated the
+        # list before reaching newer models.
+        captured = {}
+
+        class _CapturingClient(self._FakeClient):
+            async def get(self, url, headers=None, params=None):
+                captured.update(params or {})
+                return self._resp
+
+        fake = _CapturingClient(self._FakeResp({"models": [
+            {"name": "models/gemini-2.0-flash", "displayName": "Gemini 2.0 Flash", "supportedGenerationMethods": ["generateContent"]},
+        ]}))
+
+        with patch("httpx.AsyncClient", return_value=fake):
+            resp = client.post("/api/settings/ai/models", json={"provider": "gemini", "api_key": "AIza-test"})
+
+        assert resp.status_code == 200
+        assert captured["pageSize"] == 1000
+
     def test_positiv_nutzt_gespeicherten_key_bei_gleichem_provider(self, client, db_session):
         client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "sk-stored", "enabled": True})
         captured = {}
 
         class _CapturingClient(self._FakeClient):
-            async def get(self, url, headers=None):
+            async def get(self, url, headers=None, params=None):
                 captured.update(headers or {})
                 return self._resp
 

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.38',
+    date: '2026-07-27',
+    changes: [
+      'Fixed the live model list for Gemini only ever showing older models: Google\'s model-listing API paginates at 50 models per page by default, and the live-models fetch added in the previous release didn\'t ask for more or follow the next page, so newer models (e.g. more recent Flash releases) never showed up. It now requests the full list in one call.',
+    ],
+  },
+  {
     version: '4.6.37',
     date: '2026-07-27',
     changes: [

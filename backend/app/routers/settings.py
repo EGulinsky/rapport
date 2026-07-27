@@ -386,10 +386,14 @@ async def _fetch_openai_models(api_key: str) -> list[schemas.AiModelInfo]:
 
 
 async def _fetch_gemini_models(api_key: str) -> list[schemas.AiModelInfo]:
+    # v1beta/models paginates (default page size 50, hard cap 1000) — without
+    # requesting the max page size, models beyond the first page (often the
+    # newest ones) silently never show up.
     async with httpx.AsyncClient(timeout=_MODEL_LIST_TIMEOUT) as client:
         r = await client.get(
             "https://generativelanguage.googleapis.com/v1beta/models",
             headers={"x-goog-api-key": api_key},
+            params={"pageSize": 1000},
         )
         r.raise_for_status()
         data = r.json()
