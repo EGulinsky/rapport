@@ -46,6 +46,41 @@ class TestCleanupPreview:
         assert resp.json()["applications"] == []
 
 
+class TestCleanupCrossAppEvents:
+    def test_negativ_linkedin_msg_ueber_mehrere_apps_ist_kein_duplikat(self, client, db_session):
+        # Regression: attach_linkedin_messages_for_contact() deliberately
+        # creates one event per application a contact is linked to, all
+        # sharing the same external_id (the LinkedIn conversation_id) — by
+        # design, not a duplicate. Flagging + deleting one used to just get
+        # it silently recreated on the next sync/contact touch, so the same
+        # "duplicate" reappeared after every cleanup run.
+        app1 = application_factory(db_session, firma="Contoso AG", rolle="Backend Engineer")
+        app2 = application_factory(db_session, firma="Contoso AG", rolle="Frontend Engineer")
+        event_factory(db_session, app1, source="linkedin_msg", external_id="conv-123")
+        event_factory(db_session, app2, source="linkedin_msg", external_id="conv-123")
+        db_session.commit()
+
+        resp = client.get("/api/cleanup/preview")
+
+        assert resp.status_code == 200
+        assert resp.json()["cross_app_events"] == []
+
+    def test_positiv_andere_quelle_ueber_mehrere_apps_bleibt_erkannt(self, client, db_session):
+        # Sanity check: the exclusion is specific to linkedin_msg — a genuine
+        # cross-application duplicate (e.g. the same gcal event id linked to
+        # two applications by mistake) must still be detected.
+        app1 = application_factory(db_session, firma="Contoso AG", rolle="Backend Engineer")
+        app2 = application_factory(db_session, firma="Contoso AG", rolle="Frontend Engineer")
+        event_factory(db_session, app1, source="gcal", external_id="evt-123")
+        event_factory(db_session, app2, source="gcal", external_id="evt-123")
+        db_session.commit()
+
+        resp = client.get("/api/cleanup/preview")
+
+        assert resp.status_code == 200
+        assert len(resp.json()["cross_app_events"]) == 1
+
+
 class TestCleanupRun:
     def test_positiv_scope_applications_loescht_dublette_und_haengt_events_um(self, client, db_session):
         # keeper braucht genug "filled"-Bonusfelder, um den Score-Vergleich trotz

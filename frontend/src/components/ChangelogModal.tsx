@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.44',
+    date: '2026-07-27',
+    changes: [
+      'Fixed a duplicate-cleanup loop: LinkedIn messages deliberately create one timeline entry per application a contact is linked to (e.g. two different roles at the same company) — cleanup was flagging those as cross-application duplicates and offering to delete one, which then silently reappeared the next time that contact was touched by any sync, since nothing had actually changed. Cleanup no longer treats LinkedIn messages as cross-application duplicates.',
+    ],
+  },
+  {
     version: '4.6.43',
     date: '2026-07-27',
     changes: [

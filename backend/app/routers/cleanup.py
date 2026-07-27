@@ -302,8 +302,21 @@ def _find_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
 
 
 def _find_cross_app_event_groups(db: Session, calendar_only: bool = False) -> list[dict]:
-    """Find cross-application event duplicates by external_id."""
-    q = db.query(models.Event).filter(models.Event.external_id.isnot(None))
+    """Find cross-application event duplicates by external_id.
+
+    Excludes source="linkedin_msg": attach_linkedin_messages_for_contact()
+    deliberately creates one event per application a contact is linked to,
+    sharing the same external_id (the LinkedIn conversation_id) by design —
+    that is not a duplicate. Flagging and deleting one here previously just
+    got it silently recreated on the next sync/contact touch (the
+    per-application existence check in attach_linkedin_messages_for_contact
+    no longer sees an event for that application and adds it back), so the
+    same "duplicate" kept reappearing after every cleanup run.
+    """
+    q = db.query(models.Event).filter(
+        models.Event.external_id.isnot(None),
+        models.Event.source != "linkedin_msg",
+    )
     if calendar_only:
         q = _calendar_filter(q)
     events = q.all()
