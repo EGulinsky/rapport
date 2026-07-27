@@ -52,6 +52,15 @@ def save_ai_settings(
         cfg = models.AiSettings(user_id=current_user.id)
         db.add(cfg)
 
+    # A stored key is only ever valid for the provider it was entered for.
+    # Switching providers without supplying a fresh key must drop the old
+    # one — otherwise it silently survives under the new provider name and
+    # gets sent to that provider's API as if it were a real key for it
+    # (single-row config: provider and api_key_enc share one row, so
+    # nothing else marks a key as belonging to a specific provider).
+    if payload.provider != cfg.provider:
+        cfg.api_key_enc = None
+
     cfg.provider = payload.provider
     cfg.model    = payload.model
     cfg.base_url = payload.base_url or None
@@ -330,7 +339,7 @@ async def test_ai(
         raise HTTPException(502, f"Provider-Fehler: {msg}")
 
 
-_MODEL_LIST_TIMEOUT = httpx.Timeout(15.0)
+_MODEL_LIST_TIMEOUT = httpx.Timeout(30.0)
 
 
 async def _fetch_groq_models(api_key: str) -> list[schemas.AiModelInfo]:

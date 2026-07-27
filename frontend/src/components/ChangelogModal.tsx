@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.42',
+    date: '2026-07-27',
+    changes: [
+      'Found the actual reason Gemini\'s live model list kept failing after two prior attempts: switching the configured AI provider saved the new provider name immediately, but kept the previous provider\'s encrypted API key attached to it — so a Groq key ended up being sent to Gemini\'s API (and correctly rejected as invalid). Switching providers now clears the stored key unless a fresh one is entered for the new provider in the same step, so a stale key from a different provider can never be used again. This also removes a latent risk for actual AI assessments, which read the same stored config.',
+      'Removed the hand-picked "suggested models" list entirely — the model picker now always shows exactly what the provider\'s API reports as available for your key, nothing pre-selected or curated. Raised the model-discovery timeout further (now 30s) to give the full live fetch enough room to complete.',
+    ],
+  },
+  {
     version: '4.6.41',
     date: '2026-07-27',
     changes: [

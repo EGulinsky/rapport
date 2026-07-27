@@ -9,6 +9,7 @@ import pytest
 from unittest.mock import patch
 
 from app import models
+from app.ai.provider import decrypt_api_key
 
 pytestmark = pytest.mark.api
 
@@ -42,6 +43,37 @@ class TestAiSettings:
         assert resp.status_code == 200
         assert resp.json()["has_key"] is True
         assert resp.json()["model"] == "m2"
+
+    def test_negativ_provider_wechsel_ohne_neuen_key_loescht_alten_key(self, client, db_session):
+        # Regression: switching providers without supplying a fresh key used
+        # to silently keep the previous provider's encrypted key attached to
+        # the new provider name (single-row config: provider + api_key_enc
+        # share one row). Anything that later resolved "the stored key for
+        # this provider" (e.g. the live model-list fetch) would then send a
+        # Groq key to Gemini's API and get a genuine, correctly-rejected
+        # "API key not valid" error that had nothing to do with Gemini itself.
+        client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "gsk-real-groq-key", "enabled": True})
+
+        resp = client.post("/api/settings/ai", json={"provider": "gemini", "model": "gemini/gemini-2.0-flash", "enabled": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["has_key"] is False
+        cfg = db_session.query(models.AiSettings).one()
+        assert cfg.provider == "gemini"
+        assert cfg.api_key_enc is None
+
+    def test_positiv_provider_wechsel_mit_neuem_key_behaelt_neuen_key(self, client, db_session):
+        client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "gsk-real-groq-key", "enabled": True})
+
+        resp = client.post("/api/settings/ai", json={
+            "provider": "gemini", "model": "gemini/gemini-2.0-flash", "api_key": "AIza-real-gemini-key", "enabled": True,
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["has_key"] is True
+        cfg = db_session.query(models.AiSettings).one()
+        assert cfg.provider == "gemini"
+        assert decrypt_api_key(cfg.api_key_enc) == "AIza-real-gemini-key"
 
     def test_positiv_loescht_api_key(self, client, db_session):
         client.post("/api/settings/ai", json={"provider": "groq", "model": "m", "api_key": "sk-test", "enabled": True})

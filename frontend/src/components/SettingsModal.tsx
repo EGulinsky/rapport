@@ -14,16 +14,31 @@ import clsx from 'clsx'
 interface Props { onClose: () => void; onReviewOpen?: () => void }
 
 // ── AI Provider config ────────────────────────────────────────────────────────
-interface ProviderModel {
+// No curated/hand-picked model list per provider — the model picker always
+// shows whatever the provider's own API reports as available for the
+// account's key (see fetchModels below). `model` here is only the initial
+// placeholder value used the moment a provider is selected, before a key
+// has been entered and the live list has loaded.
+interface AiProvider {
+  id: string
+  name: string
+  badge: string
+  badgeColor: string
   model: string
-  label: string
-  sublabel?: string
-  badge?: string
-  badgeColor?: string
-  description?: string | null
-  context_window?: number | null
-  max_output_tokens?: number | null
+  keyPh: string
+  keyUrl: string
 }
+
+const PROVIDERS: AiProvider[] = [
+  { id: 'groq', name: 'Groq', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
+    model: 'groq/llama-3.3-70b-versatile', keyPh: 'gsk_…', keyUrl: 'https://console.groq.com/keys' },
+  { id: 'anthropic', name: 'Anthropic Claude', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
+    model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com' },
+  { id: 'openai', name: 'OpenAI', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
+    model: 'gpt-4o-mini', keyPh: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'gemini', name: 'Google Gemini', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
+    model: 'gemini/gemini-2.0-flash', keyPh: 'AIza…', keyUrl: 'https://aistudio.google.com/app/apikey' },
+] as const
 
 // "128K", "1M", "900" — compact token-count formatting for context/output limits.
 export function formatTokenCount(n: number): string {
@@ -33,76 +48,6 @@ export function formatTokenCount(n: number): string {
   }
   if (n >= 1_000) return `${Math.round(n / 1000)}K`
   return `${n}`
-}
-
-interface AiProvider {
-  id: string
-  name: string
-  badge: string
-  badgeColor: string
-  model: string
-  keyPh: string
-  keyUrl: string
-  models?: ProviderModel[]
-}
-
-const PROVIDERS: AiProvider[] = [
-  {
-    id: 'groq', name: 'Groq', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
-    model: 'groq/llama-3.3-70b-versatile', keyPh: 'gsk_…', keyUrl: 'https://console.groq.com/keys',
-    models: [
-      { model: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  sublabel: 'Versatile', badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
-      { model: 'groq/llama-3.1-8b-instant',    label: 'Llama 3.1 8B',   sublabel: 'Instant',   badge: 'fast',   badgeColor: 'bg-gray-100 text-gray-600' },
-      { model: 'groq/llama3-70b-8192',          label: 'Llama 3 70B',    sublabel: '8192 ctx' },
-      { model: 'groq/gemma2-9b-it',             label: 'Gemma 2 9B' },
-      { model: 'groq/mixtral-8x7b-32768',       label: 'Mixtral 8×7B',   sublabel: '32k ctx' },
-    ],
-  },
-  {
-    id: 'anthropic', name: 'Anthropic Claude', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
-    model: 'anthropic/claude-haiku-4-5-20251001', keyPh: 'sk-ant-…', keyUrl: 'https://console.anthropic.com',
-    models: [
-      { model: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  badge: 'cheap',    badgeColor: 'bg-green-100 text-green-700' },
-      { model: 'anthropic/claude-sonnet-4-6',          label: 'Claude Sonnet 4.6', badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
-    ],
-  },
-  {
-    id: 'openai', name: 'OpenAI', badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700',
-    model: 'gpt-4o-mini', keyPh: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys',
-    models: [
-      { model: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'cheap',    badgeColor: 'bg-green-100 text-green-700' },
-      { model: 'gpt-4o',      label: 'GPT-4o',      badge: 'recommended', badgeColor: 'bg-indigo-100 text-indigo-700' },
-    ],
-  },
-  {
-    id: 'gemini', name: 'Google Gemini', badge: 'free', badgeColor: 'bg-green-100 text-green-700',
-    model: 'gemini/gemini-2.0-flash', keyPh: 'AIza…', keyUrl: 'https://aistudio.google.com/app/apikey',
-    models: [
-      { model: 'gemini/gemini-2.0-flash',               label: 'Gemini 2.0 Flash',      badge: 'recommended',       badgeColor: 'bg-indigo-100 text-indigo-700' },
-      { model: 'gemini/gemini-2.0-flash-lite',          label: 'Gemini 2.0 Flash Lite', badge: 'fast',          badgeColor: 'bg-gray-100 text-gray-600' },
-      { model: 'gemini/gemini-1.5-flash',               label: 'Gemini 1.5 Flash' },
-      { model: 'gemini/gemini-1.5-pro',                 label: 'Gemini 1.5 Pro',        badge: 'paid', badgeColor: 'bg-orange-100 text-orange-700' },
-      { model: 'gemini/gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash',      badge: 'preview',         badgeColor: 'bg-purple-100 text-purple-700' },
-    ],
-  },
-] as const
-
-// Prefer the live, actually-available model list once fetched; fall back to
-// the curated suggestions when there's no key yet, the fetch failed, or the
-// provider returned nothing. A live entry whose model id matches one of the
-// hand-picked suggestions is replaced by that curated entry (nicer label,
-// e.g. "Llama 3.3 70B" instead of the raw "llama-3.3-70b-versatile", plus
-// its sublabel/"recommended"/"cheap" badge) — curation only ever narrows
-// which ids get the polished treatment, never adds a model the live fetch
-// didn't actually return. Exported as a pure function so this merge can be
-// tested directly.
-export function mergeCuratedModels(
-  liveModels: AiModelInfo[] | null,
-  curated: ProviderModel[] | null,
-): ProviderModel[] | null {
-  if (!liveModels || liveModels.length === 0) return curated
-  const curatedByModel = new Map((curated ?? []).map(m => [m.model, m]))
-  return liveModels.map(m => ({ ...m, ...curatedByModel.get(m.model) }))
 }
 
 // ── Google Sync Panel ─────────────────────────────────────────────────────────
@@ -422,7 +367,7 @@ function AiPanel() {
     } finally { setTesting(false) }
   }
 
-  const providerModels = mergeCuratedModels(liveModels, prov.models ?? null)
+  const providerModels = liveModels && liveModels.length > 0 ? liveModels : null
   const isKnownModel = providerModels?.some(m => m.model === form.model) ?? false
   const filteredModels = providerModels?.filter(m => {
     const q = modelFilter.trim().toLowerCase()
@@ -470,9 +415,14 @@ function AiPanel() {
       <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('ai.model')}</p>
-            {loadingModels && <Loader className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+            {loadingModels && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Loader className="h-3.5 w-3.5 animate-spin" />
+                {t('ai.discoveringModels')}
+              </span>
+            )}
             {!loadingModels && liveModels && liveModels.length > 0 && (
-              <span className="text-xs text-gray-400">{t('ai.liveModels')}</span>
+              <span className="text-xs text-gray-400">{t('ai.liveModels', { count: liveModels.length })}</span>
             )}
             {!loadingModels && modelsUnreachable && (
               <span className="text-xs text-gray-400">{t('ai.liveModelsUnavailable')}</span>
@@ -502,12 +452,6 @@ function AiPanel() {
                         ? <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
                         : <span className="h-3.5 w-3.5 shrink-0" />}
                       <span className="text-sm font-medium text-gray-800">{m.label}</span>
-                      {m.sublabel && <span className="text-xs text-gray-400">{m.sublabel}</span>}
-                      {m.badge && (
-                        <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-medium', m.badgeColor ?? 'bg-gray-100 text-gray-600')}>
-                          {t(`ai.badge.${m.badge}`)}
-                        </span>
-                      )}
                     </div>
                     {(m.context_window || m.max_output_tokens) && (
                       <p className="ml-5 mt-0.5 text-xs text-gray-400">
