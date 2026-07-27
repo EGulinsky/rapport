@@ -5,7 +5,8 @@
     "contacts": "Kontakte",
     "companies": "Firmen",
     "calendar": "Kalender",
-    "analytics": "Auswertungen"
+    "analytics": "Auswertungen",
+    "chat": "rapportGPT"
   },
   "aiAssessAll": {
     "title": "KI-Einschätzung für alle aktiven Bewerbungen aktualisieren",

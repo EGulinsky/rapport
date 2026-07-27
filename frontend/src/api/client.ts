@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile } from '../types'
+import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
 
 const BASE = '/api'
 
@@ -480,6 +480,15 @@ export const api = {
 
   analytics: {
     summary: () => request<AnalyticsSummary>('/analytics/summary'),
+  },
+
+  chat: {
+    history: () => request<ChatHistoryResponse>('/chat/history'),
+    send: (content: string) => request<ChatSendResponse>('/chat/messages', {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+    clear: () => authFetch(`${BASE}/chat`, { method: 'DELETE' }),
   },
 
   companySync: {

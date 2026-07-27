@@ -699,3 +699,19 @@ export interface CompanySyncStatus {
     last_synced_at: string | null
   }>
 }
+
+export interface ChatMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+export interface ChatHistoryResponse {
+  messages: ChatMessage[]
+}
+
+export interface ChatSendResponse {
+  user_message: ChatMessage
+  assistant_message: ChatMessage
+}

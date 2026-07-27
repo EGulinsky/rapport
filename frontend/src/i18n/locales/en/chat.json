@@ -1,0 +1,17 @@
+{
+  "tabLabel": "rapportGPT",
+  "placeholder": "Ask about your applications…",
+  "send": "Send",
+  "thinking": "Thinking…",
+  "clearConversation": "Clear conversation",
+  "clearConfirm": "Delete the entire conversation? This can't be undone.",
+  "emptyState": "Ask me anything about your applications, contacts, or companies.",
+  "retry": "Retry",
+  "errors": {
+    "notConfigured": "AI isn't configured yet.",
+    "notConfiguredAction": "Open AI settings",
+    "rateLimited": "Rate limit reached — try again in a bit.",
+    "toolsUnsupported": "This model doesn't support tool calling. Pick a different model in AI Settings.",
+    "generic": "Something went wrong."
+  }
+}

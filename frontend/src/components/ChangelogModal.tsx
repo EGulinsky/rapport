@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.46',
+    date: '2026-07-27',
+    changes: [
+      'Added rapportGPT: a new chat tab that can answer open questions about your applications instead of the old fixed traffic-light verdict — ask things like "which applications am I still waiting to hear back from?" or "assess my fit for the Contoso Backend Engineer role" and it looks up your applications, timelines, contacts, and company details (plus your CV/LinkedIn profile) as needed to answer. One ongoing conversation per account, persisted across reloads, with a "clear conversation" option. The old per-application AI assessment is still present for now and will be removed in an upcoming release once rapportGPT is confirmed working well.',
+    ],
+  },
+  {
     version: '4.6.45',
     date: '2026-07-27',
     changes: [

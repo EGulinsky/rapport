@@ -18,6 +18,7 @@ import { CompanyModal } from './components/CompanyModal'
 import { ContactModal } from './components/ContactModal'
 import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
+import { ChatView } from './components/ChatView'
 import { SettingsModal } from './components/SettingsModal'
 import { ReviewModal } from './components/ReviewModal'
 import { CleanupModal } from './components/CleanupModal'
@@ -38,7 +39,7 @@ import { useStatusLabels } from './i18n/statusLabels'
 import { useTranslation } from 'react-i18next'
 
 type ViewMode = 'table' | 'kanban'
-type MainView = 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics'
+type MainView = 'applications' | 'contacts' | 'companies' | 'calendar' | 'analytics' | 'chat'
 
 const CLEANUP_SCOPE_BY_VIEW: Partial<Record<MainView, CleanupScope>> = {
   applications: 'applications',
@@ -327,6 +328,13 @@ export default function App() {
                 >
                   <BarChart2 className="h-3.5 w-3.5" /> {t('nav.analytics')}
                 </button>
+                <button
+                  data-testid="nav-chat"
+                  onClick={() => setMainView('chat')}
+                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', mainView === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50')}
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> {t('nav.chat')}
+                </button>
               </div>
             </div>
 
@@ -526,6 +534,9 @@ export default function App() {
         )}
         {mainView === 'analytics' && (
           <AnalyticsView />
+        )}
+        {mainView === 'chat' && (
+          <ChatView />
         )}
         {mainView === 'applications' && (<>
         {/* Stats */}

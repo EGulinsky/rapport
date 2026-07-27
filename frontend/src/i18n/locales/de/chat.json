@@ -1,0 +1,17 @@
+{
+  "tabLabel": "rapportGPT",
+  "placeholder": "Frag etwas über deine Bewerbungen…",
+  "send": "Senden",
+  "thinking": "Denkt nach…",
+  "clearConversation": "Unterhaltung löschen",
+  "clearConfirm": "Die gesamte Unterhaltung löschen? Das kann nicht rückgängig gemacht werden.",
+  "emptyState": "Frag mich etwas über deine Bewerbungen, Kontakte oder Firmen.",
+  "retry": "Erneut versuchen",
+  "errors": {
+    "notConfigured": "KI ist noch nicht konfiguriert.",
+    "notConfiguredAction": "KI-Einstellungen öffnen",
+    "rateLimited": "Rate-Limit erreicht — versuch es gleich nochmal.",
+    "toolsUnsupported": "Dieses Modell unterstützt kein Tool-Calling. Wähle in den KI-Einstellungen ein anderes Modell.",
+    "generic": "Etwas ist schiefgelaufen."
+  }
+}

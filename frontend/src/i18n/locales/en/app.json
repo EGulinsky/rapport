@@ -5,7 +5,8 @@
     "contacts": "Contacts",
     "companies": "Companies",
     "calendar": "Calendar",
-    "analytics": "Analytics"
+    "analytics": "Analytics",
+    "chat": "rapportGPT"
   },
   "aiAssessAll": {
     "title": "Refresh AI assessment for all active applications",

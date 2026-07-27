@@ -33,6 +33,8 @@ import auditLogDe from './locales/de/auditLog.json'
 import auditLogEn from './locales/en/auditLog.json'
 import syncDe from './locales/de/sync.json'
 import syncEn from './locales/en/sync.json'
+import chatDe from './locales/de/chat.json'
+import chatEn from './locales/en/chat.json'
 
 export const SUPPORTED_LANGUAGES = ['de', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -56,8 +58,8 @@ export function rememberPreLoginLanguage(lang: SupportedLanguage): void {
 
 i18n.use(initReactI18next).init({
   resources: {
-    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe, calendar: calendarDe, analytics: analyticsDe, cleanup: cleanupDe, review: reviewDe, applications: applicationsDe, settings: settingsDe, auditLog: auditLogDe, sync: syncDe },
-    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn, calendar: calendarEn, analytics: analyticsEn, cleanup: cleanupEn, review: reviewEn, applications: applicationsEn, settings: settingsEn, auditLog: auditLogEn, sync: syncEn },
+    de: { common: commonDe, errors: errorsDe, auth: authDe, status: statusDe, app: appDe, companies: companiesDe, contacts: contactsDe, merge: mergeDe, calendar: calendarDe, analytics: analyticsDe, cleanup: cleanupDe, review: reviewDe, applications: applicationsDe, settings: settingsDe, auditLog: auditLogDe, sync: syncDe, chat: chatDe },
+    en: { common: commonEn, errors: errorsEn, auth: authEn, status: statusEn, app: appEn, companies: companiesEn, contacts: contactsEn, merge: mergeEn, calendar: calendarEn, analytics: analyticsEn, cleanup: cleanupEn, review: reviewEn, applications: applicationsEn, settings: settingsEn, auditLog: auditLogEn, sync: syncEn, chat: chatEn },
   },
   lng: getPreLoginLanguage(),
   fallbackLng: 'en',
