@@ -95,7 +95,8 @@ class TestStartupCheck:
     def test_positiv_all_ok_true_wenn_wirklich_alles_ok(self, client, db_session):
         db_session.add(models.GoogleSync(client_id="x", client_secret_enc="s", refresh_token_enc="y"))
         db_session.add(models.ICloudSync(apple_id="x@icloud.com", app_password_enc="y"))
-        db_session.add(models.AiSettings(api_key_enc="y"))
+        db_session.add(models.AiSettings(provider="groq"))
+        db_session.add(models.AiProviderKey(provider="groq", api_key_enc="y"))
         db_session.add(models.FilesConfig(enabled=True, folder_path="/x"))
         db_session.commit()
 

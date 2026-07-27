@@ -60,6 +60,7 @@
     "apiKey": "API Key",
     "getKey": "Get key",
     "keyStored": "●●●●●●●●●●●● (saved)",
+    "keySavedForProvider": "API key saved for this provider",
     "changeKey": "Change",
     "modelPlaceholder": "e.g. groq/llama-3.3-70b-versatile",
     "connectionOk": "Connection OK — {{message}}",

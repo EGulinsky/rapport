@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, Text, DateTime, Float, ForeignKey, Table, Index
+from sqlalchemy import Column, Integer, String, Date, Boolean, Text, DateTime, Float, ForeignKey, Table, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -558,15 +558,38 @@ class LinkedInSync(Base):
 
 
 class AiSettings(Base):
+    """Tracks the currently *active* provider/model for AI assessments —
+    the actual API key lives in AiProviderKey, one row per provider, so
+    switching the active provider here never loses or misapplies another
+    provider's key. api_key_enc is legacy/unused (kept in place rather than
+    dropped, per the project's additive-migration convention) — real keys
+    are read from AiProviderKey."""
     __tablename__ = "ai_settings"
 
     id          = Column(Integer, primary_key=True)
     user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     provider    = Column(String, nullable=False, default="groq")
     model       = Column(String, nullable=False, default="groq/llama-3.3-70b-versatile")
-    api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted
+    api_key_enc = Column(Text, nullable=True)   # legacy/unused — see class docstring
     base_url    = Column(String, nullable=True)  # custom/self-hosted endpoint override
     enabled     = Column(Boolean, default=True)
+
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AiProviderKey(Base):
+    """One encrypted API key per (user, provider) — independent of which
+    provider is currently active in AiSettings, so switching the active
+    provider back and forth never requires re-entering a key that was
+    already saved for it."""
+    __tablename__ = "ai_provider_keys"
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_ai_provider_key_user_provider"),)
+
+    id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    provider    = Column(String, nullable=False, index=True)
+    api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())

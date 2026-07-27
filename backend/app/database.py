@@ -49,7 +49,7 @@ def get_db():
 _SCOPED_MODEL_NAMES = [
     "CompanyProfile", "Application", "Contact", "MergeAlias", "Event", "Attachment",
     "GoogleSync", "SyncedItem", "PendingMatch", "ICloudSync", "CallsConfig", "LinkedInSync",
-    "AiSettings", "MapsSettings", "AgentSettings", "SyncSettings", "AuditLog",
+    "AiSettings", "AiProviderKey", "MapsSettings", "AgentSettings", "SyncSettings", "AuditLog",
     "FilesConfig", "BackupConfig", "LogoSettings",
 ]
 

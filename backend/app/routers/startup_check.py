@@ -69,7 +69,8 @@ def _check_icloud(db: Session) -> dict:
 
 def _check_ai(db: Session) -> dict:
     cfg = db.query(models.AiSettings).first()
-    if not cfg or not cfg.api_key_enc:
+    key_row = db.query(models.AiProviderKey).filter(models.AiProviderKey.provider == cfg.provider).first() if cfg else None
+    if not cfg or not key_row or not key_row.api_key_enc:
         return {"name": "AI (Anthropic/OpenAI)", "group": "connections", "ok": False,
                 "message": "Kein API-Key konfiguriert — AI-Funktionen nicht verfügbar"}
     return {"name": "AI (Anthropic/OpenAI)", "group": "connections", "ok": True, "message": None}

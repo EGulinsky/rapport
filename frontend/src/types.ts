@@ -288,6 +288,7 @@ export interface AiSettings {
   has_key: boolean
   base_url?: string
   enabled: boolean
+  configured_providers: string[]
 }
 
 export interface AiSettingsWrite {

@@ -358,9 +358,10 @@ class ApproveMatch(BaseModel):
 class AiSettingsRead(BaseModel):
     provider: str
     model: str
-    has_key: bool          # true if an encrypted key is stored
+    has_key: bool          # true if the active provider has an encrypted key stored
     base_url: Optional[str] = None
     enabled: bool
+    configured_providers: list[str] = []   # every provider with a key saved, not just the active one
 
     model_config = {"from_attributes": True}
 

@@ -278,6 +278,7 @@ function AiPanel() {
   const { t } = useTranslation(['settings', 'common'])
   const [form, setForm] = useState<AiSettingsWrite>({ provider: 'groq', model: 'groq/llama-3.3-70b-versatile', api_key: '', base_url: '', enabled: true })
   const [hasStoredKey, setHasStoredKey] = useState(false)
+  const [configuredProviders, setConfiguredProviders] = useState<string[]>([])
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveResult, setSaveResult] = useState<'saving' | 'saved' | 'error' | null>(null)
@@ -293,6 +294,7 @@ function AiPanel() {
     api.settings.getAi().then(d => {
       setForm({ provider: d.provider, model: d.model, api_key: '', base_url: d.base_url ?? '', enabled: d.enabled })
       setHasStoredKey(d.has_key)
+      setConfiguredProviders(d.configured_providers)
       if (d.has_key) fetchModels(d.provider)
     }).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,6 +330,7 @@ function AiPanel() {
         base_url: merged.base_url?.trim() || undefined,
       })
       setHasStoredKey(updated.has_key)
+      setConfiguredProviders(updated.configured_providers)
       setSaveResult('saved')
       setTimeout(() => setSaveResult(null), 2000)
     } catch {
@@ -403,8 +406,13 @@ function AiPanel() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {PROVIDERS.map(p => (
             <button key={p.id} type="button" onClick={() => selectProvider(p)}
-              className={clsx('flex flex-col items-start rounded-xl border p-3 text-left transition-all',
+              className={clsx('relative flex flex-col items-start rounded-xl border p-3 text-left transition-all',
                 form.provider === p.id ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-gray-200 hover:border-gray-300 bg-white')}>
+              {configuredProviders.includes(p.id) && (
+                <span title={t('ai.keySavedForProvider') ?? undefined} className="absolute top-2 right-2">
+                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                </span>
+              )}
               <span className="text-sm font-medium text-gray-800">{p.name}</span>
               <span className={clsx('mt-1 text-xs px-1.5 py-0.5 rounded-full font-medium', p.badgeColor)}>{t(`ai.badge.${p.badge}`)}</span>
             </button>
@@ -492,7 +500,12 @@ function AiPanel() {
           {hasStoredKey && !form.api_key ? (
             <div className="flex items-center gap-2">
               <div className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 bg-gray-50">{t('ai.keyStored')}</div>
-              <button type="button" onClick={() => { api.settings.clearAiKey(); setHasStoredKey(false) }} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">{t('common:delete')}</button>
+              <button type="button" onClick={async () => {
+                const updated = await api.settings.clearAiKey()
+                setHasStoredKey(updated.has_key)
+                setConfiguredProviders(updated.configured_providers)
+                setLiveModels(null)
+              }} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">{t('common:delete')}</button>
               <button type="button" onClick={() => setForm(f => ({ ...f, api_key: ' ' }))} className="text-xs text-indigo-600 hover:text-indigo-700 whitespace-nowrap">{t('ai.changeKey')}</button>
             </div>
           ) : (

@@ -56,7 +56,7 @@ async def complete(
     json_mode: bool = True,
     max_tokens: int = 1024,
 ) -> dict | str:
-    from app.models import AiSettings
+    from app.models import AiSettings, AiProviderKey
 
     cfg = db.query(AiSettings).first()
     if not cfg or not cfg.enabled:
@@ -68,8 +68,9 @@ async def complete(
         "max_tokens": max_tokens,
         "temperature": 0.1,
     }
-    if cfg.api_key_enc:
-        kwargs["api_key"] = decrypt_api_key(cfg.api_key_enc)
+    key_row = db.query(AiProviderKey).filter(AiProviderKey.provider == cfg.provider).first()
+    if key_row and key_row.api_key_enc:
+        kwargs["api_key"] = decrypt_api_key(key_row.api_key_enc)
     if cfg.base_url:
         kwargs["api_base"] = cfg.base_url
     if json_mode:

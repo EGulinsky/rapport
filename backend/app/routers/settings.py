@@ -17,13 +17,24 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 log = get_logger("settings", source="ai_models")
 
 
-def _to_read(cfg: models.AiSettings) -> schemas.AiSettingsRead:
+def _provider_key_row(db: Session, provider: str) -> Optional[models.AiProviderKey]:
+    return db.query(models.AiProviderKey).filter(models.AiProviderKey.provider == provider).first()
+
+
+def _configured_providers(db: Session) -> list[str]:
+    rows = db.query(models.AiProviderKey.provider).filter(models.AiProviderKey.api_key_enc.isnot(None)).all()
+    return [r[0] for r in rows]
+
+
+def _to_read(cfg: models.AiSettings, db: Session) -> schemas.AiSettingsRead:
+    row = _provider_key_row(db, cfg.provider)
     return schemas.AiSettingsRead(
         provider=cfg.provider,
         model=cfg.model,
-        has_key=bool(cfg.api_key_enc),
+        has_key=bool(row and row.api_key_enc),
         base_url=cfg.base_url,
         enabled=cfg.enabled,
+        configured_providers=_configured_providers(db),
     )
 
 
@@ -37,8 +48,9 @@ def get_ai_settings(db: Session = Depends(get_db), current_user: models.User = D
             has_key=False,
             base_url=None,
             enabled=False,
+            configured_providers=_configured_providers(db),
         )
-    return _to_read(cfg)
+    return _to_read(cfg, db)
 
 
 @router.post("/ai", response_model=schemas.AiSettingsRead)
@@ -52,37 +64,39 @@ def save_ai_settings(
         cfg = models.AiSettings(user_id=current_user.id)
         db.add(cfg)
 
-    # A stored key is only ever valid for the provider it was entered for.
-    # Switching providers without supplying a fresh key must drop the old
-    # one — otherwise it silently survives under the new provider name and
-    # gets sent to that provider's API as if it were a real key for it
-    # (single-row config: provider and api_key_enc share one row, so
-    # nothing else marks a key as belonging to a specific provider).
-    if payload.provider != cfg.provider:
-        cfg.api_key_enc = None
-
     cfg.provider = payload.provider
     cfg.model    = payload.model
     cfg.base_url = payload.base_url or None
     cfg.enabled  = payload.enabled
 
+    # The key lives in its own per-provider row (AiProviderKey), independent
+    # of which provider is active here — so switching providers back and
+    # forth never loses or misapplies a key that was already saved for it.
     if payload.api_key and payload.api_key.strip():
-        cfg.api_key_enc = encrypt_api_key(payload.api_key.strip())
+        row = _provider_key_row(db, payload.provider)
+        if not row:
+            row = models.AiProviderKey(user_id=current_user.id, provider=payload.provider)
+            db.add(row)
+        row.api_key_enc = encrypt_api_key(payload.api_key.strip())
 
     db.commit()
     db.refresh(cfg)
-    return _to_read(cfg)
+    return _to_read(cfg, db)
 
 
 @router.delete("/ai/key", response_model=schemas.AiSettingsRead)
 def clear_api_key(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Clears the key for the currently active provider only — other
+    providers' saved keys are untouched."""
     cfg = db.query(models.AiSettings).first()
-    if cfg:
-        cfg.api_key_enc = None
-        db.commit()
-        db.refresh(cfg)
-        return _to_read(cfg)
-    raise HTTPException(404, "Keine Einstellungen vorhanden")
+    if not cfg:
+        raise HTTPException(404, "Keine Einstellungen vorhanden")
+    row = _provider_key_row(db, cfg.provider)
+    if row:
+        db.delete(row)
+    db.commit()
+    db.refresh(cfg)
+    return _to_read(cfg, db)
 
 
 @router.get("/maps", response_model=schemas.MapsSettingsRead)
@@ -276,14 +290,14 @@ def save_files_config(
 
 
 def _resolve_api_key(db: Session, provider: str, explicit_key: Optional[str]) -> Optional[str]:
-    """Use the explicit (not-yet-saved) key if given, else fall back to the
-    stored key only if it belongs to the same provider (prevents e.g. a Groq
-    key leaking into a test/model-list call for a different provider)."""
+    """Use the explicit (not-yet-saved) key if given, else the key stored
+    for this specific provider in AiProviderKey — a provider-scoped table,
+    so this can never resolve to a different provider's key."""
     if explicit_key and explicit_key.strip():
         return explicit_key.strip()
-    cfg = db.query(models.AiSettings).first()
-    if cfg and cfg.api_key_enc and cfg.provider == provider:
-        return decrypt_api_key(cfg.api_key_enc)
+    row = _provider_key_row(db, provider)
+    if row and row.api_key_enc:
+        return decrypt_api_key(row.api_key_enc)
     return None
 
 

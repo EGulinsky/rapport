@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.43',
+    date: '2026-07-27',
+    changes: [
+      'AI provider API keys are now stored independently per provider, instead of sharing one slot. The previous release\'s fix (clearing the key when switching providers) was correct given the old one-key-total design, but that design itself meant only one provider could ever have a real, working key — switching away and back lost it. Groq, Anthropic, OpenAI, and Gemini now each keep their own saved key, so you only ever need to enter each one once, and switching the active provider never touches the others. Provider tiles now show a checkmark for any provider that already has a key saved.',
+    ],
+  },
+  {
     version: '4.6.42',
     date: '2026-07-27',
     changes: [
