@@ -19,7 +19,6 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit
@@ -837,174 +836,6 @@ async def _sync_icloud_notes_for_app(app: models.Application, app_dict: dict, te
     return created, skipped, len(candidates), errors
 
 
-# ── iCloud Contacts ───────────────────────────────────────────────────────────
-
-async def _sync_contacts_for_app(app: models.Application, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
-    from app.routers.sync_icloud import _get_cfg as _get_icloud_cfg, fetch_all_vcards, _normalize_phone
-    cfg = _get_icloud_cfg(db)
-    if not cfg:
-        return 0, 0, 0, []
-
-    try:
-        import vobject
-        vcards_raw = await fetch_all_vcards(cfg)
-    except Exception as e:
-        return 0, 0, 0, [f"CardDAV: {e}"]
-
-    if not vcards_raw:
-        return 0, 0, 0, []
-
-    lang = resolve_ui_language(db, user_id)
-    created = skipped = 0
-    errors: list[str] = []
-
-    for raw_vcard in vcards_raw:
-        try:
-            card = vobject.readOne(raw_vcard)
-        except Exception:
-            continue
-        try:
-            name = str(card.fn.value) if hasattr(card, "fn") else ""
-            if not name:
-                continue
-
-            email_val = str(card.email.value) if hasattr(card, "email") else None
-
-            def _vcard_phone_type(type_str: str) -> str:
-                if any(t in type_str for t in ("CELL", "IPHONE", "MOBILE")):
-                    return "mobile"
-                if "HOME" in type_str:
-                    return "home"
-                if "WORK" in type_str:
-                    return "work"
-                if "MAIN" in type_str or "PREF" in type_str:
-                    return "main"
-                return "other"
-
-            phones_val: list[dict] = []
-            _seen_numbers: set[str] = set()
-            for _tp in card.contents.get("tel", []):
-                _number = str(_tp.value).strip()
-                if not _number or _number in _seen_numbers:
-                    continue
-                _seen_numbers.add(_number)
-                _type_str = str(getattr(_tp, "params", {}).get("TYPE", "")).upper()
-                phones_val.append({"number": _number, "type": _vcard_phone_type(_type_str)})
-            org_val = None
-            if hasattr(card, "org"):
-                parts = card.org.value
-                org_val = (parts[0] if isinstance(parts, list) and parts else str(parts)).strip() or None
-            title_val = str(card.title.value) if hasattr(card, "title") else None
-            linkedin_url = None
-            for url_prop in card.contents.get("url", []) + card.contents.get("item1.url", []):
-                if "linkedin.com" in str(url_prop.value):
-                    linkedin_url = str(url_prop.value)
-                    break
-
-            # Email is required — contacts without it are useless for domain matching.
-            if not email_val:
-                skipped += 1
-                continue
-
-            org_matches = org_val and _text_matches(org_val, terms)
-            name_in_app_text = _contact_mentioned_in_app(name, email_val, app, db)
-            if not org_matches and not name_in_app_text:
-                skipped += 1
-                continue
-
-            # Upsert
-            existing = None
-            if email_val:
-                existing = db.query(models.Contact).filter_by(email=email_val).first()
-            if not existing:
-                existing = db.query(models.Contact).filter_by(name=name).first()
-
-            match_reason = t("mentioned_in_app_text_or_email", lang) if name_in_app_text else t("company_matches_application", lang, org=org_val, app=app.firma)
-
-            if existing:
-                skipped += 1
-                if linkedin_url and not existing.linkedin_url:
-                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="linkedin_url", old_value=None, new_value=linkedin_url,
-                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
-                    existing.linkedin_url = linkedin_url
-                if phones_val:
-                    existing_norms = {_normalize_phone(p.number) for p in existing.phones}
-                    for p in phones_val:
-                        norm = _normalize_phone(p["number"])
-                        if norm and norm not in existing_norms:
-                            existing.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
-                            existing_norms.add(norm)
-                            add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                                      field="telefon", old_value=None, new_value=p["number"],
-                                      reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
-                if org_val and not existing.firma:
-                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="firma", old_value=None, new_value=org_val,
-                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
-                    existing.firma = org_val
-                if title_val and not existing.rolle:
-                    add_audit(db, "update", "sync", contact_id=existing.id, app_id=app.id,
-                              field="rolle", old_value=None, new_value=title_val,
-                              reason_key="contact_from_targeted_icloud_sync", reason_params={"match_reason": match_reason}, user_id=user_id)
-                    existing.rolle = title_val
-                if name_in_app_text:
-                    db.execute(text(
-                        "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
-                    ), {"c": existing.id, "a": app.id})
-                    db.expire(existing, ["applications"])
-                    from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
-                    attach_linkedin_messages_for_contact(db, existing, user_id)
-            else:
-                contact = models.Contact(
-                    name=name, email=email_val,
-                    firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
-                    user_id=user_id,
-                )
-                for p in phones_val:
-                    contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
-                db.add(contact)
-                db.flush()
-                add_audit(db, "create", "sync", contact_id=contact.id, app_id=app.id,
-                          new_value=contact.display_name,
-                          reason_key="contact_created_targeted_icloud_sync", reason_params={"match_reason": match_reason},
-                          user_id=user_id)
-                if name_in_app_text:
-                    db.execute(text(
-                        "INSERT OR IGNORE INTO contact_application (contact_id, application_id) VALUES (:c, :a)"
-                    ), {"c": contact.id, "a": app.id})
-                    db.expire(contact, ["applications"])
-                    from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
-                    attach_linkedin_messages_for_contact(db, contact, user_id)
-                created += 1
-        except Exception as e:
-            errors.append(f"Kontakt {name if 'name' in dir() else '?'}: {e}")
-
-    return created, skipped, len(vcards_raw), errors
-
-
-def _contact_mentioned_in_app(name: str, email: Optional[str], app: models.Application, db: Session) -> bool:
-    """Check if this contact is named in any event or text field of the given application."""
-    name_lower = name.lower()
-    search_fields = [
-        app.kommentar, app.gespraech_1, app.gespraech_2,
-        app.gespraech_3, app.gespraech_4, app.gespraech_5,
-    ]
-    for f in search_fields:
-        if f and name_lower in f.lower():
-            return True
-    events = db.query(models.Event).filter_by(application_id=app.id).all()
-    for ev in events:
-        for field in [ev.titel, ev.notiz, ev.autor]:
-            if field and name_lower in field.lower():
-                return True
-        if email:
-            for field in [ev.titel, ev.notiz, ev.autor]:
-                if field and email.lower() in field.lower():
-                    return True
-    return False
-
-
 # ── iCloud Reminders ─────────────────────────────────────────────────────────
 
 async def _sync_icloud_reminders_for_app(app: models.Application, app_dict: dict, terms: list[str], db: Session, user_id: Optional[int] = None) -> tuple[int, int, int, list[str]]:
@@ -1331,24 +1162,7 @@ async def _do_sync(app_id: int) -> dict:
                 all_errors.extend(errs)
         db.commit()
 
-        # 2. Contacts — after events exist, _contact_mentioned_in_app finds names in them
-        init_progress("targeted_contacts", t("label_icloud_contacts", lang), lang=lang)
-        contacts_created = contacts_skipped = 0
-        try:
-            # Refresh app so SQLAlchemy sees the newly committed events
-            db.refresh(app)
-            c, s, p, errs = await _sync_contacts_for_app(app, terms, db, user_id)
-            contacts_created, contacts_skipped = c, s
-            total_created += c
-            total_skipped += s
-            total_processed += p
-            all_errors.extend(errs)
-        except Exception as e:
-            all_errors.append(t("contacts_error", lang, error=e))
-        finish_progress("targeted_contacts", lang=lang, created=contacts_created, skipped=contacts_skipped)
-        db.commit()
-
-        # 3. Calls (no AI)
+        # 2. Calls (no AI)
         init_progress("targeted_calls", t("label_call_list", lang), lang=lang)
         calls_created = calls_skipped = 0
         try:

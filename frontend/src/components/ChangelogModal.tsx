@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.51',
+    date: '2026-07-28',
+    changes: [
+      'Removed the per-application "sync contacts from iCloud" step that used to run as part of a single application\'s targeted sync — it was redundant with (and less capable than) the full address-book sync in the Contacts tab, which already covers every application. A single application\'s targeted sync still discovers and links new contacts automatically whenever one is actually mentioned in that application\'s mail, calendar, or notes.',
+    ],
+  },
+  {
     version: '4.6.50',
     date: '2026-07-28',
     changes: [

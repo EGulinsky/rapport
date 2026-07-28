@@ -9,7 +9,6 @@ from app import models
 from app.routers.sync_targeted import (
     _app_dict,
     _company_domains_for_app,
-    _contact_mentioned_in_app,
     _domain_from_website,
     _imap_search_utf8,
     _make_live_candidate,
@@ -18,7 +17,7 @@ from app.routers.sync_targeted import (
     _text_matches,
     _vobj_str,
 )
-from tests.factories import application_factory, company_profile_factory, contact_factory, event_factory
+from tests.factories import application_factory, company_profile_factory, contact_factory
 
 pytestmark = pytest.mark.unit
 
@@ -256,26 +255,6 @@ class TestVobjStr:
         class _VEvent:
             summary = _Val()
         assert _vobj_str(_VEvent(), "summary") == "Interview Termin"
-
-
-class TestContactMentionedInApp:
-    def test_positiv_name_im_kommentar_feld(self, db_session):
-        app = application_factory(db_session, kommentar="Gespräch mit Erika Musterfrau war gut.")
-        assert _contact_mentioned_in_app("Erika Musterfrau", None, app, db_session) is True
-
-    def test_positiv_name_in_event_titel(self, db_session):
-        app = application_factory(db_session)
-        event_factory(db_session, app, titel="Interview mit Erika Musterfrau")
-        assert _contact_mentioned_in_app("Erika Musterfrau", None, app, db_session) is True
-
-    def test_positiv_email_in_event_notiz(self, db_session):
-        app = application_factory(db_session)
-        event_factory(db_session, app, titel="Interview", notiz="Kontakt: erika@contoso.de")
-        assert _contact_mentioned_in_app("Unbekannter Name", "erika@contoso.de", app, db_session) is True
-
-    def test_negativ_kein_treffer(self, db_session):
-        app = application_factory(db_session, kommentar="Nichts Relevantes.")
-        assert _contact_mentioned_in_app("Erika Musterfrau", "erika@contoso.de", app, db_session) is False
 
 
 class TestMakeLiveCandidate:

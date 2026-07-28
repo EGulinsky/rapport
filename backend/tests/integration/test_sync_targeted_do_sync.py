@@ -1,6 +1,6 @@
 """L3 Integration — _do_sync() in sync_targeted.py, die zentrale Hintergrundlauf-
 Orchestrierung des gezielten Einzelbewerbungs-Syncs (parallele Quellen-Syncs,
-Kontakte-Sync, Anrufliste-Sync).
+Anrufliste-Sync).
 
 _do_sync() öffnet intern eine EIGENE `SessionLocal()` statt die Test-`db_session`
 zu nutzen (siehe tests/integration/conftest.py-Modul-Docstring) — Setup-Daten
@@ -8,9 +8,12 @@ müssen daher per `db_session.commit()` sichtbar gemacht werden, nicht nur
 geflusht. Die einzelnen Quellen-Sync-Funktionen selbst (_sync_gmail_for_app
 etc.) sind bereits in tests/integration/test_sync_targeted_domains.py und
 Nachbardateien abgedeckt — hier geht es nur um die Orchestrierung: Ergebnisse
-werden aufsummiert, Fehler pro Quelle gesammelt, und die Kontakte-/Anrufliste-
-Sync-Schritte dürfen den Gesamtlauf nicht zum Absturz bringen, wenn sie
-fehlschlagen.
+werden aufsummiert, Fehler pro Quelle gesammelt, und der Anrufliste-Sync-
+Schritt darf den Gesamtlauf nicht zum Absturz bringen, wenn er fehlschlägt.
+Der frühere eigene Kontakte-Sync-Schritt (_sync_contacts_for_app) wurde
+entfernt — Kontaktentdeckung läuft jetzt ausschließlich über den globalen/
+Contacts-Tab-Sync, gezielter Sync liefert Kontakte nur noch über die Mail-/
+Kalender-Erwähnungspipeline (_upsert_contact in sync_common.py).
 """
 from __future__ import annotations
 
@@ -57,19 +60,6 @@ class TestDoSync:
         assert result["created"] == 0
         assert result["processed"] == 0
         assert any("nicht gefunden" in e for e in result["errors"])
-
-    async def test_negativ_kontakte_sync_fehler_wird_gesammelt_ohne_absturz(self, db_session, monkeypatch):
-        app = application_factory(db_session, firma="Contoso AG")
-        db_session.commit()
-
-        async def _boom(app_arg, terms, db, user_id=None):
-            raise RuntimeError("CardDAV kaputt")
-
-        monkeypatch.setattr("app.routers.sync_targeted._sync_contacts_for_app", _boom)
-
-        result = await _do_sync(app.id)
-
-        assert any("Kontakte" in e and "CardDAV kaputt" in e for e in result["errors"])
 
     async def test_negativ_anrufliste_sync_fehler_wird_gesammelt_ohne_absturz(self, db_session, monkeypatch):
         app = application_factory(db_session, firma="Contoso AG")
