@@ -279,3 +279,31 @@ class TestBulkDeleteContacts:
         assert resp.status_code == 200
         assert resp.json() == {"deleted": 0}
         assert db_session.query(models.Contact).count() == 1
+
+    def test_positiv_loescht_verknuepfungen_und_telefonnummern_mit(self, client, db_session):
+        # Regression: q.delete(synchronize_session=False) is a bulk raw SQL
+        # DELETE that bypasses SQLAlchemy's ORM-level relationship cascade —
+        # it left contact_application/contact_phones rows behind for every
+        # deleted contact. Harmless until SQLite later reused the freed id
+        # for a brand-new contact (contacts.id has no AUTOINCREMENT), whose
+        # own INSERT into contact_application then hit a UNIQUE-constraint
+        # violation against the orphaned row and broke the whole batch sync.
+        app_ = application_factory(db_session, firma="Contoso", rolle="Dev")
+        c = contact_factory(db_session, name="Löschen", phones=[{"number": "+49111", "type": "mobile"}])
+        c.applications.append(app_)
+        db_session.commit()
+        contact_id = c.id
+
+        resp = client.request("DELETE", "/api/contacts/bulk", json={"ids": [contact_id]})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"deleted": 1}
+        from sqlalchemy import text
+        links = db_session.execute(
+            text("SELECT * FROM contact_application WHERE contact_id = :cid"), {"cid": contact_id}
+        ).fetchall()
+        phones = db_session.execute(
+            text("SELECT * FROM contact_phones WHERE contact_id = :cid"), {"cid": contact_id}
+        ).fetchall()
+        assert links == []
+        assert phones == []

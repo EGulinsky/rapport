@@ -1034,6 +1034,50 @@ class TestMigrateBackupRetention:
         assert {"keep_daily", "keep_weekly"} <= _cols(db_path, "backup_config")
 
 
+class TestCleanupOrphanedContactAssociations:
+    def test_positiv_loescht_verwaiste_contact_application_und_phones(self, db_path):
+        _exec(db_path, "INSERT INTO applications (id, firma, rolle, main_status) VALUES (90, 'Firma', 'Rolle', 'applied')")
+        _exec(db_path, "INSERT INTO contacts (id, name) VALUES (1, 'Bleibt')")
+        _exec(db_path, "INSERT INTO contact_application (contact_id, application_id) VALUES (1, 90)")
+        _exec(db_path, "INSERT INTO contact_application (contact_id, application_id) VALUES (54, 90)")  # orphaned
+        _exec(db_path, "INSERT INTO contact_phones (contact_id, number, type) VALUES (1, '+49111', 'mobile')")
+        _exec(db_path, "INSERT INTO contact_phones (contact_id, number, type) VALUES (54, '+49222', 'mobile')")  # orphaned
+
+        db_module._cleanup_orphaned_contact_associations()
+
+        conn = sqlite3.connect(db_path)
+        links = conn.execute("SELECT contact_id, application_id FROM contact_application").fetchall()
+        phones = conn.execute("SELECT contact_id FROM contact_phones").fetchall()
+        conn.close()
+        assert links == [(1, 90)]
+        assert phones == [(1,)]
+
+    def test_negativ_contact_application_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "contact_application")
+        db_module._cleanup_orphaned_contact_associations()  # must not raise
+
+    def test_negativ_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
+        db_module._cleanup_orphaned_contact_associations()  # must not raise
+
+    def test_corner_case_marker_verhindert_erneuten_lauf(self, db_path):
+        _exec(db_path, "INSERT INTO contacts (id, name) VALUES (1, 'Bleibt')")
+        _exec(db_path, "INSERT INTO contact_application (contact_id, application_id) VALUES (1, 1)")
+        db_module._cleanup_orphaned_contact_associations()
+
+        # A row that becomes orphaned AFTER the one-time cleanup already ran
+        # (e.g. a contact deleted by some other, still-imperfect path) must
+        # NOT be swept up by a second run — the marker makes this genuinely
+        # one-time, matching every other _backfill_/_cleanup_ migration here.
+        _exec(db_path, "DELETE FROM contacts WHERE id = 1")
+        db_module._cleanup_orphaned_contact_associations()
+
+        conn = sqlite3.connect(db_path)
+        remaining = conn.execute("SELECT COUNT(*) FROM contact_application").fetchone()[0]
+        conn.close()
+        assert remaining == 1
+
+
 class TestInitDb:
     def test_positiv_kompletter_lauf_gegen_leere_db_wirft_nicht(self, tmp_path, monkeypatch):
         # Realistischster Fresh-Install-Fall: DB-Datei existiert noch gar

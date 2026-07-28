@@ -146,3 +146,37 @@ class TestSyncContactsFromVcards:
         db_session.commit()
         db_session.refresh(legacy)
         assert legacy.vorname == "Schon Gesetzt"
+
+    async def test_positiv_ein_fehlerhafter_kontakt_blockiert_die_uebrigen_nicht(self, db_session):
+        # Regression (2026-07-28 "0 synced" incident): a flush failure for
+        # one contact — live cause was a UNIQUE-constraint collision against
+        # an orphaned contact_application row left behind by a since-fixed
+        # bulk-delete bug — used to leave the whole SQLAlchemy session in a
+        # broken "PendingRollbackError" state for every later contact too,
+        # so the caller's own db.commit() then raised uncaught, discarding
+        # the entire batch's already-processed contacts even though most of
+        # them had imported correctly. Each contact now runs inside its own
+        # SAVEPOINT (db.begin_nested()), so one bad entry only fails itself.
+        vcards = [
+            _vcard("Kaputter Kontakt", email="kaputt@example.com"),
+            _vcard("Guter Kontakt", email="gut@example.com"),
+        ]
+        real_find = sync_icloud._find_apps_where_contact_mentioned
+
+        def _boom_for_kaputt(name, email, db):
+            if email == "kaputt@example.com":
+                raise RuntimeError("simulated flush failure")
+            return real_find(name, email, db)
+
+        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)), \
+             patch.object(sync_icloud, "_find_apps_where_contact_mentioned", side_effect=_boom_for_kaputt):
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
+
+        assert created == 1
+        assert len(errors) == 1
+        assert db_session.query(sync_icloud.models.Contact).filter_by(email="kaputt@example.com").first() is None
+        good = db_session.query(sync_icloud.models.Contact).filter_by(email="gut@example.com").first()
+        assert good is not None
+        assert len(touched_ids) == 1
+        assert touched_ids == [good.id]
+        db_session.commit()  # must not raise — the failed contact's savepoint didn't poison the session

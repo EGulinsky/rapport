@@ -1645,77 +1645,86 @@ async def _sync_contacts_from_parsed(
 
     for idx, parsed in enumerate(parsed_list):
         update_progress(progress_key, idx, total, t("contact_progress", lang, current=idx + 1, total=total))
+        # Each contact gets its own SAVEPOINT: a flush failure for one entry
+        # (e.g. a stale/duplicate row elsewhere in the address book) must not
+        # poison the whole session for the rest of the batch. Without this, a
+        # single bad contact left the session in SQLAlchemy's
+        # "PendingRollbackError" state for every later iteration too, and the
+        # final db.commit() at the end of the caller then raised uncaught —
+        # discarding the entire batch's already-processed touched_ids in
+        # memory and reporting the whole sync as "0 synced" even though most
+        # contacts had, until that point, imported correctly.
         try:
-            name = parsed["name"]
-            vorname_val = parsed["vorname"]
-            fn = parsed["fn"]
-            email_val = parsed["email"]
-            org_val = parsed["firma"]
-            title_val = parsed["rolle"]
-            linkedin_url = parsed["linkedin_url"]
+            with db.begin_nested():
+                name = parsed["name"]
+                vorname_val = parsed["vorname"]
+                fn = parsed["fn"]
+                email_val = parsed["email"]
+                org_val = parsed["firma"]
+                title_val = parsed["rolle"]
+                linkedin_url = parsed["linkedin_url"]
 
-            existing = None
-            if email_val:
-                existing = db.query(models.Contact).filter_by(email=email_val).first()
-            if not existing:
-                existing = db.query(models.Contact).filter_by(name=name).first()
-            if not existing and name != fn:
-                # Kontakte von vor dem Vorname/Nachname-Split (name enthielt den
-                # vollen Anzeigenamen statt nur den Nachnamen) sonst hier nicht
-                # finden und fälschlich als Duplikat neu anlegen.
-                existing = db.query(models.Contact).filter_by(name=fn).first()
-            if existing:
-                _merge_parsed_contact(existing, parsed, db, user_id, force=False, reason_key=reason_key)
-                if vorname_val and not existing.vorname:
-                    # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
-                    # nutzt das strukturierte N:-Feld der vCard (echte Adress-
-                    # buch-Daten), kein Rate-Heuristik-Backfill über den
-                    # bisherigen (evtl. schon falsch zusammengesetzten) Namen.
-                    existing.vorname = vorname_val
-                    existing.name = name
-                touched_ids.append(existing.id)
-                continue
+                existing = None
+                if email_val:
+                    existing = db.query(models.Contact).filter_by(email=email_val).first()
+                if not existing:
+                    existing = db.query(models.Contact).filter_by(name=name).first()
+                if not existing and name != fn:
+                    # Kontakte von vor dem Vorname/Nachname-Split (name enthielt den
+                    # vollen Anzeigenamen statt nur den Nachnamen) sonst hier nicht
+                    # finden und fälschlich als Duplikat neu anlegen.
+                    existing = db.query(models.Contact).filter_by(name=fn).first()
+                if existing:
+                    _merge_parsed_contact(existing, parsed, db, user_id, force=False, reason_key=reason_key)
+                    if vorname_val and not existing.vorname:
+                        # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
+                        # nutzt das strukturierte N:-Feld der vCard (echte Adress-
+                        # buch-Daten), kein Rate-Heuristik-Backfill über den
+                        # bisherigen (evtl. schon falsch zusammengesetzten) Namen.
+                        existing.vorname = vorname_val
+                        existing.name = name
+                    touched_ids.append(existing.id)
+                else:
+                    company_profile_id = None
+                    if org_val:
+                        from app.dedup import norm_firma
+                        cp = db.query(models.CompanyProfile).filter_by(name_norm=norm_firma(org_val)).first()
+                        if cp:
+                            company_profile_id = cp.id
 
-            company_profile_id = None
-            if org_val:
-                from app.dedup import norm_firma
-                cp = db.query(models.CompanyProfile).filter_by(name_norm=norm_firma(org_val)).first()
-                if cp:
-                    company_profile_id = cp.id
+                    contact = models.Contact(
+                        name=name, vorname=vorname_val, email=email_val,
+                        firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
+                        company_profile_id=company_profile_id, user_id=user_id,
+                    )
+                    for p in parsed.get("phones") or []:
+                        contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
+                    db.add(contact)
+                    db.flush()
 
-            contact = models.Contact(
-                name=name, vorname=vorname_val, email=email_val,
-                firma=org_val, rolle=title_val, linkedin_url=linkedin_url,
-                company_profile_id=company_profile_id, user_id=user_id,
-            )
-            for p in parsed.get("phones") or []:
-                contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
-            db.add(contact)
-            db.flush()
-
-            # Volltext-Erwähnungssuche braucht den vollen Anzeigenamen (fn), nicht
-            # nur den seit dem Vorname/Nachname-Split isolierten Nachnamen — sonst
-            # würden z.B. Erwähnungen von "Max Mustermann" im Bewerbungstext nicht
-            # mehr gefunden.
-            mention_app_ids = _find_apps_where_contact_mentioned(fn, email_val, db)
-            if mention_app_ids:
-                add_audit(db, "create", "sync", contact_id=contact.id,
-                          new_value=contact.display_name,
-                          reason_key=reason_key_with_reason,
-                          reason_params={"match_reason": t("mentioned_in_app_text_or_email", lang)},
-                          user_id=user_id)
-                for aid in mention_app_ids:
-                    app_obj = db.query(models.Application).get(aid)
-                    if app_obj:
-                        contact.applications.append(app_obj)
-                from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
-                attach_linkedin_messages_for_contact(db, contact, user_id)
-            else:
-                add_audit(db, "create", "sync", contact_id=contact.id,
-                          new_value=contact.display_name,
-                          reason_key=reason_key, user_id=user_id)
-            touched_ids.append(contact.id)
-            created += 1
+                    # Volltext-Erwähnungssuche braucht den vollen Anzeigenamen (fn), nicht
+                    # nur den seit dem Vorname/Nachname-Split isolierten Nachnamen — sonst
+                    # würden z.B. Erwähnungen von "Max Mustermann" im Bewerbungstext nicht
+                    # mehr gefunden.
+                    mention_app_ids = _find_apps_where_contact_mentioned(fn, email_val, db)
+                    if mention_app_ids:
+                        add_audit(db, "create", "sync", contact_id=contact.id,
+                                  new_value=contact.display_name,
+                                  reason_key=reason_key_with_reason,
+                                  reason_params={"match_reason": t("mentioned_in_app_text_or_email", lang)},
+                                  user_id=user_id)
+                        for aid in mention_app_ids:
+                            app_obj = db.query(models.Application).get(aid)
+                            if app_obj:
+                                contact.applications.append(app_obj)
+                        from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+                        attach_linkedin_messages_for_contact(db, contact, user_id)
+                    else:
+                        add_audit(db, "create", "sync", contact_id=contact.id,
+                                  new_value=contact.display_name,
+                                  reason_key=reason_key, user_id=user_id)
+                    touched_ids.append(contact.id)
+                    created += 1
         except Exception as e:
             errors.append(f"Kontakt: {e}")
 

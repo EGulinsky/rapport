@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.57',
+    date: '2026-07-28',
+    changes: [
+      'Fixed the Contacts tab\'s full-address-book sync reporting "0 synced" and importing nothing. Root cause: a bulk contact-delete endpoint used a raw SQL delete that skipped SQLAlchemy\'s normal cleanup, leaving behind orphaned link/phone-number rows for every deleted contact; once SQLite later reused one of those freed contact IDs for a newly-synced contact, the resulting conflict silently aborted the entire sync. The delete endpoint now cleans up properly, a one-time repair removes the existing leftover rows, and each contact in a sync now succeeds or fails independently so one bad entry can no longer take the whole batch down with it.',
+    ],
+  },
+  {
     version: '4.6.56',
     date: '2026-07-28',
     changes: [

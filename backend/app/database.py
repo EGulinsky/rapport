@@ -1140,6 +1140,66 @@ def _migrate_backup_retention():
     conn.close()
 
 
+def _cleanup_orphaned_contact_associations():
+    """One-time: delete contact_application/contact_phones rows whose
+    contact_id no longer exists in contacts.
+
+    Root cause: bulk_delete_contacts() (routers/contacts.py) used a bulk
+    Query.delete(), which issues a raw SQL DELETE and bypasses SQLAlchemy's
+    ORM-level relationship cascade -- and SQLite never enforces the model's
+    declared ON DELETE CASCADE here since PRAGMA foreign_keys is never turned
+    on. Every contact deleted that way (including via the mass-deletion
+    incidents of 2026-07-10/2026-07-21) left its association/phone rows
+    behind. Harmless by themselves until 2026-07-28, when the unconditional
+    full-address-book contacts sync started creating many new contacts for
+    the first time -- SQLite reuses a deleted row's rowid for the next
+    INSERT (contacts.id has no AUTOINCREMENT), so a fresh contact could land
+    on an id that still had an orphaned contact_application row, and the
+    resulting UNIQUE-constraint violation poisoned the whole sync
+    transaction (reported as the sync completing with "0 synced"). The
+    bulk_delete_contacts() bug itself is fixed separately (proper per-row
+    db.delete() there now cascades correctly) -- this is just the one-time
+    repair for orphans that already exist. Guarded by a marker file since
+    the tables always exist on any later startup, so the join-based WHERE
+    clause alone isn't a natural no-op check.
+    """
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    marker = os.path.join(os.path.dirname(db_path), ".orphaned_contact_associations_cleaned")
+    if os.path.exists(marker):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='contact_application'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute(
+        "DELETE FROM contact_application WHERE contact_id NOT IN (SELECT id FROM contacts)"
+    )
+    deleted_links = cur.rowcount
+    deleted_phones = 0
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='contact_phones'")
+    if cur.fetchone():
+        cur.execute(
+            "DELETE FROM contact_phones WHERE contact_id NOT IN (SELECT id FROM contacts)"
+        )
+        deleted_phones = cur.rowcount
+    conn.commit()
+    conn.close()
+
+    with open(marker, "w") as f:
+        f.write("done")
+
+    if deleted_links or deleted_phones:
+        print(
+            f"[migration] Cleaned up {deleted_links} orphaned contact_application "
+            f"and {deleted_phones} orphaned contact_phones row(s)"
+        )
+
+
 def _migrate_salary():
     """Salary tracking (applicant expectation vs. company budget)."""
     import sqlite3
@@ -1535,3 +1595,4 @@ def init_db():
     _flag_noon_backfill_placeholders()
     _backfill_linkedin_message_external_url()
     _migrate_backup_retention()
+    _cleanup_orphaned_contact_associations()

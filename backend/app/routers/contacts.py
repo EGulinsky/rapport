@@ -313,9 +313,16 @@ def bulk_delete_contacts(
         models.Contact.id.in_(body.ids),
     )
     to_delete = q.all()
+    # Per-row db.delete() rather than q.delete() (bulk raw SQL): SQLite never
+    # enforces the model's declared ON DELETE CASCADE here (PRAGMA foreign_keys
+    # is never turned on), so a bulk delete silently left contact_application/
+    # contact_phones rows behind for every deleted contact — orphans that later
+    # caused a UNIQUE-constraint violation once a new contact happened to reuse
+    # a freed id (contacts.id has no AUTOINCREMENT). db.delete() goes through
+    # the ORM's own cascade instead, which cleans up both tables correctly.
     for c in to_delete:
         add_audit(db, "delete", "user", contact_id=c.id,
                   old_value=c.display_name, user_id=current_user.id)
-    deleted = q.delete(synchronize_session=False)
+        db.delete(c)
     db.commit()
-    return {"deleted": deleted}
+    return {"deleted": len(to_delete)}
