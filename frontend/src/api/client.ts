@@ -186,7 +186,11 @@ export const api = {
       }),
 
     syncICloud: (force: boolean, contactIds?: number[]) =>
-      request<{ synced: number[]; not_found: number[]; errors: string[] }>('/sync/icloud/contacts/sync', {
+      // Unscoped (no contactIds): backend fires the full address-book sync as
+      // a background task and returns immediately with started:true — the
+      // caller polls api.sync.progress()/batchResults() for live progress and
+      // the final result. Scoped: runs synchronously, started is absent.
+      request<{ started?: boolean; synced: number[]; not_found: number[]; errors: string[] }>('/sync/icloud/contacts/sync', {
         method: 'POST',
         body: JSON.stringify({ contact_ids: contactIds ?? null, force }),
       }),

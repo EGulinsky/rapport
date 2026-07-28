@@ -123,6 +123,21 @@ const TYPE_COLORS: Record<string, string> = {
 
 type SortKey = 'vorname' | 'name' | 'firma' | 'typ' | 'letzter_kontakt'
 
+// Matches the shape api.sync.progress() returns per source key — reused as-is
+// rather than duplicated, since ContactsView only ever reads the
+// "icloud_contacts"/"google_contacts" entries out of that same generic dict.
+type ContactsSyncProgress = Awaited<ReturnType<typeof api.sync.progress>>[string]
+
+// The "contacts_manual_sync" batch-result entry has its own shape (synced/
+// not_found id lists) distinct from every other source's SyncResult-shaped
+// entry, so it can't reuse api.sync.batchResults()'s generic return type.
+interface ContactsManualSyncResult {
+  done: boolean
+  synced?: number[]
+  not_found?: number[]
+  errors?: string[]
+}
+
 interface Props {
   onOpenApplication: (id: number) => void
   onOpenCompany?: (id: number) => void
@@ -148,7 +163,9 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
   const [syncing, setSyncing] = useState(false)
   const [syncMenuOpen, setSyncMenuOpen] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [syncLive, setSyncLive] = useState<Record<string, ContactsSyncProgress>>({})
   const syncMenuRef = useRef<HTMLDivElement>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -242,18 +259,58 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
     return () => document.removeEventListener('mousedown', handler)
   }, [syncMenuOpen])
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }, [])
+
+  // Only the unscoped ("full address book") sync runs as a background task
+  // with live progress — it's the one that can take a while. A scoped
+  // re-match of a handful of selected contacts stays a plain synchronous
+  // request (see startSync below), so this poll loop is only ever started
+  // for the unscoped case.
+  const startPolling = useCallback(() => {
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      try {
+        const [progress, batch] = await Promise.all([api.sync.progress(), api.sync.batchResults()])
+        setSyncLive({
+          ...(progress.icloud_contacts ? { icloud_contacts: progress.icloud_contacts } : {}),
+          ...(progress.google_contacts ? { google_contacts: progress.google_contacts } : {}),
+        })
+        const manual = batch.contacts_manual_sync as ContactsManualSyncResult | undefined
+        if (manual?.done) {
+          stopPolling()
+          setSyncing(false)
+          setSyncLive({})
+          setSyncMsg(t('view.syncResult', { synced: manual.synced?.length ?? 0, notFound: manual.not_found?.length ?? 0 }))
+          await load()
+        }
+      } catch {
+        stopPolling()
+        setSyncing(false)
+      }
+    }, 1000)
+  }, [stopPolling, load, t])
+
+  useEffect(() => stopPolling, [stopPolling])
+
   async function startSync(force: boolean) {
     setSyncMenuOpen(false)
-    setSyncing(true)
     setSyncMsg(null)
+    setSyncLive({})
+    setSyncing(true)
     const scopedIds = selected.size > 0 ? [...selected] : undefined
     try {
       const r = await api.contacts.syncICloud(force, scopedIds)
+      if (r.started) {
+        startPolling()
+        return
+      }
       setSyncMsg(t('view.syncResult', { synced: r.synced.length, notFound: r.not_found.length }))
       await load()
+      setSyncing(false)
     } catch (e) {
       setSyncMsg(e instanceof Error ? e.message : t('view.genericError'))
-    } finally {
       setSyncing(false)
     }
   }
@@ -306,6 +363,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
 
         <div className="relative shrink-0" ref={syncMenuRef}>
           <button
+            data-testid="contacts-sync-toggle"
             onClick={() => !syncing && setSyncMenuOpen(o => !o)}
             disabled={syncing}
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -319,6 +377,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
           {syncMenuOpen && (
             <div className="absolute z-50 top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
               <button
+                data-testid="contacts-sync-menu-sync"
                 onClick={() => startSync(false)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
@@ -326,6 +385,7 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                 <div className="text-xs text-gray-400">{t('view.syncMenuSubtitle')}</div>
               </button>
               <button
+                data-testid="contacts-sync-menu-resync"
                 onClick={() => startSync(true)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
@@ -355,6 +415,31 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
           </button>
         )}
       </div>
+
+      {syncing && Object.keys(syncLive).length > 0 && (() => {
+        const entries = Object.values(syncLive)
+        const total = entries.reduce((sum, e) => sum + e.total, 0)
+        const current = entries.reduce((sum, e) => sum + e.current, 0)
+        return (
+          <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2" data-testid="contacts-sync-status-bar">
+            <div className="flex items-center justify-between text-xs text-gray-500 gap-3">
+              <span className="truncate">{entries.map(e => `${e.label}: ${e.step}`).join(' · ')}</span>
+              <span className="flex items-center gap-1.5 text-indigo-500 shrink-0">
+                <span className="animate-spin inline-block h-3 w-3 border-b-2 border-indigo-400 rounded-full" />
+                {total > 0 ? `${current}/${total}` : ''}
+              </span>
+            </div>
+            {total > 0 && (
+              <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  style={{ width: `${(current / total) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {syncMsg && (
         <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-2 text-sm text-indigo-700">{syncMsg}</div>

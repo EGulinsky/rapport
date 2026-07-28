@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.56',
+    date: '2026-07-28',
+    changes: [
+      'The Contacts tab\'s "Sync"/"Re-Sync" button (unscoped, i.e. no contacts checked) now shows a live status bar with a fill-progress indicator and per-provider counts — matching what the Companies tab already had — instead of just spinning until the whole address book finished importing. It runs in the background now too, so the page stays responsive during a full sync. A scoped re-sync of specific selected contacts is unaffected and still returns immediately, since it never had anything worth showing progress for.',
+    ],
+  },
+  {
     version: '4.6.55',
     date: '2026-07-28',
     changes: [

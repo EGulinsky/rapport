@@ -1272,6 +1272,15 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
     icloud_cfg = _get_cfg(db)
     google_cfg = _get_google_cfg(db)
 
+    # Progress tracking lives here (not in each caller) so that BOTH entry
+    # points — the global "Sync all" button (sync_contacts()) and the
+    # Contacts-tab button's own background run (sync_contacts_icloud()) —
+    # get identical, complete live progress for free, per provider.
+    if icloud_cfg:
+        init_progress("icloud_contacts", t("label_icloud_contacts", lang), t("loading_contacts", lang), lang=lang)
+    if google_cfg:
+        init_progress("google_contacts", t("label_google_contacts", lang), t("loading_contacts", lang), lang=lang)
+
     created = 0
     errors: list[str] = []
     touched_ids: list[int] = []
@@ -1282,6 +1291,7 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
         errors.extend(errs)
         touched_ids.extend(ids)
         icloud_cfg.contacts_last_sync = datetime.now(timezone.utc)
+        finish_progress("icloud_contacts", lang=lang, created=c, skipped=len(errs))
 
     if google_cfg:
         c, errs, ids = await _sync_contacts_from_google(google_cfg, db, user_id)
@@ -1289,6 +1299,7 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
         errors.extend(errs)
         touched_ids.extend(ids)
         google_cfg.contacts_last_sync = datetime.now(timezone.utc)
+        finish_progress("google_contacts", lang=lang, created=c, skipped=len(errs))
 
     db.commit()
 
@@ -1298,18 +1309,37 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
     # into the errors list the way it used to be.
     updated = 0
     all_contacts = db.query(models.Contact).all()
-    for c in all_contacts:
-        mention_ids = _find_apps_where_contact_mentioned(c.name, c.email, db)
-        linked_ids = {a.id for a in c.applications}
+    for contact in all_contacts:
+        mention_ids = _find_apps_where_contact_mentioned(contact.name, contact.email, db)
+        linked_ids = {a.id for a in contact.applications}
         for app_id in mention_ids:
             if app_id not in linked_ids:
                 app = db.query(models.Application).get(app_id)
                 if app:
-                    c.applications.append(app)
+                    contact.applications.append(app)
                     updated += 1
 
     db.commit()
     return created, errors, touched_ids, updated
+
+
+async def _do_contacts_manual_sync(user_id: int) -> None:
+    """Background runner for sync_contacts_icloud()'s unscoped case — the
+    Contacts-tab "Sync"/"Re-Sync" button. Opens its own session (the
+    request-scoped one is gone by the time this runs) and reports the final
+    result under its own batch-result key so it can't be confused with the
+    global "Sync all" button's own "icloud_contacts" SyncResult-shaped entry,
+    even though both ultimately call the same _sync_all_contacts()."""
+    db = SessionLocal()
+    set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
+    try:
+        _created, errors, touched_ids, _updated = await _sync_all_contacts(db, user_id, lang)
+        set_batch_result("contacts_manual_sync", {"synced": touched_ids, "not_found": [], "errors": errors, "done": True})
+    except Exception as e:
+        set_batch_result("contacts_manual_sync", {"synced": [], "not_found": [], "errors": [str(e)], "done": True})
+    finally:
+        db.close()
 
 
 @router.post("/contacts", response_model=schemas.SyncResult)
@@ -1320,9 +1350,7 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
         raise HTTPException(400, "Weder iCloud noch Google konfiguriert.")
 
     set_batch_result("icloud_contacts", {"done": False})
-    init_progress("icloud_contacts", t("label_icloud_contacts", current_user.ui_language), t("loading_contacts", current_user.ui_language), lang=current_user.ui_language)
     created, errors, _touched_ids, updated = await _sync_all_contacts(db, current_user.id, current_user.ui_language)
-    finish_progress("icloud_contacts", lang=current_user.ui_language, created=created, updated=updated)
 
     result = schemas.SyncResult(processed=created, created=created, skipped=0, updated=updated, errors=errors)
     set_batch_result("icloud_contacts", {**result.model_dump(), "done": True})
@@ -1874,6 +1902,7 @@ class ContactsSyncPayload(BaseModel):
 @router.post("/contacts/sync")
 async def sync_contacts_icloud(
     body: ContactsSyncPayload,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -1883,15 +1912,21 @@ async def sync_contacts_icloud(
     contacts against the current address book(s) — force=False only adds
     new phone numbers and fills currently-empty fields (the existing passive-
     sync behavior); force=True overwrites the contact wholesale from the
-    matched entry. Unmatched contacts are reported in `not_found`.
+    matched entry. Unmatched contacts are reported in `not_found`. Runs
+    synchronously and returns the final result directly — small, fast,
+    nothing to show live progress for.
 
     Unscoped (contact_ids omitted): a full, unconditional import of every
     contact in every configured address book — not just a re-match of what's
-    already known. `not_found` is always empty here since nothing is being
-    matched against a fixed contact list; `synced` lists every contact
-    touched (created or merged). Delegates to _sync_all_contacts(), the same
-    function the global "Sync all" button's contacts step uses, so the two
-    entry points can't drift apart.
+    already known. Runs via _sync_all_contacts(), the same function the
+    global "Sync all" button's contacts step uses, so the two entry points
+    can't drift apart — but as a background task rather than inline, so the
+    request returns immediately with {"started": true} instead of blocking
+    for however long the whole address book takes. The frontend polls
+    GET /api/sync/google/progress (keys "icloud_contacts"/"google_contacts")
+    for live per-contact progress and GET /api/sync/google/batch/results
+    (key "contacts_manual_sync") for the final synced/not_found/errors —
+    the same generic mechanism every other batch sync button already uses.
     """
     from app.routers.sync_google import _get_cfg as _get_google_cfg, fetch_all_google_contacts
 
@@ -1901,10 +1936,9 @@ async def sync_contacts_icloud(
         raise HTTPException(status_code=400, detail="Weder iCloud noch Google konfiguriert")
 
     if not body.contact_ids:
-        _created, errors, touched_ids, _updated = await _sync_all_contacts(
-            db, current_user.id, resolve_ui_language(db, current_user.id)
-        )
-        return {"synced": touched_ids, "not_found": [], "errors": errors}
+        set_batch_result("contacts_manual_sync", {"done": False})
+        background_tasks.add_task(_do_contacts_manual_sync, current_user.id)
+        return {"started": True, "synced": [], "not_found": [], "errors": []}
 
     contacts = db.query(models.Contact).filter(models.Contact.id.in_(body.contact_ids)).all()
     if not contacts:

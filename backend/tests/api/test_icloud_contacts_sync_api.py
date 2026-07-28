@@ -60,11 +60,14 @@ class TestContactsSync:
         resp = client.post("/api/sync/icloud/contacts/sync", json={"contact_ids": [1], "force": False})
         assert resp.status_code == 400
 
-    def test_positiv_ohne_contact_ids_laeuft_vollimport_und_liefert_touched_ids(self, client, db_session):
-        # Ohne contact_ids delegiert der Endpoint jetzt an den unconditional
-        # Vollimport (_sync_contacts_from_vcards) statt an ein reines
-        # Re-Match bestehender Kontakte — "synced" ist deshalb kein leerer
-        # Filter mehr, sondern die Liste der neu angelegten/berührten IDs.
+    def test_positiv_ohne_contact_ids_startet_hintergrundlauf_mit_batch_result(self, client, db_session):
+        # Ohne contact_ids läuft der Endpoint jetzt als Background-Task (fire
+        # and poll, wie jeder andere Batch-Sync-Button) statt die ganze
+        # Adressbuch-Synchronisierung inline zu blockieren — die Response
+        # kommt sofort mit {"started": true}, das tatsächliche Ergebnis landet
+        # unter dem Batch-Result-Key "contacts_manual_sync". Der FastAPI
+        # TestClient führt BackgroundTasks synchron vor der Response aus,
+        # daher ist das Ergebnis hier schon bereit, ohne echt pollen zu müssen.
         _icloud_cfg(db_session)
         vcards = [_vcard("Neue Person", email="neu@example.com")]
 
@@ -72,14 +75,38 @@ class TestContactsSync:
             resp = client.post("/api/sync/icloud/contacts/sync", json={"force": False})
 
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["errors"] == []
-        assert body["not_found"] == []
-        assert len(body["synced"]) == 1
-        contact = db_session.query(models.Contact).filter_by(email="neu@example.com").one()
-        assert body["synced"] == [contact.id]
+        assert resp.json()["started"] is True
 
-    def test_positiv_ohne_icloud_aber_mit_google_laeuft_vollimport(self, client, db_session):
+        contact = db_session.query(models.Contact).filter_by(email="neu@example.com").one()
+        batch = client.get("/api/sync/google/batch/results").json()["contacts_manual_sync"]
+        assert batch["done"] is True
+        assert batch["errors"] == []
+        assert batch["synced"] == [contact.id]
+
+    def test_positiv_beide_provider_konfiguriert_liefern_eigene_progress_eintraege(self, client, db_session):
+        # _sync_all_contacts() initialisiert/beendet jetzt einen eigenen
+        # Progress-Eintrag pro konfiguriertem Provider ("icloud_contacts" /
+        # "google_contacts"), damit die Live-Fortschrittsanzeige beide
+        # Hälften eines kombinierten Syncs zeigen kann, nicht nur iCloud.
+        _icloud_cfg(db_session)
+        _google_cfg(db_session)
+        vcards = [_vcard("Neue Person", email="neu@example.com")]
+
+        async def fake_google_fetch(cfg_arg, db_arg):
+            return [_google_person("jane@example.com")]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)), \
+             patch("app.routers.sync_google.fetch_all_google_contacts", new=fake_google_fetch):
+            resp = client.post("/api/sync/icloud/contacts/sync", json={"force": False})
+
+        assert resp.status_code == 200
+        progress = client.get("/api/sync/google/progress").json()
+        assert progress["icloud_contacts"]["done"] is True
+        assert progress["icloud_contacts"]["created"] == 1
+        assert progress["google_contacts"]["done"] is True
+        assert progress["google_contacts"]["created"] == 1
+
+    def test_positiv_ohne_icloud_aber_mit_google_startet_hintergrundlauf(self, client, db_session):
         # Kein ICloudSync-Eintrag — nur Google konfiguriert. Der Endpoint darf
         # nicht mit 400 ablehnen, nur weil iCloud fehlt.
         _google_cfg(db_session)
@@ -91,10 +118,11 @@ class TestContactsSync:
             resp = client.post("/api/sync/icloud/contacts/sync", json={"force": False})
 
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["errors"] == []
-        assert len(body["synced"]) == 1
+        assert resp.json()["started"] is True
         assert db_session.query(models.Contact).filter_by(email="jane@example.com").count() == 1
+        batch = client.get("/api/sync/google/batch/results").json()["contacts_manual_sync"]
+        assert batch["errors"] == []
+        assert len(batch["synced"]) == 1
 
     def test_positiv_gescopter_re_match_kombiniert_beide_provider(self, client, db_session):
         _icloud_cfg(db_session)
