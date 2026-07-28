@@ -23,7 +23,6 @@ import html
 import tempfile
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
-from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -1192,48 +1191,6 @@ def reset_contacts_sync(db: Session = Depends(get_db), current_user: models.User
         db.commit()
 
 
-def _firm_variants(name: str) -> list[str]:
-    """Return the name plus a version with common legal suffixes stripped."""
-    suffixes = (" gmbh", " ag", " se", " kg", " ohg", " gbr", " inc", " ltd",
-                " llc", " bv", " nv", " gmbh & co. kg", " gmbh & co kg")
-    variants = [name]
-    lower = name.lower()
-    for s in suffixes:
-        if lower.endswith(s):
-            variants.append(name[: len(name) - len(s)].strip())
-            break
-    return variants
-
-
-def _find_apps_for_contact(org: str, db) -> list[int]:
-    """Return all application ids whose firma matches the contact's org field."""
-    if not org:
-        return []
-    org_lower = org.strip().lower()
-    apps = db.query(models.Application).all()
-    matched: list[int] = []
-    # Exact match pass
-    for a in apps:
-        for field in [a.firma, a.zielfirma_bei_hh, a.wurde_besetzt_von]:
-            if not field:
-                continue
-            for variant in _firm_variants(field):
-                if variant.lower() == org_lower and a.id not in matched:
-                    matched.append(a.id)
-    if matched:
-        return matched
-    # Substring containment pass
-    for a in apps:
-        for field in [a.firma, a.zielfirma_bei_hh, a.wurde_besetzt_von]:
-            if not field:
-                continue
-            for variant in _firm_variants(field):
-                v = variant.lower()
-                if (v in org_lower or org_lower in v) and a.id not in matched:
-                    matched.append(a.id)
-    return matched
-
-
 def _find_apps_where_contact_mentioned(name: str, email: str | None, db) -> list[int]:
     """Return app IDs where this contact is explicitly mentioned in events or application text fields.
 
@@ -1305,7 +1262,7 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
 
     set_batch_result("icloud_contacts", {"done": False})
     init_progress("icloud_contacts", t("label_icloud_contacts", current_user.ui_language), t("loading_contacts", current_user.ui_language), lang=current_user.ui_language)
-    created, errors = await _sync_contacts_http(cfg, db, current_user.id)
+    created, errors, _touched_ids = await _sync_contacts_from_vcards(cfg, db, current_user.id)
 
     # Backfill missing application links for already-imported contacts (mention-based) —
     # a real "updated" (an existing contact gained a new application link), not
@@ -1508,7 +1465,8 @@ def _parse_vcard(raw_vcard: str) -> Optional[dict]:
 
 
 def _merge_parsed_contact(
-    contact: "models.Contact", parsed: dict, db: Session, user_id: Optional[int], force: bool = False
+    contact: "models.Contact", parsed: dict, db: Session, user_id: Optional[int], force: bool = False,
+    reason_key: str = "contact_from_icloud_addressbook",
 ) -> list[str]:
     """Apply a freshly parsed vCard onto an EXISTING contact — shared by every
     sync path that discovers new info for an already-known contact (automatic
@@ -1542,7 +1500,7 @@ def _merge_parsed_contact(
             return
         add_audit(db, "update", "sync", contact_id=contact.id,
                   field=field, old_value=old_value, new_value=new_value,
-                  reason_key="contact_from_icloud_addressbook", user_id=user_id)
+                  reason_key=reason_key, user_id=user_id)
         setattr(contact, field, new_value)
         changed.append(field)
 
@@ -1566,7 +1524,7 @@ def _merge_parsed_contact(
         if contact.firma != org_val or contact.company_profile_id != company_profile_id:
             add_audit(db, "update", "sync", contact_id=contact.id,
                       field="firma", old_value=contact.firma, new_value=org_val,
-                      reason_key="contact_from_icloud_addressbook", user_id=user_id)
+                      reason_key=reason_key, user_id=user_id)
             contact.firma = org_val
             contact.company_profile_id = company_profile_id
             changed.append("firma")
@@ -1593,31 +1551,34 @@ def _merge_parsed_contact(
     return changed
 
 
-async def _sync_contacts_http(
-    cfg: models.ICloudSync, db: Session, user_id: Optional[int] = None
-) -> tuple[int, list[str]]:
-    """CardDAV sync via HTTP using fetch_all_vcards helper."""
-    processed = created = 0
+async def _sync_contacts_from_parsed(
+    parsed_list: list[dict], db: Session, user_id: Optional[int], lang: str,
+    progress_key: str, reason_key: str, reason_key_with_reason: str,
+) -> tuple[int, list[str], list[int]]:
+    """Upsert-or-create every parsed contact, unconditionally — no company-
+    name/app-relevance gating. Every contact in the address book gets
+    imported, full stop. Linking to an application only happens when the
+    contact is explicitly mentioned in that application's own mail/calendar/
+    event text (_find_apps_where_contact_mentioned) — a company-name match
+    on a plain address-book entry is no longer enough to link (this used to
+    also gate whether the contact was imported at all, which caused both
+    false-positive imports and false-positive links — e.g. a bare "ERA"
+    substring, left over after stripping the corporate suffix "Group" from
+    an application named "ERA Group", matching unrelated words like
+    "Beratung"/"Cooperation" and silently linking those contacts).
+
+    Shared by both providers (_sync_contacts_from_vcards/_sync_contacts_from_google)
+    since `parsed_list` is already normalized into the same dict shape
+    regardless of source — this function never needs to know where a
+    contact came from."""
+    created = 0
     errors: list[str] = []
+    touched_ids: list[int] = []
+    total = len(parsed_list)
+    update_progress(progress_key, 0, total, t("contacts_found", lang, count=total))
 
-    try:
-        vcards_raw = await fetch_all_vcards(cfg)
-    except Exception as e:
-        return 0, [f"CardDAV HTTP-Fehler: {e}"]
-
-    if not vcards_raw:
-        return 0, ["Keine vCards gefunden (CardDAV)"]
-
-    lang = resolve_ui_language(db, user_id)
-    total_vcards = len(vcards_raw)
-    update_progress("icloud_contacts", 0, total_vcards, t("contacts_found", lang, count=total_vcards))
-
-    for idx, raw_vcard in enumerate(vcards_raw):
-        update_progress("icloud_contacts", idx, total_vcards, t("contact_progress", lang, current=idx + 1, total=total_vcards))
-        parsed = _parse_vcard(raw_vcard)
-        if not parsed:
-            continue
-
+    for idx, parsed in enumerate(parsed_list):
+        update_progress(progress_key, idx, total, t("contact_progress", lang, current=idx + 1, total=total))
         try:
             name = parsed["name"]
             vorname_val = parsed["vorname"]
@@ -1638,7 +1599,7 @@ async def _sync_contacts_http(
                 # finden und fälschlich als Duplikat neu anlegen.
                 existing = db.query(models.Contact).filter_by(name=fn).first()
             if existing:
-                _merge_parsed_contact(existing, parsed, db, user_id, force=False)
+                _merge_parsed_contact(existing, parsed, db, user_id, force=False, reason_key=reason_key)
                 if vorname_val and not existing.vorname:
                     # Nachträglicher Vorname/Nachname-Split für Alt-Kontakte —
                     # nutzt das strukturierte N:-Feld der vCard (echte Adress-
@@ -1646,50 +1607,15 @@ async def _sync_contacts_http(
                     # bisherigen (evtl. schon falsch zusammengesetzten) Namen.
                     existing.vorname = vorname_val
                     existing.name = name
+                touched_ids.append(existing.id)
                 continue
 
-            # Always import the contact so it appears in the company Kontakte tab.
-            # Application links are created only for apps where the contact is
-            # explicitly mentioned in events or application text (not just by firma match).
-            # Volltext-Erwähnungssuche braucht den vollen Anzeigenamen (fn), nicht
-            # nur den seit dem Vorname/Nachname-Split isolierten Nachnamen — sonst
-            # würden z.B. Erwähnungen von "Max Mustermann" im Bewerbungstext nicht
-            # mehr gefunden.
-            mention_app_ids = _find_apps_where_contact_mentioned(fn, email_val, db)
-            firma_app_ids = _find_apps_for_contact(org_val or "", db) if org_val else []
-
-            # Check whether the org matches a known CompanyProfile. A text match on the
-            # org field alone is NOT enough to justify import — the user's address book
-            # can contain hundreds of colleagues from a former employer that happens to
-            # share a name with a CompanyProfile (e.g. from an unrelated application),
-            # which previously caused entire company address books to be imported wholesale
-            # (592 contacts, 272 from a single "Contoso GmbH" match — live-verified bug).
-            # Only accept the company match as a standalone reason if the contact's email
-            # domain also matches the company's website — an org-name match by itself
-            # still populates company_profile_id for display, but doesn't gate import.
-            # Additionally, the CompanyProfile must actually be tied to a real application —
-            # a CompanyProfile can exist standalone (e.g. leftover from an old/removed
-            # application, LinkedIn import, etc.) without ever having been applied to. An
-            # email-domain match against such a profile still isn't a real connection: it
-            # imported 32 Contoso-domain contacts even though Contoso has zero applications
-            # (live-verified follow-up to the bug above).
             company_profile_id = None
-            company_domain_match = False
             if org_val:
                 from app.dedup import norm_firma
-                norm = norm_firma(org_val)
-                cp = db.query(models.CompanyProfile).filter_by(name_norm=norm).first()
+                cp = db.query(models.CompanyProfile).filter_by(name_norm=norm_firma(org_val)).first()
                 if cp:
                     company_profile_id = cp.id
-                    if email_val and cp.website and (cp.applications or cp.hh_applications):
-                        host = (urlparse(cp.website if "//" in cp.website else f"//{cp.website}").hostname or "").removeprefix("www.")
-                        email_domain = email_val.split("@", 1)[1].lower() if "@" in email_val else ""
-                        if host and email_domain and (email_domain == host or email_domain.endswith(f".{host}")):
-                            company_domain_match = True
-
-            # Skip contacts with no real connection to job applications or known companies
-            if not mention_app_ids and not firma_app_ids and not company_domain_match:
-                continue
 
             contact = models.Contact(
                 name=name, vorname=vorname_val, email=email_val,
@@ -1700,30 +1626,70 @@ async def _sync_contacts_http(
                 contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
             db.add(contact)
             db.flush()
+
+            # Volltext-Erwähnungssuche braucht den vollen Anzeigenamen (fn), nicht
+            # nur den seit dem Vorname/Nachname-Split isolierten Nachnamen — sonst
+            # würden z.B. Erwähnungen von "Max Mustermann" im Bewerbungstext nicht
+            # mehr gefunden.
+            mention_app_ids = _find_apps_where_contact_mentioned(fn, email_val, db)
             if mention_app_ids:
-                match_reason = t("mentioned_in_app_text_or_email", lang)
-            elif firma_app_ids:
-                match_reason = t("company_matches_existing_application", lang, org=org_val)
-            else:
-                match_reason = t("email_domain_matches_company", lang, org=org_val)
-            add_audit(db, "create", "sync", contact_id=contact.id,
-                      new_value=contact.display_name,
-                      reason_key="contact_imported_icloud_addressbook", reason_params={"match_reason": match_reason},
-                      user_id=user_id)
-            linked_ids = list({*mention_app_ids, *firma_app_ids})
-            for aid in linked_ids:
-                app_obj = db.query(models.Application).get(aid)
-                if app_obj:
-                    contact.applications.append(app_obj)
-            if linked_ids:
+                add_audit(db, "create", "sync", contact_id=contact.id,
+                          new_value=contact.display_name,
+                          reason_key=reason_key_with_reason,
+                          reason_params={"match_reason": t("mentioned_in_app_text_or_email", lang)},
+                          user_id=user_id)
+                for aid in mention_app_ids:
+                    app_obj = db.query(models.Application).get(aid)
+                    if app_obj:
+                        contact.applications.append(app_obj)
                 from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
                 attach_linkedin_messages_for_contact(db, contact, user_id)
-            processed += 1
+            else:
+                add_audit(db, "create", "sync", contact_id=contact.id,
+                          new_value=contact.display_name,
+                          reason_key=reason_key, user_id=user_id)
+            touched_ids.append(contact.id)
             created += 1
         except Exception as e:
             errors.append(f"Kontakt: {e}")
 
-    return created, errors
+    return created, errors, touched_ids
+
+
+async def _sync_contacts_from_vcards(
+    cfg: models.ICloudSync, db: Session, user_id: Optional[int] = None
+) -> tuple[int, list[str], list[int]]:
+    """CardDAV sync via HTTP using fetch_all_vcards helper."""
+    try:
+        vcards_raw = await fetch_all_vcards(cfg)
+    except Exception as e:
+        return 0, [f"CardDAV HTTP-Fehler: {e}"], []
+    if not vcards_raw:
+        return 0, [], []
+
+    parsed_list = [p for p in (_parse_vcard(v) for v in vcards_raw) if p]
+    lang = resolve_ui_language(db, user_id)
+    return await _sync_contacts_from_parsed(
+        parsed_list, db, user_id, lang, "icloud_contacts",
+        "contact_imported_icloud_addressbook", "contact_imported_icloud_addressbook_with_reason",
+    )
+
+
+async def _sync_contacts_from_google(
+    cfg: models.GoogleSync, db: Session, user_id: Optional[int] = None
+) -> tuple[int, list[str], list[int]]:
+    """Google People API sync via fetch_all_google_contacts helper."""
+    from app.routers.sync_google import fetch_all_google_contacts
+
+    parsed_list = await fetch_all_google_contacts(cfg, db)
+    if not parsed_list:
+        return 0, [], []
+
+    lang = resolve_ui_language(db, user_id)
+    return await _sync_contacts_from_parsed(
+        parsed_list, db, user_id, lang, "google_contacts",
+        "contact_imported_google_contacts", "contact_imported_google_contacts_with_reason",
+    )
 
 
 @router.get("/contacts/search")
@@ -1732,11 +1698,10 @@ async def search_contacts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Volltextsuche im kompletten iCloud-Adressbuch, unabhängig von der
-    Relevanz-Prüfung des automatischen Syncs (_sync_contacts_http). Für den
-    manuellen Import sucht der User gezielt nach einer Person und entscheidet
-    selbst, ob sie importiert wird — die "hat eine echte Verbindung zu einer
-    Bewerbung"-Gate gilt hier bewusst nicht.
+    """Volltextsuche im kompletten iCloud-Adressbuch — unabhängig davon, ob
+    der reguläre Sync (_sync_contacts_from_vcards) bereits gelaufen ist. Für
+    den manuellen Import sucht der User gezielt nach einer Person, statt auf
+    den nächsten vollständigen Adressbuch-Sync zu warten.
     """
     cfg = _get_cfg(db)
     if not cfg:
@@ -1874,21 +1839,31 @@ async def sync_contacts_icloud(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Per-contact "Sync"/"Re-Sync": re-matches the given (or, if contact_ids
-    is omitted, all of the user's) contacts against the current iCloud address
-    book. force=False only adds new phone numbers and fills currently-empty
-    fields (the existing passive-sync behavior); force=True overwrites the
-    contact wholesale from the matched vCard — an explicit "make this match
-    iCloud now" action, unlike the automatic sync's conservative default.
+    """Contacts-tab "Sync"/"Re-Sync" button.
+
+    Scoped (contact_ids given): re-matches only the specified, already-known
+    contacts against the current iCloud address book — force=False only adds
+    new phone numbers and fills currently-empty fields (the existing passive-
+    sync behavior); force=True overwrites the contact wholesale from the
+    matched vCard. Unmatched contacts are reported in `not_found`.
+
+    Unscoped (contact_ids omitted): a full, unconditional import of every
+    contact in the address book — not just a re-match of what's already
+    known. `not_found` is always empty here since nothing is being matched
+    against a fixed contact list; `synced` lists every contact touched
+    (created or merged).
     """
     cfg = _get_cfg(db)
     if not cfg:
         raise HTTPException(status_code=400, detail="iCloud nicht konfiguriert")
 
-    if body.contact_ids:
-        contacts = db.query(models.Contact).filter(models.Contact.id.in_(body.contact_ids)).all()
-    else:
-        contacts = db.query(models.Contact).all()
+    if not body.contact_ids:
+        _created, errors, touched_ids = await _sync_contacts_from_vcards(cfg, db, current_user.id)
+        cfg.contacts_last_sync = datetime.now(timezone.utc)
+        db.commit()
+        return {"synced": touched_ids, "not_found": [], "errors": errors}
+
+    contacts = db.query(models.Contact).filter(models.Contact.id.in_(body.contact_ids)).all()
     if not contacts:
         return {"synced": [], "not_found": [], "errors": []}
 

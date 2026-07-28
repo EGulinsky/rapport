@@ -1,17 +1,18 @@
-"""L1 Component — _sync_contacts_http() in sync_icloud.py.
+"""L1 Component — _sync_contacts_from_vcards() in sync_icloud.py.
 
-Regressionstest für einen live an Produktivdaten gefundenen Bug: 592 importierte
-Kontakte, davon 272 allein mit Firma "Contoso GmbH". Ursache war, dass ein reiner
-Textmatch des ORG-Feldes einer vCard gegen den Namen einer bekannten CompanyProfile
-(z.B. aus einer früheren Bewerbung) ausreichte, um JEDEN Kontakt mit diesem
-Firmennamen zu importieren — unabhängig davon, ob eine tatsächliche Verbindung zur
-Bewerbung besteht. Das importiert faktisch ein komplettes Adressbuch eines früheren
-Arbeitgebers, sobald irgendeine CompanyProfile mit gleichem Namen existiert.
+Contact *discovery* is now unconditional — every address-book entry gets
+imported, full stop, no company-name/app-relevance gating (see the plan doc
+for the "ERA Group" false-positive-linking incident this replaced: a bare
+"ERA" substring, left over after stripping the corporate suffix "Group",
+matched unrelated words like "Beratung"/"Cooperation" and silently linked
+those contacts to the wrong application).
 
-Fix: ein reiner Namens-Match auf die CompanyProfile reicht nicht mehr aus. Es wird
-zusätzlich verlangt, dass die E-Mail-Domain des Kontakts zur Website der Firma
-passt — oder dass der Kontakt anderweitig (Erwähnung in Events/Bewerbungstext,
-Firma-Textmatch auf eine echte Bewerbung) mit einer Bewerbung verknüpft ist.
+Contact-to-application *linking* is now much narrower: only a contact
+explicitly mentioned in that application's own mail/calendar/event text
+still gets linked on import. A company-name match alone — the exact
+mechanism that used to gate import (and that produced this file's original
+regression tests, "592 imported contacts, 272 with the same company name")
+— no longer creates a link at all.
 """
 from unittest.mock import AsyncMock, patch
 
@@ -42,34 +43,22 @@ def _cfg():
     )
 
 
-class TestSyncContactsHttp:
-    async def test_negativ_reiner_namens_match_auf_companyprofile_importiert_nicht(self, db_session):
-        # Regressionsfall: CompanyProfile "Contoso GmbH" existiert (z.B. aus einer alten
-        # Bewerbung), aber der Adressbuch-Kontakt hat weder eine passende E-Mail-Domain
-        # noch sonst eine Verbindung zu einer Bewerbung — darf NICHT importiert werden.
+class TestSyncContactsFromVcards:
+    async def test_positiv_reiner_namens_match_auf_companyprofile_wird_trotzdem_importiert(self, db_session):
+        # Ehemaliger historischer Bug: ein reiner Textmatch des ORG-Feldes gegen
+        # eine bekannte CompanyProfile durfte NICHT genügen, um zu importieren
+        # (592 importierte Kontakte, 272 allein mit Firma "Contoso GmbH"). Die
+        # Lösung ist jetzt eine andere: Import ist unconditional — jeder
+        # Adressbuch-Kontakt wird importiert — aber ohne jede Bewerbungs-Verknüpfung.
         company_profile_factory(db_session, name_display="Contoso GmbH", name_norm="contoso", website="https://www.contoso-gmbh.de/")
         vcards = [_vcard("Ehemaliger Kollege", email="kollege@web.de", org="Contoso GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
 
-        assert created == 0
-        assert db_session.query(sync_icloud.models.Contact).count() == 0
-
-    async def test_negativ_domain_match_ohne_bewerbung_zur_firma_importiert_nicht(self, db_session):
-        # Regressionsfall (Follow-up): Contoso-Domain-Kontakte wurden weiter importiert,
-        # obwohl es zu Contoso gar keine Bewerbung gibt — die CompanyProfile existierte nur
-        # noch als Datenleiche. Ein Domain-Match reicht nicht, wenn die Firma nicht
-        # tatsächlich mit einer Bewerbung verknüpft ist (live: 32 Contoso-Kontakte trotz 0
-        # Bewerbungen zu Contoso).
-        company_profile_factory(db_session, name_display="Contoso GmbH", name_norm="contoso", website="https://www.contoso-gmbh.de/")
-        vcards = [_vcard("Ehemaliger Kollege", email="kollege@contoso-gmbh.de", org="Contoso GmbH")]
-
-        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
-
-        assert created == 0
-        assert db_session.query(sync_icloud.models.Contact).count() == 0
+        assert created == 1
+        contact = db_session.query(sync_icloud.models.Contact).one()
+        assert contact.applications == []
 
     async def test_positiv_email_domain_matcht_firmen_website_mit_echter_bewerbung_wird_importiert(self, db_session):
         cp = company_profile_factory(db_session, name_display="Contoso GmbH", name_norm="contoso", website="https://www.contoso-gmbh.de/")
@@ -77,40 +66,47 @@ class TestSyncContactsHttp:
         vcards = [_vcard("Recruiterin Muster", email="muster@contoso-gmbh.de", org="Contoso GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
 
         assert created == 1
         contact = db_session.query(sync_icloud.models.Contact).one()
         assert contact.company_profile_id is not None
 
-    async def test_positiv_erwaehnung_in_event_wird_trotz_fremder_domain_importiert(self, db_session):
+    async def test_positiv_erwaehnung_in_event_wird_importiert_und_verknuepft(self, db_session):
         app = application_factory(db_session, firma="Andere Firma GmbH")
         event_factory(db_session, app, typ="notiz", notiz="Telefonat mit Anna Beispiel vereinbart")
         vcards = [_vcard("Anna Beispiel", email="anna.beispiel@web.de", org=None)]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
-
-        assert created == 1
-
-    async def test_positiv_firma_textmatch_auf_echte_bewerbung_wird_importiert_und_verknuepft(self, db_session):
-        app = application_factory(db_session, firma="Contoso AG")
-        vcards = [_vcard("Herr Beispiel", email="beispiel@web.de", org="Contoso AG")]
-
-        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
 
         assert created == 1
         contact = db_session.query(sync_icloud.models.Contact).one()
         assert app in contact.applications
 
-    async def test_corner_case_ohne_org_und_ohne_erwaehnung_kein_import(self, db_session):
+    async def test_negativ_firma_textmatch_allein_verknuepft_nicht_mehr(self, db_session):
+        # Kernverhalten der Umstellung: ein reiner Firmennamen-Match des ORG-
+        # Feldes gegen eine echte Bewerbung importiert weiterhin (unconditional),
+        # aber verknüpft NICHT mehr automatisch — nur eine echte Erwähnung im
+        # Bewerbungs-/E-Mail-Text (oder Kalender) tut das noch.
+        app = application_factory(db_session, firma="Contoso AG")
+        vcards = [_vcard("Herr Beispiel", email="beispiel@web.de", org="Contoso AG")]
+
+        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
+
+        assert created == 1
+        contact = db_session.query(sync_icloud.models.Contact).one()
+        assert app not in contact.applications
+
+    async def test_positiv_ohne_org_und_ohne_erwaehnung_wird_trotzdem_importiert(self, db_session):
         vcards = [_vcard("Unbekannt Niemand", email="niemand@web.de", org=None)]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
 
-        assert created == 0
+        assert created == 1
+        assert db_session.query(sync_icloud.models.Contact).one().applications == []
 
     async def test_positiv_legacy_kontakt_ohne_email_wird_per_altem_vollnamen_gefunden_und_gesplittet(self, db_session):
         # Live-Regressionsfall: Alt-Kontakte (vor dem Vorname/Nachname-Split)
@@ -123,7 +119,7 @@ class TestSyncContactsHttp:
         vcards = [_vcard("Max Mustermann", n=("Mustermann", "Max"), org="Fabrikam GmbH")]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            created, errors = await sync_icloud._sync_contacts_http(_cfg(), db_session)
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
 
         assert created == 0  # kein Duplikat
         assert db_session.query(sync_icloud.models.Contact).count() == 1
@@ -145,7 +141,7 @@ class TestSyncContactsHttp:
         db_session.commit()
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
-            await sync_icloud._sync_contacts_http(_cfg(), db_session)
+            await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
 
         db_session.commit()
         db_session.refresh(legacy)

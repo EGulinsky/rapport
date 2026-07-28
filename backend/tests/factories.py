@@ -91,7 +91,7 @@ def icloud_vcard(
     tel: str | None = None, tel_type: str | None = None, linkedin_url: str | None = None,
 ) -> str:
     """Baut einen echten, über vobject serialisierten vCard-3.0-String für Tests
-    des iCloud-CardDAV-Kontakte-Syncs (_parse_vcard/_sync_contacts_http)."""
+    des iCloud-CardDAV-Kontakte-Syncs (_parse_vcard/_sync_contacts_from_vcards)."""
     import vobject
 
     card = vobject.vCard()

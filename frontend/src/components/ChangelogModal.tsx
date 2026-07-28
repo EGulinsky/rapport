@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.50',
+    date: '2026-07-28',
+    changes: [
+      'Contact sync is being overhauled: a sync of your iCloud address book now imports every contact unconditionally (no more silent skipping of contacts that don\'t obviously match an application), but only links a contact to an application when it actually appears in that application\'s own mail, calendar, or notes — a company-name match alone no longer creates a link. This replaces a fragile heuristic that could both wrongly link contacts (e.g. a short company-name fragment matching inside an unrelated word) and wrongly skip importing real contacts. Google Contacts support is not wired in yet — iCloud only for now.',
+    ],
+  },
+  {
     version: '4.6.49',
     date: '2026-07-27',
     changes: [

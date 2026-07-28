@@ -38,11 +38,24 @@ class TestContactsSync:
         resp = client.post("/api/sync/icloud/contacts/sync", json={"contact_ids": [1], "force": False})
         assert resp.status_code == 400
 
-    def test_positiv_ohne_contact_ids_gibt_leeres_ergebnis_wenn_keine_kontakte(self, client, db_session):
+    def test_positiv_ohne_contact_ids_laeuft_vollimport_und_liefert_touched_ids(self, client, db_session):
+        # Ohne contact_ids delegiert der Endpoint jetzt an den unconditional
+        # Vollimport (_sync_contacts_from_vcards) statt an ein reines
+        # Re-Match bestehender Kontakte — "synced" ist deshalb kein leerer
+        # Filter mehr, sondern die Liste der neu angelegten/berührten IDs.
         _icloud_cfg(db_session)
-        resp = client.post("/api/sync/icloud/contacts/sync", json={"force": False})
+        vcards = [_vcard("Neue Person", email="neu@example.com")]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.post("/api/sync/icloud/contacts/sync", json={"force": False})
+
         assert resp.status_code == 200
-        assert resp.json() == {"synced": [], "not_found": [], "errors": []}
+        body = resp.json()
+        assert body["errors"] == []
+        assert body["not_found"] == []
+        assert len(body["synced"]) == 1
+        contact = db_session.query(models.Contact).filter_by(email="neu@example.com").one()
+        assert body["synced"] == [contact.id]
 
     def test_positiv_sync_fuegt_nur_neue_nummer_hinzu_ueberschreibt_nicht(self, client, db_session):
         _icloud_cfg(db_session)

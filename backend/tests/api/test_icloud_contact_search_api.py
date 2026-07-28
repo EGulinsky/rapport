@@ -1,9 +1,10 @@
 """L2 API — /api/sync/icloud/contacts/search + /import.
 
-Manueller Kontakt-Import: der User sucht gezielt im vollen Adressbuch (nicht
-nur "relevante" Kontakte wie beim automatischen Sync) und entscheidet selbst,
-wen er importiert — die Relevanz-Prüfung von _sync_contacts_http gilt hier
-bewusst nicht.
+Manueller Kontakt-Import: der User sucht gezielt im vollen Adressbuch und
+entscheidet selbst, wen er importiert und ob er ihn mit einer Bewerbung
+verknüpft — unabhängig vom automatischen Sync (_sync_contacts_from_vcards),
+der zwar seinerseits inzwischen ebenfalls das ganze Adressbuch importiert,
+aber nie anhand von Firmenname/Adressbuch-Match verknüpft.
 """
 from unittest.mock import AsyncMock, patch
 
