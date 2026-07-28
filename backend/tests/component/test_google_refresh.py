@@ -12,7 +12,7 @@ from google.oauth2.credentials import Credentials
 
 from app import models
 from app.ai.provider import encrypt_api_key
-from app.routers.sync_google import _refresh_if_needed
+from app.routers.sync_google import _build_credentials, _refresh_if_needed
 
 pytestmark = pytest.mark.component
 
@@ -88,3 +88,38 @@ class TestRefreshIfNeeded:
             _refresh_if_needed(cfg, db_session)
 
         assert cfg.refresh_token_enc is not None  # unangetastet
+
+    def test_negativ_invalid_scope_loescht_tokens_und_wirft_hilfreiche_meldung(self, db_session, monkeypatch):
+        # Live beobachtet: eine vor Einführung des contacts.readonly-Scopes
+        # verbundene Google-Verbindung schlug bei JEDEM Sync (nicht nur
+        # Contacts) mit "invalid_scope: Bad Request" fehl, weil der Refresh
+        # dieses neue Scope anforderte, obwohl der gespeicherte Refresh-Token
+        # nie dafür autorisiert wurde. Gleiche Behandlung wie invalid_grant.
+        cfg = _expired_cfg(db_session)
+
+        def _raise_invalid_scope(self, request):
+            raise Exception("invalid_scope: Bad Request")
+
+        monkeypatch.setattr(Credentials, "refresh", _raise_invalid_scope)
+
+        with pytest.raises(RuntimeError, match="neu verbinden"):
+            _refresh_if_needed(cfg, db_session)
+
+        assert cfg.access_token_enc is None
+        assert cfg.refresh_token_enc is None
+        assert cfg.token_expiry is None
+
+
+class TestBuildCredentials:
+    def test_positiv_keine_scopes_gesetzt_um_refresh_grant_nicht_einzuschraenken(self, db_session):
+        # google-auth sendet ein "scope"-Feld im Refresh-Request nur, wenn
+        # Credentials.scopes gesetzt ist — und Google lehnt den Refresh mit
+        # invalid_scope ab, falls dort ein Scope steht, den der gespeicherte
+        # Refresh-Token nie erhalten hat (z.B. bei Verbindungen von vor der
+        # Einführung von contacts.readonly). Kein `scopes=` an Credentials()
+        # übergeben lässt das Refresh-Scope unverändert (RFC 6749 §6).
+        cfg = _expired_cfg(db_session)
+
+        creds = _build_credentials(cfg)
+
+        assert not creds.scopes

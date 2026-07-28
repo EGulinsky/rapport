@@ -65,13 +65,20 @@ def _get_cfg(db: Session) -> Optional[models.GoogleSync]:
 def _build_credentials(cfg: models.GoogleSync):
     from google.oauth2.credentials import Credentials
 
+    # Deliberately no `scopes=SCOPES` here: google-auth's refresh_grant() sends
+    # whatever scopes are set as the request's `scope` param, and Google's token
+    # endpoint rejects the refresh with `invalid_scope` if that includes a scope
+    # the refresh token wasn't actually issued for (e.g. contacts.readonly for
+    # anyone who connected before that scope was added) — breaking Gmail/Calendar
+    # sync too, not just Contacts, since this helper is shared by all three.
+    # Omitting `scope` on a refresh request is valid per RFC 6749 §6 and just
+    # preserves whatever scopes the token already carries.
     creds = Credentials(
         token=decrypt_api_key(cfg.access_token_enc) if cfg.access_token_enc else None,
         refresh_token=decrypt_api_key(cfg.refresh_token_enc) if cfg.refresh_token_enc else None,
         token_uri="https://oauth2.googleapis.com/token",
         client_id=cfg.client_id,
         client_secret=decrypt_api_key(cfg.client_secret_enc),
-        scopes=SCOPES,
     )
     if cfg.token_expiry:
         creds.expiry = cfg.token_expiry.replace(tzinfo=None)
@@ -87,7 +94,16 @@ def _refresh_if_needed(cfg: models.GoogleSync, db: Session):
             creds.refresh(Request())
         except Exception as e:
             err_str = str(e).lower()
-            if "invalid_grant" in err_str or "token has been expired" in err_str or "revoked" in err_str:
+            if (
+                "invalid_grant" in err_str
+                or "token has been expired" in err_str
+                or "revoked" in err_str
+                # A scope was requested that the stored refresh token wasn't
+                # issued for (e.g. an older connection predating a newly added
+                # scope) — same "please reconnect" remedy as an expired/revoked
+                # token, since only a fresh OAuth consent can fix it.
+                or "invalid_scope" in err_str
+            ):
                 # Refresh token is invalid — wipe stored tokens so user is prompted to reconnect
                 cfg.access_token_enc  = None
                 cfg.refresh_token_enc = None

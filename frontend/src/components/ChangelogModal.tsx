@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.63',
+    date: '2026-07-28',
+    changes: [
+      'Fixed Gmail/Calendar sync failing with "invalid_scope: Bad Request" for any Google account connected before Google Contacts support was added. The token-refresh request was asking Google to re-authorize the newer contacts scope on every refresh, which Google rejects for a refresh token that was never actually granted it — breaking Gmail and Calendar sync too, not just Contacts. Token refreshes no longer request specific scopes at all, so they keep whatever access was originally granted. If this happened to you, one manual reconnect under Settings → Google is still needed to grant Contacts access (unrelated to this fix), but Gmail/Calendar sync should no longer break as a side effect of it.',
+    ],
+  },
+  {
     version: '4.6.62',
     date: '2026-07-28',
     changes: [
