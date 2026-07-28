@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.62',
+    date: '2026-07-28',
+    changes: [
+      'CI resilience: the backend test job had silently stalled for the full 25-minute job timeout several times recently, always at the same point in the suite, with no error and no clue why — just a cancelled run that had to be manually re-triggered. Individual tests now get a 60-second cap with a full stack-trace dump on timeout, so a stuck test fails fast with a diagnosable error instead of eating the whole job budget; the job-level timeout was also lowered from 25 to 10 minutes to match.',
+    ],
+  },
+  {
     version: '4.6.61',
     date: '2026-07-28',
     changes: [
