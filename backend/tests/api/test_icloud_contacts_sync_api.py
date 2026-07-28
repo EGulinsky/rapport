@@ -33,6 +33,28 @@ def _icloud_cfg(db_session):
     return cfg
 
 
+def _google_cfg(db_session):
+    from app.ai.provider import encrypt_api_key
+
+    cfg = models.GoogleSync(
+        client_id="test-client-id",
+        client_secret_enc=encrypt_api_key("test-secret"),
+        access_token_enc=encrypt_api_key("test-access-token"),
+        refresh_token_enc=encrypt_api_key("test-refresh-token"),
+        user_id=1,
+    )
+    db_session.add(cfg)
+    db_session.commit()
+    return cfg
+
+
+def _google_person(email: str) -> dict:
+    return {
+        "name": "Doe", "vorname": "Jane", "fn": "Jane Doe", "email": email,
+        "phones": [], "firma": None, "rolle": None, "linkedin_url": None,
+    }
+
+
 class TestContactsSync:
     def test_negativ_ohne_icloud_config_liefert_400(self, client):
         resp = client.post("/api/sync/icloud/contacts/sync", json={"contact_ids": [1], "force": False})
@@ -56,6 +78,45 @@ class TestContactsSync:
         assert len(body["synced"]) == 1
         contact = db_session.query(models.Contact).filter_by(email="neu@example.com").one()
         assert body["synced"] == [contact.id]
+
+    def test_positiv_ohne_icloud_aber_mit_google_laeuft_vollimport(self, client, db_session):
+        # Kein ICloudSync-Eintrag — nur Google konfiguriert. Der Endpoint darf
+        # nicht mit 400 ablehnen, nur weil iCloud fehlt.
+        _google_cfg(db_session)
+
+        async def fake_google_fetch(cfg_arg, db_arg):
+            return [_google_person("jane@example.com")]
+
+        with patch("app.routers.sync_google.fetch_all_google_contacts", new=fake_google_fetch):
+            resp = client.post("/api/sync/icloud/contacts/sync", json={"force": False})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["errors"] == []
+        assert len(body["synced"]) == 1
+        assert db_session.query(models.Contact).filter_by(email="jane@example.com").count() == 1
+
+    def test_positiv_gescopter_re_match_kombiniert_beide_provider(self, client, db_session):
+        _icloud_cfg(db_session)
+        _google_cfg(db_session)
+        contact = contact_factory(db_session, name="Doe", email="jane@example.com", firma=None)
+        db_session.commit()
+        vcards = [_vcard("Someone Else", email="someone@example.com")]
+
+        async def fake_google_fetch(cfg_arg, db_arg):
+            return [{
+                "name": "Doe", "vorname": "Jane", "fn": "Jane Doe", "email": "jane@example.com",
+                "phones": [], "firma": "Contoso AG", "rolle": None, "linkedin_url": None,
+            }]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)), \
+             patch("app.routers.sync_google.fetch_all_google_contacts", new=fake_google_fetch):
+            resp = client.post("/api/sync/icloud/contacts/sync", json={"contact_ids": [contact.id], "force": False})
+
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == [contact.id]
+        db_session.refresh(contact)
+        assert contact.firma == "Contoso AG"
 
     def test_positiv_sync_fuegt_nur_neue_nummer_hinzu_ueberschreibt_nicht(self, client, db_session):
         _icloud_cfg(db_session)

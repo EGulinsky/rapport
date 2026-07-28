@@ -316,6 +316,39 @@ class TestSyncTrigger:
         db_session.refresh(existing)
         assert app in existing.applications
 
+    def test_positiv_contacts_mit_nur_google_konfiguriert_importiert(self, client, db_session, monkeypatch):
+        # Kein ICloudSync-Eintrag — nur Google ist verbunden. Der Sync darf
+        # trotzdem laufen (kein 400) und ausschließlich den Google-Kontakt
+        # importieren.
+        from app.ai.provider import encrypt_api_key
+
+        google_cfg = models.GoogleSync(
+            client_id="test-client-id",
+            client_secret_enc=encrypt_api_key("test-secret"),
+            access_token_enc=encrypt_api_key("test-access-token"),
+            refresh_token_enc=encrypt_api_key("test-refresh-token"),
+            user_id=1,
+        )
+        db_session.add(google_cfg)
+        db_session.commit()
+
+        async def fake_google_fetch(cfg_arg, db_arg):
+            return [{
+                "name": "Doe", "vorname": "Jane", "fn": "Jane Doe", "email": "jane@example.com",
+                "phones": [], "firma": None, "rolle": None, "linkedin_url": None,
+            }]
+
+        monkeypatch.setattr("app.routers.sync_google.fetch_all_google_contacts", fake_google_fetch)
+
+        resp = client.post("/api/sync/icloud/contacts")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["created"] == 1
+        assert db_session.query(models.Contact).filter_by(email="jane@example.com").count() == 1
+        db_session.refresh(google_cfg)
+        assert google_cfg.contacts_last_sync is not None
+
     def test_negativ_calls_deaktiviert_liefert_sofortigen_hinweis(self, client, db_session):
         db_session.add(models.CallsConfig(enabled=False, user_id=1))
         db_session.commit()

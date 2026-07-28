@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.52',
+    date: '2026-07-28',
+    changes: [
+      'Google Contacts is now wired into the same contact sync as iCloud — the Contacts tab\'s "Sync" button and the global "Sync all" both pull in every contact from both connected services when configured, and either one alone still works fine if only one is connected. There is no Google Contacts setup UI yet (that lands in the next release); this only wires up the backend side.',
+    ],
+  },
+  {
     version: '4.6.51',
     date: '2026-07-28',
     changes: [

@@ -1254,23 +1254,50 @@ def _find_apps_where_contact_mentioned(name: str, email: str | None, db) -> list
     return list(app_ids)
 
 
-@router.post("/contacts", response_model=schemas.SyncResult)
-async def sync_contacts(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    cfg = _get_cfg(db)
-    if not cfg:
-        raise HTTPException(400, "Keine iCloud-Credentials gespeichert.")
+async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> tuple[int, list[str], list[int], int]:
+    """Run every configured contacts provider (iCloud CardDAV + Google People
+    API) unconditionally, then backfill missing application links for ALL
+    existing contacts based on mail/calendar mentions. Shared by sync_contacts()
+    (global batch endpoint) and sync_contacts_icloud() (Contacts-tab button,
+    unscoped case) so the two entry points can't drift.
 
-    set_batch_result("icloud_contacts", {"done": False})
-    init_progress("icloud_contacts", t("label_icloud_contacts", current_user.ui_language), t("loading_contacts", current_user.ui_language), lang=current_user.ui_language)
-    created, errors, _touched_ids = await _sync_contacts_from_vcards(cfg, db, current_user.id)
+    Callers are responsible for checking that at least one provider is
+    configured before calling this (raising 400 otherwise) — this function
+    itself just silently skips whichever provider has no credentials.
+
+    Returns (created, errors, touched_ids, updated).
+    """
+    from app.routers.sync_google import _get_cfg as _get_google_cfg
+
+    icloud_cfg = _get_cfg(db)
+    google_cfg = _get_google_cfg(db)
+
+    created = 0
+    errors: list[str] = []
+    touched_ids: list[int] = []
+
+    if icloud_cfg:
+        c, errs, ids = await _sync_contacts_from_vcards(icloud_cfg, db, user_id)
+        created += c
+        errors.extend(errs)
+        touched_ids.extend(ids)
+        icloud_cfg.contacts_last_sync = datetime.now(timezone.utc)
+
+    if google_cfg:
+        c, errs, ids = await _sync_contacts_from_google(google_cfg, db, user_id)
+        created += c
+        errors.extend(errs)
+        touched_ids.extend(ids)
+        google_cfg.contacts_last_sync = datetime.now(timezone.utc)
+
+    db.commit()
 
     # Backfill missing application links for already-imported contacts (mention-based) —
     # a real "updated" (an existing contact gained a new application link), not
     # a skip or an error, so it's counted as such rather than stuffed as free text
     # into the errors list the way it used to be.
-    update_progress("icloud_contacts", 0, 1, t("updating_links", current_user.ui_language))
-    all_contacts = db.query(models.Contact).all()
     updated = 0
+    all_contacts = db.query(models.Contact).all()
     for c in all_contacts:
         mention_ids = _find_apps_where_contact_mentioned(c.name, c.email, db)
         linked_ids = {a.id for a in c.applications}
@@ -1282,8 +1309,19 @@ async def sync_contacts(db: Session = Depends(get_db), current_user: models.User
                     updated += 1
 
     db.commit()
-    cfg.contacts_last_sync = datetime.now(timezone.utc)
-    db.commit()
+    return created, errors, touched_ids, updated
+
+
+@router.post("/contacts", response_model=schemas.SyncResult)
+async def sync_contacts(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    from app.routers.sync_google import _get_cfg as _get_google_cfg
+
+    if not _get_cfg(db) and not _get_google_cfg(db):
+        raise HTTPException(400, "Weder iCloud noch Google konfiguriert.")
+
+    set_batch_result("icloud_contacts", {"done": False})
+    init_progress("icloud_contacts", t("label_icloud_contacts", current_user.ui_language), t("loading_contacts", current_user.ui_language), lang=current_user.ui_language)
+    created, errors, _touched_ids, updated = await _sync_all_contacts(db, current_user.id, current_user.ui_language)
     finish_progress("icloud_contacts", lang=current_user.ui_language, created=created, updated=updated)
 
     result = schemas.SyncResult(processed=created, created=created, skipped=0, updated=updated, errors=errors)
@@ -1842,37 +1880,47 @@ async def sync_contacts_icloud(
     """Contacts-tab "Sync"/"Re-Sync" button.
 
     Scoped (contact_ids given): re-matches only the specified, already-known
-    contacts against the current iCloud address book — force=False only adds
+    contacts against the current address book(s) — force=False only adds
     new phone numbers and fills currently-empty fields (the existing passive-
     sync behavior); force=True overwrites the contact wholesale from the
-    matched vCard. Unmatched contacts are reported in `not_found`.
+    matched entry. Unmatched contacts are reported in `not_found`.
 
     Unscoped (contact_ids omitted): a full, unconditional import of every
-    contact in the address book — not just a re-match of what's already
-    known. `not_found` is always empty here since nothing is being matched
-    against a fixed contact list; `synced` lists every contact touched
-    (created or merged).
+    contact in every configured address book — not just a re-match of what's
+    already known. `not_found` is always empty here since nothing is being
+    matched against a fixed contact list; `synced` lists every contact
+    touched (created or merged). Delegates to _sync_all_contacts(), the same
+    function the global "Sync all" button's contacts step uses, so the two
+    entry points can't drift apart.
     """
-    cfg = _get_cfg(db)
-    if not cfg:
-        raise HTTPException(status_code=400, detail="iCloud nicht konfiguriert")
+    from app.routers.sync_google import _get_cfg as _get_google_cfg, fetch_all_google_contacts
+
+    icloud_cfg = _get_cfg(db)
+    google_cfg = _get_google_cfg(db)
+    if not icloud_cfg and not google_cfg:
+        raise HTTPException(status_code=400, detail="Weder iCloud noch Google konfiguriert")
 
     if not body.contact_ids:
-        _created, errors, touched_ids = await _sync_contacts_from_vcards(cfg, db, current_user.id)
-        cfg.contacts_last_sync = datetime.now(timezone.utc)
-        db.commit()
+        _created, errors, touched_ids, _updated = await _sync_all_contacts(
+            db, current_user.id, resolve_ui_language(db, current_user.id)
+        )
         return {"synced": touched_ids, "not_found": [], "errors": errors}
 
     contacts = db.query(models.Contact).filter(models.Contact.id.in_(body.contact_ids)).all()
     if not contacts:
         return {"synced": [], "not_found": [], "errors": []}
 
-    try:
-        vcards_raw = await fetch_all_vcards(cfg)
-    except Exception as e:
-        return {"synced": [], "not_found": [], "errors": [f"CardDAV HTTP-Fehler: {e}"]}
+    parsed_cards: list[dict] = []
+    errors: list[str] = []
+    if icloud_cfg:
+        try:
+            vcards_raw = await fetch_all_vcards(icloud_cfg)
+            parsed_cards.extend(p for p in (_parse_vcard(v) for v in vcards_raw) if p)
+        except Exception as e:
+            errors.append(f"CardDAV HTTP-Fehler: {e}")
+    if google_cfg:
+        parsed_cards.extend(await fetch_all_google_contacts(google_cfg, db))
 
-    parsed_cards = [p for p in (_parse_vcard(v) for v in vcards_raw) if p]
     by_email = {p["email"].lower(): p for p in parsed_cards if p["email"]}
     by_name: dict[str, dict] = {}
     for p in parsed_cards:
@@ -1881,7 +1929,6 @@ async def sync_contacts_icloud(
 
     synced: list[int] = []
     not_found: list[int] = []
-    errors: list[str] = []
 
     for contact in contacts:
         try:
