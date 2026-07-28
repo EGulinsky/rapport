@@ -11,16 +11,20 @@ contacts with no real connection" gate that used to live here caused two
 live-verified mass-import bugs: 592 contacts with 272 from one company name,
 then 32 Contoso-domain contacts despite zero Contoso applications — both are
 now moot since nothing is gated on import anymore). Contact-to-application
-*linking* is narrower instead: only an explicit mention in the application's
-own mail/calendar/event text still links; a company-name or email-domain
-match alone no longer does.
+*linking* is narrower instead: only being the literal sender/recipient of a
+mail event, or an attendee of a calendar event, for that specific
+application still links — a company-name/email-domain match, or a name
+mentioned in free text (kommentar/notiz/titel), no longer does (the latter
+was itself a live-reported regression, 2026-07-28: "kreuz und quer" linked
+contacts, the same substring-match bug this file's own mass-import fixes
+already eliminated once for company names).
 """
 import pytest
 
 from app import models
 from app.dedup import norm_firma
 from app.routers.sync_icloud import _sync_contacts_from_vcards
-from tests.factories import application_factory, company_profile_factory, icloud_vcard
+from tests.factories import application_factory, company_profile_factory, event_factory, icloud_vcard
 
 pytestmark = pytest.mark.integration
 
@@ -52,8 +56,26 @@ class TestSyncContactsFromVcards:
         contact = db_session.query(models.Contact).filter_by(email="erika@contoso.com").one()
         assert app not in contact.applications
 
-    async def test_positiv_erwaehnung_im_bewerbungstext_matcht_ohne_firmenname(self, db_session, monkeypatch):
+    async def test_negativ_erwaehnung_im_bewerbungstext_verknuepft_nicht_mehr(self, db_session, monkeypatch):
         app = application_factory(db_session, firma="Fremdfirma GmbH", kommentar="Gespräch mit Erika Musterfrau war gut.")
+        db_session.commit()
+        cfg = _cfg(db_session)
+        raw = icloud_vcard("Erika Musterfrau", family="Musterfrau", given="Erika", email="erika@privat.de", org="Privatperson")
+
+        async def fake_fetch(cfg_arg):
+            return [raw]
+
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", fake_fetch)
+
+        created, errors, touched_ids = await _sync_contacts_from_vcards(cfg, db_session)
+
+        assert created == 1
+        contact = db_session.query(models.Contact).filter_by(email="erika@privat.de").one()
+        assert app not in contact.applications
+
+    async def test_positiv_mail_absender_matcht_ohne_firmenname(self, db_session, monkeypatch):
+        app = application_factory(db_session, firma="Fremdfirma GmbH")
+        event_factory(db_session, app, typ="mail", source="gmail", autor="Erika Musterfrau <erika@privat.de>")
         db_session.commit()
         cfg = _cfg(db_session)
         raw = icloud_vcard("Erika Musterfrau", family="Musterfrau", given="Erika", email="erika@privat.de", org="Privatperson")
