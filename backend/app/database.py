@@ -556,6 +556,52 @@ def _migrate_google_email():
     conn.close()
 
 
+def _migrate_google_contacts():
+    """Add contacts_last_sync/contacts_scope_granted columns to google_sync table if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='google_sync'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(google_sync)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "contacts_last_sync" not in cols:
+        cur.execute("ALTER TABLE google_sync ADD COLUMN contacts_last_sync TIMESTAMP")
+    if "contacts_scope_granted" not in cols:
+        cur.execute("ALTER TABLE google_sync ADD COLUMN contacts_scope_granted INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+    conn.close()
+
+
+def _migrate_sync_settings_google_contacts():
+    """Add google_contacts_enabled column to sync_settings table if missing."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sync_settings'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(sync_settings)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "google_contacts_enabled" not in cols:
+        cur.execute("ALTER TABLE sync_settings ADD COLUMN google_contacts_enabled INTEGER NOT NULL DEFAULT 1")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_attachments():
     """Create attachments table if missing."""
     import sqlite3
@@ -1448,7 +1494,9 @@ def init_db():
     _migrate_icloud()
     _migrate_calls()
     _migrate_google_email()
+    _migrate_google_contacts()
     _migrate_sync_settings_files()
+    _migrate_sync_settings_google_contacts()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
     _migrate_attachments()

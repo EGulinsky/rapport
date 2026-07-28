@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.49',
+    date: '2026-07-27',
+    changes: [
+      'Backend groundwork for real Google Contacts sync — a new "contacts.readonly" scope, a People-API contact fetch, and the config columns to track it. No user-facing change yet; this lays the foundation for a broader contact-sync overhaul (unconditional full mirror from every connected service, contact-to-application linking limited to actual mail/calendar mentions instead of fragile company-name matching) landing over the next few releases.',
+    ],
+  },
+  {
     version: '4.6.48',
     date: '2026-07-27',
     changes: [

@@ -38,7 +38,9 @@ router = APIRouter(prefix="/api/sync/google", tags=["sync"])
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/contacts.readonly",
 ]
+CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly"
 REDIRECT_URI = "http://localhost:8000/api/sync/google/callback"
 
 # Legacy aliases kept for any external imports
@@ -116,6 +118,92 @@ def _gmail_body(payload: dict) -> str:
     return ""
 
 
+def _google_phone_type(type_str: str) -> str:
+    """Map a People API phoneNumbers[].type string to the same mobile/home/
+    work/main/other vocabulary _vcard_phone_type() (sync_icloud.py) uses, so
+    a Google-sourced phone is indistinguishable from a CardDAV-sourced one
+    downstream."""
+    t = (type_str or "").lower()
+    if "mobile" in t or "cell" in t:
+        return "mobile"
+    if "home" in t:
+        return "home"
+    if "work" in t:
+        return "work"
+    if "main" in t:
+        return "main"
+    return "other"
+
+
+async def fetch_all_google_contacts(cfg: models.GoogleSync, db: Session) -> list[dict]:
+    """People API paginated fetch, parsed into the same normalized dict shape
+    _parse_vcard() (sync_icloud.py) produces — name/vorname/fn/email/phones/
+    firma/rolle/linkedin_url — so downstream code (_merge_parsed_contact,
+    the unified contacts sync) never needs to know which provider a contact
+    came from. Defensive like fetch_all_vcards(): returns [] on any error,
+    the caller decides how to surface that."""
+    try:
+        creds = _refresh_if_needed(cfg, db)
+        from googleapiclient.discovery import build
+
+        service = build("people", "v1", credentials=creds, cache_discovery=False)
+
+        results: list[dict] = []
+        page_token = None
+        while True:
+            response = service.people().connections().list(
+                resourceName="people/me",
+                personFields="names,emailAddresses,phoneNumbers,organizations,urls",
+                pageSize=1000,
+                pageToken=page_token,
+            ).execute()
+
+            for person in response.get("connections", []):
+                names = person.get("names") or []
+                fn = (names[0].get("displayName") if names else "") or ""
+                if not fn:
+                    continue
+                family = (names[0].get("familyName") or "").strip() if names else ""
+                given = (names[0].get("givenName") or "").strip() if names else ""
+                name = family or fn
+                vorname_val = given or None
+
+                emails = person.get("emailAddresses") or []
+                email_val = emails[0].get("value") if emails else None
+
+                phones_val: list[dict] = []
+                for p in person.get("phoneNumbers") or []:
+                    number = (p.get("value") or "").strip()
+                    if not number:
+                        continue
+                    phones_val.append({"number": number, "type": _google_phone_type(p.get("type", ""))})
+
+                orgs = person.get("organizations") or []
+                org_val = (orgs[0].get("name") or "").strip() or None if orgs else None
+                title_val = (orgs[0].get("title") or "").strip() or None if orgs else None
+
+                linkedin_url = None
+                for url_entry in person.get("urls") or []:
+                    val = url_entry.get("value") or ""
+                    if "linkedin.com" in val:
+                        linkedin_url = val
+                        break
+
+                results.append({
+                    "name": name, "vorname": vorname_val, "fn": fn, "email": email_val,
+                    "phones": phones_val, "firma": org_val, "rolle": title_val,
+                    "linkedin_url": linkedin_url,
+                })
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        return results
+    except Exception:
+        return []
+
+
 # ── OAuth endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/status", response_model=schemas.GoogleSyncStatus)
@@ -128,6 +216,8 @@ def google_status(db: Session = Depends(get_db), current_user: models.User = Dep
         client_id=cfg.client_id,
         gmail_last_sync=cfg.gmail_last_sync,
         gcal_last_sync=cfg.gcal_last_sync,
+        contacts_last_sync=cfg.contacts_last_sync,
+        contacts_scope_granted=cfg.contacts_scope_granted,
     )
 
 
@@ -222,6 +312,12 @@ def google_callback(code: str, state: str = "", db: Session = Depends(get_db)):
     cfg.refresh_token_enc = encrypt_api_key(creds.refresh_token) if creds.refresh_token else None
     cfg.token_expiry      = creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry else None
     cfg.oauth_state       = None
+    # creds.scopes reflects what Google actually granted (from the token
+    # endpoint's real "scope" response field), not just what we requested —
+    # an existing refresh token from before the contacts scope was added
+    # won't have it until the user reconnects. getattr() defensively, since
+    # not every Credentials-shaped object is guaranteed to carry .scopes.
+    cfg.contacts_scope_granted = CONTACTS_SCOPE in (getattr(creds, "scopes", None) or [])
 
     # Fetch the authenticated user's email from Google Userinfo and store it
     try:

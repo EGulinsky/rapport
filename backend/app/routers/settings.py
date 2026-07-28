@@ -221,6 +221,7 @@ def get_sync_settings(db: Session = Depends(get_db), current_user: models.User =
         "google_enabled": cfg.google_enabled,
         "gmail_enabled": cfg.gmail_enabled,
         "gcal_enabled": cfg.gcal_enabled,
+        "google_contacts_enabled": cfg.google_contacts_enabled,
         "icloud_enabled": cfg.icloud_enabled,
         "icloud_mail_enabled": cfg.icloud_mail_enabled,
         "icloud_cal_enabled": cfg.icloud_cal_enabled,

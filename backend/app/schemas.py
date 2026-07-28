@@ -315,6 +315,8 @@ class GoogleSyncStatus(BaseModel):
     client_id: Optional[str] = None
     gmail_last_sync: Optional[datetime] = None
     gcal_last_sync: Optional[datetime] = None
+    contacts_last_sync: Optional[datetime] = None
+    contacts_scope_granted: bool = False
 
 
 class SyncResult(BaseModel):

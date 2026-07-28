@@ -456,6 +456,8 @@ class GoogleSync(Base):
     gmail_email         = Column(String, nullable=True)   # authenticated Google account email
     gmail_last_sync     = Column(DateTime(timezone=True), nullable=True)
     gcal_last_sync      = Column(DateTime(timezone=True), nullable=True)
+    contacts_last_sync    = Column(DateTime(timezone=True), nullable=True)
+    contacts_scope_granted = Column(Boolean, default=False, nullable=False)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -647,6 +649,7 @@ class SyncSettings(Base):
     google_enabled           = Column(Boolean, default=True, nullable=False)
     gmail_enabled            = Column(Boolean, default=True, nullable=False)
     gcal_enabled             = Column(Boolean, default=True, nullable=False)
+    google_contacts_enabled  = Column(Boolean, default=True, nullable=False)
     icloud_enabled           = Column(Boolean, default=True, nullable=False)
     icloud_mail_enabled      = Column(Boolean, default=True, nullable=False)
     icloud_cal_enabled       = Column(Boolean, default=True, nullable=False)
