@@ -38,11 +38,15 @@
     "connectWithGoogle": "Connect with Google",
     "gmail": "Gmail",
     "calendar": "Calendar",
+    "contacts": "Contacts",
     "syncMailTitle": "Fetch new mail since last sync",
     "resyncAllTitle": "Re-scan the last 90 days",
     "lastSync": "Last sync: {{date}}",
     "syncDoneTitle": "{{target}} sync complete",
-    "syncStats": "{{processed}} processed · {{created}} events created · {{skipped}} skipped"
+    "syncStats": "{{processed}} processed · {{created}} events created · {{skipped}} skipped",
+    "contactsSyncStats": "{{processed}} processed · {{created}} contacts created",
+    "contactsReconnectHint": "Reconnect to grant Contacts access",
+    "contactsReconnect": "Reconnect"
   },
   "ai": {
     "autoSaveHint": "Changes are saved automatically",

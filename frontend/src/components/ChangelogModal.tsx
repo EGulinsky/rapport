@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.53',
+    date: '2026-07-28',
+    changes: [
+      'Google Contacts now has a UI: a third card next to Gmail/Calendar in Settings → Google, with its own Sync button and last-sync time, plus a "Reconnect" prompt if the connected Google account hasn\'t granted Contacts access yet (adding Contacts support to an account connected before this release needs one re-authorization). A new toggle in Settings → Sync Control lets Google Contacts be turned off independently of Gmail/Calendar, matching the existing iCloud Contacts toggle. The main "Sync all" button now fires the contacts sync whenever either iCloud or Google contacts is enabled.',
+    ],
+  },
+  {
     version: '4.6.52',
     date: '2026-07-28',
     changes: [

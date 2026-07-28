@@ -343,6 +343,8 @@ export interface GoogleSyncStatus {
   client_id?: string
   gmail_last_sync?: string
   gcal_last_sync?: string
+  contacts_last_sync?: string
+  contacts_scope_granted?: boolean
 }
 
 export interface SyncResult {
@@ -489,6 +491,7 @@ export interface SyncSettings {
   google_enabled: boolean
   gmail_enabled: boolean
   gcal_enabled: boolean
+  google_contacts_enabled: boolean
   icloud_enabled: boolean
   icloud_mail_enabled: boolean
   icloud_cal_enabled: boolean

@@ -149,8 +149,12 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
       const icloudOn  = syncCfg?.icloud_enabled  ?? true
       const filesOn   = (syncCfg?.files_enabled ?? true) && (filesCfg?.enabled ?? false) && !!(filesCfg?.folder_path)
 
-      // Contacts first (fast, no AI) — calls matching depends on them being present
-      if (icloudOn && (syncCfg?.icloud_contacts_enabled ?? true)) {
+      // Contacts first (fast, no AI) — calls matching depends on them being present.
+      // A single sync covers both providers server-side, so fire it whenever
+      // either iCloud or Google contacts is enabled.
+      const icloudContactsOn = icloudOn && (syncCfg?.icloud_contacts_enabled ?? true)
+      const googleContactsOn = googleOn && (syncCfg?.google_contacts_enabled ?? true)
+      if (icloudContactsOn || googleContactsOn) {
         await api.icloud.syncContacts().catch(() => null)
       }
 

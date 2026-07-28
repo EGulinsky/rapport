@@ -58,7 +58,7 @@ function GoogleSyncPanel() {
   const [creds, setCreds] = useState({ client_id: '', client_secret: '' })
   const [showSecret, setShowSecret] = useState(false)
   const [savingCreds, setSavingCreds] = useState(false)
-  const [syncing, setSyncing] = useState<'gmail' | 'gcal' | null>(null)
+  const [syncing, setSyncing] = useState<'gmail' | 'gcal' | 'contacts' | null>(null)
   const [resetting, setResetting] = useState(false)
   const [lastResult, setLastResult] = useState<(SyncResult & { target: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -120,14 +120,16 @@ function GoogleSyncPanel() {
     }
   }
 
-  async function runSync(target: 'gmail' | 'gcal') {
+  async function runSync(target: 'gmail' | 'gcal' | 'contacts') {
     setSyncing(target)
     setError(null)
     setLastResult(null)
     try {
       const res = target === 'gmail'
         ? await api.sync.syncGmail()
-        : await api.sync.syncCalendar()
+        : target === 'gcal'
+        ? await api.sync.syncCalendar()
+        : await api.icloud.syncContacts()
       setLastResult({ ...res, target })
       const s = await api.sync.googleStatus()
       setStatus(s)
@@ -244,15 +246,42 @@ function GoogleSyncPanel() {
                 </div>
                 <p className="text-xs text-gray-400">{t('google.lastSync', { date: fmtDate(status.gcal_last_sync) })}</p>
               </div>
+
+              {/* Contacts */}
+              <div className="col-span-2 rounded-lg bg-gray-50 border border-gray-100 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-700">{t('google.contacts')}</p>
+                  <button onClick={() => runSync('contacts')} disabled={!!syncing || !status.contacts_scope_granted}
+                    className="flex items-center gap-1 rounded-md bg-white border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50">
+                    {syncing === 'contacts'
+                      ? <Loader className="h-3 w-3 animate-spin" />
+                      : <RefreshCw className="h-3 w-3" />}
+                    {t('shared.sync')}
+                  </button>
+                </div>
+                {status.contacts_scope_granted ? (
+                  <p className="text-xs text-gray-400">{t('google.lastSync', { date: fmtDate(status.contacts_last_sync) })}</p>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-amber-700">{t('google.contactsReconnectHint')}</p>
+                    <button onClick={openOAuth}
+                      className="shrink-0 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700">
+                      {t('google.contactsReconnect')}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* Sync result */}
           {lastResult && (
             <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 space-y-1">
-              <p className="font-semibold">{t('google.syncDoneTitle', { target: lastResult.target === 'gmail' ? t('google.gmail') : t('google.calendar') })}</p>
+              <p className="font-semibold">{t('google.syncDoneTitle', { target: lastResult.target === 'gmail' ? t('google.gmail') : lastResult.target === 'gcal' ? t('google.calendar') : t('google.contacts') })}</p>
               <p>
-                {t('google.syncStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}
+                {lastResult.target === 'contacts'
+                  ? t('google.contactsSyncStats', { processed: lastResult.processed, created: lastResult.created })
+                  : t('google.syncStats', { processed: lastResult.processed, created: lastResult.created, skipped: lastResult.skipped })}
                 {!!lastResult.updated && ` · ${t('shared.updatedCount', { count: lastResult.updated })}`}
               </p>
               {lastResult.errors.length > 0 && (
@@ -1115,7 +1144,7 @@ function FilesPanel() {
 // ── Sync Control Panel ────────────────────────────────────────────────────────
 
 const DEFAULT_SYNC: SyncSettings = {
-  google_enabled: true, gmail_enabled: true, gcal_enabled: true,
+  google_enabled: true, gmail_enabled: true, gcal_enabled: true, google_contacts_enabled: true,
   icloud_enabled: true, icloud_mail_enabled: true, icloud_cal_enabled: true,
   icloud_notes_enabled: true, icloud_reminders_enabled: true,
   icloud_contacts_enabled: true, icloud_calls_enabled: true,
@@ -1195,6 +1224,7 @@ function SyncControlPanel() {
       <SyncGroup label={t('syncControl.google')} enabled={settings.google_enabled} onToggle={v => toggle('google_enabled', v)}>
         <SyncRow label={t('syncControl.gmail')} enabled={settings.gmail_enabled} onToggle={v => toggle('gmail_enabled', v)} />
         <SyncRow label={t('syncControl.googleCalendar')} enabled={settings.gcal_enabled} onToggle={v => toggle('gcal_enabled', v)} />
+        <SyncRow label={t('syncControl.contacts')} enabled={settings.google_contacts_enabled} onToggle={v => toggle('google_contacts_enabled', v)} />
       </SyncGroup>
 
       <SyncGroup label={t('syncControl.appleIcloud')} enabled={settings.icloud_enabled} onToggle={v => toggle('icloud_enabled', v)}>
