@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.58',
+    date: '2026-07-28',
+    changes: [
+      'Fixed contacts sync linking newly-synced contacts to the wrong applications ("crisscross" links). The contact-linking check used to search a contact\'s name as a substring across event notes, timeline titles, and application comments/interview-notes text — the same class of bug already fixed once for company names ("ERA" matching "Beratung"), just recurring for person names. It now only links a contact when they\'re the literal sender/recipient of a mail event or an attendee of a calendar event for that specific application. Rejected applications are also now excluded from gaining new contact links during a routine sync, matching how mail/calendar matching already treats them. Existing incorrect links from past syncs aren\'t auto-removed (there\'s no reliable way to tell which ones were wrong after the fact) — use the Contacts tab to review and unlink as needed.',
+    ],
+  },
+  {
     version: '4.6.57',
     date: '2026-07-28',
     changes: [

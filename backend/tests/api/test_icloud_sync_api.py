@@ -17,7 +17,7 @@ import pytest
 
 from app import models
 from app.ai.provider import encrypt_api_key
-from tests.factories import application_factory, contact_factory, icloud_vcard
+from tests.factories import application_factory, contact_factory, event_factory, icloud_vcard
 from tests.integration.conftest import (
     FakeCaldavCalendar, FakeCaldavClient, FakeImapConnection, icloud_calendar_event,
 )
@@ -294,11 +294,13 @@ class TestSyncTrigger:
     ):
         _cfg(db_session)
         # "Erika Musterfrau" existiert bereits (z.B. aus einem früheren Sync),
-        # ist aber noch NICHT mit der Bewerbung verlinkt, obwohl sie im
-        # Kommentartext erwähnt wird — der Sync muss diese Lücke per Backfill
-        # schließen. Der neue vCard-Kontakt "Neuer Kontakt" landet zusätzlich
-        # als frischer Import (Firmenname-Match), unabhängig vom Backfill.
-        app = application_factory(db_session, firma="Contoso AG", kommentar="Telefonat mit Erika Musterfrau.")
+        # ist aber noch NICHT mit der Bewerbung verlinkt, obwohl sie als
+        # Absenderin eines Mail-Events zu dieser Bewerbung geführt wird — der
+        # Sync muss diese Lücke per Backfill schließen. Der neue vCard-Kontakt
+        # "Neuer Kontakt" landet zusätzlich als frischer Import (Firmenname-
+        # Match), unabhängig vom Backfill.
+        app = application_factory(db_session, firma="Contoso AG")
+        event_factory(db_session, app, typ="mail", source="gmail", autor="Erika Musterfrau <erika-bereits-da@example.com>")
         existing = contact_factory(db_session, name="Musterfrau", vorname="Erika", email="erika-bereits-da@example.com")
         db_session.commit()
         vcards = [icloud_vcard("Neuer Kontakt", family="Kontakt", given="Neuer", email="neu@contoso.com", org="Contoso AG")]

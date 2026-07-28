@@ -437,6 +437,11 @@ class SyncProgress:
     created: int = 0
     updated: int = 0
     skipped: int = 0
+    # Name of whatever single record is being processed right now (e.g. a
+    # contact's display name) -- separate from `step`'s aggregate count text,
+    # mirroring sync_company.py's _CURRENT_COMPANY concept so a live progress
+    # UI can show "currently processing: X" next to an overall summary.
+    current_item: str = ""
 
 # module-level dict; safe for single-worker uvicorn (this is a single-user app)
 _progress: dict[str, SyncProgress] = {}
@@ -449,13 +454,15 @@ def init_progress(source: str, label: str, step: Optional[str] = None, lang: str
     _progress[source] = SyncProgress(label=label, step=step or t("starting", lang))
 
 
-def update_progress(source: str, current: int, total: int, step: str = "") -> None:
+def update_progress(source: str, current: int, total: int, step: str = "", current_item: str = "") -> None:
     p = _progress.get(source)
     if p:
         p.current = current
         p.total = total
         if step:
             p.step = step
+        if current_item:
+            p.current_item = current_item
 
 
 def finish_progress(
@@ -499,6 +506,7 @@ def get_all_progress() -> dict:
             "created": p.created,
             "updated": p.updated,
             "skipped": p.skipped,
+            "current_item": p.current_item,
         }
         for src, p in _progress.items()
     }
@@ -798,7 +806,11 @@ def extract_email_domains(text: str) -> list[str]:
 
 
 def build_contact_domain_index(db: Session) -> dict[str, list[dict]]:
-    """Map email-domain → [app_dict] from contacts linked to applications."""
+    """Map email-domain → [app_dict] from contacts linked to applications.
+
+    Skips rejected applications — matches build_firm_index()'s active-only
+    scope, so a contact linked to both an active and a rejected application
+    can't route a new batch-sync match to the rejected one."""
     index: dict[str, list[dict]] = {}
     for c in db.query(models.Contact).all():
         if not c.email or "@" not in c.email:
@@ -807,6 +819,8 @@ def build_contact_domain_index(db: Session) -> dict[str, list[dict]]:
         if domain in _GENERIC_EMAIL_DOMAINS:
             continue
         for app in (c.applications or []):
+            if app.main_status == "rejected":
+                continue
             app_dict = {"id": app.id, "firma": app.firma, "rolle": app.rolle}
             bucket = index.setdefault(domain, [])
             if app_dict not in bucket:
@@ -823,7 +837,9 @@ def extract_email_addresses(header_val: str) -> list[str]:
 
 
 def build_contact_email_index(db: Session) -> dict[str, list[dict]]:
-    """Map exact contact email → [app_dict] for contacts linked to applications."""
+    """Map exact contact email → [app_dict] for contacts linked to applications.
+
+    Skips rejected applications — see build_contact_domain_index()."""
     index: dict[str, list[dict]] = {}
     for c in db.query(models.Contact).all():
         if not c.email or "@" not in c.email:
@@ -833,6 +849,8 @@ def build_contact_email_index(db: Session) -> dict[str, list[dict]]:
         if domain in _GENERIC_EMAIL_DOMAINS:
             continue
         for app in (c.applications or []):
+            if app.main_status == "rejected":
+                continue
             app_dict = {"id": app.id, "firma": app.firma, "rolle": app.rolle}
             bucket = index.setdefault(email_lower, [])
             if app_dict not in bucket:

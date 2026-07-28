@@ -72,9 +72,14 @@ class TestSyncContactsFromVcards:
         contact = db_session.query(sync_icloud.models.Contact).one()
         assert contact.company_profile_id is not None
 
-    async def test_positiv_erwaehnung_in_event_wird_importiert_und_verknuepft(self, db_session):
+    async def test_positiv_mail_absender_wird_importiert_und_verknuepft(self, db_session):
+        # Nur eine echte E-Mail (autor = tatsächlicher Absender/Empfänger,
+        # source ist ein Mail-Sync) verknüpft — nicht mehr ein bloßer
+        # Namens-Substring irgendwo im Notiz-/Titel-Text (Regression
+        # 2026-07-28: neu synchronisierte Kontakte wurden nach diesem alten
+        # Verhalten wieder "kreuz und quer" verknüpft).
         app = application_factory(db_session, firma="Andere Firma GmbH")
-        event_factory(db_session, app, typ="notiz", notiz="Telefonat mit Anna Beispiel vereinbart")
+        event_factory(db_session, app, typ="mail", source="gmail", autor="Anna Beispiel <anna.beispiel@web.de>")
         vcards = [_vcard("Anna Beispiel", email="anna.beispiel@web.de", org=None)]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
@@ -84,13 +89,54 @@ class TestSyncContactsFromVcards:
         contact = db_session.query(sync_icloud.models.Contact).one()
         assert app in contact.applications
 
+    async def test_positiv_kalender_teilnehmer_wird_importiert_und_verknuepft(self, db_session):
+        app = application_factory(db_session, firma="Andere Firma GmbH")
+        event_factory(db_session, app, typ="gespräch", source="gcal", autor="Teilnehmer: Anna Beispiel <anna.beispiel@web.de>")
+        vcards = [_vcard("Anna Beispiel", email="anna.beispiel@web.de", org=None)]
+
+        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
+
+        assert created == 1
+        contact = db_session.query(sync_icloud.models.Contact).one()
+        assert app in contact.applications
+
+    async def test_negativ_erwaehnung_in_notiz_verknuepft_nicht_mehr(self, db_session):
+        # Ein Namens-Substring in einer freien Notiz (nicht im autor-Feld
+        # eines Mail-/Kalender-Events) verknüpft nicht mehr — das war genau
+        # die Quelle der "kreuz und quer"-Fehlverknüpfungen.
+        app = application_factory(db_session, firma="Andere Firma GmbH")
+        event_factory(db_session, app, typ="notiz", source="gmail", notiz="Telefonat mit Anna Beispiel vereinbart")
+        vcards = [_vcard("Anna Beispiel", email="anna.beispiel@web.de", org=None)]
+
+        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
+
+        assert created == 1
+        contact = db_session.query(sync_icloud.models.Contact).one()
+        assert app not in contact.applications
+
     async def test_negativ_firma_textmatch_allein_verknuepft_nicht_mehr(self, db_session):
         # Kernverhalten der Umstellung: ein reiner Firmennamen-Match des ORG-
         # Feldes gegen eine echte Bewerbung importiert weiterhin (unconditional),
-        # aber verknüpft NICHT mehr automatisch — nur eine echte Erwähnung im
-        # Bewerbungs-/E-Mail-Text (oder Kalender) tut das noch.
+        # aber verknüpft NICHT mehr automatisch — nur eine echte Mail-/Kalender-
+        # Teilnahme (autor-Feld) tut das noch.
         app = application_factory(db_session, firma="Contoso AG")
         vcards = [_vcard("Herr Beispiel", email="beispiel@web.de", org="Contoso AG")]
+
+        with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)
+
+        assert created == 1
+        contact = db_session.query(sync_icloud.models.Contact).one()
+        assert app not in contact.applications
+
+    async def test_negativ_abgelehnte_bewerbung_wird_nicht_verknuepft(self, db_session):
+        # Batch-Sync verknüpft nur aktive Bewerbungen — dieselbe Regel wie
+        # build_firm_index() (sync_common.py), jetzt auch hier angewendet.
+        app = application_factory(db_session, firma="Andere Firma GmbH", main_status="rejected")
+        event_factory(db_session, app, typ="mail", source="gmail", autor="Anna Beispiel <anna.beispiel@web.de>")
+        vcards = [_vcard("Anna Beispiel", email="anna.beispiel@web.de", org=None)]
 
         with patch.object(sync_icloud, "fetch_all_vcards", new=AsyncMock(return_value=vcards)):
             created, errors, touched_ids = await sync_icloud._sync_contacts_from_vcards(_cfg(), db_session)

@@ -115,10 +115,15 @@ class TestSyncAllContacts:
         assert touched_ids == []
         assert updated == 0
 
-    async def test_positiv_backfill_verlinkt_bestandskontakt_ueber_erwaehnung(self, db_session, monkeypatch):
-        from tests.factories import application_factory, contact_factory
+    async def test_positiv_backfill_verlinkt_bestandskontakt_ueber_mail_absender(self, db_session, monkeypatch):
+        # Nur eine echte Mail-Teilnahme (autor-Feld eines Mail-/Kalender-
+        # Events) verlinkt beim Backfill — ein Namens-Substring in einem
+        # freien Text (z.B. kommentar) tut das nicht mehr (Regression
+        # 2026-07-28: "kreuz und quer" verknüpfte Kontakte).
+        from tests.factories import application_factory, contact_factory, event_factory
 
-        app = application_factory(db_session, firma="Andere Firma GmbH", kommentar="Telefonat mit Erika Musterfrau.")
+        app = application_factory(db_session, firma="Andere Firma GmbH")
+        event_factory(db_session, app, typ="mail", source="gmail", autor="Erika Musterfrau <erika-bereits-da@example.com>")
         existing = contact_factory(db_session, name="Musterfrau", vorname="Erika", email="erika-bereits-da@example.com")
         db_session.commit()
         _icloud_cfg(db_session)
@@ -130,3 +135,19 @@ class TestSyncAllContacts:
         assert updated == 1
         db_session.refresh(existing)
         assert app in existing.applications
+
+    async def test_negativ_backfill_verlinkt_nicht_ueber_freitext_erwaehnung(self, db_session, monkeypatch):
+        from tests.factories import application_factory, contact_factory
+
+        application_factory(db_session, firma="Andere Firma GmbH", kommentar="Telefonat mit Erika Musterfrau.")
+        existing = contact_factory(db_session, name="Musterfrau", vorname="Erika", email="erika-bereits-da@example.com")
+        db_session.commit()
+        _icloud_cfg(db_session)
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", AsyncMock(return_value=[]))
+
+        created, errors, touched_ids, updated = await _sync_all_contacts(db_session, None, "de")
+
+        assert created == 0
+        assert updated == 0
+        db_session.refresh(existing)
+        assert existing.applications == []

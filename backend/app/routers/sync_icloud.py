@@ -1191,67 +1191,80 @@ def reset_contacts_sync(db: Session = Depends(get_db), current_user: models.User
         db.commit()
 
 
+_MAIL_AND_CALENDAR_SOURCES = ("gmail", "icloud_mail", "gcal", "icloud_cal")
+
+
 def _find_apps_where_contact_mentioned(name: str, email: str | None, db) -> list[int]:
-    """Return app IDs where this contact is explicitly mentioned in events or application text fields.
+    """Return app IDs where this contact is the literal sender/recipient of a
+    mail event, or an attendee of a calendar event, for that specific
+    application — NOT a generic text-substring match anywhere in event or
+    application notes.
 
-    Only creates a match when the full name (or email) appears verbatim — avoids false
-    positives from common first-name-only fragments.
+    Event.autor is a structured field, not free text: for mail events
+    (source gmail/icloud_mail) it holds only the OTHER party's "Name <email>"
+    (or several, comma-joined) via _mail_autor_and_direction() in
+    sync_common.py; for calendar events (source gcal/icloud_cal) it holds a
+    "Teilnehmer: Name <email>, ..." line built from the organizer/attendees.
+    Matching against autor alone, scoped to these four sources, means every
+    match is a genuine sender/recipient/attendee for that application.
+
+    Matching against notiz/titel/kommentar/gespraech_* (the previous
+    behavior, removed here) searched free text that can mention a name in
+    any context — the exact "ERA Group" substring-linking bug this
+    codebase's contacts-sync overhaul was meant to eliminate, just recurring
+    for person names instead of company names (live-reported regression,
+    2026-07-28: newly-synced contacts ending up linked to unrelated
+    applications again — "kreuz und quer").
+
+    Also excludes rejected applications, matching every other batch-sync
+    matcher (build_firm_index() et al. in sync_common.py) — a rejected
+    application shouldn't gain new contact links from a routine sync either.
     """
-    from sqlalchemy import or_
-
     app_ids: set[int] = set()
     candidates: list[str] = []
 
-    # Full name as-is
-    if name and len(name) >= 5:
-        candidates.append(name)
-
-    # "Last First" inversion for contacts stored surname-first
-    parts = name.split() if name else []
-    if len(parts) >= 2:
-        inverted = " ".join(reversed(parts))
-        if inverted != name:
-            candidates.append(inverted)
-
-    # Email is highly specific
     if email:
         candidates.append(email.lower())
+
+    if name and len(name) >= 5:
+        candidates.append(name)
+        parts = name.split()
+        if len(parts) >= 2:
+            inverted = " ".join(reversed(parts))
+            if inverted != name:
+                candidates.append(inverted)
 
     if not candidates:
         return []
 
-    # Search events
     for term in candidates:
         evs = (
             db.query(models.Event)
-            .filter(or_(
-                models.Event.titel.ilike(f"%{term}%"),
-                models.Event.notiz.ilike(f"%{term}%"),
+            .join(models.Application, models.Event.application_id == models.Application.id)
+            .filter(
+                models.Event.source.in_(_MAIL_AND_CALENDAR_SOURCES),
                 models.Event.autor.ilike(f"%{term}%"),
-            ))
+                models.Application.main_status != "rejected",
+            )
             .all()
         )
         for ev in evs:
             app_ids.add(ev.application_id)
 
-    # Search application text fields
-    for term in candidates:
-        apps = (
-            db.query(models.Application)
-            .filter(or_(
-                models.Application.kommentar.ilike(f"%{term}%"),
-                models.Application.gespraech_1.ilike(f"%{term}%"),
-                models.Application.gespraech_2.ilike(f"%{term}%"),
-                models.Application.gespraech_3.ilike(f"%{term}%"),
-                models.Application.gespraech_4.ilike(f"%{term}%"),
-                models.Application.gespraech_5.ilike(f"%{term}%"),
-            ))
-            .all()
-        )
-        for a in apps:
-            app_ids.add(a.id)
-
     return list(app_ids)
+
+
+# Cancel flag for the Contacts-tab's own "Sync"/"Re-Sync" button — mirrors
+# sync_company.py's _SYNC_CANCEL. Module-level, not per-request, since the
+# actual work runs in a detached BackgroundTask the request has no handle to.
+_CONTACTS_SYNC_CANCEL = False
+
+
+@router.post("/contacts/cancel", status_code=200)
+async def cancel_contacts_sync():
+    global _CONTACTS_SYNC_CANCEL
+    _CONTACTS_SYNC_CANCEL = True
+    return {"ok": True}
 
 
 async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> tuple[int, list[str], list[int], int]:
@@ -1265,8 +1278,18 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
     configured before calling this (raising 400 otherwise) — this function
     itself just silently skips whichever provider has no credentials.
 
+    Cancellable via _CONTACTS_SYNC_CANCEL (set by cancel_contacts_sync()):
+    checked between providers and inside each provider's own per-contact loop
+    (_sync_contacts_from_parsed), so a cancel takes effect within one contact
+    of being requested rather than only between the two providers. Whatever
+    was already imported/matched before the cancel stays — this is a graceful
+    early stop, not a rollback, matching sync_company.py's cancel semantics.
+
     Returns (created, errors, touched_ids, updated).
     """
+    global _CONTACTS_SYNC_CANCEL
+    _CONTACTS_SYNC_CANCEL = False
+
     from app.routers.sync_google import _get_cfg as _get_google_cfg
 
     icloud_cfg = _get_cfg(db)
@@ -1275,11 +1298,13 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
     # Progress tracking lives here (not in each caller) so that BOTH entry
     # points — the global "Sync all" button (sync_contacts()) and the
     # Contacts-tab button's own background run (sync_contacts_icloud()) —
-    # get identical, complete live progress for free, per provider.
+    # get identical, complete live progress for free, per provider. Google's
+    # entry is only initialized once we're actually about to run it (not
+    # up front alongside iCloud's) — otherwise a cancel during the iCloud
+    # phase would leave google_contacts stuck showing "loading" forever,
+    # since nothing would ever update or finish it.
     if icloud_cfg:
         init_progress("icloud_contacts", t("label_icloud_contacts", lang), t("loading_contacts", lang), lang=lang)
-    if google_cfg:
-        init_progress("google_contacts", t("label_google_contacts", lang), t("loading_contacts", lang), lang=lang)
 
     created = 0
     errors: list[str] = []
@@ -1293,7 +1318,8 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
         icloud_cfg.contacts_last_sync = datetime.now(timezone.utc)
         finish_progress("icloud_contacts", lang=lang, created=c, skipped=len(errs))
 
-    if google_cfg:
+    if google_cfg and not _CONTACTS_SYNC_CANCEL:
+        init_progress("google_contacts", t("label_google_contacts", lang), t("loading_contacts", lang), lang=lang)
         c, errs, ids = await _sync_contacts_from_google(google_cfg, db, user_id)
         created += c
         errors.extend(errs)
@@ -1308,16 +1334,19 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
     # a skip or an error, so it's counted as such rather than stuffed as free text
     # into the errors list the way it used to be.
     updated = 0
-    all_contacts = db.query(models.Contact).all()
-    for contact in all_contacts:
-        mention_ids = _find_apps_where_contact_mentioned(contact.name, contact.email, db)
-        linked_ids = {a.id for a in contact.applications}
-        for app_id in mention_ids:
-            if app_id not in linked_ids:
-                app = db.query(models.Application).get(app_id)
-                if app:
-                    contact.applications.append(app)
-                    updated += 1
+    if not _CONTACTS_SYNC_CANCEL:
+        all_contacts = db.query(models.Contact).all()
+        for contact in all_contacts:
+            if _CONTACTS_SYNC_CANCEL:
+                break
+            mention_ids = _find_apps_where_contact_mentioned(contact.name, contact.email, db)
+            linked_ids = {a.id for a in contact.applications}
+            for app_id in mention_ids:
+                if app_id not in linked_ids:
+                    app = db.query(models.Application).get(app_id)
+                    if app:
+                        contact.applications.append(app)
+                        updated += 1
 
     db.commit()
     return created, errors, touched_ids, updated
@@ -1644,7 +1673,12 @@ async def _sync_contacts_from_parsed(
     update_progress(progress_key, 0, total, t("contacts_found", lang, count=total))
 
     for idx, parsed in enumerate(parsed_list):
-        update_progress(progress_key, idx, total, t("contact_progress", lang, current=idx + 1, total=total))
+        if _CONTACTS_SYNC_CANCEL:
+            break
+        update_progress(
+            progress_key, idx, total, t("contact_progress", lang, current=idx + 1, total=total),
+            current_item=parsed.get("fn") or parsed.get("name") or "",
+        )
         # Each contact gets its own SAVEPOINT: a flush failure for one entry
         # (e.g. a stale/duplicate row elsewhere in the address book) must not
         # poison the whole session for the rest of the batch. Without this, a
