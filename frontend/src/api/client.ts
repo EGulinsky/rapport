@@ -173,6 +173,12 @@ export const api = {
         body: JSON.stringify({ ids }),
       }),
 
+    bulkUnlinkApplications: (contactId: number, ids: number[]) =>
+      request<{ unlinked: number }>(`/contacts/${contactId}/applications/bulk`, {
+        method: 'DELETE',
+        body: JSON.stringify({ ids }),
+      }),
+
     patch: (id: number, data: Omit<Partial<Contact>, 'phones'> & { company_profile_id?: number | null; phones?: { number: string; type: string }[] }) =>
       request<{ ok: boolean }>(`/contacts/${id}`, {
         method: 'PATCH',

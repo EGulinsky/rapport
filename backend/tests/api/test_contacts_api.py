@@ -307,3 +307,82 @@ class TestBulkDeleteContacts:
         ).fetchall()
         assert links == []
         assert phones == []
+
+
+class TestBulkUnlinkApplications:
+    """DELETE /api/contacts/{id}/applications/bulk — mirror of applications.py's
+    bulk_delete_contacts(), from the contact's side: removes only the link,
+    never the application, and (unlike the app-side endpoint) never
+    hard-deletes the contact even if this empties its application list."""
+
+    def test_positiv_entfernt_gezielt_ausgewaehlte_verknuepfungen(self, client, db_session):
+        c = contact_factory(db_session, name="Mehrfach Verlinkt")
+        app1 = application_factory(db_session, firma="Contoso", rolle="Dev")
+        app2 = application_factory(db_session, firma="Fabrikam", rolle="PM")
+        app3 = application_factory(db_session, firma="Adatum", rolle="QA")
+        c.applications.extend([app1, app2, app3])
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/contacts/{c.id}/applications/bulk", json={"ids": [app1.id, app2.id]})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"unlinked": 2}
+        db_session.refresh(c)
+        assert [a.id for a in c.applications] == [app3.id]
+
+    def test_positiv_bewerbung_und_kontakt_bleiben_erhalten(self, client, db_session):
+        # Explicit user requirement: only the link is removed — neither the
+        # application nor the contact itself gets deleted, even if this
+        # leaves the contact with zero remaining applications (unlike the
+        # app-side bulk-delete-contacts endpoint, which hard-deletes an
+        # orphaned contact — the wrong behavior here since the user is
+        # editing this specific contact from its own modal).
+        c = contact_factory(db_session, name="Wird Nicht Geloescht")
+        app = application_factory(db_session, firma="Contoso", rolle="Dev")
+        c.applications.append(app)
+        db_session.commit()
+        contact_id, app_id = c.id, app.id
+
+        resp = client.request("DELETE", f"/api/contacts/{contact_id}/applications/bulk", json={"ids": [app_id]})
+
+        assert resp.status_code == 200
+        assert db_session.get(models.Contact, contact_id) is not None
+        assert db_session.get(models.Application, app_id) is not None
+        db_session.refresh(c)
+        assert c.applications == []
+
+    def test_negativ_unbekannter_kontakt_liefert_404(self, client, db_session):
+        resp = client.request("DELETE", "/api/contacts/99999/applications/bulk", json={"ids": [1]})
+        assert resp.status_code == 404
+
+    def test_negativ_nicht_verlinkte_id_wird_ignoriert(self, client, db_session):
+        c = contact_factory(db_session, name="Solo")
+        app = application_factory(db_session, firma="Contoso", rolle="Dev")
+        unrelated = application_factory(db_session, firma="Fabrikam", rolle="PM")
+        c.applications.append(app)
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/contacts/{c.id}/applications/bulk", json={"ids": [unrelated.id]})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"unlinked": 0}
+        db_session.refresh(c)
+        assert [a.id for a in c.applications] == [app.id]
+
+    def test_positiv_schreibt_audit_pro_entfernter_verknuepfung(self, client, db_session):
+        # add_audit() only persists "update"-action entries in verbose mode
+        # (normal mode is create/delete/status_change/merge/import only) —
+        # same convention every other field-level audit call in this
+        # codebase follows, so exercise it explicitly here.
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        c = contact_factory(db_session, name="Audit Mich")
+        app = application_factory(db_session, firma="Contoso", rolle="Dev")
+        c.applications.append(app)
+        db_session.commit()
+
+        resp = client.request("DELETE", f"/api/contacts/{c.id}/applications/bulk", json={"ids": [app.id]})
+
+        assert resp.status_code == 200
+        audit = db_session.query(models.AuditLog).filter_by(action="update", contact_id=c.id).first()
+        assert audit is not None
+        assert audit.app_id == app.id

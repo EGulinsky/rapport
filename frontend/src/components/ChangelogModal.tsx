@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.59',
+    date: '2026-07-28',
+    changes: [
+      'The Applications tab in a contact\'s detail modal now supports multi-select and batch removal — check several linked applications and unlink them all at once, mirroring the existing batch-remove-contacts feature in the application modal. This only removes the contact↔application link; neither the application nor the contact itself is deleted, which is useful for cleaning up incorrect links (e.g. from a past sync).',
+    ],
+  },
+  {
     version: '4.6.58',
     date: '2026-07-28',
     changes: [

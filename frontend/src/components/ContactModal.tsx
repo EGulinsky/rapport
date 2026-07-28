@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw, Calendar } from 'lucide-react'
+import { X, Pencil, Save, RotateCcw, Mail, Phone, Linkedin, Building2, ExternalLink, RefreshCw, Calendar, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ContactWithApp, ContactEvents, ContactEventItem } from '../types'
@@ -78,6 +78,8 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
   const [tab, setTab] = useState<Tab>('overview')
   const [events, setEvents] = useState<ContactEvents | null>(null)
   const [eventsLoading, setEventsLoading] = useState(true)
+  const [selectedAppIds, setSelectedAppIds] = useState<Set<number>>(new Set())
+  const [bulkUnlinking, setBulkUnlinking] = useState(false)
   const tabsScrollRef = useRef<HTMLDivElement>(null)
   const [tabsOverflowRight, setTabsOverflowRight] = useState(false)
 
@@ -92,6 +94,28 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
     }
   }, [id])
 
+  function toggleAppSelect(appId: number) {
+    setSelectedAppIds(prev => {
+      const next = new Set(prev)
+      next.has(appId) ? next.delete(appId) : next.add(appId)
+      return next
+    })
+  }
+
+  async function bulkUnlinkSelectedApplications() {
+    if (selectedAppIds.size === 0) return
+    if (!confirm(t('contactModal.confirmUnlinkApplications', { count: selectedAppIds.size }))) return
+    setBulkUnlinking(true)
+    try {
+      await api.contacts.bulkUnlinkApplications(id, [...selectedAppIds])
+      setSelectedAppIds(new Set())
+      await load()
+      onChanged?.()
+    } finally {
+      setBulkUnlinking(false)
+    }
+  }
+
   const loadEvents = useCallback(async () => {
     setEventsLoading(true)
     try {
@@ -102,6 +126,7 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
   }, [id])
 
   useEffect(() => { load(); loadEvents() }, [load, loadEvents])
+  useEffect(() => { setSelectedAppIds(new Set()) }, [id])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -424,17 +449,54 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
         {!loading && contact && !editing && tab === 'apps' && (
           <div className="px-6 py-5">
             {contact.applications && contact.applications.length > 0 ? (
-              <div className="space-y-1">
-                {contact.applications.map(a => (
-                  <button
-                    key={a.id}
-                    onClick={() => onOpenApplication?.(a.id)}
-                    className="w-full text-left rounded-lg border border-gray-100 px-3 py-2 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
-                  >
-                    <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
-                    <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={contact.applications.length > 0 && contact.applications.every(a => selectedAppIds.has(a.id))}
+                    ref={el => { if (el) el.indeterminate = selectedAppIds.size > 0 && !contact.applications!.every(a => selectedAppIds.has(a.id)) }}
+                    onChange={() => {
+                      setSelectedAppIds(prev => {
+                        const allSelected = contact.applications!.every(a => prev.has(a.id))
+                        if (allSelected) return new Set()
+                        return new Set(contact.applications!.map(a => a.id))
+                      })
+                    }}
+                    className="rounded border-gray-300 text-indigo-600 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400">{t('contactModal.selectAllApplications')}</span>
+                  {selectedAppIds.size > 0 && (
+                    <button
+                      onClick={bulkUnlinkSelectedApplications}
+                      disabled={bulkUnlinking}
+                      className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50 ml-2"
+                    >
+                      <Trash2 className="h-3 w-3" /> {t('contactModal.unlinkApplications', { count: selectedAppIds.size })}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {contact.applications.map(a => (
+                    <div
+                      key={a.id}
+                      className="flex items-start gap-2 rounded-lg border border-gray-100 px-3 py-2 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAppIds.has(a.id)}
+                        onChange={() => toggleAppSelect(a.id)}
+                        className="mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0"
+                      />
+                      <button
+                        onClick={() => onOpenApplication?.(a.id)}
+                        className="flex-1 min-w-0 text-left"
+                      >
+                        <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
+                        <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-gray-400 text-center py-8">{t('contactModal.noApplications')}</p>

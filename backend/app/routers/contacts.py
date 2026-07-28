@@ -326,3 +326,43 @@ def bulk_delete_contacts(
         db.delete(c)
     db.commit()
     return {"deleted": len(to_delete)}
+
+
+class BulkUnlinkApplicationsBody(BaseModel):
+    ids: List[int]
+
+
+@router.delete("/{contact_id}/applications/bulk", status_code=200)
+def bulk_unlink_applications(
+    contact_id: int,
+    body: BulkUnlinkApplicationsBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Mirror of applications.py's bulk_delete_contacts(), from the contact's
+    side: removes only the contact<->application link for each given
+    application, never the application itself. Unlike the app-side endpoint,
+    the contact is never hard-deleted here even if this empties its
+    application list — the user is editing this specific contact from its
+    own modal, so deleting the contact out from under them would be a much
+    bigger, unrequested side effect."""
+    from app.routers.applications import _delete_call_events_for_contact
+
+    contact = db.query(models.Contact).filter_by(id=contact_id, user_id=current_user.id).first()
+    if not contact:
+        raise api_error(404, ErrorKey.CONTACT_NOT_FOUND, "Kontakt nicht gefunden")
+
+    linked_by_id = {a.id: a for a in contact.applications}
+    unlinked = 0
+    for app_id in body.ids:
+        app = linked_by_id.get(app_id)
+        if not app:
+            continue
+        _delete_call_events_for_contact(db, app.id, contact, current_user.id)
+        add_audit(db, "update", "user", app_id=app.id, contact_id=contact.id,
+                  field="applications", old_value=f"{app.firma} – {app.rolle}", new_value=None,
+                  reason_key="contact_unlinked_from_application", user_id=current_user.id)
+        contact.applications.remove(app)
+        unlinked += 1
+    db.commit()
+    return {"unlinked": unlinked}

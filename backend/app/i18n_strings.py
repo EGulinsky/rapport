@@ -54,6 +54,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "merge_status_taken": "Zusammenführen: Status übernommen",
         "merge_field_taken": "Zusammenführen: Feld übernommen",
         "merged": "Zusammengeführt",
+        "contact_unlinked_from_application": "Verknüpfung zur Bewerbung entfernt",
         # applications
         "date_from_earliest_event": "automatisch aus frühestem Bewerbungs-Ereignis ergänzt",
         "changed_manually": "manuell geändert",
@@ -222,6 +223,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "merge_status_taken": "Merge: status kept",
         "merge_field_taken": "Merge: field kept",
         "merged": "Merged",
+        "contact_unlinked_from_application": "Unlinked from application",
         "date_from_earliest_event": "automatically filled in from the earliest application event",
         "changed_manually": "changed manually",
         "file_attached_manually": "File attached manually",
