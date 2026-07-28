@@ -708,7 +708,21 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
             log.warning("LinkedIn: Browser-Start fehlgeschlagen: {}", e)
 
         if li_ctx:
+            from app.dedup import norm_firma
+
             playwright, browser, context = li_ctx
+
+            async def _scrape_or_fallback(pid: int, url: str, name: str) -> None:
+                try:
+                    data = await _linkedin_scrape_about(context, url)
+                except Exception as e:
+                    log.debug("LinkedIn-Scrape Fehler für '{}': {}", name, e)
+                    data = {}
+                if data:
+                    li_single_data[pid] = data
+                else:
+                    wikidata_fallback_pids.append(pid)
+
             try:
                 for pid in profile_ids:
                     if _SYNC_CANCEL:
@@ -728,19 +742,24 @@ async def _run_sync_batch(profile_ids: list[int], user_id: int):
                     if len(candidates) == 0:
                         wikidata_fallback_pids.append(pid)
                     elif len(candidates) == 1:
-                        try:
-                            data = await _linkedin_scrape_about(context, candidates[0]["url"])
-                        except Exception as e:
-                            log.debug("LinkedIn-Scrape Fehler für '{}': {}", name, e)
-                            data = {}
-                        if data:
-                            li_single_data[pid] = data
-                        else:
-                            wikidata_fallback_pids.append(pid)
+                        await _scrape_or_fallback(pid, candidates[0]["url"], name)
                     else:
-                        needs_review_map[pid] = candidates
-                        log.info("'{}': {} LinkedIn-Treffer — braucht manuelle Auswahl",
-                                 name, len(candidates))
+                        # Among several LinkedIn hits, one whose name exactly
+                        # matches (modulo legal-suffix/case normalization) the
+                        # company name as written needs no manual review —
+                        # e.g. "MAN Truck & Bus SE" among "MAN Truck", "MAN
+                        # Truck & Bus (South Africa)", ... and an exact "MAN
+                        # Truck & Bus SE" hit should just be picked (live-
+                        # reported: the review queue kept surfacing these even
+                        # though the right answer was unambiguous).
+                        target_norm = norm_firma(name)
+                        exact = [c for c in candidates if norm_firma(c.get("name") or "") == target_norm]
+                        if len(exact) == 1:
+                            await _scrape_or_fallback(pid, exact[0]["url"], name)
+                        else:
+                            needs_review_map[pid] = candidates
+                            log.info("'{}': {} LinkedIn-Treffer — braucht manuelle Auswahl",
+                                     name, len(candidates))
                     await asyncio.sleep(1.0)
             finally:
                 await browser.close()

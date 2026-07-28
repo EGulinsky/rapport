@@ -7,6 +7,7 @@ Cancel-Tests absichtlich vor der SPARQL-Antwort abbrechen), sowie einzelne
 Fehlerzweige (LinkedIn-Browser-Start, LinkedIn-Suche/Scrape, SPARQL-Batch,
 gelöschtes Profil zwischen den Phasen, unerwarteter Top-Level-Fehler).
 """
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -242,6 +243,91 @@ class TestRunSyncBatchLinkedinFehler:
         assert p.sync_status == "done"
         assert p.sync_source == "linkedin"
         assert p.logo_data == "data:image/png;base64,CLEARBIT"
+
+
+class TestRunSyncBatchMehrereTrefferExakterName:
+    """Bei 2+ LinkedIn-Treffern braucht es nur dann manuelle Review, wenn KEIN
+    Treffer (normalisiert) exakt dem geschriebenen Firmennamen entspricht —
+    live-reported: "MAN Truck & Bus SE" landete trotz eines exakt gleich
+    benannten Treffers unter mehreren Kandidaten in der Review-Queue."""
+
+    async def test_positiv_exakter_treffer_unter_mehreren_wird_automatisch_uebernommen(self, db_session):
+        p = company_profile_factory(db_session, sync_status="pending", name_display="MAN Truck & Bus SE")
+        db_session.commit()
+
+        async def fake_get_context(user_id=None):
+            return _fake_linkedin_context()
+
+        async def fake_search_candidates(context, name, limit=5):
+            return [
+                {"name": "MAN Truck", "url": "https://www.linkedin.com/company/man-truck"},
+                {"name": "MAN Truck & Bus (South Africa)", "url": "https://www.linkedin.com/company/man-truck-bus-sa"},
+                {"name": "MAN Truck & Bus SE", "url": "https://www.linkedin.com/company/man-commercial-vehicles"},
+            ]
+
+        async def fake_scrape_about(context, url):
+            return {"industry": "Motor Vehicle Manufacturing", "linkedin_company_url": url}
+
+        with patch.object(sync_company, "_get_linkedin_context", new=fake_get_context), \
+             patch.object(sync_company, "_linkedin_search_candidates", new=fake_search_candidates), \
+             patch.object(sync_company, "_linkedin_scrape_about", new=fake_scrape_about), \
+             patch.object(sync_company, "_fetch_logo_with_clearbit_fallback", new=AsyncMock(return_value=None)), \
+             patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
+            await sync_company._run_sync_batch([p.id], 1)
+
+        db_session.expire_all()
+        assert p.sync_status == "done"
+        assert p.sync_source == "linkedin"
+        assert p.linkedin_company_url == "https://www.linkedin.com/company/man-commercial-vehicles"
+        assert db_session.query(models.PendingMatch).filter_by(event_type="company_candidate").count() == 0
+
+    async def test_negativ_kein_exakter_treffer_bleibt_review_pflichtig(self, db_session):
+        p = company_profile_factory(db_session, sync_status="pending", name_display="MAN Truck & Bus SE")
+        db_session.commit()
+
+        async def fake_get_context(user_id=None):
+            return _fake_linkedin_context()
+
+        async def fake_search_candidates(context, name, limit=5):
+            return [
+                {"name": "MAN Truck", "url": "https://www.linkedin.com/company/man-truck"},
+                {"name": "MAN Truck & Bus (South Africa)", "url": "https://www.linkedin.com/company/man-truck-bus-sa"},
+                {"name": "MAN Truck & Bus Saudi Arabia", "url": "https://www.linkedin.com/company/mantrucksksa"},
+            ]
+
+        with patch.object(sync_company, "_get_linkedin_context", new=fake_get_context), \
+             patch.object(sync_company, "_linkedin_search_candidates", new=fake_search_candidates), \
+             patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
+            await sync_company._run_sync_batch([p.id], 1)
+
+        db_session.expire_all()
+        assert p.sync_status == "needs_review"
+        pending = db_session.query(models.PendingMatch).filter_by(event_type="company_candidate").one()
+        payload = json.loads(pending.raw_content)
+        assert len(payload["candidates"]) == 3
+
+    async def test_negativ_mehrdeutiger_exakter_treffer_bleibt_review_pflichtig(self, db_session):
+        # Zwei Treffer normalisieren beide auf denselben Namen -- eindeutige
+        # Auswahl ist trotz "exaktem" Match nicht möglich.
+        p = company_profile_factory(db_session, sync_status="pending", name_display="Contoso GmbH")
+        db_session.commit()
+
+        async def fake_get_context(user_id=None):
+            return _fake_linkedin_context()
+
+        async def fake_search_candidates(context, name, limit=5):
+            return [
+                {"name": "Contoso GmbH", "url": "https://www.linkedin.com/company/contoso-1"},
+                {"name": "Contoso AG", "url": "https://www.linkedin.com/company/contoso-2"},
+            ]
+
+        with patch.object(sync_company, "_get_linkedin_context", new=fake_get_context), \
+             patch.object(sync_company, "_linkedin_search_candidates", new=fake_search_candidates), \
+             patch.object(sync_company.asyncio, "sleep", new=AsyncMock()):
+            await sync_company._run_sync_batch([p.id], 1)
+
+        db_session.expire_all()
+        assert p.sync_status == "needs_review"
 
 
 class TestRunSyncBatchGeloeschtesProfil:

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.61',
+    date: '2026-07-28',
+    changes: [
+      'Company sync no longer sends a company to manual review just because LinkedIn returned several results — if exactly one of them matches the company\'s name (ignoring case and legal-entity suffixes like GmbH/SE/Inc), it\'s picked automatically, same as when LinkedIn only returns a single result. Manual review is now reserved for genuine ambiguity, e.g. several regional LinkedIn pages for the same company with none matching the name exactly.',
+    ],
+  },
+  {
     version: '4.6.60',
     date: '2026-07-28',
     changes: [
