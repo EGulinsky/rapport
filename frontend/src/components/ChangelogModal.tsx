@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.54',
+    date: '2026-07-28',
+    changes: [
+      'Wording cleanup for the contacts sync overhaul that shipped over the last few releases: the Contacts tab\'s sync menu, the per-contact Sync/Re-Sync action, and the main sync button\'s progress label no longer say "iCloud" specifically now that both providers are covered by the same sync. Manual contact search/import stays iCloud-specific, since that particular feature hasn\'t been extended to Google yet.',
+    ],
+  },
+  {
     version: '4.6.53',
     date: '2026-07-28',
     changes: [

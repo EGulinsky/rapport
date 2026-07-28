@@ -30,7 +30,7 @@
   "google": {
     "credentialsTitle": "Google OAuth 2.0 credentials",
     "cloudConsole": "Cloud Console",
-    "setupHint": "Create project → enable APIs (Gmail + Calendar) → create OAuth client (type: Web application)",
+    "setupHint": "Create project → enable APIs (Gmail + Calendar + People API for Contacts) → create OAuth client (type: Web application)",
     "redirectUriLabel": "Authorized redirect URI:",
     "clientIdPlaceholder": "Client ID",
     "clientSecretPlaceholder": "Client Secret",
