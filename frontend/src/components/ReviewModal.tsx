@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
-import type { PendingMatch, Application } from '../types'
+import type { PendingMatch, Application, ContactWithApp } from '../types'
 import { MAIN_STATUS_COLORS } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
-import { Check, X, ChevronDown, Mail, Calendar, FileText, ArrowRight, Linkedin } from 'lucide-react'
+import { Check, X, ChevronDown, Mail, Calendar, FileText, ArrowRight, Linkedin, Search } from 'lucide-react'
 import clsx from 'clsx'
 
 const EVENT_TYPE_OPTIONS = ['bewerbung', 'status', 'gespräch', 'notiz', 'angebot', 'absage']
@@ -602,45 +602,129 @@ interface CompanyCandidate {
   snippet?: string | null
 }
 
+function CandidateButton({ c, selected, onSelect }: { c: CompanyCandidate; selected: boolean; onSelect: (url: string) => void }) {
+  return (
+    <button
+      onClick={() => onSelect(c.url)}
+      className={clsx(
+        'w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors',
+        selected
+          ? 'border-blue-400 bg-blue-100 text-blue-900 font-medium'
+          : 'border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 text-gray-700'
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span>{c.name}</span>
+        <Linkedin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+      </div>
+      {c.snippet && <p className="text-xs text-gray-500 truncate">{c.snippet}</p>}
+      <span className="text-xs text-gray-400 break-all">{c.url}</span>
+    </button>
+  )
+}
+
 function CompanyCandidatePicker({
   item, selectedUrl, onSelect,
 }: { item: PendingMatch; selectedUrl?: string; onSelect: (url: string) => void }) {
   const { t } = useTranslation('review')
   let candidates: CompanyCandidate[] = []
+  let companyProfileId: number | undefined
   try {
     const payload = JSON.parse(item.raw_content ?? '{}')
     candidates = payload.candidates ?? []
+    companyProfileId = payload.company_profile_id
   } catch {
     candidates = []
   }
 
-  if (candidates.length === 0) {
-    return <p className="text-xs text-amber-600">{t('companyPicker.noCandidates')}</p>
+  const [contacts, setContacts] = useState<ContactWithApp[]>([])
+  useEffect(() => {
+    if (!companyProfileId) return
+    api.contacts.listAll({ company_profile_id: companyProfileId }).then(setContacts).catch(() => setContacts([]))
+  }, [companyProfileId])
+
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searched, setSearched] = useState(false)
+  const [liveResults, setLiveResults] = useState<CompanyCandidate[]>([])
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  async function runLiveSearch() {
+    if (query.trim().length < 2) return
+    setSearching(true)
+    setSearched(true)
+    setSearchError(null)
+    try {
+      setLiveResults(await api.companies.searchLinkedIn(query.trim()))
+    } catch (e) {
+      setLiveResults([])
+      setSearchError(e instanceof Error ? e.message.replace(/^\d+:\s*/, '') : String(e))
+    } finally {
+      setSearching(false)
+    }
   }
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-blue-700">{t('companyPicker.question')}</p>
-      <div className="space-y-1">
-        {candidates.map(c => (
+    <div className="space-y-2">
+      {item.titel && (
+        <p className="text-xs text-gray-500">
+          {t('companyPicker.exactName')} <span className="font-medium text-gray-800">{item.titel}</span>
+        </p>
+      )}
+      {contacts.length > 0 && (
+        <p className="text-xs text-gray-500">
+          {t('companyPicker.relatedContacts')}{' '}
+          <span className="font-medium text-gray-800">
+            {contacts.map(c => c.vorname ? `${c.vorname} ${c.name}` : c.name).join(', ')}
+          </span>
+        </p>
+      )}
+
+      {candidates.length === 0 ? (
+        <p className="text-xs text-amber-600">{t('companyPicker.noCandidates')}</p>
+      ) : (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-blue-700">{t('companyPicker.question')}</p>
+          <div className="space-y-1">
+            {candidates.map(c => (
+              <CandidateButton key={c.url} c={c} selected={selectedUrl === c.url} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5 pt-1.5 border-t border-blue-100">
+        <p className="text-xs font-medium text-blue-700">{t('companyPicker.searchLinkedin')}</p>
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && runLiveSearch()}
+              placeholder={t('companyPicker.searchPlaceholder')}
+              className="w-full rounded-lg border border-gray-200 pl-8 pr-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
           <button
-            key={c.url}
-            onClick={() => onSelect(c.url)}
-            className={clsx(
-              'w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors',
-              selectedUrl === c.url
-                ? 'border-blue-400 bg-blue-100 text-blue-900 font-medium'
-                : 'border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 text-gray-700'
-            )}
+            onClick={runLiveSearch}
+            disabled={query.trim().length < 2 || searching}
+            className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 shrink-0"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span>{c.name}</span>
-              <Linkedin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-            </div>
-            {c.snippet && <p className="text-xs text-gray-500 truncate">{c.snippet}</p>}
-            <span className="text-xs text-gray-400 break-all">{c.url}</span>
+            {searching ? t('companyPicker.searching') : t('companyPicker.search')}
           </button>
-        ))}
+        </div>
+        {searchError && <p className="text-xs text-red-600">{searchError}</p>}
+        {searched && !searching && liveResults.length === 0 && !searchError && (
+          <p className="text-xs text-gray-400">{t('companyPicker.noResults')}</p>
+        )}
+        {liveResults.length > 0 && (
+          <div className="space-y-1">
+            {liveResults.map(c => (
+              <CandidateButton key={c.url} c={c} selected={selectedUrl === c.url} onSelect={onSelect} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

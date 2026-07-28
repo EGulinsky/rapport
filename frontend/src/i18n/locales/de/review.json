@@ -38,7 +38,14 @@
   "selectPlaceholder": "— auswählen —",
   "companyPicker": {
     "noCandidates": "Keine Kandidaten gefunden — nur \"Keiner davon\" möglich.",
-    "question": "Welche LinkedIn-Seite ist die richtige?"
+    "question": "Welche LinkedIn-Seite ist die richtige?",
+    "exactName": "Wie geschrieben:",
+    "relatedContacts": "Zugehörige(r) Kontakt(e):",
+    "searchLinkedin": "Nicht dabei? Direkt bei LinkedIn suchen",
+    "searchPlaceholder": "Firmenname…",
+    "search": "Suchen",
+    "searching": "Suche läuft…",
+    "noResults": "Keine Treffer."
   },
   "appPicker": {
     "searchPlaceholder": "Stelle suchen…"

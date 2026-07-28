@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.60',
+    date: '2026-07-28',
+    changes: [
+      'The company review queue\'s "multiple LinkedIn matches" dialog now shows the exact company name as it was written in the source, and any contacts already linked to that pending company, to give more context when picking between the suggested LinkedIn pages. It also has its own live LinkedIn search — if none of the suggested pages are right, search LinkedIn directly from the dialog and pick a result from there instead.',
+    ],
+  },
+  {
     version: '4.6.59',
     date: '2026-07-28',
     changes: [

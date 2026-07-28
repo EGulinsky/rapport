@@ -38,7 +38,14 @@
   "selectPlaceholder": "— select —",
   "companyPicker": {
     "noCandidates": "No candidates found — only \"None of these\" is possible.",
-    "question": "Which LinkedIn page is the right one?"
+    "question": "Which LinkedIn page is the right one?",
+    "exactName": "As written:",
+    "relatedContacts": "Related contact(s):",
+    "searchLinkedin": "Not listed? Search LinkedIn directly",
+    "searchPlaceholder": "Company name…",
+    "search": "Search",
+    "searching": "Searching…",
+    "noResults": "No results."
   },
   "appPicker": {
     "searchPlaceholder": "Search application…"
