@@ -18,6 +18,7 @@
     "button": "Neu",
     "createManually": "Manuell anlegen",
     "importFromIcloud": "Aus iCloud importieren",
+    "importFromGoogle": "Aus Google Kontakte importieren",
     "importFromLinkedin": "Aus LinkedIn importieren"
   },
   "review": "Manuelle Überprüfung",

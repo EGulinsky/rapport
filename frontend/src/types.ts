@@ -171,6 +171,17 @@ export interface ICloudContactCandidate {
   already_imported?: boolean
 }
 
+export interface GoogleContactCandidate {
+  name: string
+  vorname?: string | null
+  email?: string | null
+  phones?: { number: string; type: string }[]
+  firma?: string | null
+  rolle?: string | null
+  linkedin_url?: string | null
+  already_imported?: boolean
+}
+
 export interface LinkedInPeopleCandidate {
   name: string
   headline?: string | null

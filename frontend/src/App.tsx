@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud, X } from 'lucide-react'
+import { Plus, RefreshCw, Briefcase, Users, Settings, Sparkles, GitMerge, ClipboardList, BarChart2, Building2, ChevronDown, Linkedin, Cloud, AtSign, X } from 'lucide-react'
 import { CompanySearchInput } from './components/CompanySearchInput'
 import { api } from './api/client'
 import { ApplicationTable } from './components/ApplicationTable'
@@ -117,7 +117,7 @@ export default function App() {
   const [contactsSearch, setContactsSearch] = useState('')
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewCompany, setShowNewCompany] = useState(false)
-  const [contactImportSource, setContactImportSource] = useState<'icloud' | 'linkedin' | null>(null)
+  const [contactImportSource, setContactImportSource] = useState<'icloud' | 'google' | 'linkedin' | null>(null)
   const [showCompanyImport, setShowCompanyImport] = useState(false)
   const [contactsReloadKey, setContactsReloadKey] = useState(0)
 
@@ -383,6 +383,14 @@ export default function App() {
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
                         >
                           <Cloud className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.importFromIcloud')}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="new-menu-import-google"
+                          onClick={() => { setShowNewMenu(false); setContactImportSource('google') }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                        >
+                          <AtSign className="h-3.5 w-3.5 shrink-0" /> {t('newMenu.importFromGoogle')}
                         </button>
                         <button
                           type="button"

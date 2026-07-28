@@ -18,6 +18,7 @@
     "button": "New",
     "createManually": "Create manually",
     "importFromIcloud": "Import from iCloud",
+    "importFromGoogle": "Import from Google Contacts",
     "importFromLinkedin": "Import from LinkedIn"
   },
   "review": "Manual review",

@@ -199,6 +199,14 @@ export const api = {
         body: JSON.stringify({ candidates, application_id: applicationId }),
       }),
 
+    searchGoogle: (q: string) =>
+      request<import('../types').GoogleContactCandidate[]>(`/sync/google/contacts/search?q=${encodeURIComponent(q)}`),
+    importFromGoogle: (candidates: import('../types').GoogleContactCandidate[], applicationId?: number) =>
+      request<{ imported: number; skipped: number }>('/sync/google/contacts/import', {
+        method: 'POST',
+        body: JSON.stringify({ candidates, application_id: applicationId }),
+      }),
+
     searchLinkedIn: (q: string) =>
       request<import('../types').LinkedInPeopleCandidate[]>(`/sync/linkedin/people/search?q=${encodeURIComponent(q)}`),
     importFromLinkedIn: (candidates: import('../types').LinkedInPeopleCandidate[], applicationId?: number) =>

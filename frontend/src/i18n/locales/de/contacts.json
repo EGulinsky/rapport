@@ -16,8 +16,10 @@
   },
   "import": {
     "titleIcloud": "Aus iCloud importieren",
+    "titleGoogle": "Aus Google Kontakte importieren",
     "titleLinkedin": "Aus LinkedIn importieren",
     "placeholderIcloud": "Name, E-Mail oder Firma…",
+    "placeholderGoogle": "Name, E-Mail oder Firma…",
     "placeholderLinkedin": "Name suchen…",
     "search": "Suchen",
     "searching": "Suche…",
@@ -25,6 +27,7 @@
     "resultSkipped": ", {{count}} übersprungen (bereits vorhanden)",
     "noResults": "Keine Treffer",
     "searchHintIcloud": "Durchsucht dein gesamtes iCloud-Adressbuch, nicht nur bereits verknüpfte Kontakte.",
+    "searchHintGoogle": "Durchsucht dein gesamtes Google-Adressbuch, nicht nur bereits verknüpfte Kontakte.",
     "searchHintLinkedin": "Sucht LinkedIn-Personen nach Namen (benötigt eine gültige LinkedIn-Session). Firma wird aus der Kurzbeschreibung erkannt — bei individuell angepassten Beschreibungen ohne Firmenerwähnung bleibt sie leer und muss ggf. nach dem Import ergänzt werden.",
     "alreadyImported": "bereits vorhanden",
     "at": "bei",

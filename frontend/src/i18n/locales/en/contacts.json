@@ -16,8 +16,10 @@
   },
   "import": {
     "titleIcloud": "Import from iCloud",
+    "titleGoogle": "Import from Google Contacts",
     "titleLinkedin": "Import from LinkedIn",
     "placeholderIcloud": "Name, email, or company…",
+    "placeholderGoogle": "Name, email, or company…",
     "placeholderLinkedin": "Search name…",
     "search": "Search",
     "searching": "Searching…",
@@ -25,6 +27,7 @@
     "resultSkipped": ", {{count}} skipped (already exists)",
     "noResults": "No results",
     "searchHintIcloud": "Searches your entire iCloud address book, not just already-linked contacts.",
+    "searchHintGoogle": "Searches your entire Google address book, not just already-linked contacts.",
     "searchHintLinkedin": "Searches LinkedIn people by name (requires a valid LinkedIn session). Company is detected from the headline — for custom headlines without a company mention, it stays empty and may need to be filled in after import.",
     "alreadyImported": "already added",
     "at": "at",

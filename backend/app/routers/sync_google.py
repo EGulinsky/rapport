@@ -14,10 +14,12 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.audit import add_audit
 from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.i18n_strings import resolve_ui_language, t
@@ -1164,3 +1166,129 @@ async def sync_calendar(
 
     background_tasks.add_task(_bg)
     return schemas.SyncResult(processed=0, created=0, skipped=0, errors=[])
+
+
+# ── Contacts: manual search + import ────────────────────────────────────────
+
+@router.get("/contacts/search")
+async def search_contacts(
+    q: str = Query(..., min_length=2),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Volltextsuche über die gesamten Google Contacts — live per People-API-
+    Fetch, unabhängig davon, ob der reguläre Sync schon gelaufen ist. Analog
+    zu search_contacts() in sync_icloud.py, nur mit fetch_all_google_contacts()
+    als Quelle statt CardDAV-vCards (beide liefern dasselbe normalisierte
+    dict-Shape, siehe fetch_all_google_contacts()'s eigener Docstring)."""
+    cfg = _get_cfg(db)
+    if not cfg:
+        raise HTTPException(status_code=400, detail="Google nicht konfiguriert")
+    if not cfg.contacts_scope_granted:
+        raise HTTPException(status_code=400, detail="Google-Konto ohne Kontakte-Zugriff — bitte erneut verbinden")
+
+    parsed_list = await fetch_all_google_contacts(cfg, db)
+
+    q_lower = q.strip().lower()
+    results: list[dict] = []
+    seen_keys: set[str] = set()
+    for parsed in parsed_list:
+        haystack = " ".join(filter(None, [parsed["fn"], parsed["email"], parsed["firma"]])).lower()
+        if q_lower not in haystack:
+            continue
+
+        existing = None
+        if parsed["email"]:
+            existing = db.query(models.Contact).filter_by(email=parsed["email"]).first()
+        if not existing:
+            existing = db.query(models.Contact).filter_by(name=parsed["name"]).first()
+        if not existing and parsed["name"] != parsed["fn"]:
+            existing = db.query(models.Contact).filter_by(name=parsed["fn"]).first()
+        parsed["already_imported"] = existing is not None
+
+        key = f"{parsed['email'] or ''}|{parsed['name']}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        parsed.pop("fn", None)
+        results.append(parsed)
+        if len(results) >= 30:
+            break
+
+    return results
+
+
+class GoogleContactPhoneIn(BaseModel):
+    number: str
+    type: str = "other"
+
+
+class GoogleContactImportCandidate(BaseModel):
+    name: str
+    vorname: Optional[str] = None
+    email: Optional[str] = None
+    phones: list[GoogleContactPhoneIn] = []
+    firma: Optional[str] = None
+    rolle: Optional[str] = None
+    linkedin_url: Optional[str] = None
+
+
+class GoogleContactImportPayload(BaseModel):
+    candidates: list[GoogleContactImportCandidate]
+    application_id: Optional[int] = None
+
+
+@router.post("/contacts/import")
+def import_contacts(
+    body: GoogleContactImportPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Importiert vom User ausgewählte Kandidaten (aus /contacts/search) als
+    echte Contact-Zeilen — identischer Ablauf zu import_contacts() in
+    sync_icloud.py, nur mit eigenem reason_key für den Audit-Log-Eintrag."""
+    app_obj = None
+    if body.application_id:
+        app_obj = db.query(models.Application).filter(
+            models.Application.id == body.application_id
+        ).first()
+        if not app_obj:
+            raise HTTPException(status_code=404, detail="Bewerbung nicht gefunden")
+
+    imported = 0
+    skipped = 0
+    for cand in body.candidates:
+        existing = None
+        if cand.email:
+            existing = db.query(models.Contact).filter_by(email=cand.email).first()
+        if not existing:
+            existing = db.query(models.Contact).filter_by(name=cand.name).first()
+        if existing:
+            skipped += 1
+            if app_obj and app_obj not in existing.applications:
+                existing.applications.append(app_obj)
+                from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+                attach_linkedin_messages_for_contact(db, existing, current_user.id)
+            continue
+        contact = models.Contact(
+            name=cand.name, vorname=cand.vorname, email=cand.email,
+            firma=cand.firma, rolle=cand.rolle, linkedin_url=cand.linkedin_url,
+            user_id=current_user.id,
+        )
+        for p in cand.phones:
+            contact.phones.append(models.ContactPhone(number=p.number, type=p.type, user_id=current_user.id))
+        db.add(contact)
+        db.flush()
+        if app_obj:
+            contact.applications.append(app_obj)
+        add_audit(db, "create", "user", contact_id=contact.id,
+                  app_id=app_obj.id if app_obj else None,
+                  new_value=contact.display_name, reason_key="import_from_google_contact_search",
+                  user_id=current_user.id)
+        if app_obj:
+            from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
+            attach_linkedin_messages_for_contact(db, contact, current_user.id)
+        imported += 1
+
+    db.commit()
+    return {"imported": imported, "skipped": skipped}

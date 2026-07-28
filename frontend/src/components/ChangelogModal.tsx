@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.55',
+    date: '2026-07-28',
+    changes: [
+      'Manual contact search & import now also works for Google Contacts, not just iCloud — the Contacts tab\'s "New" menu gained an "Import from Google Contacts" option that searches your whole Google address book by name, email, or company and lets you pick who to import and optionally link to an application, same as the existing iCloud flow. Requires a Google account connected with Contacts access (see Settings → Google).',
+    ],
+  },
+  {
     version: '4.6.54',
     date: '2026-07-28',
     changes: [

@@ -1,44 +1,53 @@
 import { useState } from 'react'
-import { X, Check, Search, Linkedin as LinkedinIcon, Cloud } from 'lucide-react'
+import { X, Check, Search, Linkedin as LinkedinIcon, Cloud, AtSign } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
-import type { ICloudContactCandidate, LinkedInPeopleCandidate } from '../types'
+import type { ICloudContactCandidate, GoogleContactCandidate, LinkedInPeopleCandidate } from '../types'
 import clsx from 'clsx'
 
-type Candidate = ICloudContactCandidate | LinkedInPeopleCandidate
+type Source = 'icloud' | 'google' | 'linkedin'
+type Candidate = ICloudContactCandidate | GoogleContactCandidate | LinkedInPeopleCandidate
 
 interface Props {
-  source: 'icloud' | 'linkedin'
+  source: Source
   onClose: () => void
   onImported: () => void
 }
 
-function candidateKey(source: 'icloud' | 'linkedin', c: Candidate): string {
-  if (source === 'icloud') return (c as ICloudContactCandidate).email ?? c.name
-  return (c as LinkedInPeopleCandidate).profile_url
+// iCloud and Google candidates share the exact same shape (both come from the
+// same normalized {name, vorname, email, phones, firma, rolle, linkedin_url}
+// dict on the backend) — only LinkedIn's shape differs, so a single shape
+// check (rather than threading `source` through every helper) is enough to
+// discriminate.
+function isLinkedInCandidate(c: Candidate): c is LinkedInPeopleCandidate {
+  return 'profile_url' in c
 }
 
-function candidateDisplayName(source: 'icloud' | 'linkedin', c: Candidate): string {
-  if (source === 'icloud') {
-    const ic = c as ICloudContactCandidate
-    return ic.vorname ? `${ic.vorname} ${ic.name}` : ic.name
-  }
-  return c.name
+function candidateKey(c: Candidate): string {
+  if (isLinkedInCandidate(c)) return c.profile_url
+  return c.email ?? c.name
 }
 
-function candidateSubtitle(source: 'icloud' | 'linkedin', c: Candidate, atWord: string): string {
-  if (source === 'icloud') {
-    const ic = c as ICloudContactCandidate
-    return [ic.rolle, ic.firma].filter(Boolean).join(` ${atWord} `) || ic.email || ''
-  }
-  return (c as LinkedInPeopleCandidate).headline ?? ''
+function candidateDisplayName(c: Candidate): string {
+  if (isLinkedInCandidate(c)) return c.name
+  return c.vorname ? `${c.vorname} ${c.name}` : c.name
+}
+
+function candidateSubtitle(c: Candidate, atWord: string): string {
+  if (isLinkedInCandidate(c)) return c.headline ?? ''
+  return [c.rolle, c.firma].filter(Boolean).join(` ${atWord} `) || c.email || ''
+}
+
+function candidateAlreadyImported(c: Candidate): boolean {
+  return !isLinkedInCandidate(c) && !!c.already_imported
 }
 
 export function ContactImportModal({ source, onClose, onImported }: Props) {
   const { t } = useTranslation('contacts')
   const META = {
-    icloud: { title: t('import.titleIcloud'), icon: Cloud, placeholder: t('import.placeholderIcloud'), color: 'sky' },
-    linkedin: { title: t('import.titleLinkedin'), icon: LinkedinIcon, placeholder: t('import.placeholderLinkedin'), color: 'blue' },
+    icloud: { title: t('import.titleIcloud'), icon: Cloud, placeholder: t('import.placeholderIcloud'), searchHint: t('import.searchHintIcloud') },
+    google: { title: t('import.titleGoogle'), icon: AtSign, placeholder: t('import.placeholderGoogle'), searchHint: t('import.searchHintGoogle') },
+    linkedin: { title: t('import.titleLinkedin'), icon: LinkedinIcon, placeholder: t('import.placeholderLinkedin'), searchHint: t('import.searchHintLinkedin') },
   } as const
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,9 +69,10 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
     setSelected(new Set())
     setResult(null)
     try {
-      const res = source === 'icloud'
-        ? await api.contacts.searchICloud(query.trim())
-        : await api.contacts.searchLinkedIn(query.trim())
+      const q = query.trim()
+      const res = source === 'icloud' ? await api.contacts.searchICloud(q)
+        : source === 'google' ? await api.contacts.searchGoogle(q)
+        : await api.contacts.searchLinkedIn(q)
       setCandidates(res)
     } catch (e) {
       setCandidates([])
@@ -73,7 +83,7 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
   }
 
   function toggle(c: Candidate) {
-    const key = candidateKey(source, c)
+    const key = candidateKey(c)
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -83,16 +93,16 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
   }
 
   async function doImport() {
-    const picked = candidates.filter(c => selected.has(candidateKey(source, c)))
+    const picked = candidates.filter(c => selected.has(candidateKey(c)))
     if (picked.length === 0) return
     setImporting(true)
     setError(null)
     try {
-      const res = source === 'icloud'
-        ? await api.contacts.importFromICloud(picked as ICloudContactCandidate[])
+      const res = source === 'icloud' ? await api.contacts.importFromICloud(picked as ICloudContactCandidate[])
+        : source === 'google' ? await api.contacts.importFromGoogle(picked as GoogleContactCandidate[])
         : await api.contacts.importFromLinkedIn(picked as LinkedInPeopleCandidate[])
       setResult(res)
-      setCandidates(prev => prev.filter(c => !selected.has(candidateKey(source, c))))
+      setCandidates(prev => prev.filter(c => !selected.has(candidateKey(c))))
       setSelected(new Set())
       onImported()
     } catch (e) {
@@ -152,15 +162,13 @@ export function ContactImportModal({ source, onClose, onImported }: Props) {
             <p className="text-sm text-gray-400 text-center py-6">{t('import.noResults')}</p>
           )}
           {!searched && !loading && (
-            <p className="text-sm text-gray-400 text-center py-6">
-              {source === 'icloud' ? t('import.searchHintIcloud') : t('import.searchHintLinkedin')}
-            </p>
+            <p className="text-sm text-gray-400 text-center py-6">{meta.searchHint}</p>
           )}
           {candidates.map(c => {
-            const key = candidateKey(source, c)
-            const displayName = candidateDisplayName(source, c)
-            const subtitle = candidateSubtitle(source, c, t('import.at'))
-            const alreadyImported = source === 'icloud' && (c as ICloudContactCandidate).already_imported
+            const key = candidateKey(c)
+            const displayName = candidateDisplayName(c)
+            const subtitle = candidateSubtitle(c, t('import.at'))
+            const alreadyImported = candidateAlreadyImported(c)
             return (
               <label
                 key={key}
