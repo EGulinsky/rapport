@@ -1580,10 +1580,20 @@ def _merge_parsed_contact(
 
     Returns the list of changed field names (used for the Sync/Re-Sync result
     message and to decide whether icloud_last_synced_at should be bumped).
-    """
+
+    Emits at most ONE audit_log row per call, summarizing every field this
+    call actually touched (e.g. "linkedin_url: https://…; rolle: CTO; firma:
+    Contoso → Contoso AG") — not one row per field. A batch sync touching many
+    existing contacts used to leave one audit row per changed field per
+    contact, scattered across the log with no way to see at a glance which
+    contacts a sync run actually changed; one contact, one row fixes that."""
     from app.dedup import norm_firma
 
     changed: list[str] = []
+    change_descriptions: list[str] = []
+
+    def _describe(field: str, old_value, new_value) -> str:
+        return f"{field}: {old_value} → {new_value}" if old_value else f"{field}: {new_value}"
 
     def _set_scalar(field: str, new_value):
         if not new_value:
@@ -1593,9 +1603,7 @@ def _merge_parsed_contact(
             return
         if str(old_value or "") == str(new_value):
             return
-        add_audit(db, "update", "sync", contact_id=contact.id,
-                  field=field, old_value=old_value, new_value=new_value,
-                  reason_key=reason_key, user_id=user_id)
+        change_descriptions.append(_describe(field, old_value, new_value))
         setattr(contact, field, new_value)
         changed.append(field)
 
@@ -1617,9 +1625,7 @@ def _merge_parsed_contact(
         if cp:
             company_profile_id = cp.id
         if contact.firma != org_val or contact.company_profile_id != company_profile_id:
-            add_audit(db, "update", "sync", contact_id=contact.id,
-                      field="firma", old_value=contact.firma, new_value=org_val,
-                      reason_key=reason_key, user_id=user_id)
+            change_descriptions.append(_describe("firma", contact.firma, org_val))
             contact.firma = org_val
             contact.company_profile_id = company_profile_id
             changed.append("firma")
@@ -1631,17 +1637,24 @@ def _merge_parsed_contact(
             for p in parsed_phones:
                 contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
             changed.append("phones")
+            change_descriptions.append(f"phones: {len(parsed_phones)}")
     else:
         existing_norm = {_normalize_phone(p.number) for p in contact.phones}
-        added = False
+        added = 0
         for p in parsed_phones:
             norm = _normalize_phone(p["number"])
             if norm and norm not in existing_norm:
                 contact.phones.append(models.ContactPhone(number=p["number"], type=p["type"], user_id=user_id))
                 existing_norm.add(norm)
-                added = True
+                added += 1
         if added:
             changed.append("phones")
+            change_descriptions.append(f"phones: +{added}")
+
+    if change_descriptions:
+        add_audit(db, "update", "sync", contact_id=contact.id,
+                  new_value="; ".join(change_descriptions),
+                  reason_key=reason_key, user_id=user_id)
 
     return changed
 

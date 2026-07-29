@@ -185,6 +185,31 @@ class TestContactsSync:
         assert [(p.number, p.type) for p in contact.phones] == [("+491701234567", "work")]
         assert contact.firma == "Contoso AG"
 
+    def test_positiv_ein_konsolidierter_audit_eintrag_statt_einem_pro_feld(self, client, db_session):
+        """Live-Feedback: nach einem Batch-Sync war im Audit-Log für einen
+        geänderten Bestandskontakt nicht auf einen Blick ersichtlich, was
+        sich geändert hat — ein Eintrag pro geändertem Feld, verstreut im
+        Log. _merge_parsed_contact() fasst jetzt alle Feldänderungen EINES
+        Kontakts in EINEM Audit-Eintrag zusammen."""
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        _icloud_cfg(db_session)
+        contact = contact_factory(
+            db_session, name="Erika Musterfrau", email="erika@contoso.com",
+            rolle=None, firma=None, phones=[],
+        )
+        db_session.commit()
+        vcards = [_vcard("Erika Musterfrau", email="erika@contoso.com", org="Contoso AG")]
+
+        with patch("app.routers.sync_icloud.fetch_all_vcards", new=AsyncMock(return_value=vcards)):
+            resp = client.post("/api/sync/icloud/contacts/sync", json={"contact_ids": [contact.id], "force": False})
+
+        assert resp.status_code == 200
+        audits = db_session.query(models.AuditLog).filter_by(
+            action="update", contact_id=contact.id,
+        ).all()
+        assert len(audits) == 1
+        assert "firma: Contoso AG" in audits[0].new_value
+
     def test_negativ_kein_treffer_landet_in_not_found(self, client, db_session):
         _icloud_cfg(db_session)
         contact = contact_factory(db_session, name="Ohne Treffer", email="niemand@nowhere.de")

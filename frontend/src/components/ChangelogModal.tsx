@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.65',
+    date: '2026-07-29',
+    changes: [
+      'A batch contacts sync used to leave one audit-log row per changed field per contact for any existing contact it touched (e.g. separate rows for "linkedin_url", "rolle", "firma"), scattered through the log with no way to see at a glance which contacts a sync run actually changed. Existing-contact updates from a sync now produce a single audit entry per contact summarizing every field it changed in one place. Note this still only appears with the audit log level set to "verbose" in Settings → Sync — on "normal" (the default), only newly-created contacts are logged, same as before.',
+    ],
+  },
+  {
     version: '4.6.64',
     date: '2026-07-29',
     changes: [
