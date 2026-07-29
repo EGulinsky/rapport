@@ -1,6 +1,6 @@
 # rapport – Technical Architecture
 
-> This document describes the **current implementation** (as of v4.3.6, 2026-07-16). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
+> This document describes the **current implementation** (as of v4.6.65, 2026-07-29). The original planning document with vision and roadmap: [Rapport_Konzept_Architektur.md](Rapport_Konzept_Architektur.md)
 >
 > Diagrams are embedded as [Mermaid](https://mermaid.js.org/) — GitHub renders them automatically when viewing the file. No external tool needed to view; a text editor is enough to edit them.
 
@@ -163,6 +163,7 @@ frontend/src/
     ├── ApplicationTable.tsx    Sortable table view
     ├── KanbanBoard.tsx          Kanban with drag & drop
     ├── ApplicationModal.tsx     Detail/edit modal: lifecycle bar, timeline, attachments, contacts, salary
+    ├── SalarySlotEditor.tsx        Shared min/max + fixed/bonus breakdown + company-car editor, used by ApplicationModal's salary tab (expectation + budget slots) and SettingsModal's Account salary-defaults section
     ├── ChatView.tsx               rapportGPT: chat UI (history load, optimistic send, clear conversation)
     ├── CalendarView.tsx          Calendar view (day/week/month)
     ├── StatsBar.tsx               KPI tiles
@@ -372,7 +373,7 @@ Both use the same login/2FA/consent helpers. Session cookies are cached in `link
 ### 3.7 Company Data Enrichment (`sync_company.py`)
 
 - **Source cascade:** LinkedIn company page (primary, Playwright — industry/location/employee count/logo) → Wikidata fallback (search API + batch SPARQL, on 0 LinkedIn hits or manually resolved as "none of these") → Clearbit (logo fallback via domain, if neither LinkedIn nor Wikidata provide a logo)
-- **Disambiguation:** with multiple LinkedIn hits, the company ends up as `pending` with a candidate list in the review queue; manual choice including "none of these" (→ Wikidata fallback for that one profile)
+- **Disambiguation:** with multiple LinkedIn hits, an exact name match (case/legal-suffix-insensitive via `norm_firma()`) among them is auto-selected and scraped directly, same as a single hit — manual review in the queue is reserved for genuine ambiguity (no exact match, or several exact matches), with "none of these" (→ Wikidata fallback) still available there
 - **Trigger:** manually via "Sync"/"Re-sync" in the companies view (optionally limited to a selection), automatically once on creation via LinkedIn import
 
 ### 3.8 Downloadable Installer (backend/frontend)
@@ -687,6 +688,7 @@ erDiagram
 | `ui_language` | VARCHAR NOT NULL, default `'de'` | `'de'` \| `'en'` — see [§9](#9-internationalization-i18n). New registrations always send an explicit value (`RegisterPayload` default `'en'`); the column default only protects pre-existing rows from the migration |
 | `home_location` | VARCHAR NULL | Free-text label (Settings → Account), either typed via the same autocomplete as `Application.ort` or reverse-geocoded from a "use my location" button |
 | `home_lat` / `home_lng` | FLOAT NULL | Geocoded once when `home_location` changes (`update_profile()`), reused as the origin for every application's cached `drive_distance_km`/`drive_duration_min` rather than re-geocoding per request |
+| `default_salary_currency` / `default_salary_expectation_min` / `_max` / `_min_fixed` / `_min_bonus` / `_max_fixed` / `_max_bonus` / `_company_car` | VARCHAR NULL / INTEGER NULL ×6 / BOOLEAN NULL | Default salary expectation (Settings → Account), mirroring the "expectation" half of `Application.salary_*` (§3.5) — copied into `Application.salary_expectation_*` on `POST /api/applications/` whenever the request itself doesn't set that field, freely editable per application afterward |
 
 #### `email_verification_codes`
 
@@ -871,7 +873,7 @@ Before accounts were introduced, all rows belonged to no one (`user_id IS NULL`)
 
 ## 8. CI/CD
 
-File: `.github/workflows/ci.yml` · self-hosted runner on the Mac.
+File: `.github/workflows/ci.yml`. Only `deploy` runs on the self-hosted Mac runner (it needs to reach this machine's own Docker stack) — `backend`/`frontend`/`agent`/`e2e`/`docker` all run on GitHub-hosted runners (`ubuntu-latest`/`windows-latest`/`macos-latest`), fully isolated from this Mac.
 
 ```mermaid
 flowchart LR
@@ -890,7 +892,7 @@ flowchart LR
 
 | Job | Trigger | Steps |
 |---|---|---|
-| `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error), `pytest -m "unit or component or api"` (PR gate) + `pytest -m integration` on push to `main`/manual dispatch |
+| `backend` | push/PR to `main` | `ruff check` (E,F,W), `pyright` (informational, continue-on-error), `pytest -m "unit or component or api"` (PR gate) + `pytest -m integration` on push to `main`/manual dispatch. Job timeout 10min (down from 25min); `pytest-timeout` caps each individual test at 60s (`signal` method — actually interrupts and dumps a stack trace) so a single hung test fails fast with a diagnosable traceback instead of silently consuming the whole job budget, after a recurring unexplained hang on GitHub's hosted runner (not reproducible locally) |
 | `frontend` | push/PR to `main` | `tsc --noEmit`, `vitest run` (unit/component, incl. the i18n key-parity suite), `vite build` |
 | `agent` | push/PR to `main`, matrix `[ubuntu-latest, windows-latest, macos-latest]` | `pytest` over `agent/tests/` — independent of backend/frontend/e2e/docker/deploy, since the native agent ships and updates separately (see §3.5); all three OS legs run the same suite (mocked providers/service registration) — real-hardware verification of the packaged builds themselves is a separate, manual, non-CI pass (see §3.5) |
 | `e2e` | push/PR to `main` or manual dispatch (after backend+frontend) | Build test stack (`docker-compose.test.yml`, own DB/ports), run all 12 Playwright journeys in German; on push to `main`, additionally run a curated subset (`application-lifecycle`, `company-sync`, `backup-restore`) in English via the `uiLanguage` fixture |
@@ -898,7 +900,7 @@ flowchart LR
 | `deploy` | push to `main` (self-hosted, after docker) | `git pull` → rebuild Playwright base if needed (hash check) → `docker compose up -d --build` → L5 smoke checks (backend health, frontend loads, login + applications API) → macOS notification + open browser |
 | `notify-failure` | `always()` on failure in any of the above jobs | macOS failure notification + log entry |
 
-A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1406 tests (427 unit / 253 component / 526 api / 200 integration) — PR-gate coverage 75% of `app/`, 87% including integration tests. Frontend: 93 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
+A nightly cron (`0 6 * * *`) additionally re-runs the full integration + E2E suites. Current backend test scale: 1787 tests (551 unit / 340 component / 673 api / 223 integration) — PR-gate coverage 77% of `app/`, 89% including integration tests. Frontend: 149 tests. Agent: 133 tests, run on all 3 OSes in CI; packaged builds for all 3 OSes are hardware-verified (see §3.5). Details: [TEST_KONZEPT.md](TEST_KONZEPT.md).
 
 **`release.yml`** is a second, deliberately decoupled workflow — it never runs on a push, only `on: release: types: [published]` (or manual `workflow_dispatch`), since the agent/installer packaged builds and GHCR images should only be rebuilt when a version is actually released, not on every commit. Seven jobs, all matrixed by platform where relevant: `publish-images` (backend/frontend/playwright-base → GHCR, see §3.8), `macos`/`windows`/`linux` (Rapport Agent installers, see §3.5), and `installer-macos`/`installer-windows`/`installer-linux` (Rapport Installer, see §3.8 — `installer-windows` builds the WiX MSI via `dotnet build`, no separate CLI tool install needed since WiX is fetched via NuGet) — each resolves the release tag, builds via the matching `packaging/build_*` script, and `gh release upload`s the result to the same release.
 

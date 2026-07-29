@@ -53,7 +53,7 @@ open http://localhost:3000
 | **Calendar view** | Outlook-like: day / work week / week / month |
 | **Filter & search** | By status, free text, show/hide rejected |
 | **Detail modal** | Full profile, lifecycle bar, timeline, interview notes |
-| **Salary tracking** | Your expectation vs. the company's budget, single value or min–max range, optional fixed+bonus breakdown, company-car flag, selectable currency; flags a mismatch when the budget can't meet your expectation |
+| **Salary tracking** | Your expectation vs. the company's budget, single value or min–max range, optional fixed+bonus breakdown, company-car flag, selectable currency; flags a mismatch when the budget can't meet your expectation. A default expectation can be set once in Settings → Account and is copied into every new application |
 | **Contacts (CRM)** | Contact persons with n:m linking to applications |
 | **Excel import** | `.xlsx` in the original format (sheet "Tracking", 17 columns) |
 | **Excel export** | Re-export to the same format |
@@ -141,7 +141,7 @@ Data is preserved (Docker volume `jobtracker-data`).
 ```bash
 cd backend
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -m "unit or component or api"    # 1250 tests, same gate as in CI
+pytest -m "unit or component or api"    # 1564 tests, same gate as in CI
 ```
 
 Details on the test concept: [docs/TEST_KONZEPT.md](docs/TEST_KONZEPT.md)
