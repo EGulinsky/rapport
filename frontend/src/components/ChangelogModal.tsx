@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.69',
+    date: '2026-07-29',
+    changes: [
+      'CI: found and fixed the actual root cause behind the backend job repeatedly hanging for its full timeout with no error (previously worked around in v4.6.62 by adding a per-test watchdog, which helped but didn\'t explain why it kept happening). The logging system\'s Seq sink defaults to a Docker-only hostname that doesn\'t exist on the plain CI runner, and the DNS lookup for that missing hostname can hang indefinitely — a wait no per-test timeout could catch, because it happens on Python\'s network layer, not inside a test. CI now points that sink at a loopback address that fails instantly instead, so a hung DNS lookup can never again silently eat the whole job.',
+    ],
+  },
+  {
     version: '4.6.68',
     date: '2026-07-29',
     changes: [

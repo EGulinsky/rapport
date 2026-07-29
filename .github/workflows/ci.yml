@@ -22,6 +22,16 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      # app/logger.py's Seq sink defaults SEQ_URL to the Docker-internal hostname
+      # "seq", which doesn't resolve on a bare GitHub-hosted runner. httpx's
+      # timeout=2.0 on that call only bounds the connect/read phase, not the
+      # blocking getaddrinfo() DNS lookup itself — an unresolvable hostname can
+      # hang indefinitely regardless of that timeout. Pointing at a loopback
+      # address needs no DNS lookup at all and fails instantly (connection
+      # refused), so a stuck Seq sink can never again eat the whole job budget
+      # (root cause of repeated silent CI hangs, e.g. v4.6.62).
+      SEQ_URL: http://127.0.0.1:1
 
     steps:
       - uses: actions/checkout@v4
