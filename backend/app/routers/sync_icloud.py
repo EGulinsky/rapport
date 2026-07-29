@@ -1339,7 +1339,12 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
         for contact in all_contacts:
             if _CONTACTS_SYNC_CANCEL:
                 break
-            mention_ids = _find_apps_where_contact_mentioned(contact.name, contact.email, db)
+            # display_name, not contact.name (surname only) -- a bare surname is a
+            # substring-match false-positive waiting to happen (live-observed: a
+            # contact surnamed "Gulinsky" matched the account owner's own email
+            # egulinsky@... on virtually every event in the whole account, since
+            # "Gulinsky" is a substring of "egulinsky").
+            mention_ids = _find_apps_where_contact_mentioned(contact.display_name, contact.email, db)
             linked_ids = {a.id for a in contact.applications}
             for app_id in mention_ids:
                 if app_id not in linked_ids:

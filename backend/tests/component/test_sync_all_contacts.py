@@ -151,3 +151,27 @@ class TestSyncAllContacts:
         assert updated == 0
         db_session.refresh(existing)
         assert existing.applications == []
+
+    async def test_negativ_backfill_verlinkt_nicht_ueber_nachnamen_substring(self, db_session, monkeypatch):
+        # Live-Vorfall (2026-07-29): der Backfill übergab contact.name (nur
+        # der Nachname) statt des vollen Anzeigenamens an
+        # _find_apps_where_contact_mentioned() — ein Kontakt mit Nachnamen
+        # "Gulinsky" wurde dadurch mit praktisch jeder Bewerbung verknüpft,
+        # weil "Gulinsky" ein Substring der eigenen E-Mail-Adresse des
+        # Kontoinhabers ("egulinsky@...") war, die als autor auf fast jedem
+        # Event steht. Ein Nachname allein darf keinen Treffer mehr auslösen.
+        from tests.factories import application_factory, contact_factory, event_factory
+
+        app = application_factory(db_session, firma="Andere Firma GmbH")
+        event_factory(db_session, app, typ="mail", source="gmail", autor="Eugen Testowski <etestowski@example.com>")
+        existing = contact_factory(db_session, name="Testowski", vorname="Jana", email=None)
+        db_session.commit()
+        _icloud_cfg(db_session)
+        monkeypatch.setattr("app.routers.sync_icloud.fetch_all_vcards", AsyncMock(return_value=[]))
+
+        created, errors, touched_ids, updated = await _sync_all_contacts(db_session, None, "de")
+
+        assert created == 0
+        assert updated == 0
+        db_session.refresh(existing)
+        assert existing.applications == []

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.66',
+    date: '2026-07-29',
+    changes: [
+      'Fixed contacts sync still linking contacts to unrelated applications ("crisscross" links) in one specific case the earlier fix (v4.6.58) missed: the pass that re-checks all existing contacts on every sync for new mail/calendar mentions searched by surname alone instead of the full name. A contact whose surname happened to be a substring of someone else\'s name or email address (most visibly your own — e.g. a contact surnamed the same as your email address) could get linked to a large number of unrelated applications. It now always matches on the full name, same as when a contact is first created.',
+    ],
+  },
+  {
     version: '4.6.65',
     date: '2026-07-29',
     changes: [
