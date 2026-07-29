@@ -71,8 +71,8 @@ function SuccessByGroupChart({
           />
           <Tooltip formatter={(value: number) => pct(value)} />
           <Legend />
-          <Bar dataKey="interview_rate" name={t('groupChart.interviewRate')} fill={VIOLET} radius={[0, 4, 4, 0]} />
-          <Bar dataKey="offer_rate" name={t('groupChart.offerRate')} fill={EMERALD} radius={[0, 4, 4, 0]} />
+          <Bar dataKey="interview_rate" name={t('groupChart.interviewRate')} fill={VIOLET} radius={[0, 4, 4, 0]} isAnimationActive={false} />
+          <Bar dataKey="offer_rate" name={t('groupChart.offerRate')} fill={EMERALD} radius={[0, 4, 4, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       <p className="text-[11px] text-gray-400 mt-2">{t('groupChart.minTotalNote', { count: minTotal })}</p>
@@ -200,7 +200,7 @@ export function AnalyticsView() {
                 [`${value} (${pct(props.payload?.pct ?? 0)})`, t('funnel.tooltipLabel')]
               }
             />
-            <Bar dataKey="count" fill={INDIGO} radius={[0, 4, 4, 0]}>
+            <Bar dataKey="count" fill={INDIGO} radius={[0, 4, 4, 0]} isAnimationActive={false}>
               {funnelData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
@@ -242,7 +242,7 @@ export function AnalyticsView() {
                   [`${pct(value)} (${t('stageConversion.tooltipLost', { count: props.payload?.drop_off ?? 0 })})`, t('stageConversion.tooltipLabel')]
                 }
               />
-              <Bar dataKey="rate" fill={AMBER} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="rate" fill={AMBER} radius={[0, 4, 4, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -264,6 +264,7 @@ export function AnalyticsView() {
                 dataKey="value"
                 label={({ name, value }) => `${name}: ${value}`}
                 labelLine={false}
+                isAnimationActive={false}
               >
                 {statusData.map((_entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -281,7 +282,7 @@ export function AnalyticsView() {
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="source" width={75} tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="count" fill={VIOLET} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="count" fill={VIOLET} radius={[0, 4, 4, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -300,9 +301,9 @@ export function AnalyticsView() {
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip />
             <Legend />
-            <Bar dataKey="total" name={t('hhVsDirect.total')} fill={INDIGO} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="gespräch" name={t('hhVsDirect.interview')} fill={VIOLET} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="offer" name={t('hhVsDirect.offer')} fill={EMERALD} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="total" name={t('hhVsDirect.total')} fill={INDIGO} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey="gespräch" name={t('hhVsDirect.interview')} fill={VIOLET} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey="offer" name={t('hhVsDirect.offer')} fill={EMERALD} radius={[4, 4, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -333,7 +334,7 @@ export function AnalyticsView() {
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="count" name={t('rejectionByPhase.name')} fill={ROSE} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" name={t('rejectionByPhase.name')} fill={ROSE} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>

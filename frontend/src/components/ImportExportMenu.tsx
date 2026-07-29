@@ -61,13 +61,14 @@ export function ImportExportMenu({ onImported }: Props) {
         <button
           onClick={() => setOpen(o => !o)}
           disabled={busy}
+          title={t('importExport.button')}
           data-testid="import-export-menu-button"
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
         >
           {busy
             ? <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
             : <Download className="h-4 w-4 text-indigo-500" />}
-          {t('importExport.button')}
+          <span className="hidden lg:inline">{t('importExport.button')}</span>
           <ChevronDown className={clsx('h-3.5 w-3.5 text-gray-400 transition-transform', open && 'rotate-180')} />
         </button>
 

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.68',
+    date: '2026-07-29',
+    changes: [
+      'Optimized the app for iPad: the top toolbar (Sync, Import/Export, Clean up, New) previously had no responsive layout at all below desktop widths, so on an iPad in portrait orientation several buttons were pushed off-screen and the whole page scrolled sideways to reach them. The toolbar now collapses to icon-only buttons (with the same labels still available as tooltips) below a medium-width breakpoint and wraps gracefully as a fallback, so nothing is ever clipped. Also fixed the Analytics charts (funnel, conversion, pipeline distribution, etc.) rendering as empty axes with no visible bars or pie slices on first load at iPad-portrait width — a known Recharts animation/measurement race condition, now avoided by disabling the initial grow-in animation.',
+    ],
+  },
+  {
     version: '4.6.67',
     date: '2026-07-29',
     changes: [

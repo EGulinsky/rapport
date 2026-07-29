@@ -295,7 +295,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
             <RefreshCw className={clsx('h-4 w-4 text-indigo-500', syncing && 'animate-spin')} />
-            {syncing ? t('syncing') : t('sync')}
+            <span className="hidden lg:inline">{syncing ? t('syncing') : t('sync')}</span>
           </button>
           <button
             onClick={() => setOpen(o => !o)}

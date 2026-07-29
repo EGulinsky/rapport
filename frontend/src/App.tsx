@@ -276,7 +276,7 @@ export default function App() {
       {/* Header */}
       <header className="border-b border-gray-200 bg-white shadow-sm sticky top-0 z-30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-14 items-center justify-between gap-4">
+          <div className="flex flex-wrap min-h-14 py-2 items-center justify-between gap-x-4 gap-y-2">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2.5">
                 <img src="/brand/icon.svg" alt="" className="h-5 w-5" />
@@ -342,7 +342,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <SyncButton onSynced={() => { load(); loadReviewCount() }} onReviewOpen={checkReviewAfterSync} />
               <ImportExportMenu onImported={load} />
               <button
@@ -352,16 +352,17 @@ export default function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                {cleanupScope ? t('cleanup.buttonScoped', { scope: cleanupScopeLabel }) : t('cleanup.button')}
+                <span className="hidden lg:inline">{cleanupScope ? t('cleanup.buttonScoped', { scope: cleanupScopeLabel }) : t('cleanup.button')}</span>
               </button>
               <div className="relative" ref={newMenuRef}>
                 <button
                   data-testid="new-menu-button"
                   onClick={() => setShowNewMenu(o => !o)}
+                  title={t('newMenu.button')}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
-                  {t('newMenu.button')}
+                  <span className="hidden lg:inline">{t('newMenu.button')}</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
                 {showNewMenu && (
