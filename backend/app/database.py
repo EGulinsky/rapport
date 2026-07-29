@@ -1236,6 +1236,33 @@ def _migrate_salary():
     conn.close()
 
 
+def _migrate_user_salary_defaults():
+    """Default salary expectation on the user profile, copied into new
+    applications' salary_expectation_* on create (see create_application() in
+    applications.py) — see models.py's User docstring for field details."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "default_salary_currency" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN default_salary_currency TEXT")
+    for col in (
+        "default_salary_expectation_min", "default_salary_expectation_max",
+        "default_salary_expectation_min_fixed", "default_salary_expectation_min_bonus",
+        "default_salary_expectation_max_fixed", "default_salary_expectation_max_bonus",
+    ):
+        if col not in cols:
+            cur.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER")
+    if "default_salary_expectation_company_car" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN default_salary_expectation_company_car BOOLEAN")
+    conn.commit()
+    conn.close()
+
+
 _USER_SCOPED_TABLES = [
     "company_profiles", "applications", "contacts", "merge_aliases", "events",
     "attachments", "google_sync", "synced_items", "pending_matches", "icloud_sync",
@@ -1582,6 +1609,7 @@ def init_db():
     _migrate_contact_phones()
     _migrate_user_profile()
     _migrate_user_home_location()
+    _migrate_user_salary_defaults()
     _migrate_application_ort_coords()
     _migrate_application_drive_distance()
     _migrate_cv_extracted_text_cache()

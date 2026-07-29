@@ -566,6 +566,112 @@ class TestProfileAndCv:
         assert user.cv_extracted_text is None
 
 
+class TestSalaryDefaults:
+    def _token(self, real_auth_client, captured_email, email="test@example.com"):
+        _register(real_auth_client, captured_email, email=email)
+        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
+        return r.json()["access_token"]
+
+    def test_positiv_speichern_und_lesen(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={
+                "default_salary_currency": "USD",
+                "default_salary_expectation_min": 60000,
+                "default_salary_expectation_max": 70000,
+                "default_salary_expectation_company_car": True,
+            },
+            headers=headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["default_salary_currency"] == "USD"
+        assert body["default_salary_expectation_min"] == 60000
+        assert body["default_salary_expectation_max"] == 70000
+        assert body["default_salary_expectation_company_car"] is True
+
+        assert real_auth_client.get("/api/auth/me", headers=headers).json()["default_salary_expectation_min"] == 60000
+
+    def test_negativ_max_ohne_min_liefert_400(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={"default_salary_expectation_max": 70000},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    def test_negativ_max_kleiner_min_liefert_400(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={"default_salary_expectation_min": 70000, "default_salary_expectation_max": 60000},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    def test_negativ_nur_fixum_ohne_bonus_liefert_400(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={"default_salary_expectation_min": 60000, "default_salary_expectation_min_fixed": 50000},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    def test_negativ_fixum_plus_bonus_ungleich_gesamt_liefert_400(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={
+                "default_salary_expectation_min": 60000,
+                "default_salary_expectation_min_fixed": 50000,
+                "default_salary_expectation_min_bonus": 5000,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    def test_positiv_fixum_plus_bonus_gleich_gesamt_wird_akzeptiert(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={
+                "default_salary_expectation_min": 60000,
+                "default_salary_expectation_min_fixed": 50000,
+                "default_salary_expectation_min_bonus": 10000,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+    def test_corner_case_anderer_profil_save_loescht_salary_defaults_nicht(self, real_auth_client, captured_email):
+        token = self._token(real_auth_client, captured_email)
+        headers = {"Authorization": f"Bearer {token}"}
+        real_auth_client.patch(
+            "/api/auth/profile",
+            json={"default_salary_currency": "USD", "default_salary_expectation_min": 60000},
+            headers=headers,
+        )
+
+        resp = real_auth_client.patch(
+            "/api/auth/profile",
+            json={
+                "vorname": "Ada",
+                "default_salary_currency": "USD",
+                "default_salary_expectation_min": 60000,
+            },
+            headers=headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["default_salary_expectation_min"] == 60000
+
+
 class TestHomeLocation:
     """Home address for the distance-to-job feature (KanbanBoard/
     ApplicationModal) -- geocoded once when home_location changes (see

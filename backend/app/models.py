@@ -786,6 +786,23 @@ class User(Base):
     home_lat         = Column(Float, nullable=True)
     home_lng         = Column(Float, nullable=True)
 
+    # Default salary expectation, copied into Application.salary_expectation_*
+    # when a new application is created (see create_application() in
+    # applications.py) and freely editable per-application afterward. Mirrors
+    # the "expectation" half of Application's salary fields only — the
+    # "budget" half is inherently company-specific and has no equivalent here.
+    default_salary_currency             = Column(String, nullable=True)
+    default_salary_expectation_min       = Column(Integer, nullable=True)
+    default_salary_expectation_max       = Column(Integer, nullable=True)
+    default_salary_expectation_min_fixed = Column(Integer, nullable=True)
+    default_salary_expectation_min_bonus = Column(Integer, nullable=True)
+    default_salary_expectation_max_fixed = Column(Integer, nullable=True)
+    default_salary_expectation_max_bonus = Column(Integer, nullable=True)
+    # Nullable with no default (unlike Application's own non-null-ish Boolean
+    # default=False) so "never set" (None) stays distinguishable from an
+    # explicit False — create_application() only copies it when not None.
+    default_salary_expectation_company_car = Column(Boolean, nullable=True)
+
 
 class EmailVerificationCode(Base):
     """6-stelliger Code für E-Mail-Bestätigung und Passwort-Reset — gleicher

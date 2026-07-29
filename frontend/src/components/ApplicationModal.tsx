@@ -7,6 +7,7 @@ import { CompanyLogo } from './CompanyLogo'
 import { LocationSearchInput } from './LocationSearchInput'
 import { displayName } from './ContactModal'
 import { CURRENCIES } from '../constants/currencies'
+import { SalarySlotEditor } from './SalarySlotEditor'
 import { formatCurrencyAmount, formatSalaryRange } from '../utils/salaryFormat'
 import { formatDriveDistance } from '../utils/distanceFormat'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
@@ -1864,100 +1865,29 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
                  'salary_budget_min_fixed', 'salary_budget_min_bonus',
                  'salary_budget_max_fixed', 'salary_budget_max_bonus',
                  t('salary.budget'), 'salary_budget_company_car', t('salary.companyCarBudget')],
-              ] as const).map(([minKey, maxKey, minFixedKey, minBonusKey, maxFixedKey, maxBonusKey, label, carKey, carLabel]) => {
-                const minVal = draft[minKey]
-                const maxVal = draft[maxKey]
-                const hasRange = maxVal != null
-
-                const renderAmountInput = (
-                  key: typeof minKey | typeof maxKey,
-                  fixedKey: typeof minFixedKey | typeof maxFixedKey,
-                  bonusKey: typeof minBonusKey | typeof maxBonusKey,
-                  placeholder: string,
-                  clearAlso?: Partial<Application>,
-                ) => {
-                  const fixedVal = draft[fixedKey]
-                  const bonusVal = draft[bonusKey]
-                  const hasBreakdown = fixedVal != null || bonusVal != null
-                  return (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <input type="number" min={0} readOnly={hasBreakdown}
-                        className={`w-28 rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${hasBreakdown ? 'bg-gray-50 text-gray-500 border-gray-200' : 'border-gray-200'}`}
-                        placeholder={placeholder}
-                        value={draft[key] ?? ''}
-                        onChange={hasBreakdown ? undefined : e => {
-                          const val = e.target.value === '' ? null : Number(e.target.value)
-                          setDraft(d => ({ ...d, [key]: val, ...(val === null && clearAlso ? clearAlso : {}) }))
-                        }}
-                      />
-                      {hasBreakdown ? (
-                        <>
-                          <span className="text-xs text-gray-400">=</span>
-                          <input type="number" min={0}
-                            className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder={t('salary.fixed')}
-                            value={fixedVal ?? ''}
-                            onChange={e => {
-                              const val = e.target.value === '' ? null : Number(e.target.value)
-                              setDraft(d => ({ ...d, [fixedKey]: val, [key]: (val ?? 0) + (d[bonusKey] ?? 0) }))
-                            }}
-                          />
-                          <span className="text-xs text-gray-400">+</span>
-                          <input type="number" min={0}
-                            className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder={t('salary.bonus')}
-                            value={bonusVal ?? ''}
-                            onChange={e => {
-                              const val = e.target.value === '' ? null : Number(e.target.value)
-                              setDraft(d => ({ ...d, [bonusKey]: val, [key]: (d[fixedKey] ?? 0) + (val ?? 0) }))
-                            }}
-                          />
-                          <button type="button" className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
-                            onClick={() => setDraft(d => ({ ...d, [fixedKey]: null, [bonusKey]: null }))}>
-                            {t('salary.breakdownToggleOff')}
-                          </button>
-                        </>
-                      ) : (
-                        <button type="button" className="text-xs text-indigo-500 hover:text-indigo-700 whitespace-nowrap"
-                          disabled={draft[key] == null}
-                          onClick={() => setDraft(d => ({ ...d, [fixedKey]: d[key] ?? 0, [bonusKey]: 0 }))}>
-                          {t('salary.breakdownToggleOn')}
-                        </button>
-                      )}
-                    </div>
-                  )
-                }
-
-                return (
-                  <div key={minKey} className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{label}</p>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {renderAmountInput(minKey, minFixedKey, minBonusKey, t('salary.amountPlaceholder'))}
-                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                        <input type="checkbox" checked={hasRange}
-                          className="rounded border-gray-300 text-indigo-600"
-                          disabled={minVal == null}
-                          onChange={e => setDraft(d => ({
-                            ...d,
-                            [maxKey]: e.target.checked ? (minVal ?? 0) : null,
-                            ...(e.target.checked ? {} : { [maxFixedKey]: null, [maxBonusKey]: null }),
-                          }))}
-                        />
-                        {t('salary.rangeToggle')}
-                      </label>
-                    </div>
-                    {hasRange && renderAmountInput(maxKey, maxFixedKey, maxBonusKey, t('salary.amountMaxPlaceholder'))}
-                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pt-1">
-                      <input type="checkbox" checked={!!draft[carKey]}
-                        className="rounded border-gray-300 text-indigo-600"
-                        onChange={e => setDraft(d => ({ ...d, [carKey]: e.target.checked }))}
-                      />
-                      <Car className="h-3.5 w-3.5 text-gray-400" />
-                      {carLabel}
-                    </label>
-                  </div>
-                )
-              })}
+              ] as const).map(([minKey, maxKey, minFixedKey, minBonusKey, maxFixedKey, maxBonusKey, label, carKey, carLabel]) => (
+                <SalarySlotEditor
+                  key={minKey}
+                  label={label}
+                  companyCarLabel={carLabel}
+                  value={{
+                    min: draft[minKey], max: draft[maxKey],
+                    minFixed: draft[minFixedKey], minBonus: draft[minBonusKey],
+                    maxFixed: draft[maxFixedKey], maxBonus: draft[maxBonusKey],
+                    companyCar: draft[carKey],
+                  }}
+                  onChange={patch => setDraft(d => ({
+                    ...d,
+                    ...(patch.min !== undefined && { [minKey]: patch.min }),
+                    ...(patch.max !== undefined && { [maxKey]: patch.max }),
+                    ...(patch.minFixed !== undefined && { [minFixedKey]: patch.minFixed }),
+                    ...(patch.minBonus !== undefined && { [minBonusKey]: patch.minBonus }),
+                    ...(patch.maxFixed !== undefined && { [maxFixedKey]: patch.maxFixed }),
+                    ...(patch.maxBonus !== undefined && { [maxBonusKey]: patch.maxBonus }),
+                    ...(patch.companyCar !== undefined && { [carKey]: patch.companyCar }),
+                  }))}
+                />
+              ))}
             </>
           ) : (
             <>

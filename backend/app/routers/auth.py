@@ -99,6 +99,14 @@ class UserResponse(BaseModel):
     home_location: Optional[str] = None
     home_lat: Optional[float] = None
     home_lng: Optional[float] = None
+    default_salary_currency: Optional[str] = None
+    default_salary_expectation_min: Optional[int] = None
+    default_salary_expectation_max: Optional[int] = None
+    default_salary_expectation_min_fixed: Optional[int] = None
+    default_salary_expectation_min_bonus: Optional[int] = None
+    default_salary_expectation_max_fixed: Optional[int] = None
+    default_salary_expectation_max_bonus: Optional[int] = None
+    default_salary_expectation_company_car: Optional[bool] = None
 
 
 class ProfilePayload(BaseModel):
@@ -115,6 +123,19 @@ class ProfilePayload(BaseModel):
     # Ein Profil-Save aus einem anderen Tab (z.B. CV-Upload) darf die Sprache nicht
     # unbeabsichtigt zurücksetzen, nur weil das Feld im Payload fehlt.
     ui_language: Optional[str] = None
+    # Unconditionally overwritten by update_profile(), same as vorname/
+    # nachname/linkedin_url above — every AccountPanel section (including
+    # the other, unrelated ones like home location/language) resends its own
+    # currently-held copy of these values alongside whatever it's actually
+    # changing, so no section accidentally blanks these out on save.
+    default_salary_currency: Optional[str] = None
+    default_salary_expectation_min: Optional[int] = None
+    default_salary_expectation_max: Optional[int] = None
+    default_salary_expectation_min_fixed: Optional[int] = None
+    default_salary_expectation_min_bonus: Optional[int] = None
+    default_salary_expectation_max_fixed: Optional[int] = None
+    default_salary_expectation_max_bonus: Optional[int] = None
+    default_salary_expectation_company_car: Optional[bool] = None
 
 
 def _user_response(user: models.User) -> UserResponse:
@@ -132,6 +153,14 @@ def _user_response(user: models.User) -> UserResponse:
         home_location=user.home_location,
         home_lat=user.home_lat,
         home_lng=user.home_lng,
+        default_salary_currency=user.default_salary_currency,
+        default_salary_expectation_min=user.default_salary_expectation_min,
+        default_salary_expectation_max=user.default_salary_expectation_max,
+        default_salary_expectation_min_fixed=user.default_salary_expectation_min_fixed,
+        default_salary_expectation_min_bonus=user.default_salary_expectation_min_bonus,
+        default_salary_expectation_max_fixed=user.default_salary_expectation_max_fixed,
+        default_salary_expectation_max_bonus=user.default_salary_expectation_max_bonus,
+        default_salary_expectation_company_car=user.default_salary_expectation_company_car,
     )
 
 
@@ -282,9 +311,28 @@ async def update_profile(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from app.routers.applications import _validate_salary_pair, _validate_salary_breakdown
+    _validate_salary_pair(payload.default_salary_expectation_min, payload.default_salary_expectation_max, "Gehaltsvorstellung")
+    _validate_salary_breakdown(
+        payload.default_salary_expectation_min_fixed, payload.default_salary_expectation_min_bonus,
+        payload.default_salary_expectation_min, "Gehaltsvorstellung (min)",
+    )
+    _validate_salary_breakdown(
+        payload.default_salary_expectation_max_fixed, payload.default_salary_expectation_max_bonus,
+        payload.default_salary_expectation_max, "Gehaltsvorstellung (max)",
+    )
+
     current_user.vorname = payload.vorname
     current_user.nachname = payload.nachname
     current_user.linkedin_url = payload.linkedin_url
+    current_user.default_salary_currency = payload.default_salary_currency
+    current_user.default_salary_expectation_min = payload.default_salary_expectation_min
+    current_user.default_salary_expectation_max = payload.default_salary_expectation_max
+    current_user.default_salary_expectation_min_fixed = payload.default_salary_expectation_min_fixed
+    current_user.default_salary_expectation_min_bonus = payload.default_salary_expectation_min_bonus
+    current_user.default_salary_expectation_max_fixed = payload.default_salary_expectation_max_fixed
+    current_user.default_salary_expectation_max_bonus = payload.default_salary_expectation_max_bonus
+    current_user.default_salary_expectation_company_car = payload.default_salary_expectation_company_car
 
     if payload.home_location != current_user.home_location:
         current_user.home_location = payload.home_location

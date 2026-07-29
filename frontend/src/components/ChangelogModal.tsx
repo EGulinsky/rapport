@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.64',
+    date: '2026-07-29',
+    changes: [
+      'Settings → Account now has a "Salary expectation" section (currency, min/max range, optional fixed+bonus breakdown, company car), using the exact same editor as the application salary tab. It\'s copied into every new application\'s salary expectation as a starting point — freely editable per application afterward, and only applied when the application itself doesn\'t already set that field (e.g. a LinkedIn-prefilled create).',
+      'Fixed a latent bug found while building this: saving the Profile or Language section of Settings → Account could silently clear your home location (and the cached commute distance on every application) if one was set, because those saves didn\'t resend it. All Account sections now consistently resend each other\'s current values so saving one never blanks out another.',
+    ],
+  },
+  {
     version: '4.6.63',
     date: '2026-07-28',
     changes: [

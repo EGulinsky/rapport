@@ -246,6 +246,12 @@
     "saveHomeLocation": "Save home location",
     "geolocationUnsupported": "Your browser doesn't support geolocation.",
     "geolocationNoLabel": "Couldn't determine an address for your location.",
+    "salaryDefaults": {
+      "title": "Salary expectation",
+      "hint": "Copied into every new application's salary tab as a starting point — freely editable per application afterward.",
+      "expectation": "Expectation",
+      "save": "Save salary expectation"
+    },
     "language": "Language",
     "uiLanguage": "UI language",
     "saveLanguage": "Save language",

@@ -608,9 +608,13 @@ export const api = {
         method: 'POST', body: JSON.stringify({ old_password, new_password }),
         skipAuthHandling: true, // 401 hier heißt "altes Passwort falsch", nicht "Session abgelaufen"
       }),
-    updateProfile: (vorname: string, nachname: string, linkedin_url: string, ui_language?: string, home_location?: string | null) =>
+    updateProfile: (
+      vorname: string, nachname: string, linkedin_url: string,
+      ui_language?: string, home_location?: string | null,
+      salaryDefaults?: SalaryDefaults,
+    ) =>
       request<AuthUser>('/auth/profile', {
-        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url, ui_language, home_location }),
+        method: 'PATCH', body: JSON.stringify({ vorname, nachname, linkedin_url, ui_language, home_location, ...salaryDefaults }),
       }),
     uploadCv: async (file: File): Promise<AuthUser> => {
       const form = new FormData()
@@ -639,7 +643,18 @@ export interface AuthTokenResponse {
   token_type: string
 }
 
-export interface AuthUser {
+export interface SalaryDefaults {
+  default_salary_currency?: string | null
+  default_salary_expectation_min?: number | null
+  default_salary_expectation_max?: number | null
+  default_salary_expectation_min_fixed?: number | null
+  default_salary_expectation_min_bonus?: number | null
+  default_salary_expectation_max_fixed?: number | null
+  default_salary_expectation_max_bonus?: number | null
+  default_salary_expectation_company_car?: boolean | null
+}
+
+export interface AuthUser extends SalaryDefaults {
   id: number
   email: string
   email_verified: boolean

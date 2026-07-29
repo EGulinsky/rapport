@@ -5,6 +5,9 @@ import { api } from '../api/client'
 import { useLogoKey } from '../context/LogoContext'
 import { useAuth } from '../context/AuthContext'
 import { LocationSearchInput } from './LocationSearchInput'
+import { SalarySlotEditor } from './SalarySlotEditor'
+import { CURRENCIES } from '../constants/currencies'
+import type { SalaryDefaults } from '../api/client'
 import { SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../i18n'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate, formatDateTime } from '../i18n/formatDate'
@@ -2011,19 +2014,46 @@ function AccountPanel() {
   const [homeLocationSaved, setHomeLocationSaved] = useState(false)
   const [locating, setLocating] = useState(false)
 
+  const [salaryDraft, setSalaryDraft] = useState<Required<SalaryDefaults>>({
+    default_salary_currency: null,
+    default_salary_expectation_min: null,
+    default_salary_expectation_max: null,
+    default_salary_expectation_min_fixed: null,
+    default_salary_expectation_min_bonus: null,
+    default_salary_expectation_max_fixed: null,
+    default_salary_expectation_max_bonus: null,
+    default_salary_expectation_company_car: null,
+  })
+  const [salaryError, setSalaryError] = useState<string | null>(null)
+  const [salarySaving, setSalarySaving] = useState(false)
+  const [salarySaved, setSalarySaved] = useState(false)
+
   useEffect(() => {
     setVorname(user?.vorname ?? '')
     setNachname(user?.nachname ?? '')
     setLinkedinUrl(user?.linkedin_url ?? '')
     setHomeLocation(user?.home_location ?? '')
     if (user?.ui_language === 'de' || user?.ui_language === 'en') setUiLanguage(user.ui_language)
+    setSalaryDraft({
+      default_salary_currency: user?.default_salary_currency ?? null,
+      default_salary_expectation_min: user?.default_salary_expectation_min ?? null,
+      default_salary_expectation_max: user?.default_salary_expectation_max ?? null,
+      default_salary_expectation_min_fixed: user?.default_salary_expectation_min_fixed ?? null,
+      default_salary_expectation_min_bonus: user?.default_salary_expectation_min_bonus ?? null,
+      default_salary_expectation_max_fixed: user?.default_salary_expectation_max_fixed ?? null,
+      default_salary_expectation_max_bonus: user?.default_salary_expectation_max_bonus ?? null,
+      default_salary_expectation_company_car: user?.default_salary_expectation_company_car ?? null,
+    })
   }, [user])
 
   async function saveProfile() {
     setProfileError(null)
     setProfileSaving(true)
     try {
-      await api.auth.updateProfile(vorname, nachname, linkedinUrl)
+      // Also resends uiLanguage/homeLocation/salaryDraft (all unconditionally
+      // overwritten by update_profile(), same as vorname/nachname/linkedin_url)
+      // so saving THIS section can't silently blank out the others' data.
+      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage, homeLocation.trim() || null, salaryDraft)
       await refreshUser()
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 2000)
@@ -2031,6 +2061,21 @@ function AccountPanel() {
       setProfileError(e instanceof Error ? e.message : String(e))
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  async function saveSalaryDefaults() {
+    setSalaryError(null)
+    setSalarySaving(true)
+    try {
+      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage, homeLocation.trim() || null, salaryDraft)
+      await refreshUser()
+      setSalarySaved(true)
+      setTimeout(() => setSalarySaved(false), 2000)
+    } catch (e: unknown) {
+      setSalaryError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSalarySaving(false)
     }
   }
 
@@ -2054,7 +2099,7 @@ function AccountPanel() {
       // Sends the current profile fields alongside home_location, same reasoning
       // as saveLanguage() -- avoids relying on the backend's "only overwrite if
       // provided" behavior for the other fields while this section saves on its own.
-      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage, homeLocation.trim() || null)
+      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage, homeLocation.trim() || null, salaryDraft)
       await refreshUser()
       setHomeLocationSaved(true)
       setTimeout(() => setHomeLocationSaved(false), 2000)
@@ -2100,7 +2145,10 @@ function AccountPanel() {
       // Sends the current profile fields alongside the language so this save
       // doesn't rely on the backend's "only overwrite if provided" behavior
       // for ui_language while still reflecting the profile section's own state.
-      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage)
+      // Also resends homeLocation/salaryDraft -- both are unconditionally
+      // overwritten by update_profile() same as vorname/nachname/linkedin_url,
+      // so omitting them here would silently wipe them on every language save.
+      await api.auth.updateProfile(vorname, nachname, linkedinUrl, uiLanguage, homeLocation.trim() || null, salaryDraft)
       await refreshUser()
       setLanguageSaved(true)
       setTimeout(() => setLanguageSaved(false), 2000)
@@ -2269,6 +2317,58 @@ function AccountPanel() {
         >
           {homeLocationSaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : homeLocationSaved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
           {homeLocationSaved ? t('common:saved') : t('account.saveHomeLocation')}
+        </button>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-4">
+        <h4 className="text-xs font-semibold text-gray-700">{t('account.salaryDefaults.title')}</h4>
+        <p className="text-xs text-gray-400">{t('account.salaryDefaults.hint')}</p>
+        {salaryError && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {salaryError}
+          </div>
+        )}
+        <div>
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 block">{t('salary.currency', { ns: 'applications' })}</label>
+          <select
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            value={salaryDraft.default_salary_currency || 'EUR'}
+            onChange={e => setSalaryDraft(d => ({ ...d, default_salary_currency: e.target.value }))}
+          >
+            {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>)}
+          </select>
+        </div>
+        <SalarySlotEditor
+          label={t('account.salaryDefaults.expectation')}
+          companyCarLabel={t('salary.companyCarExpectation', { ns: 'applications' })}
+          value={{
+            min: salaryDraft.default_salary_expectation_min,
+            max: salaryDraft.default_salary_expectation_max,
+            minFixed: salaryDraft.default_salary_expectation_min_fixed,
+            minBonus: salaryDraft.default_salary_expectation_min_bonus,
+            maxFixed: salaryDraft.default_salary_expectation_max_fixed,
+            maxBonus: salaryDraft.default_salary_expectation_max_bonus,
+            companyCar: salaryDraft.default_salary_expectation_company_car,
+          }}
+          onChange={patch => setSalaryDraft(d => ({
+            ...d,
+            ...(patch.min !== undefined && { default_salary_expectation_min: patch.min }),
+            ...(patch.max !== undefined && { default_salary_expectation_max: patch.max }),
+            ...(patch.minFixed !== undefined && { default_salary_expectation_min_fixed: patch.minFixed }),
+            ...(patch.minBonus !== undefined && { default_salary_expectation_min_bonus: patch.minBonus }),
+            ...(patch.maxFixed !== undefined && { default_salary_expectation_max_fixed: patch.maxFixed }),
+            ...(patch.maxBonus !== undefined && { default_salary_expectation_max_bonus: patch.maxBonus }),
+            ...(patch.companyCar !== undefined && { default_salary_expectation_company_car: patch.companyCar }),
+          }))}
+        />
+        <button
+          onClick={saveSalaryDefaults}
+          disabled={salarySaving}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {salarySaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : salarySaved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+          {salarySaved ? t('common:saved') : t('account.salaryDefaults.save')}
         </button>
       </div>
 

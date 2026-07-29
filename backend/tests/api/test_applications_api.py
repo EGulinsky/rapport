@@ -104,6 +104,89 @@ class TestCreateApplication:
         assert resp.json()["ort"] is None
 
 
+class TestCreateApplicationSalaryProfileDefaults:
+    """create_application() falls back to the current user's
+    default_salary_expectation_* (Settings -> Account) for any
+    salary_expectation_* field the request itself didn't set — see the
+    `provided`/exclude_unset logic in applications.py. Re-overrides
+    get_current_user() with a user carrying salary defaults, on top of what
+    the `client` fixture already wires up."""
+
+    def _client_with_salary_defaults(self, client, db_session, **salary_kwargs):
+        from app.main import app
+        from app.auth.dependencies import get_current_user
+        from app.database import set_session_user
+
+        fake_user = models.User(
+            id=1, email="test-client@example.com", password_hash="x", email_verified=True,
+            **salary_kwargs,
+        )
+
+        def _override():
+            set_session_user(db_session, fake_user.id)
+            return fake_user
+
+        app.dependency_overrides[get_current_user] = _override
+        return client
+
+    def test_positiv_kopiert_profil_default_wenn_nicht_gesetzt(self, client, db_session):
+        c = self._client_with_salary_defaults(
+            client, db_session,
+            default_salary_currency="USD",
+            default_salary_expectation_min=60000,
+            default_salary_expectation_max=70000,
+            default_salary_expectation_company_car=True,
+        )
+
+        resp = c.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_currency"] == "USD"
+        assert body["salary_expectation_min"] == 60000
+        assert body["salary_expectation_max"] == 70000
+        assert body["salary_expectation_company_car"] is True
+
+    def test_positiv_kopiert_fixum_bonus_breakdown(self, client, db_session):
+        c = self._client_with_salary_defaults(
+            client, db_session,
+            default_salary_expectation_min=60000,
+            default_salary_expectation_min_fixed=50000,
+            default_salary_expectation_min_bonus=10000,
+        )
+
+        resp = c.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_expectation_min_fixed"] == 50000
+        assert body["salary_expectation_min_bonus"] == 10000
+
+    def test_positiv_expliziter_wert_ueberschreibt_profil_default(self, client, db_session):
+        c = self._client_with_salary_defaults(
+            client, db_session,
+            default_salary_currency="USD", default_salary_expectation_min=60000,
+        )
+
+        resp = c.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer",
+            "salary_currency": "GBP", "salary_expectation_min": 40000,
+        })
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_currency"] == "GBP"
+        assert body["salary_expectation_min"] == 40000
+
+    def test_negativ_kein_profil_default_gesetzt_bleibt_leer(self, client):
+        resp = client.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["salary_currency"] == "EUR"
+        assert body["salary_expectation_min"] is None
+
+
 class TestListApplicationsSearch:
     def test_positiv_suche_matcht_firma(self, client, db_session):
         application_factory(db_session, firma="Contoso AG")

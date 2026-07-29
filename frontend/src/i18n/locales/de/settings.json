@@ -246,6 +246,12 @@
     "saveHomeLocation": "Wohnort speichern",
     "geolocationUnsupported": "Dein Browser unterstützt keine Standortermittlung.",
     "geolocationNoLabel": "Für deinen Standort konnte keine Adresse ermittelt werden.",
+    "salaryDefaults": {
+      "title": "Gehaltsvorstellung",
+      "hint": "Wird als Ausgangswert in den Gehalts-Tab jeder neuen Bewerbung übernommen — danach pro Bewerbung frei änderbar.",
+      "expectation": "Vorstellung",
+      "save": "Gehaltsvorstellung speichern"
+    },
     "language": "Sprache",
     "uiLanguage": "UI-Sprache",
     "saveLanguage": "Sprache speichern",

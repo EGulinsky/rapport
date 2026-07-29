@@ -588,8 +588,27 @@ async def create_application(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    provided = payload.model_dump(exclude_unset=True)
     data = payload.model_dump()
     skip_linkedin_sync = data.pop("created_from_linkedin")
+
+    # Copy the user's default salary expectation (Settings -> Account) into
+    # a new application whenever the client didn't explicitly set that field
+    # itself — e.g. the quick "New Application" form never sends any
+    # salary_* keys at all, so every one of these falls back here. Explicit
+    # values (from the full ApplicationModal salary tab, or a LinkedIn-
+    # prefilled create) always win since they're present in `provided`.
+    for f in (
+        "salary_currency", "salary_expectation_min", "salary_expectation_max",
+        "salary_expectation_min_fixed", "salary_expectation_min_bonus",
+        "salary_expectation_max_fixed", "salary_expectation_max_bonus",
+        "salary_expectation_company_car",
+    ):
+        if f not in provided:
+            profile_val = getattr(current_user, f"default_{f}", None)
+            if profile_val is not None:
+                data[f] = profile_val
+
     _validate_salary_pair(data.get("salary_expectation_min"), data.get("salary_expectation_max"), "Gehaltsvorstellung")
     _validate_salary_pair(data.get("salary_budget_min"), data.get("salary_budget_max"), "Budget")
     for slot, label in (
