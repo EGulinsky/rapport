@@ -11,7 +11,7 @@ import type { SalaryDefaults } from '../api/client'
 import { SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../i18n'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate, formatDateTime } from '../i18n/formatDate'
-import type { AiSettingsWrite, AiModelInfo, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInSyncLogEntry, LinkedInMessagesStatus, LinkedInMessagesImportResult, BackupStatus, AgentHealth } from '../types'
+import type { AiSettingsWrite, AiModelInfo, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInMessagesStatus, LinkedInMessagesImportResult, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void; onReviewOpen?: () => void }
@@ -1357,13 +1357,6 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
     } catch (e: unknown) { setLiError(e instanceof Error ? e.message : String(e)) }
   }
 
-  function logLabel(e: LinkedInSyncLogEntry) {
-    if (e.aktion === 'neu') return { text: t('linkedin.logNew'), cls: 'bg-indigo-50 text-indigo-700' }
-    if (e.aktion === 'abgesagt') return { text: t('linkedin.logRejected'), cls: 'bg-red-50 text-red-700' }
-    if (e.aktion === 'aktualisiert') return { text: t('linkedin.logUpdated'), cls: 'bg-blue-50 text-blue-700' }
-    return { text: t('linkedin.logUnchanged'), cls: 'bg-gray-50 text-gray-500' }
-  }
-
   async function handleSubmit2fa() {
     if (!twoFaCode.trim()) return
     setSubmitting2fa(true); setLiError(null)
@@ -1450,9 +1443,14 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
       {syncState && (
         <div className="space-y-3 border border-gray-100 rounded-lg p-3">
           {(isRunning || needs2fa) && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0077B5]" />
-              <span>{syncState.step || t('linkedin.running')}</span>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 text-xs text-gray-600">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0077B5]" />
+                <span>{syncState.step || t('linkedin.running')}</span>
+              </div>
+              {isRunning && syncState.current_item && (
+                <p className="text-[11px] text-gray-400 pl-5.5 truncate">{syncState.current_item}</p>
+              )}
             </div>
           )}
           {needs2fa && (
@@ -1511,41 +1509,25 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
             </div>
           )}
 
-          {isDone && syncState.log && syncState.log.filter(e => e.aktion !== 'unverändert').length > 0 && (
-            <details open className="text-xs">
-              <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">
-                {t('linkedin.actionLog', { count: syncState.log.filter(e => e.aktion !== 'unverändert').length })}
-              </summary>
-              <div className="mt-1 max-h-48 overflow-y-auto space-y-1">
-                {syncState.log.filter(e => e.aktion !== 'unverändert').map((entry, i) => {
-                  const { text, cls } = logLabel(entry)
-                  return (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>{text}</span>
-                      <span className="text-gray-700 leading-tight">
-                        <span className="font-medium">{entry.firma}</span>
-                        {entry.rolle && <span className="text-gray-400"> · {entry.rolle}</span>}
-                        {entry.aktion === 'aktualisiert' && entry.von && entry.zu && <span className="text-gray-400">{t('linkedin.logUpdateArrow', { from: entry.von, to: entry.zu })}</span>}
-                        {entry.aktion === 'abgesagt' && entry.von && <span className="text-gray-400">{t('linkedin.logWasRejected', { from: entry.von })}</span>}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </details>
-          )}
-
-          {isDone && syncState.log && syncState.log.filter(e => e.aktion === 'unverändert').length > 0 && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-gray-400 hover:text-gray-600">
-                {t('linkedin.unchangedCount', { count: syncState.log.filter(e => e.aktion === 'unverändert').length })}
-              </summary>
-              <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5 ml-2">
-                {syncState.log.filter(e => e.aktion === 'unverändert').map((entry, i) => (
-                  <div key={i} className="text-gray-400">{entry.firma} · {entry.rolle}</div>
-                ))}
-              </div>
-            </details>
+          {syncState.category_counts.length > 0 && (
+            <div className="space-y-1 text-xs border-t border-gray-100 pt-2">
+              {syncState.category_counts.map(cc => (
+                <div key={cc.card_type} className="flex items-center justify-between gap-2">
+                  <span className="text-gray-600">{cc.label}</span>
+                  <span className="text-gray-400 tabular-nums">
+                    {t('linkedin.catFound', { count: cc.found })}
+                    {(cc.created > 0 || cc.updated > 0) && (
+                      <>
+                        {' · '}
+                        {cc.created > 0 && t('linkedin.catNew', { count: cc.created })}
+                        {cc.created > 0 && cc.updated > 0 && ' · '}
+                        {cc.updated > 0 && t('linkedin.catUpdated', { count: cc.updated })}
+                      </>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
 
           {syncState.errors.length > 0 && (

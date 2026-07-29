@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.6.67',
+    date: '2026-07-29',
+    changes: [
+      'LinkedIn sync (both the global "Sync all" run and a single application\'s own sync) now shows more detail while it runs: a live "Company — Job Title" line for whichever posting is currently being processed, and a per-category breakdown (Saved / Draft / Applied (unconfirmed) / Applied / Interviews / Archived) of how many postings were found and how many were newly created or updated in each. Previously it only showed a bare step description and an overall processed/total counter, with a category-count feature that had silently stopped populating in an earlier release and a debug action-log panel that never actually rendered anything.',
+    ],
+  },
+  {
     version: '4.6.66',
     date: '2026-07-29',
     changes: [

@@ -1101,6 +1101,9 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
                   />
                 </div>
                 <p className="text-[10px] text-gray-400 truncate">{liStatus.step}</p>
+                {liStatus.current_item && (
+                  <p className="text-[10px] text-gray-300 truncate">{liStatus.current_item}</p>
+                )}
               </div>
             )}
           </div>

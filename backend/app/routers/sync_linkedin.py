@@ -67,6 +67,14 @@ _state: dict = {
     "skipped": 0,
     "errors": [],
     "raw_jobs": [],        # all scraped jobs (for status endpoint)
+    # Per-category breakdown (SAVED/DRAFT/CLICKED_APPLY/APPLIED/INTERVIEWS/
+    # ARCHIVED for a batch sync; whichever subset _categories_for_individual_
+    # sync() picks for an individual one) — "found" fills in as each category
+    # finishes scraping, created/updated/skipped fill in as _process() works
+    # through the combined job list, so both entry points show real progress
+    # throughout the whole run instead of only during the final DB-write loop.
+    "category_counts": [],
+    "current_item": None,  # "Company — Job Title" while _process() is running
     "started_at": None,
     "finished_at": None,
 }
@@ -87,6 +95,8 @@ def _reset_state():
         "updated": 0,
         "skipped": 0,
         "errors": [],
+        "category_counts": [],
+        "current_item": None,
         "started_at": None,
         "finished_at": None,
     })
@@ -1144,17 +1154,33 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             errors: list[str] = []
             newly_created_app_ids: list[int] = []
 
+            def _cc_entry(card_type: str) -> dict:
+                for entry in _state["category_counts"]:
+                    if entry["card_type"] == card_type:
+                        return entry
+                # Shouldn't happen (every card_type is seeded below before any
+                # job referencing it is processed) — fail soft with a fresh
+                # entry rather than crashing the sync over a display detail.
+                entry = {"card_type": card_type, "label": card_type, "found": 0, "created": 0, "updated": 0, "skipped": 0}
+                _state["category_counts"].append(entry)
+                return entry
+
             def _process(job: dict) -> None:
                 nonlocal created, updated, skipped
+                _state["current_item"] = f"{job.get('company', '?')} — {job.get('title', '?')}"
+                cc = _cc_entry(job.get("_card_type", ""))
                 try:
                     outcome = _process_linkedin_job(db, job, user_id)
                     if outcome["result"] == "created":
                         created += 1
+                        cc["created"] += 1
                         newly_created_app_ids.append(outcome["app_id"])
                     elif outcome["result"] == "updated":
                         updated += 1
+                        cc["updated"] += 1
                     else:
                         skipped += 1
+                        cc["skipped"] += 1
                 except Exception as e:
                     errors.append(f"{job.get('company', '?')}: {e}")
                     log.error("[LI] Fehler bei {}/{}: {}", job.get("company", "?"), job.get("title", "?"), e)
@@ -1168,6 +1194,10 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 log.info("[LI] Individueller Sync App #{} — LI-ID: {}", target_app_id, target_li_job_id or "unbekannt")
 
                 search_categories = _categories_for_individual_sync(target_app)
+                _state["category_counts"] = [
+                    {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0}
+                    for ct, lbl, *_ in search_categories
+                ]
 
                 found_job: dict | None = None
                 cats_searched = 0
@@ -1178,6 +1208,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                         j["_card_type"] = card_type
                         j["_label"] = label
                     cats_searched += 1
+                    _cc_entry(card_type)["found"] = len(cat_jobs)
                     log.info("[LI kat] {}: {} gefunden", label, len(cat_jobs))
                     _state["step"] = t("li_jobs_searching_match", lang, label=label, count=len(cat_jobs))
 
@@ -1198,12 +1229,18 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                     _state["processed"] = 1
                     _state["step"] = t("li_processing_match", lang)
                     _process(found_job)
+                    _state["current_item"] = None
                 else:
                     log.info("[LI] Ziel-App #{} nicht in LI-Daten gefunden", target_app_id)
                     _state["step"] = t("li_no_entry_found", lang)
 
             # ── Batch-Sync: alle Kategorien sammeln, dann verarbeiten ───────────────
             else:
+                _state["category_counts"] = [
+                    {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0}
+                    for ct, lbl, *_ in CATEGORIES
+                ]
+
                 # Dedup by firma|title — later categories (higher priority) overwrite earlier
                 all_jobs_by_key: dict[str, dict] = {}
                 for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
@@ -1214,6 +1251,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                         j["_label"] = label
                         dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
                         all_jobs_by_key[dedup_key] = j
+                    _cc_entry(card_type)["found"] = len(cat_jobs)
                     log.info("[LI kat] {}: {} gefunden (gesamt {})", label, len(cat_jobs), len(all_jobs_by_key))
                     _state["step"] = t("li_jobs_found_total", lang, label=label, count=len(cat_jobs), total=len(all_jobs_by_key))
                 all_jobs = list(all_jobs_by_key.values())
@@ -1231,6 +1269,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                     _state["processed"] = i + 1
                     _state["step"] = t("li_processing_progress", lang, current=i + 1, total=len(all_jobs))
                     _process(job)
+                _state["current_item"] = None
 
         cfg.last_sync = datetime.now(timezone.utc)
         _commit_with_retry(db)

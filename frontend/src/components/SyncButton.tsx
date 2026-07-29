@@ -36,6 +36,7 @@ interface ProgressEntry {
   created: number
   updated: number
   skipped: number
+  currentItem?: string | null
 }
 
 const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'icloud_contacts', 'local_files']
@@ -276,6 +277,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
     created: liStatus.created || 0,
     updated: liStatus.updated || 0,
     skipped: liStatus.skipped || 0,
+    currentItem: liStatus.current_item,
   } : null
 
   const allProgressEntries = liProgressEntry
@@ -409,6 +411,9 @@ function ProgressRow({ entry }: { entry: ProgressEntry }) {
         />
       </div>
       <p className="text-[10px] text-gray-400 truncate">{entry.step}</p>
+      {!entry.done && entry.currentItem && (
+        <p className="text-[10px] text-gray-300 truncate">{entry.currentItem}</p>
+      )}
     </div>
   )
 }

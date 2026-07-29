@@ -580,15 +580,6 @@ export interface CalendarEvent {
   source?: string
 }
 
-export interface LinkedInSyncLogEntry {
-  aktion: 'neu' | 'abgesagt' | 'aktualisiert' | 'unverändert'
-  firma: string
-  rolle: string
-  von?: string
-  zu?: string
-  status?: string
-}
-
 export interface MergeRequest {
   winner_id: number
   loser_ids: number[]
@@ -603,7 +594,10 @@ export interface MergeResult {
 export interface LinkedInSyncCategoryCount {
   card_type: string
   label: string
-  count: number
+  found: number
+  created: number
+  updated: number
+  skipped: number
 }
 
 export interface LinkedInSyncStatus {
@@ -615,8 +609,8 @@ export interface LinkedInSyncStatus {
   updated: number
   skipped: number
   errors: string[]
-  log: LinkedInSyncLogEntry[]
   category_counts: LinkedInSyncCategoryCount[]
+  current_item: string | null
   started_at: string | null
   finished_at: string | null
 }
