@@ -18,7 +18,8 @@
     "icloud_reminders": "iCloud Erinnerungen",
     "icloud_calls": "Anrufliste",
     "icloud_contacts": "Kontakte",
-    "local_files": "Dokumente"
+    "local_files": "Dokumente",
+    "ai_scoring": "KI-Bewertung"
   },
   "summary": {
     "title": "Sync abgeschlossen",

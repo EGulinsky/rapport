@@ -7,15 +7,18 @@ from sqlalchemy import or_, func
 from typing import List, Optional
 from datetime import date
 
-from app.database import get_db
+from app.database import get_db, SessionLocal, set_session_user
 from app import models, schemas
 from app.auth.dependencies import get_current_user
 from app.models import MAIN_STATUS_LABELS, SUB_STATUS_LABELS
 from app.audit import add_audit
 from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
+from app.logger import get_logger
 from app.routers.sync_common import _berlin_naive_to_utc_naive
 from app.routers.geo import _get_maps_api_key, geocode_one, driving_route
+
+log = get_logger("applications")
 
 
 def _delete_call_events_for_contact(db: Session, app_id: int, contact: "models.Contact", user_id: Optional[int]) -> int:
@@ -117,6 +120,61 @@ def apply_ghosting_overrides(db: Session, apps: list) -> None:
         else:
             # Active application (incl. negotiating): no real activity for > 14 days
             app._ghosting_override = last_activity is not None and (today - last_activity).days > 14
+
+
+async def score_application(db: Session, app: "models.Application", user: "models.User", lang: str = "de") -> bool:
+    """Computes match_score + success_probability for a single application
+    and persists them. Always recomputes (no skip-if-already-scored check —
+    see the plan doc for why). Runs a second, separate AI call for
+    success_probability except for terminal statuses (rejected/signed),
+    where the outcome is already known and the value is set deterministically.
+
+    Returns True if scoring actually ran, False if skipped (no JD text
+    resolvable — see resolve_jd_texts()) so callers like _run_score_all()
+    can report an accurate "scored" count rather than just "didn't raise".
+
+    Raises AINotConfigured/AIRateLimited so the caller can decide how to
+    handle a globally-broken/rate-limited AI setup (e.g. abort a whole batch
+    run); any other exception is the caller's responsibility to catch and log.
+    """
+    from datetime import datetime, timezone
+
+    from app.ai.jd_resolve import resolve_jd_texts
+    from app.ai.tasks import _build_profile_block, compute_match_score, compute_success_probability
+    from app.ai.timeline_text import build_timeline_text
+
+    apply_ghosting_overrides(db, [app])
+
+    profile_block = _build_profile_block(user.cv_extracted_text, user.linkedin_profile_text)
+    jd_texts = await resolve_jd_texts(db, app)
+    if not jd_texts:
+        return False
+
+    match_result = await compute_match_score(
+        db, app.firma or "", app.rolle or "", profile_block, jd_texts, ui_language=lang,
+    )
+    app.match_score = match_result["match_score"]
+    app.match_score_reasoning = match_result["reasoning"]
+
+    if app.main_status in ("rejected", "signed"):
+        app.success_probability = 0 if app.main_status == "rejected" else 100
+        app.success_probability_reasoning = (
+            "Absage bereits erhalten." if app.main_status == "rejected"
+            else "Zusage bereits erhalten."
+        )
+    else:
+        timeline_text = build_timeline_text(app.events)
+        prob_result = await compute_success_probability(
+            db, app.firma or "", app.rolle or "", app.main_status, app.sub_status,
+            app.match_score, app.match_score_reasoning, timeline_text, app.ghosting,
+            ui_language=lang,
+        )
+        app.success_probability = prob_result["success_probability"]
+        app.success_probability_reasoning = prob_result["reasoning"]
+
+    app.ai_score_computed_at = datetime.now(timezone.utc)
+    db.commit()
+    return True
 
 
 def _compute_naechster_schritt(
@@ -514,6 +572,79 @@ def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends
     )
 
 
+PROGRESS_KEY_AI_SCORING = "ai_scoring"
+
+
+async def _run_score_all(user_id: int) -> None:
+    """Background task for POST /score-all: recomputes match_score/
+    success_probability for every one of the user's applications.
+    Sequential with a provider-based throttle (5s gemini/groq — free-tier RPM
+    limits — else 1s), mirroring the removed traffic-light assessment's
+    ai-assess-all batch throttle. Stops the whole batch immediately on
+    AINotConfigured/AIRateLimited (a globally broken/limited AI setup won't
+    get better for the next application either); any other per-app exception
+    is logged and the batch continues."""
+    import asyncio
+
+    from app.ai.provider import AINotConfigured, AIRateLimited
+    from app.i18n_strings import resolve_ui_language
+    from app.routers.sync_common import finish_progress, set_batch_result, update_progress
+
+    db = SessionLocal()
+    set_session_user(db, user_id)
+    lang = resolve_ui_language(db, user_id)
+    errors: list[str] = []
+    scored = 0
+    try:
+        user = db.query(models.User).get(user_id)
+        apps = db.query(models.Application).filter(models.Application.user_id == user_id).all()
+        apply_ghosting_overrides(db, apps)
+
+        cfg = db.query(models.AiSettings).first()
+        provider_id = (cfg.provider if cfg else "") or ""
+        delay_s = 5.0 if provider_id in ("gemini", "groq") else 1.0
+
+        total = len(apps)
+        for i, app in enumerate(apps):
+            if i > 0:
+                await asyncio.sleep(delay_s)
+            update_progress(
+                PROGRESS_KEY_AI_SCORING, i, total,
+                current_item=f"{app.firma or '?'} | {app.rolle or '?'}",
+            )
+            try:
+                if await score_application(db, app, user, lang):
+                    scored += 1
+            except (AINotConfigured, AIRateLimited) as e:
+                errors.append(str(e))
+                break
+            except Exception as e:
+                log.warning("[score-all] Scoring fehlgeschlagen für App #{}: {}", app.id, e)
+                errors.append(f"#{app.id} {app.firma}: {e}")
+    finally:
+        finish_progress(PROGRESS_KEY_AI_SCORING, lang=lang, created=scored)
+        # "created" mirrors "scored" so the frontend's shared batch-result
+        # summary (built generically across all sources) can display a
+        # meaningful count without a bespoke ai_scoring case.
+        set_batch_result(PROGRESS_KEY_AI_SCORING, {"scored": scored, "created": scored, "errors": errors, "done": True})
+        db.close()
+
+
+@router.post("/score-all")
+async def score_all(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from app.i18n_strings import t
+    from app.routers.sync_common import init_progress, set_batch_result
+
+    set_batch_result(PROGRESS_KEY_AI_SCORING, {"done": False})
+    init_progress(PROGRESS_KEY_AI_SCORING, t("label_ai_scoring", current_user.ui_language), lang=current_user.ui_language)
+    background_tasks.add_task(_run_score_all, current_user.id)
+    return {"started": True}
+
+
 @router.post("/extract-from-linkedin-url")
 async def extract_from_linkedin_url(
     payload: schemas.ExtractFromUrlRequest,
@@ -710,6 +841,12 @@ async def update_application(
 
     firma_changed = "firma" in update_data or "zielfirma_bei_hh" in update_data or "is_headhunter" in update_data
     ort_changed = "ort" in update_data
+    # Invalidate the cached LinkedIn-JD scrape (ai/jd_resolve.py) when the
+    # posting URL itself changes — a stale cache would otherwise keep
+    # feeding match-score computation the previous posting's text.
+    if "stellenanzeige_url" in update_data and update_data["stellenanzeige_url"] != app.stellenanzeige_url:
+        app.jd_link_text_cache = None
+        app.jd_link_text_fetched_at = None
     for field, value in update_data.items():
         setattr(app, field, value)
 

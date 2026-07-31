@@ -348,3 +348,179 @@ Extrahiere:
         "zielfirma_bei_hh": result.get("zielfirma_bei_hh") or None,
         "kommentar": result.get("kommentar") or None,
     }
+
+
+# Match score / success probability (see routers/applications.py::score_application()).
+# Same additive-block/language-note pattern the (now removed) traffic-light
+# assessment used — not resurrecting its color/next-step semantics, just this
+# well-tested shape for building the prompt.
+
+_SCORE_LANGUAGE_NOTE = {
+    "de": 'Schreibe "reasoning" auf Deutsch.',
+    "en": 'Write "reasoning" in English.',
+}
+
+_MATCH_SCORE_SYSTEM = """\
+Du bist ein erfahrener Recruiting-Experte. Du bewertest, wie gut ein Bewerberprofil \
+zu einer Stellenanzeige passt. Antworte ausschließlich als valides JSON-Objekt, \
+kein Markdown, keine Erklärungen außerhalb des JSON.
+"""
+
+_SUCCESS_PROBABILITY_SYSTEM = """\
+Du bist ein erfahrener Karrierecoach. Du schätzt, wie wahrscheinlich eine Bewerbung \
+noch zu einem Angebot führt. Antworte ausschließlich als valides JSON-Objekt, \
+kein Markdown, keine Erklärungen außerhalb des JSON.
+"""
+
+_STATUS_LABELS = {
+    "prospecting": "Anbahnung",
+    "applied": "Beworben",
+    "hr": "Gespräch HR/HH",
+    "fb": "Gespräch FB",
+    "waiting": "Warten auf Entscheidung",
+    "negotiating": "Angebotsverhandlung",
+    "signed": "Unterschrift",
+    "rejected": "Absage",
+}
+
+
+def _build_profile_block(cv_text: str | None, linkedin_text: str | None) -> str:
+    """Optional '=== BEWERBERPROFIL ===' prompt section — CV text (app/
+    cv_extract.py) and/or cached LinkedIn profile text (routers/
+    sync_linkedin.py's scrape_own_profile()), when available. Empty string
+    when neither is present."""
+    parts = []
+    if cv_text:
+        parts.append(f"Lebenslauf (Auszug):\n{cv_text}")
+    if linkedin_text:
+        parts.append(f"LinkedIn-Profil (Auszug):\n{linkedin_text}")
+    if not parts:
+        return ""
+    return "=== BEWERBERPROFIL ===\n" + "\n\n".join(parts) + "\n\n"
+
+
+def _clamp_score(value, default: int = 0) -> int:
+    """Defensively coerces an LLM-controlled numeric field to an int 0-100 —
+    never trust the model to actually respect the requested range/type."""
+    try:
+        return max(0, min(100, int(round(float(value)))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_jd_block(jd_texts: list[dict]) -> str:
+    """'=== STELLENANZEIGE(N) ===' block — one or more candidate documents
+    (an application's file-type attachments, or a scraped LinkedIn job
+    posting as fallback — see ai/jd_resolve.py), labeled by filename. There's
+    deliberately no code-side heuristic for which one is "the" job
+    description when several are attached — the model judges relevance
+    itself from the filenames, firma/rolle context, and content."""
+    if not jd_texts:
+        return ""
+    parts = [f"[{jd['filename']}]\n{jd['text']}" for jd in jd_texts]
+    return "=== STELLENANZEIGE(N) ===\n" + "\n\n".join(parts) + "\n\n"
+
+
+async def compute_match_score(
+    db: Session,
+    firma: str,
+    rolle: str,
+    profile_block: str,
+    jd_texts: list[dict],
+    ui_language: str = "de",
+) -> dict:
+    """How well does the applicant's profile (CV/LinkedIn, via profile_block)
+    match the job's requirements (jd_texts)? Returns
+    {"match_score": int 0-100, "reasoning": str}."""
+    lang_note = _SCORE_LANGUAGE_NOTE.get(ui_language, _SCORE_LANGUAGE_NOTE["de"])
+    jd_block = _build_jd_block(jd_texts)
+
+    prompt = f"""=== BEWERBUNG ===
+Firma: {firma}
+Stelle: {rolle}
+
+{profile_block}{jd_block}=== AUFGABE ===
+Gib ein JSON-Objekt mit genau zwei Feldern zurück:
+
+1. "match_score" — Wie gut passt das Bewerberprofil zu den Anforderungen der Stelle? \
+Eine Zahl von 0 (kein erkennbarer Zusammenhang) bis 100 (nahezu perfekte Übereinstimmung).
+   - Falls oben keine Stellenanzeige vorhanden ist: bewerte konservativ allein anhand von \
+Firma/Stelle-Name, ohne Details zu erfinden.
+   - Falls oben kein Bewerberprofil vorhanden ist: bewerte konservativ, ohne Qualifikationen zu erfinden.
+
+2. "reasoning" — Warum diese Einschätzung? (2-3 Sätze, konkrete Übereinstimmungen und Lücken benennen, \
+keine Floskeln)
+
+{lang_note}
+
+{{"match_score": <0-100>, "reasoning": "..."}}"""
+
+    result = await complete(
+        db,
+        [{"role": "system", "content": _MATCH_SCORE_SYSTEM}, {"role": "user", "content": prompt}],
+        json_mode=True,
+        max_tokens=400,
+    )
+
+    return {
+        "match_score": _clamp_score(result.get("match_score")),
+        "reasoning": result.get("reasoning") or "",
+    }
+
+
+async def compute_success_probability(
+    db: Session,
+    firma: str,
+    rolle: str,
+    main_status: str,
+    sub_status: str | None,
+    match_score: int,
+    match_reasoning: str,
+    timeline_text: str,
+    ghosting: bool,
+    ui_language: str = "de",
+) -> dict:
+    """How likely is this application to still result in an offer, given the
+    match score and the application's actual activity history? Returns
+    {"success_probability": int 0-100, "reasoning": str}."""
+    lang_note = _SCORE_LANGUAGE_NOTE.get(ui_language, _SCORE_LANGUAGE_NOTE["de"])
+    status_label = _STATUS_LABELS.get(main_status, main_status)
+    ghosting_note = "\nHinweis: Diese Bewerbung gilt aktuell als Ghosting (lange keine echte Aktivität)." if ghosting else ""
+
+    prompt = f"""=== BEWERBUNG ===
+Firma: {firma}
+Stelle: {rolle}
+Status: {status_label}{f" ({sub_status})" if sub_status else ""}{ghosting_note}
+
+=== MATCH-SCORE ===
+{match_score}/100 — {match_reasoning}
+
+=== VOLLSTÄNDIGE TIMELINE (chronologisch) ===
+{timeline_text}
+
+=== AUFGABE ===
+Gib ein JSON-Objekt mit genau zwei Feldern zurück:
+
+1. "success_probability" — Wie wahrscheinlich führt diese Bewerbung noch zu einem Angebot? \
+Eine Zahl von 0 (praktisch ausgeschlossen) bis 100 (so gut wie sicher). Berücksichtige sowohl den \
+Match-Score als auch den bisherigen Verlauf (Anzahl/Art der Gespräche, Tage seit letztem Kontakt, \
+erreichte Phase, Ghosting-Hinweis).
+
+2. "reasoning" — Warum diese Einschätzung? (2-3 Sätze, konkrete Fakten aus Match-Score und Timeline nennen, \
+keine Floskeln)
+
+{lang_note}
+
+{{"success_probability": <0-100>, "reasoning": "..."}}"""
+
+    result = await complete(
+        db,
+        [{"role": "system", "content": _SUCCESS_PROBABILITY_SYSTEM}, {"role": "user", "content": prompt}],
+        json_mode=True,
+        max_tokens=400,
+    )
+
+    return {
+        "success_probability": _clamp_score(result.get("success_probability")),
+        "reasoning": result.get("reasoning") or "",
+    }

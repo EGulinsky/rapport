@@ -463,6 +463,28 @@ class TestMigrateApplicationOrt:
         assert "ort" in _cols(db_path, "applications")
 
 
+class TestMigrateAiScoring:
+    def test_positiv_fuegt_alle_spalten_hinzu(self, db_path):
+        _drop_columns(
+            db_path, "applications",
+            "match_score", "match_score_reasoning",
+            "success_probability", "success_probability_reasoning",
+            "ai_score_computed_at", "jd_link_text_cache", "jd_link_text_fetched_at",
+        )
+        db_module._migrate_ai_scoring()
+        cols = _cols(db_path, "applications")
+        for col in (
+            "match_score", "match_score_reasoning",
+            "success_probability", "success_probability_reasoning",
+            "ai_score_computed_at", "jd_link_text_cache", "jd_link_text_fetched_at",
+        ):
+            assert col in cols, f"{col} missing"
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_ai_scoring()
+        db_module._migrate_ai_scoring()  # must not raise ("duplicate column")
+
+
 class TestMigrateAddUserIdColumns:
     def test_positiv_fuegt_user_id_zu_allen_tabellen_hinzu(self, db_path):
         for table in db_module._USER_SCOPED_TABLES:

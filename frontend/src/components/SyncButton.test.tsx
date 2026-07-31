@@ -49,6 +49,18 @@ describe('filterProgressEntries', () => {
     expect(result).toEqual([progress.gmail, progress.icloud_mail])
   })
 
+  it('includes an ai_scoring entry alongside the other sync sources', () => {
+    const progress = {
+      gmail: entry({ total: 10, current: 3, percent: 30 }),
+      ai_scoring: entry({ label: 'AI Scoring', done: true, created: 2 }),
+    }
+
+    const result = filterProgressEntries(progress)
+
+    expect(result).toHaveLength(2)
+    expect(result).toEqual([progress.gmail, progress.ai_scoring])
+  })
+
   it('omits sources with no progress and not done', () => {
     const progress = {
       gmail: entry({ total: 0, done: false }),

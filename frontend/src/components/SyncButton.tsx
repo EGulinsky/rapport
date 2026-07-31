@@ -39,7 +39,7 @@ interface ProgressEntry {
   currentItem?: string | null
 }
 
-const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'icloud_contacts', 'local_files']
+const SOURCE_KEYS = ['gmail', 'gcal', 'icloud_mail', 'icloud_cal', 'icloud_notes', 'icloud_reminders', 'icloud_calls', 'icloud_contacts', 'local_files', 'ai_scoring']
 
 // Only ever show progress for this run's own sources (SOURCE_KEYS), never
 // every key in `progress` — that dict is a single process-wide store the
@@ -146,6 +146,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
       // Load sync settings to skip disabled sources
       const syncCfg = await api.settings.getSync().catch(() => null)
       const filesCfg = await api.settings.getFiles().catch(() => null)
+      const aiCfg = await api.settings.getAi().catch(() => null)
       const googleOn  = syncCfg?.google_enabled  ?? true
       const icloudOn  = syncCfg?.icloud_enabled  ?? true
       const filesOn   = (syncCfg?.files_enabled ?? true) && (filesCfg?.enabled ?? false) && !!(filesCfg?.folder_path)
@@ -169,6 +170,7 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
         { key: 'icloud_reminders', enabled: icloudOn && (syncCfg?.icloud_reminders_enabled ?? true), fn: () => api.icloud.syncReminders() },
         { key: 'icloud_calls',     enabled: icloudOn && (syncCfg?.icloud_calls_enabled     ?? true), fn: () => api.icloud.syncCalls() },
         { key: 'local_files',      enabled: filesOn,                                                  fn: () => api.files.sync() },
+        { key: 'ai_scoring',       enabled: !!(aiCfg?.enabled && aiCfg?.has_key),                      fn: () => api.applications.scoreAll() },
       ].filter(s => s.enabled)
 
       const startedSources = new Set<string>()

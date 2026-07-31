@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Wallet, AlertTriangle, Car, Linkedin, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { X, Plus, Trash2, Pencil, Check, Clock, Mail, Calendar, FileText, Phone, PenLine, Crosshair, ChevronDown, RefreshCw, Send, TrendingUp, MessageCircle, ExternalLink, Search, Paperclip, Download, Folder, FolderOpen, ChevronRight, File, Users, Building2, Wallet, AlertTriangle, Car, Linkedin, ArrowDownLeft, ArrowUpRight, Target } from 'lucide-react'
 import { api } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
@@ -10,6 +10,7 @@ import { CURRENCIES } from '../constants/currencies'
 import { SalarySlotEditor } from './SalarySlotEditor'
 import { formatCurrencyAmount, formatSalaryRange } from '../utils/salaryFormat'
 import { formatDriveDistance } from '../utils/distanceFormat'
+import { scoreColorClass } from '../utils/scoreFormat'
 import type { CompanyProfile, LinkedInSyncStatus } from '../types'
 import {
   MAIN_PIPELINE, MAIN_STATUS_COLORS,
@@ -1246,6 +1247,44 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
                 </div>
               )}
             </dl>
+          )}
+
+          {/* AI Assessment (match_score / success_probability) — recomputed
+              on every sync, read-only here (no editing UI). */}
+          {!editing && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{t('aiScoring.title')}</p>
+              {app?.match_score != null || app?.success_probability != null ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {app?.match_score != null && (
+                    <div>
+                      <dt className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        <Target className="h-3 w-3" />
+                        {t('aiScoring.matchScore')}
+                      </dt>
+                      <dd className={`mt-0.5 text-sm font-medium ${scoreColorClass(app.match_score)}`}>{app.match_score} / 100</dd>
+                      {app.match_score_reasoning && (
+                        <p className="mt-1 text-xs text-gray-500">{app.match_score_reasoning}</p>
+                      )}
+                    </div>
+                  )}
+                  {app?.success_probability != null && (
+                    <div>
+                      <dt className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        <TrendingUp className="h-3 w-3" />
+                        {t('aiScoring.successProbability')}
+                      </dt>
+                      <dd className={`mt-0.5 text-sm font-medium ${scoreColorClass(app.success_probability)}`}>{app.success_probability} / 100</dd>
+                      {app.success_probability_reasoning && (
+                        <p className="mt-1 text-xs text-gray-500">{app.success_probability_reasoning}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic">{t('aiScoring.notYetComputed')}</p>
+              )}
+            </div>
           )}
 
           {/* Stellenanzeige */}

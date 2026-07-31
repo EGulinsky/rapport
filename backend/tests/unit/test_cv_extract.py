@@ -4,7 +4,7 @@ already dependencies) rather than mocking pdfplumber/docx internals — a
 genuine extraction test catches library-integration breakage a mock can't."""
 import pytest
 
-from app.cv_extract import MAX_TEXT_CHARS, extract_cv_text
+from app.cv_extract import MAX_TEXT_CHARS, extract_cv_text, extract_text_from_file
 
 pytestmark = pytest.mark.unit
 
@@ -103,3 +103,63 @@ class TestExtractCvText:
 
         assert result is None
         assert elapsed < 5
+
+
+class TestExtractTextFromFile:
+    """L0 Unit — the generalized extract_text_from_file(), used for both the
+    CV (via extract_cv_text()'s thin wrapper) and per-application
+    job-description attachments (ai/jd_resolve.py)."""
+
+    def test_positiv_txt_wird_extrahiert(self, tmp_path):
+        txt_path = tmp_path / "jd.txt"
+        txt_path.write_text("Senior Backend Engineer — Python, Kubernetes, 5+ years", encoding="utf-8")
+
+        result = extract_text_from_file(str(txt_path))
+
+        assert result == "Senior Backend Engineer — Python, Kubernetes, 5+ years"
+
+    def test_positiv_md_wird_extrahiert(self, tmp_path):
+        md_path = tmp_path / "jd.md"
+        md_path.write_text("# Senior Backend Engineer\n\nRequirements: Python, Kubernetes", encoding="utf-8")
+
+        result = extract_text_from_file(str(md_path))
+
+        assert result == "# Senior Backend Engineer\n\nRequirements: Python, Kubernetes"
+
+    def test_positiv_pdf_wird_extrahiert(self, tmp_path):
+        pdf_path = tmp_path / "jd.pdf"
+        _write_pdf(pdf_path, "Senior Backend Engineer")
+
+        result = extract_text_from_file(str(pdf_path))
+
+        assert result is not None
+        assert "Senior Backend Engineer" in result
+
+    def test_positiv_eigener_max_chars_wird_respektiert(self, tmp_path):
+        txt_path = tmp_path / "jd.txt"
+        txt_path.write_text("word " * 2000, encoding="utf-8")
+
+        result = extract_text_from_file(str(txt_path), max_chars=100)
+
+        assert result is not None
+        assert len(result) == 100
+
+    def test_negativ_nicht_unterstuetzte_endung_liefert_none(self, tmp_path):
+        path = tmp_path / "jd.xyz"
+        path.write_text("irrelevant", encoding="utf-8")
+
+        result = extract_text_from_file(str(path))
+
+        assert result is None
+
+    def test_regression_extract_cv_text_verhaelt_sich_unveraendert(self, tmp_path):
+        """extract_cv_text() must still use MAX_TEXT_CHARS, not
+        extract_text_from_file()'s own default — guards the thin-wrapper
+        refactor against silently changing the CV's cap."""
+        docx_path = tmp_path / "long.docx"
+        _write_docx(docx_path, ["word " * (MAX_TEXT_CHARS // 4)])
+
+        result = extract_cv_text(str(docx_path))
+
+        assert result is not None
+        assert len(result) == MAX_TEXT_CHARS

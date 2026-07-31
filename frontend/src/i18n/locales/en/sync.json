@@ -18,7 +18,8 @@
     "icloud_reminders": "iCloud Reminders",
     "icloud_calls": "Call log",
     "icloud_contacts": "Contacts",
-    "local_files": "Documents"
+    "local_files": "Documents",
+    "ai_scoring": "AI Scoring"
   },
   "summary": {
     "title": "Sync complete",

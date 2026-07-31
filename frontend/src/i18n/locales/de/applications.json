@@ -253,6 +253,14 @@
     "applied": "Beworben",
     "update": "Update",
     "assessment": "Einschätzung",
-    "rejectedSuffix": "Absage"
+    "rejectedSuffix": "Absage",
+    "matchScore": "Match",
+    "successProbability": "Erfolg"
+  },
+  "aiScoring": {
+    "title": "KI-Einschätzung",
+    "matchScore": "Match-Score",
+    "successProbability": "Erfolgswahrscheinlichkeit",
+    "notYetComputed": "Noch nicht berechnet"
   }
 }

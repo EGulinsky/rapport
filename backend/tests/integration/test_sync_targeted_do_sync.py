@@ -88,3 +88,53 @@ class TestDoSync:
         result = await _do_sync(app.id)
 
         assert any("Gmail" in e and "Gmail API kaputt" in e for e in result["errors"])
+
+
+class TestDoSyncAiScoring:
+    """AI-Scoring (score_application()) läuft best-effort als letzter Schritt
+    von _do_sync() — siehe applications.py::score_application(). Fehlt der
+    User (kein passendes User-Objekt zur user_id) oder ist AI nicht
+    konfiguriert/limitiert, darf das den Sync-Lauf nicht zum Scheitern bringen."""
+
+    async def test_positiv_kein_user_objekt_kein_scoring_kein_fehler(self, db_session, monkeypatch):
+        # application_factory setzt user_id=1, aber legt kein echtes User-Objekt
+        # an — score_application() muss dann übersprungen werden, ohne Fehler.
+        _mock_agent_empty(monkeypatch)
+        app = application_factory(db_session, firma="Contoso AG")
+        db_session.commit()
+
+        result = await _do_sync(app.id)
+
+        assert result["errors"] == []
+
+    async def test_positiv_ainotconfigured_wird_still_geschluckt(self, db_session, monkeypatch):
+        _mock_agent_empty(monkeypatch)
+        from app import models
+        app = application_factory(db_session, firma="Contoso AG")
+        user = models.User(id=app.user_id, email="test@example.com", password_hash="x", email_verified=True)
+        db_session.add(user)
+        db_session.commit()
+
+        result = await _do_sync(app.id)
+
+        # Kein AiSettings-Eintrag -> compute_match_score() wirft AINotConfigured,
+        # das wird von _do_sync() abgefangen und darf nicht als Fehler auftauchen.
+        assert result["errors"] == []
+
+    async def test_negativ_unerwarteter_scoring_fehler_wird_geloggt_nicht_geworfen(self, db_session, monkeypatch):
+        _mock_agent_empty(monkeypatch)
+        from app import models
+        app = application_factory(db_session, firma="Contoso AG")
+        user = models.User(id=app.user_id, email="test@example.com", password_hash="x", email_verified=True)
+        db_session.add(user)
+        db_session.commit()
+
+        async def _boom(db, app_arg, user_arg, lang):
+            raise RuntimeError("Scoring kaputt")
+
+        monkeypatch.setattr("app.routers.applications.score_application", _boom)
+
+        result = await _do_sync(app.id)
+
+        assert result["errors"] == []
+        assert result["created"] == 0

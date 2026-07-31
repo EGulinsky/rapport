@@ -6,7 +6,7 @@ import {
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle, Wallet } from 'lucide-react'
+import { MapPin, AlertTriangle, Wallet, Target, TrendingUp } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import { CompanyLogo } from './CompanyLogo'
 import { MAIN_STATUS_COLORS, SUB_STATUS_SEQUENCE, type MainStatus } from '../types'
@@ -15,6 +15,7 @@ import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
 import { formatSalaryRange } from '../utils/salaryFormat'
 import { formatDriveDistance } from '../utils/distanceFormat'
+import { scoreColorClass } from '../utils/scoreFormat'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import type { Application } from '../types'
@@ -119,6 +120,28 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
             </span>
           )}
         </p>
+      )}
+      {(app.match_score != null || app.success_probability != null) && (
+        <div className="flex items-center gap-2 mt-1">
+          {app.match_score != null && (
+            <span
+              title={app.match_score_reasoning || t('aiScoring.matchScore')}
+              className={clsx('flex items-center gap-0.5 text-[10px] font-medium', scoreColorClass(app.match_score))}
+            >
+              <Target className="h-2.5 w-2.5 shrink-0" />
+              {app.match_score}
+            </span>
+          )}
+          {app.success_probability != null && (
+            <span
+              title={app.success_probability_reasoning || t('aiScoring.successProbability')}
+              className={clsx('flex items-center gap-0.5 text-[10px] font-medium', scoreColorClass(app.success_probability))}
+            >
+              <TrendingUp className="h-2.5 w-2.5 shrink-0" />
+              {app.success_probability}
+            </span>
+          )}
+        </div>
       )}
       {!app.abgesagt && app.naechster_schritt && (
         <p className={`text-[10px] mt-1.5 leading-tight font-medium ${

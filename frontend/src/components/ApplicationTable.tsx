@@ -9,6 +9,7 @@ import type { Application, MainStatus } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate, collate } from '../i18n/formatDate'
+import { scoreColorClass } from '../utils/scoreFormat'
 
 const SUB_ORDER = Object.fromEntries(SUB_STATUS_SEQUENCE.map((s, i) => [s, i]))
 import { api } from '../api/client'
@@ -24,7 +25,7 @@ interface Props {
   updatedIds?: Set<number>
 }
 
-type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status'
+type SortKey = 'firma' | 'datum_bewerbung' | 'letztes_update' | 'main_status' | 'match_score' | 'success_probability'
 
 export function ApplicationTable({ applications, onSelect, onStatusChanged, selectedIds, onToggleSelect, onOpenCompany, updatedIds }: Props) {
   const { t } = useTranslation('common')
@@ -59,6 +60,9 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
         const sa = a.sub_status ? (SUB_ORDER[a.sub_status] ?? 99) : -1
         const sb = b.sub_status ? (SUB_ORDER[b.sub_status] ?? 99) : -1
         return sa - sb
+      } else if (sortKey === 'match_score' || sortKey === 'success_probability') {
+        av = a[sortKey] ?? -1
+        bv = b[sortKey] ?? -1
       } else {
         av = a[sortKey] ?? ''
         bv = b[sortKey] ?? ''
@@ -121,6 +125,8 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
             <Th k="datum_bewerbung" label={tApp('table.applied')} />
             <Th k="letztes_update" label={tApp('table.update')} />
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{tApp('table.assessment')}</th>
+            <Th k="match_score" label={tApp('table.matchScore')} />
+            <Th k="success_probability" label={tApp('table.successProbability')} />
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -141,7 +147,7 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
               <>
                 {groupLabel && (
                   <tr key={`grp-${app.main_status}-${app.sub_status ?? 'none'}`} className="bg-gray-50/80">
-                    <td colSpan={onToggleSelect ? 9 : 8} className="px-4 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                    <td colSpan={onToggleSelect ? 11 : 10} className="px-4 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
                       {groupLabel}
                     </td>
                   </tr>
@@ -278,6 +284,12 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                     {app.naechster_schritt}
                   </span>
                 ) : '—'}
+              </td>
+              <td className={clsx('px-4 py-3 text-xs font-medium', app.match_score != null ? scoreColorClass(app.match_score) : 'text-gray-300')} title={app.match_score_reasoning || undefined}>
+                {app.match_score ?? '—'}
+              </td>
+              <td className={clsx('px-4 py-3 text-xs font-medium', app.success_probability != null ? scoreColorClass(app.success_probability) : 'text-gray-300')} title={app.success_probability_reasoning || undefined}>
+                {app.success_probability ?? '—'}
               </td>
               <td className="px-4 py-3 text-right">
                 <ExternalLink className="h-3.5 w-3.5 text-gray-300 group-hover:text-indigo-400" />

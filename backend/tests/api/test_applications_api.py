@@ -353,6 +353,49 @@ class TestUpdateApplication:
         assert resp.status_code == 404
         assert resp.json()["detail"]["error_key"] == "application.not_found"
 
+    def test_positiv_jd_link_cache_wird_bei_url_aenderung_geleert(self, client, db_session):
+        app = application_factory(
+            db_session,
+            stellenanzeige_url="https://www.linkedin.com/jobs/view/111",
+            jd_link_text_cache="Alter Stellentext.",
+        )
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"stellenanzeige_url": "https://www.linkedin.com/jobs/view/222"})
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.jd_link_text_cache is None
+        assert app.jd_link_text_fetched_at is None
+
+    def test_negativ_jd_link_cache_bleibt_bei_unveraenderter_url_erhalten(self, client, db_session):
+        app = application_factory(
+            db_session,
+            stellenanzeige_url="https://www.linkedin.com/jobs/view/111",
+            jd_link_text_cache="Gecachter Text.",
+        )
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"kommentar": "Notiz"})
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.jd_link_text_cache == "Gecachter Text."
+
+    def test_negativ_jd_link_cache_bleibt_bei_gleicher_url_im_payload_erhalten(self, client, db_session):
+        app = application_factory(
+            db_session,
+            stellenanzeige_url="https://www.linkedin.com/jobs/view/111",
+            jd_link_text_cache="Gecachter Text.",
+        )
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"stellenanzeige_url": "https://www.linkedin.com/jobs/view/111"})
+
+        assert resp.status_code == 200
+        db_session.refresh(app)
+        assert app.jd_link_text_cache == "Gecachter Text."
+
     def test_positiv_ort_kann_nachtraeglich_gesetzt_werden(self, client, db_session):
         app = application_factory(db_session, ort=None)
         db_session.commit()

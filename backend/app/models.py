@@ -239,6 +239,21 @@ class Application(Base):
     ai_reasoning        = Column(Text, nullable=True)
     ai_assessed_at      = Column(DateTime(timezone=True), nullable=True)
 
+    # Match score / success probability (unrelated to the ai_* block above,
+    # which is historical-only and no longer written to — see routers/
+    # applications.py::score_application()).
+    match_score                   = Column(Integer, nullable=True)   # 0-100
+    match_score_reasoning         = Column(Text, nullable=True)
+    success_probability           = Column(Integer, nullable=True)   # 0-100
+    success_probability_reasoning = Column(Text, nullable=True)
+    ai_score_computed_at          = Column(DateTime(timezone=True), nullable=True)
+    # Cached scrape of stellenanzeige_url's job-posting text (LinkedIn only,
+    # fallback source for match scoring when no file attachment yields a job
+    # description) -- expensive Playwright scrape, so cached until the URL
+    # itself changes rather than re-fetched on every sync.
+    jd_link_text_cache      = Column(Text, nullable=True)
+    jd_link_text_fetched_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 

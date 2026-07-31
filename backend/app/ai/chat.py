@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models
 from app.ai.provider import complete_with_tools
+from app.ai.timeline_text import build_timeline_text as _build_timeline_text
 from app.i18n_strings import resolve_ui_language
 from app.logger import get_logger
 from app.routers.companies import build_company_detail
@@ -102,27 +103,6 @@ TOOLS = [
         },
     },
 ]
-
-
-def _build_timeline_text(events: list) -> str:
-    """Same chronological, full-content timeline format used by the (now
-    removed) per-application assessment feature — kept here since it's a
-    well-tested, readable shape for feeding an LLM an application's history."""
-    today = date.today()
-    ordered = sorted([e for e in events if e.datum], key=lambda e: e.datum)
-    lines = []
-    for e in ordered:
-        age = (today - e.datum).days
-        line = f"{e.datum.strftime('%d.%m.%Y')} (vor {age}d) [{e.typ}]"
-        if e.autor:
-            autor_short = e.autor.split('<')[0].strip().strip('"') or e.autor
-            line += f" | von: {autor_short[:80]}"
-        if e.titel:
-            line += f"\n  Betreff: {e.titel}"
-        if e.notiz and e.notiz.strip():
-            line += f"\n  Inhalt: {e.notiz.strip()}"
-        lines.append(line)
-    return "\n\n".join(lines) if lines else "(keine Ereignisse)"
 
 
 def _tool_list_applications(db: Session, args: dict) -> list[dict]:

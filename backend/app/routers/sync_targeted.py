@@ -1177,6 +1177,21 @@ async def _do_sync(app_id: int) -> dict:
         finish_progress("targeted_calls", lang=lang, created=calls_created, skipped=calls_skipped)
 
         db.commit()
+
+        # 3. AI match score / success probability (best-effort — sync must
+        #    never fail because scoring failed or AI isn't configured).
+        try:
+            from app.ai.provider import AINotConfigured, AIRateLimited
+            from app.routers.applications import score_application
+
+            user = db.query(models.User).get(user_id) if user_id is not None else None
+            if user is not None:
+                await score_application(db, app, user, lang)
+        except (AINotConfigured, AIRateLimited):
+            pass
+        except Exception as e:
+            log.warning("[SYNC #{}] AI-Scoring fehlgeschlagen: {}", app_id, e)
+
         log.info("━━━ SYNC ENDE  #{} — {} | {} erstellt, {} übersprungen, {} geprüft, {} Fehler ━━━",
                  app_id, label, total_created, total_skipped, total_processed, len(all_errors))
 

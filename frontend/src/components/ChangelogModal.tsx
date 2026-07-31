@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.0',
+    date: '2026-07-31',
+    changes: [
+      'New AI-computed "Match Score" (0-100, how well the job fits your CV + LinkedIn profile) and "Success Probability" (0-100, combining the match with real application activity — timeline, ghosting, pipeline stage) per application, shown on the Kanban card, as two sortable table columns, and with the full reasoning in the application\'s Overview tab. Both are recomputed automatically on every sync — a single application\'s sync and the global "Sync all" (as a new "AI Scoring" step, only when AI is configured). The job requirements are read from whatever\'s already in the Attachments tab (no separate upload needed — if several files are attached, the model judges which one is the actual job posting itself), falling back to a live scrape of the LinkedIn posting link when there\'s no attachment; an application with neither is left unscored rather than guessing. Rejected/signed applications skip the second AI call — the outcome is already known, so success probability is set directly (0/100).',
+    ],
+  },
+  {
     version: '4.6.69',
     date: '2026-07-29',
     changes: [

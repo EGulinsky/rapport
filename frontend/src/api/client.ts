@@ -136,6 +136,8 @@ export const api = {
       request<{ total: number; updated: number; errors: string[] }>('/applications/backfill-ort-geocode', { method: 'POST' }),
     backfillDriveDistance: () =>
       request<{ total: number; updated: number; errors: string[] }>('/applications/backfill-drive-distance', { method: 'POST' }),
+    scoreAll: () =>
+      request<{ started: boolean }>('/applications/score-all', { method: 'POST' }),
   },
 
   contacts: {

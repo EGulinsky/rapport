@@ -13,6 +13,8 @@ from app.ai.provider import AIBadRequest, AINotConfigured, AIRateLimited
 from app.ai.tasks import (
     classify_batch_for_app,
     classify_for_app,
+    compute_match_score,
+    compute_success_probability,
     extract_application_from_text,
     match_and_classify,
     test_connection as ai_test_connection,
@@ -335,4 +337,113 @@ class TestMatchAndClassifyFormatting:
 
         prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
         assert "HINWEIS: Dieser Eintrag wurde durch Suche nach dem Firmennamen gefunden" in prompt
-        assert "Bevorzuge diese Bewerbungen bei der Zuordnung" in prompt
+
+
+class TestComputeMatchScore:
+    async def test_positiv_liefert_score_und_reasoning(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+
+        result = await compute_match_score(
+            db_session, firma="Contoso AG", rolle="Backend Engineer",
+            profile_block="=== BEWERBERPROFIL ===\nLebenslauf (Auszug):\n5 Jahre Python\n\n",
+            jd_texts=[{"filename": "jd.txt", "text": "Python, Kubernetes, 3+ Jahre"}],
+        )
+
+        assert result["match_score"] == 78
+        assert "Python-Erfahrung" in result["reasoning"]
+
+    async def test_positiv_jd_texte_werden_gelabelt_in_prompt_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+
+        await compute_match_score(
+            db_session, firma="Contoso AG", rolle="Backend Engineer",
+            profile_block="",
+            jd_texts=[{"filename": "stellenanzeige.pdf", "text": "Muss Python können"}],
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "=== STELLENANZEIGE(N) ===" in prompt
+        assert "[stellenanzeige.pdf]" in prompt
+        assert "Muss Python können" in prompt
+
+    async def test_negativ_score_ausserhalb_bereich_wird_geklammert(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content('{"match_score": 150, "reasoning": "..."}')
+
+        result = await compute_match_score(db_session, firma="X", rolle="Y", profile_block="", jd_texts=[])
+
+        assert result["match_score"] == 100
+
+    async def test_negativ_score_als_ungueltiger_typ_wird_zu_default(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content('{"match_score": "sehr gut", "reasoning": "..."}')
+
+        result = await compute_match_score(db_session, firma="X", rolle="Y", profile_block="", jd_texts=[])
+
+        assert result["match_score"] == 0
+
+    async def test_positiv_englische_sprache_wird_im_prompt_angefordert(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+
+        await compute_match_score(db_session, firma="X", rolle="Y", profile_block="", jd_texts=[], ui_language="en")
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert 'Write "reasoning" in English.' in prompt
+
+
+class TestComputeSuccessProbability:
+    async def test_positiv_liefert_probability_und_reasoning(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        result = await compute_success_probability(
+            db_session, firma="Contoso AG", rolle="Backend Engineer",
+            main_status="hr", sub_status="1_done",
+            match_score=78, match_reasoning="Guter Fit",
+            timeline_text="(keine Ereignisse)", ghosting=False,
+        )
+
+        assert result["success_probability"] == 55
+        assert "HR-Gespräch" in result["reasoning"]
+
+    async def test_positiv_ghosting_hinweis_wird_in_prompt_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=50, match_reasoning="...", timeline_text="...", ghosting=True,
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "gilt aktuell als Ghosting" in prompt
+
+    async def test_negativ_kein_ghosting_hinweis_ohne_ghosting(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=50, match_reasoning="...", timeline_text="...", ghosting=False,
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "gilt aktuell als Ghosting" not in prompt
+
+    async def test_negativ_probability_ausserhalb_bereich_wird_geklammert(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content('{"success_probability": -20, "reasoning": "..."}')
+
+        result = await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="applied", sub_status=None,
+            match_score=10, match_reasoning="...", timeline_text="...", ghosting=False,
+        )
+
+        assert result["success_probability"] == 0
+
+    async def test_positiv_match_score_und_timeline_werden_im_prompt_referenziert(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=91, match_reasoning="Exzellenter Fit", timeline_text="01.01.2026 [mail]", ghosting=False,
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "91/100" in prompt
+        assert "Exzellenter Fit" in prompt
+        assert "01.01.2026 [mail]" in prompt

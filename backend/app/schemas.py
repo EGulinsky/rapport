@@ -254,6 +254,11 @@ class ApplicationRead(ApplicationBase):
     ai_next_step: Optional[str] = None
     ai_reasoning: Optional[str] = None
     ai_assessed_at: Optional[datetime] = None
+    match_score: Optional[int] = None
+    match_score_reasoning: Optional[str] = None
+    success_probability: Optional[int] = None
+    success_probability_reasoning: Optional[str] = None
+    ai_score_computed_at: Optional[datetime] = None
     contacts: List[ContactRead] = []
     events: List[EventRead] = []
 
@@ -301,6 +306,11 @@ class ApplicationListItem(BaseModel):
     ai_next_step: Optional[str] = None
     ai_reasoning: Optional[str] = None
     ai_assessed_at: Optional[datetime] = None
+    match_score: Optional[int] = None
+    match_score_reasoning: Optional[str] = None
+    success_probability: Optional[int] = None
+    success_probability_reasoning: Optional[str] = None
+    ai_score_computed_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

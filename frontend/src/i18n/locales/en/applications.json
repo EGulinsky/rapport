@@ -253,6 +253,14 @@
     "applied": "Applied",
     "update": "Update",
     "assessment": "Assessment",
-    "rejectedSuffix": "Rejected"
+    "rejectedSuffix": "Rejected",
+    "matchScore": "Match",
+    "successProbability": "Success"
+  },
+  "aiScoring": {
+    "title": "AI Assessment",
+    "matchScore": "Match Score",
+    "successProbability": "Success Probability",
+    "notYetComputed": "Not yet computed"
   }
 }

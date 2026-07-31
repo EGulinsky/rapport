@@ -72,6 +72,11 @@ export interface Application {
   ai_next_step?: string | null
   ai_reasoning?: string | null
   ai_assessed_at?: string | null
+  match_score?: number | null
+  match_score_reasoning?: string | null
+  success_probability?: number | null
+  success_probability_reasoning?: string | null
+  ai_score_computed_at?: string | null
   salary_currency?: string | null
   salary_expectation_min?: number | null
   salary_expectation_max?: number | null
