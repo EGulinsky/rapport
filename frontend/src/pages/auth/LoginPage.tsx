@@ -41,10 +41,7 @@ export function LoginPage() {
           />
         </div>
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-medium text-gray-700">{t('login.passwordLabel')}</label>
-            <Link to="/forgot-password" className="text-xs text-indigo-600 hover:underline">{t('login.forgotLink')}</Link>
-          </div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">{t('login.passwordLabel')}</label>
           <input
             type="password" required value={password}
             onChange={e => setPassword(e.target.value)}

@@ -43,7 +43,6 @@ rapport currently runs exclusively on the developer's own Mac via OrbStack + Doc
 ### 3.4 External Integrations — configuration/code changes needed
 - **Google OAuth**: `REDIRECT_URI` is currently a hardcoded constant in `backend/app/routers/sync_google.py:41` (`http://localhost:8000/api/sync/google/callback`) — not an env var. Needs a code change to parametrize it, plus registering the new URI as an authorized redirect in the Google Cloud Console OAuth client.
 - **LinkedIn scraper**: Playwright login from a datacenter/VPS IP is more likely to trigger LinkedIn's bot-detection than from a residential IP — expect more frequent 2FA/checkpoint challenges, possibly account flags. Not a blocker, but a real operational risk to budget for.
-- **SMTP**: real credentials (Resend or similar) must be set via `.env` (`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`) — without them, registration/password-reset fail with `502 EmailNotConfigured`.
 
 ### 3.5 Rapport Agent Connectivity (open architectural decision)
 
@@ -69,7 +68,6 @@ Health-check URLs in the deploy job would need to point at the real domain regar
 
 ### 3.8 Environment Variables Checklist (`.env` on the new server)
 - `JWT_SECRET_KEY` — optional, auto-generated if omitted
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — required for registration/password-reset to work
 - `BUILD_NUMBER` — set by CI, not needed manually
 - (New, pending 3.4) whatever env var the parametrized Google OAuth `REDIRECT_URI` ends up using
 - (New, pending 3.5) `AGENT_URL` — only relevant if the VPN/tunnel option is chosen

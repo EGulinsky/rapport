@@ -131,20 +131,3 @@ def _deterministic_faker():
     Faker.seed(1234)
 
 
-@pytest.fixture()
-def captured_email(monkeypatch):
-    """Fängt jeden 'gesendeten' Bestätigungscode ab, statt echtes SMTP zu nutzen.
-
-    Shared across test modules (originally lived only in test_auth_api.py) --
-    any test using real_auth_client's real register/verify-email/login flow
-    (e.g. tests/api/test_applications_api.py::TestDistanceKm) needs this too."""
-    box: dict = {}
-
-    def fake_send(to_email, code, purpose, ui_language="de"):
-        box["to"] = to_email
-        box["code"] = code
-        box["purpose"] = purpose
-        box["ui_language"] = ui_language
-
-    monkeypatch.setattr("app.routers.auth.send_verification_code", fake_send)
-    return box

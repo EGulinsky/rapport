@@ -259,7 +259,7 @@ def save_sync_settings(
 def get_files_config(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     cfg = db.query(models.FilesConfig).first()
     if not cfg:
-        cfg = models.FilesConfig(enabled=True, user_id=current_user.id)
+        cfg = models.FilesConfig(enabled=False, user_id=current_user.id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)

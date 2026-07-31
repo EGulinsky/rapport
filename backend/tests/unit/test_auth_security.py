@@ -1,5 +1,5 @@
-"""L0 Unit — app/auth/security.py: Passwort-Hashing, JWT-Encode/Decode,
-Bestätigungscode-Generierung. Reine Kryptographie-/Logik-Funktionen, keine DB.
+"""L0 Unit — app/auth/security.py: Passwort-Hashing, JWT-Encode/Decode.
+Reine Kryptographie-/Logik-Funktionen, keine DB.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -56,22 +56,3 @@ class TestAccessToken:
         payload = {"exp": datetime.now(timezone.utc) + timedelta(minutes=5)}
         token = jwt.encode(payload, security._jwt_secret(), algorithm=security.JWT_ALGORITHM)
         assert security.decode_access_token(token) is None
-
-
-class TestVerificationCode:
-    def test_positiv_code_ist_sechsstellig_numerisch(self):
-        code = security.generate_verification_code()
-        assert len(code) == 6
-        assert code.isdigit()
-
-    def test_corner_case_fuehrende_nullen_bleiben_erhalten(self):
-        # secrets.randbelow(1_000_000) kann Werte < 100000 liefern — das Format
-        # muss diese trotzdem auf 6 Stellen auffüllen, sonst kollidiert die
-        # Code-Prüfung (String-Vergleich) mit einer kürzeren Nutzereingabe.
-        codes = {security.generate_verification_code() for _ in range(200)}
-        assert all(len(c) == 6 for c in codes)
-
-    def test_positiv_ablaufzeit_liegt_in_der_zukunft(self):
-        expiry = security.verification_code_expiry()
-        assert expiry > datetime.now(timezone.utc)
-        assert expiry <= datetime.now(timezone.utc) + timedelta(minutes=security.VERIFICATION_CODE_EXPIRE_MINUTES + 1)

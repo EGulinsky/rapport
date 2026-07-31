@@ -2050,7 +2050,7 @@ async def sync_contacts_icloud(
 def _get_calls_cfg(db: Session, user_id: Optional[int] = None) -> models.CallsConfig:
     cfg = db.query(models.CallsConfig).first()
     if not cfg:
-        cfg = models.CallsConfig(enabled=True, user_id=user_id)
+        cfg = models.CallsConfig(enabled=False, user_id=user_id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)

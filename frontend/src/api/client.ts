@@ -588,14 +588,6 @@ export const api = {
       request<AuthTokenResponse>('/auth/login', {
         method: 'POST', body: JSON.stringify({ email, password }),
       }),
-    forgotPassword: (email: string) =>
-      request<{ message: string }>('/auth/forgot-password', {
-        method: 'POST', body: JSON.stringify({ email }),
-      }),
-    resetPassword: (email: string, code: string, new_password: string) =>
-      request<{ message: string }>('/auth/reset-password', {
-        method: 'POST', body: JSON.stringify({ email, code, new_password }),
-      }),
     me: () => request<AuthUser>('/auth/me'),
     changePassword: (old_password: string, new_password: string) =>
       request<{ message: string }>('/auth/change-password', {

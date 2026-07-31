@@ -458,7 +458,7 @@ class TestCallsStatusUndSettings:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["enabled"] is True
+        assert body["enabled"] is False
         assert body["bridge_reachable"] is True
 
     def test_positiv_status_meldet_nicht_erreichbaren_agenten(self, client, db_session, monkeypatch):

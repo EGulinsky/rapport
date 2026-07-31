@@ -19,15 +19,12 @@ from fastapi import HTTPException
 class ErrorKey(str, Enum):
     # auth
     AUTH_EMAIL_ALREADY_REGISTERED = "auth.email_already_registered"
-    AUTH_CODE_INVALID = "auth.code_invalid"
-    AUTH_CODE_EXPIRED = "auth.code_expired"
     AUTH_LOGIN_FAILED = "auth.login_failed"
     AUTH_CURRENT_PASSWORD_WRONG = "auth.current_password_wrong"
     AUTH_CV_TYPE_INVALID = "auth.cv_type_invalid"
     AUTH_CV_TOO_LARGE = "auth.cv_too_large"
     AUTH_NO_CV = "auth.no_cv"
     AUTH_CV_FILE_MISSING = "auth.cv_file_missing"
-    AUTH_EMAIL_SEND_FAILED = "auth.email_send_failed"
 
     # applications
     APPLICATION_NOT_FOUND = "application.not_found"

@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.2',
+    date: '2026-07-31',
+    changes: [
+      'New sync sources (Google, iCloud, LinkedIn, local files) now default to off for a newly created account instead of on — a fresh account has nothing connected yet, so leaving them enabled just produced failed-sync noise until the account owner actually configured a source; existing accounts are unaffected.',
+      'Completely removed password reset and the underlying SMTP/Resend mailing setup — with the email-verification step already gone (v4.7.1), this was the last thing in the app that sent email, and for a self-hosted personal tool it was mostly unused complexity anyway. A forgotten password currently has no self-service recovery path; changing a password while logged in still works as before.',
+    ],
+  },
+  {
     version: '4.7.1',
     date: '2026-07-31',
     changes: [

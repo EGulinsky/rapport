@@ -1,9 +1,8 @@
 """L2 API — /api/auth/*: simple registration (email+password, JWT returned
-directly — no email-verification step; see git history for the removed
-verify-email/resend-code flow), login, password-reset per code, password
-change. E-Mail-Versand (heute nur noch für Passwort-Reset relevant) wird an
-der Netzwerkgrenze gemockt (app.routers.auth.send_verification_code), damit
-kein echter SMTP-Server nötig ist.
+directly — no email-verification step and no password-reset flow; both
+required sending mail, which no longer exists here — see git history for the
+removed verify-email/resend-code and forgot-password/reset-password flows),
+login, password change.
 """
 import pytest
 
@@ -13,7 +12,6 @@ pytestmark = pytest.mark.api
 # Bewusst nicht "passwort-förmig" benannt, um GitGuardian-Fehlalarme zu vermeiden.
 TESTPW_ORIGINAL = "not-a-real-secret-fixture-1"
 TESTPW_NEW = "not-a-real-secret-fixture-2"
-TESTPW_RESET = "not-a-real-secret-fixture-3"
 TESTPW_WRONG = "not-a-real-secret-fixture-WRONG"
 TESTPW_TOO_SHORT = "abcd123"
 
@@ -137,68 +135,6 @@ class TestChangePassword:
         )
 
         assert resp.status_code == 401
-
-
-class TestForgotUndResetPassword:
-    def test_positiv_voller_reset_fluss(self, real_auth_client, captured_email):
-        _register(real_auth_client)
-
-        resp = real_auth_client.post("/api/auth/forgot-password", json={"email": "test@example.com"})
-        assert resp.status_code == 200
-        reset_code = captured_email["code"]
-        assert captured_email["purpose"] == "reset_password"
-
-        resp = real_auth_client.post(
-            "/api/auth/reset-password",
-            json={"email": "test@example.com", "code": reset_code, "new_password": TESTPW_RESET},
-        )
-        assert resp.status_code == 200
-
-        login_resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_RESET})
-        assert login_resp.status_code == 200
-
-    def test_negativ_unbekannte_email_liefert_trotzdem_200(self, real_auth_client):
-        # Verhindert User-Enumeration: keine unterschiedliche Antwort je nachdem,
-        # ob die E-Mail-Adresse existiert.
-        resp = real_auth_client.post("/api/auth/forgot-password", json={"email": "existiert-nicht@example.com"})
-        assert resp.status_code == 200
-
-    def test_negativ_falscher_reset_code_wird_abgelehnt(self, real_auth_client, captured_email):
-        _register(real_auth_client)
-        real_auth_client.post("/api/auth/forgot-password", json={"email": "test@example.com"})
-
-        resp = real_auth_client.post(
-            "/api/auth/reset-password",
-            json={"email": "test@example.com", "code": "000000", "new_password": TESTPW_RESET},
-        )
-
-        assert resp.status_code == 400
-
-    def test_negativ_falscher_purpose_code_wird_fuer_reset_abgelehnt(self, real_auth_client, db_session):
-        # Codes sind zweckgebunden (purpose) — ein Code, der für einen anderen
-        # Zweck ausgestellt wurde, darf nicht als Passwort-Reset-Code
-        # akzeptiert werden. Seit der Entfernung des E-Mail-Bestätigungs-
-        # schritts stellt register() keine "verify_email"-Codes mehr aus, also
-        # wird hier direkt einer angelegt, um die purpose-Prüfung weiterhin
-        # abzudecken ("verify_email" bleibt ein gültiger Wert in der
-        # purpose-Spalte für historische Zeilen).
-        from datetime import datetime, timedelta, timezone
-        from app import models
-
-        _register(real_auth_client, email="purposetest@example.com")
-        user = db_session.query(models.User).filter_by(email="purposetest@example.com").one()
-        db_session.add(models.EmailVerificationCode(
-            user_id=user.id, code="111111", purpose="verify_email",
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-        ))
-        db_session.commit()
-
-        resp = real_auth_client.post(
-            "/api/auth/reset-password",
-            json={"email": "purposetest@example.com", "code": "111111", "new_password": TESTPW_RESET},
-        )
-
-        assert resp.status_code == 400
 
 
 class TestClaimOnFirstRegistration:

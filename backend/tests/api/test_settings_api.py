@@ -193,11 +193,11 @@ class TestSyncSettings:
 
 
 class TestFilesConfig:
-    def test_positiv_erstanfrage_legt_enabled_default_an(self, client, db_session):
+    def test_positiv_erstanfrage_legt_disabled_default_an(self, client, db_session):
         resp = client.get("/api/settings/files")
 
         assert resp.status_code == 200
-        assert resp.json()["enabled"] is True
+        assert resp.json()["enabled"] is False
         assert db_session.query(models.FilesConfig).count() == 1
 
     def test_positiv_speichert_ordnerpfad(self, client):

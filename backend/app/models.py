@@ -555,7 +555,7 @@ class CallsConfig(Base):
 
     id          = Column(Integer, primary_key=True)
     user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    enabled     = Column(Boolean, default=True, nullable=False)
+    enabled     = Column(Boolean, default=False, nullable=False)
     last_sync   = Column(DateTime(timezone=True), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
@@ -661,19 +661,22 @@ class SyncSettings(Base):
 
     id                       = Column(Integer, primary_key=True)
     user_id                  = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    google_enabled           = Column(Boolean, default=True, nullable=False)
-    gmail_enabled            = Column(Boolean, default=True, nullable=False)
-    gcal_enabled             = Column(Boolean, default=True, nullable=False)
-    google_contacts_enabled  = Column(Boolean, default=True, nullable=False)
-    icloud_enabled           = Column(Boolean, default=True, nullable=False)
-    icloud_mail_enabled      = Column(Boolean, default=True, nullable=False)
-    icloud_cal_enabled       = Column(Boolean, default=True, nullable=False)
-    icloud_notes_enabled     = Column(Boolean, default=True, nullable=False)
-    icloud_reminders_enabled = Column(Boolean, default=True, nullable=False)
-    icloud_contacts_enabled  = Column(Boolean, default=True, nullable=False)
-    icloud_calls_enabled     = Column(Boolean, default=True, nullable=False)
-    linkedin_enabled         = Column(Boolean, default=True, nullable=False)
-    files_enabled            = Column(Boolean, default=True, nullable=False)
+    # All sync sources default to off for a new account — a fresh user has no
+    # connected accounts yet, so leaving them "on" just produces failed-sync
+    # noise until the user actually configures a source and opts in.
+    google_enabled           = Column(Boolean, default=False, nullable=False)
+    gmail_enabled            = Column(Boolean, default=False, nullable=False)
+    gcal_enabled             = Column(Boolean, default=False, nullable=False)
+    google_contacts_enabled  = Column(Boolean, default=False, nullable=False)
+    icloud_enabled           = Column(Boolean, default=False, nullable=False)
+    icloud_mail_enabled      = Column(Boolean, default=False, nullable=False)
+    icloud_cal_enabled       = Column(Boolean, default=False, nullable=False)
+    icloud_notes_enabled     = Column(Boolean, default=False, nullable=False)
+    icloud_reminders_enabled = Column(Boolean, default=False, nullable=False)
+    icloud_contacts_enabled  = Column(Boolean, default=False, nullable=False)
+    icloud_calls_enabled     = Column(Boolean, default=False, nullable=False)
+    linkedin_enabled         = Column(Boolean, default=False, nullable=False)
+    files_enabled            = Column(Boolean, default=False, nullable=False)
     # "off" | "normal" | "verbose"
     audit_log_level          = Column(String, default="normal", nullable=False, server_default="normal")
 
@@ -712,7 +715,7 @@ class FilesConfig(Base):
     id           = Column(Integer, primary_key=True)
     user_id      = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     folder_path  = Column(String, nullable=True)
-    enabled      = Column(Boolean, default=True, nullable=False)
+    enabled      = Column(Boolean, default=False, nullable=False)
     last_sync    = Column(DateTime(timezone=True), nullable=True)
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
     updated_at   = Column(DateTime(timezone=True), onupdate=func.now())
@@ -817,19 +820,3 @@ class User(Base):
     # default=False) so "never set" (None) stays distinguishable from an
     # explicit False — create_application() only copies it when not None.
     default_salary_expectation_company_car = Column(Boolean, nullable=True)
-
-
-class EmailVerificationCode(Base):
-    """6-stelliger Code für E-Mail-Bestätigung und Passwort-Reset — gleicher
-    Mechanismus, unterschieden über `purpose`."""
-    __tablename__ = "email_verification_codes"
-
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    code       = Column(String, nullable=False)
-    purpose    = Column(String, nullable=False)  # "verify_email" | "reset_password"
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    used_at    = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    user = relationship("User", foreign_keys=[user_id])

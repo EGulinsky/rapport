@@ -1146,13 +1146,15 @@ function FilesPanel() {
 // ── Main Modal ────────────────────────────────────────────────────────────────
 // ── Sync Control Panel ────────────────────────────────────────────────────────
 
+// Matches the backend column defaults in SyncSettings (models.py) — all off
+// until the actual GET /api/settings/sync response arrives and overwrites this.
 const DEFAULT_SYNC: SyncSettings = {
-  google_enabled: true, gmail_enabled: true, gcal_enabled: true, google_contacts_enabled: true,
-  icloud_enabled: true, icloud_mail_enabled: true, icloud_cal_enabled: true,
-  icloud_notes_enabled: true, icloud_reminders_enabled: true,
-  icloud_contacts_enabled: true, icloud_calls_enabled: true,
-  linkedin_enabled: true,
-  files_enabled: true,
+  google_enabled: false, gmail_enabled: false, gcal_enabled: false, google_contacts_enabled: false,
+  icloud_enabled: false, icloud_mail_enabled: false, icloud_cal_enabled: false,
+  icloud_notes_enabled: false, icloud_reminders_enabled: false,
+  icloud_contacts_enabled: false, icloud_calls_enabled: false,
+  linkedin_enabled: false,
+  files_enabled: false,
   audit_log_level: 'normal',
 }
 

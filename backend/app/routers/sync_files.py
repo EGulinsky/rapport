@@ -49,7 +49,7 @@ def _get_cfg(db: Session) -> Optional[models.FilesConfig]:
 def _get_or_create_cfg(db: Session, user_id: int) -> models.FilesConfig:
     cfg = _get_cfg(db)
     if not cfg:
-        cfg = models.FilesConfig(enabled=True, user_id=user_id)
+        cfg = models.FilesConfig(enabled=False, user_id=user_id)
         db.add(cfg)
         db.commit()
         db.refresh(cfg)

@@ -8,8 +8,6 @@ interface AuthContextValue {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, uiLanguage: string) => Promise<void>
-  forgotPassword: (email: string) => Promise<void>
-  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -66,21 +64,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshUser()
   }
 
-  async function forgotPassword(email: string) {
-    await api.auth.forgotPassword(email)
-  }
-
-  async function resetPassword(email: string, code: string, newPassword: string) {
-    await api.auth.resetPassword(email, code, newPassword)
-  }
-
   function logout() {
     setToken(null)
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, forgotPassword, resetPassword, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

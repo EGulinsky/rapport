@@ -1,6 +1,5 @@
 """
-Passwort-Hashing (bcrypt via passlib), JWT-Erstellung/-Prüfung sowie
-6-stellige Bestätigungscodes für E-Mail-Verifizierung und Passwort-Reset.
+Passwort-Hashing (bcrypt via passlib) sowie JWT-Erstellung/-Prüfung.
 
 JWT_SECRET_KEY wird — analog zum bestehenden fernet.key-Muster in
 app/ai/provider.py — automatisch generiert und neben der DB abgelegt, wenn
@@ -27,7 +26,6 @@ _DATA_DIR = pathlib.Path(
 
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60 * 24 * 7  # 7 Tage
-VERIFICATION_CODE_EXPIRE_MINUTES = 15
 
 
 def _jwt_secret() -> str:
@@ -70,12 +68,3 @@ def decode_access_token(token: str) -> Optional[int]:
         return int(sub)
     except ValueError:
         return None
-
-
-def generate_verification_code() -> str:
-    """6-stelliger numerischer Code, kryptographisch zufällig."""
-    return f"{secrets.randbelow(1_000_000):06d}"
-
-
-def verification_code_expiry() -> datetime:
-    return datetime.now(timezone.utc) + timedelta(minutes=VERIFICATION_CODE_EXPIRE_MINUTES)

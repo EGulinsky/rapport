@@ -114,11 +114,10 @@ backend/app/
 │   ├── tasks.py              Classification/extraction prompts (match_and_classify, extract_application_from_text, …)
 │   └── chat.py                rapportGPT: tools + agent loop (run_chat_turn())
 ├── auth/
-│   ├── security.py          Password hashing (bcrypt), JWT encode/decode, 6-digit confirmation codes
-│   ├── dependencies.py       get_current_user() – dependency, reads bearer token, activates tenant filter
-│   └── email.py               SMTP delivery of confirmation codes (registration/password reset)
+│   ├── security.py          Password hashing (bcrypt), JWT encode/decode
+│   └── dependencies.py       get_current_user() – dependency, reads bearer token, activates tenant filter
 └── routers/
-    ├── auth.py                Registration, email confirmation, login, password reset, account (see §7)
+    ├── auth.py                Registration, login, password change, account (see §7) — no email sending anywhere, so no SMTP dependency at all
     ├── applications.py       CRUD + events + contacts + LinkedIn import
     ├── chat.py                  rapportGPT: GET /api/chat/history, POST /api/chat/messages, DELETE /api/chat
     ├── contacts.py            Global contact management
@@ -152,11 +151,11 @@ backend/app/
 ```
 frontend/src/
 ├── App.tsx                 Root component: tabs (Applications/Contacts/Companies/Calendar/Analytics/rapportGPT), toolbar, modal orchestration
-├── AppRoutes.tsx             Routing: /login, /register, /forgot-password, /reset-password, protected root route
+├── AppRoutes.tsx             Routing: /login, /register, protected root route
 ├── types.ts                 TypeScript types, status labels/colors, constants
 ├── api/client.ts             Fetch wrapper for all backend calls, grouped by namespace; attaches bearer token, handles 401 centrally
 ├── context/AuthContext.tsx    Login state, token in localStorage, login()/register()/logout()/…, propagates user.ui_language to i18next on login/refresh/logout
-├── pages/auth/                LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage, AuthLayout
+├── pages/auth/                LoginPage, RegisterPage, AuthLayout
 ├── i18n/                       react-i18next setup (see §9): index.ts (provider/registration), useLocale.ts, formatDate.ts, errorMessage.ts, statusLabels.ts, locales/{de,en}/*.json per feature area
 └── components/
     ├── RequireAuth.tsx          Route guard: redirects to /login when not signed in
@@ -193,16 +192,14 @@ frontend/src/
 
 Swagger UI: `http://localhost:8000/docs`
 
-All endpoints except `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/startup-check`, and `/health` require `Authorization: Bearer <jwt>`. Details in [§7](#7-authentication--multi-tenancy).
+All endpoints except `/api/auth/register`, `/api/auth/login`, `/api/startup-check`, and `/health` require `Authorization: Bearer <jwt>`. Details in [§7](#7-authentication--multi-tenancy).
 
 ### Authentication
 
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/auth/register` | Create account, return JWT directly (409 if already registered) — no email-verification step |
-| `POST` | `/api/auth/login` | Login, return JWT (403 if email not confirmed) |
-| `POST` | `/api/auth/forgot-password` | Reset code by email (always 200, no user enumeration) |
-| `POST` | `/api/auth/reset-password` | Verify reset code, set new password |
+| `POST` | `/api/auth/login` | Login, return JWT |
 | `GET` | `/api/auth/me` | Current account (requires login) |
 | `POST` | `/api/auth/change-password` | Change password (requires login) |
 | `PATCH` | `/api/auth/profile` | Update `vorname`/`nachname`/`linkedin_url`/`ui_language` — payload must always send the current `ui_language` alongside any partial update, or it gets overwritten with the default |
@@ -582,7 +579,6 @@ Two more fixes (v4.6.17), both live-reported: **(1)** `cleanup_run()`'s per-row 
 ```mermaid
 erDiagram
     USER ||--o{ APPLICATION : owns
-    USER ||--o{ EMAIL_VERIFICATION_CODE : has
     APPLICATION ||--o{ EVENT : has
     APPLICATION }o--o{ CONTACT : "contact_application"
     APPLICATION ||--o{ PENDING_MATCH : "suggests for"
@@ -606,13 +602,6 @@ erDiagram
         string linkedin_url
         string cv_storage_path
         string ui_language
-    }
-    EMAIL_VERIFICATION_CODE {
-        int id PK
-        int user_id FK
-        string code
-        string purpose
-        datetime expires_at
     }
     APPLICATION {
         int id PK
@@ -672,7 +661,7 @@ erDiagram
     }
 ```
 
-**Multi-tenancy:** apart from `users` and `email_verification_codes` themselves, practically every table (~20 total — core entities as above plus all configuration tables) carries a `user_id` column; see [§7](#7-authentication--multi-tenancy) for the central filter mechanism. For clarity, `user_id` is not listed individually in every ER diagram block.
+**Multi-tenancy:** apart from `users` itself, practically every table (~20 total — core entities as above plus all configuration tables) carries a `user_id` column; see [§7](#7-authentication--multi-tenancy) for the central filter mechanism. For clarity, `user_id` is not listed individually in every ER diagram block.
 
 **Configuration tables** (exactly one row per **account**, no ER relations among each other): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
 
@@ -686,7 +675,7 @@ erDiagram
 |---|---|---|
 | `email` | VARCHAR UNIQUE, indexed | |
 | `password_hash` | VARCHAR | bcrypt |
-| `email_verified` | BOOLEAN | Always `true` on new accounts (v4.7.1 removed the email-verification step) — kept in the schema rather than dropped, per the additive-migration convention |
+| `email_verified` | BOOLEAN | Always `true` on new accounts (v4.7.1 removed the email-verification step) — kept in the schema rather than dropped, per the additive-migration convention. Nothing sends email at all anymore (v4.7.2 removed the SMTP setup and the password-reset flow that was its last user), so this column is now purely vestigial |
 | `created_at` | DATETIME | |
 | `vorname` / `nachname` / `linkedin_url` | VARCHAR NULL | Profile fields (Settings → Account) |
 | `cv_filename` / `cv_content_type` / `cv_size_bytes` / `cv_storage_path` | | Optional uploaded CV, stored at `{DB_DIR}/user_files/{user_id}/{filename}` (same pattern as `attachments.py`); text fed into AI assessment (§3.6) |
@@ -695,18 +684,6 @@ erDiagram
 | `home_location` | VARCHAR NULL | Free-text label (Settings → Account), either typed via the same autocomplete as `Application.ort` or reverse-geocoded from a "use my location" button |
 | `home_lat` / `home_lng` | FLOAT NULL | Geocoded once when `home_location` changes (`update_profile()`), reused as the origin for every application's cached `drive_distance_km`/`drive_duration_min` rather than re-geocoding per request |
 | `default_salary_currency` / `default_salary_expectation_min` / `_max` / `_min_fixed` / `_min_bonus` / `_max_fixed` / `_max_bonus` / `_company_car` | VARCHAR NULL / INTEGER NULL ×6 / BOOLEAN NULL | Default salary expectation (Settings → Account), mirroring the "expectation" half of `Application.salary_*` (§3.5) — copied into `Application.salary_expectation_*` on `POST /api/applications/` whenever the request itself doesn't set that field, freely editable per application afterward |
-
-#### `email_verification_codes`
-
-Still used for password reset (`purpose="reset_password"`); the `"verify_email"` purpose value is only ever seen on historical rows from before v4.7.1 — registration no longer writes any.
-
-| Column | Type | Description |
-|---|---|---|
-| `user_id` | INTEGER FK NOT NULL | → `users.id` |
-| `code` | VARCHAR(6) | |
-| `purpose` | VARCHAR | `reset_password` (`verify_email` historical only) |
-| `expires_at` | DATETIME | 15-minute validity |
-| `used_at` | DATETIME NULL | Prevents reuse |
 
 #### `applications`
 
@@ -857,7 +834,7 @@ sequenceDiagram
     FE->>FE: token in localStorage, all further requests with Authorization: Bearer
 ```
 
-Password reset still uses the original code-by-email mechanism (`purpose="reset_password"` on `EmailVerificationCode` — the `"verify_email"` purpose value is no longer written, only ever seen on historical rows), triggered via `POST /api/auth/forgot-password` (always 200, no user enumeration) → `POST /api/auth/reset-password`. Passwords: bcrypt hash (`app/auth/security.py`). Codes: `used_at` prevents reuse. SMTP configuration (currently Resend as the provider) via env vars `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`; without these, `forgot-password` returns `502 EmailNotConfigured` (the DB row including the code is still committed before the send attempt fails).
+Passwords: bcrypt hash (`app/auth/security.py`). There is no password-reset flow (removed in v4.7.2 alongside the SMTP mailing setup entirely — see git history for the earlier forgot-password/reset-password-by-email-code flow); a forgotten password currently has no self-service recovery path. `POST /api/auth/change-password` (requires being logged in) is the only way to change a password.
 
 ### 7.2 Central Tenant Filter
 

@@ -1,12 +1,12 @@
 """
-Benutzerkonten: einfache Registrierung (kein E-Mail-Bestätigungsschritt mehr —
-siehe git-history für die entfernte verify-email/resend-code-Variante), Login,
-Passwort-Reset per Code sowie Passwort-Änderung im eingeloggten Zustand.
+Benutzerkonten: einfache Registrierung (kein E-Mail-Bestätigungsschritt, kein
+Passwort-Reset — beide erforderten einen Mailversand, den es hier nicht mehr
+gibt; siehe git-history für die entfernten verify-email/resend-code- und
+forgot-password/reset-password-Varianten), Login sowie Passwort-Änderung im
+eingeloggten Zustand.
 
 POST /api/auth/register          — Konto anlegen, JWT direkt zurückgeben
 POST /api/auth/login              — Login, JWT zurückgeben
-POST /api/auth/forgot-password   — Reset-Code per E-Mail (immer 200, keine User-Enumeration)
-POST /api/auth/reset-password    — Reset-Code prüfen, neues Passwort setzen
 GET  /api/auth/me                — aktueller Nutzer (erfordert Login)
 POST /api/auth/change-password   — Passwort ändern (erfordert Login)
 """
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, UploadFile
@@ -24,14 +24,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.auth.dependencies import get_current_user
-from app.auth.email import EmailNotConfigured, send_verification_code
-from app.auth.security import (
-    create_access_token,
-    generate_verification_code,
-    hash_password,
-    verify_password,
-    verification_code_expiry,
-)
+from app.auth.security import create_access_token, hash_password, verify_password
 from app.database import DATABASE_URL, claim_unowned_data, get_db
 from app.error_keys import ErrorKey, api_error
 
@@ -53,16 +46,6 @@ class RegisterPayload(BaseModel):
 class LoginPayload(BaseModel):
     email: EmailStr
     password: str
-
-
-class ForgotPasswordPayload(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordPayload(BaseModel):
-    email: EmailStr
-    code: str
-    new_password: str = Field(min_length=8)
 
 
 class ChangePasswordPayload(BaseModel):
@@ -154,30 +137,6 @@ def _user_response(user: models.User) -> UserResponse:
     )
 
 
-def _issue_code(db: Session, user: models.User, purpose: str) -> str:
-    code = generate_verification_code()
-    db.add(models.EmailVerificationCode(
-        user_id=user.id, code=code, purpose=purpose, expires_at=verification_code_expiry(),
-    ))
-    db.commit()
-    return code
-
-
-def _consume_code(db: Session, user: models.User, code: str, purpose: str) -> models.EmailVerificationCode:
-    entry = (
-        db.query(models.EmailVerificationCode)
-        .filter_by(user_id=user.id, code=code, purpose=purpose, used_at=None)
-        .order_by(models.EmailVerificationCode.id.desc())
-        .first()
-    )
-    if not entry:
-        raise api_error(400, ErrorKey.AUTH_CODE_INVALID, "Code ungültig.")
-    if entry.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise api_error(400, ErrorKey.AUTH_CODE_EXPIRED, "Code ist abgelaufen.")
-    entry.used_at = datetime.now(timezone.utc)
-    return entry
-
-
 @router.post("/register", response_model=AuthTokenResponse, status_code=201)
 def register(payload: RegisterPayload, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter_by(email=payload.email).first()
@@ -215,33 +174,6 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
         raise api_error(401, ErrorKey.AUTH_LOGIN_FAILED, "E-Mail oder Passwort ist falsch.")
 
     return AuthTokenResponse(access_token=create_access_token(user.id))
-
-
-@router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordPayload, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter_by(email=payload.email).first()
-    if user:
-        code = _issue_code(db, user, "reset_password")
-        try:
-            send_verification_code(user.email, code, "reset_password", user.ui_language)
-        except EmailNotConfigured as e:
-            raise api_error(502, ErrorKey.AUTH_EMAIL_SEND_FAILED, str(e))
-    # Immer dieselbe Antwort, unabhängig davon ob die E-Mail existiert — verhindert
-    # Rückschlüsse auf registrierte Adressen (User-Enumeration).
-    return {"message": "Falls ein Konto mit dieser E-Mail-Adresse existiert, wurde ein Code gesendet."}
-
-
-@router.post("/reset-password")
-def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter_by(email=payload.email).first()
-    if not user:
-        raise api_error(400, ErrorKey.AUTH_CODE_INVALID, "Code ungültig.")
-
-    _consume_code(db, user, payload.code, "reset_password")
-    user.password_hash = hash_password(payload.new_password)
-    db.commit()
-
-    return {"message": "Passwort wurde zurückgesetzt."}
 
 
 @router.get("/me", response_model=UserResponse)
