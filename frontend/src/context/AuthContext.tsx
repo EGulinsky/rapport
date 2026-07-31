@@ -8,8 +8,6 @@ interface AuthContextValue {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, uiLanguage: string) => Promise<void>
-  verifyEmail: (email: string, code: string) => Promise<void>
-  resendCode: (email: string) => Promise<void>
   forgotPassword: (email: string) => Promise<void>
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>
   logout: () => void
@@ -59,21 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(email: string, password: string, uiLanguage: string) {
-    await api.auth.register(email, password, uiLanguage)
-    // Applies immediately so VerifyEmailPage renders in the chosen language
-    // without waiting for a /me round-trip (no token/user yet at this point).
+    const res = await api.auth.register(email, password, uiLanguage)
+    // Applies immediately so the app renders in the chosen language right
+    // away, without waiting for the refreshUser() round-trip below.
     rememberPreLoginLanguage(uiLanguage as 'de' | 'en')
     await i18n.changeLanguage(uiLanguage)
-  }
-
-  async function verifyEmail(email: string, code: string) {
-    const res = await api.auth.verifyEmail(email, code)
     setToken(res.access_token)
     await refreshUser()
-  }
-
-  async function resendCode(email: string) {
-    await api.auth.resendCode(email)
   }
 
   async function forgotPassword(email: string) {
@@ -90,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, resendCode, forgotPassword, resetPassword, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, forgotPassword, resetPassword, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

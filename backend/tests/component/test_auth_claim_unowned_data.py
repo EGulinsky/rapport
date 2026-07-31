@@ -1,7 +1,8 @@
 """L1 Component — claim_unowned_data() in app/database.py: der einmalige
 Übergang von der Ein-Personen-Installation (Daten ohne user_id) zu echten
-Benutzerkonten. Wird über verify_email() nur für das allererste je
-bestätigte Konto ausgelöst.
+Benutzerkonten. Wird über register() nur für das allererste je registrierte
+Konto ausgelöst (vor Entfernung des E-Mail-Bestätigungsschritts war dies an
+das erste *verifizierte* Konto gekoppelt).
 """
 import pytest
 

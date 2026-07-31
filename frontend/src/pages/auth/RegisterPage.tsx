@@ -31,7 +31,7 @@ export function RegisterPage() {
     setSubmitting(true)
     try {
       await register(email, password, uiLanguage)
-      navigate(`/verify-email?email=${encodeURIComponent(email)}`)
+      navigate('/')
     } catch (err) {
       setError(errorMessage(err, t))
     } finally {

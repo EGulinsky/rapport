@@ -814,16 +814,11 @@ class TestDriveDistance:
     transient object never persisted, so setting home_lat/lng on it
     wouldn't be visible to the endpoint."""
 
-    def _token(self, real_auth_client, captured_email, email="test@example.com"):
-        from tests.api.test_auth_api import _register
-        _register(real_auth_client, captured_email, email=email)
-        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
-        return r.json()["access_token"]
-
-    def test_positiv_route_wird_berechnet_wenn_beide_koordinaten_vorhanden(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_route_wird_berechnet_wenn_beide_koordinaten_vorhanden(self, real_auth_client, db_session, monkeypatch):
         from app import models as m
+        from tests.api.test_auth_api import _token
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         user = db_session.query(m.User).filter_by(email="test@example.com").one()
         user.home_lat, user.home_lng = 52.5200, 13.4050  # Berlin
@@ -853,8 +848,10 @@ class TestDriveDistance:
         assert get_resp.json()["drive_distance_km"] == 504.0
         assert get_resp.json()["drive_duration_min"] == 312.0
 
-    def test_negativ_keine_route_ohne_home_location(self, real_auth_client, captured_email, monkeypatch):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_keine_route_ohne_home_location(self, real_auth_client, monkeypatch):
+        from tests.api.test_auth_api import _token
+
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
 
         async def fake_geocode_one(term, api_key):
@@ -870,10 +867,11 @@ class TestDriveDistance:
         assert resp.json()["drive_distance_km"] is None
         assert resp.json()["drive_duration_min"] is None
 
-    def test_negativ_keine_route_ohne_ort(self, real_auth_client, captured_email, db_session):
+    def test_negativ_keine_route_ohne_ort(self, real_auth_client, db_session):
         from app import models as m
+        from tests.api.test_auth_api import _token
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         user = db_session.query(m.User).filter_by(email="test@example.com").one()
         user.home_lat, user.home_lng = 52.5200, 13.4050
@@ -960,16 +958,11 @@ class TestBackfillDriveDistance:
     Needs a real, persisted User row (home_lat/lng), unlike the `client`
     fixture's transient one, hence real_auth_client here."""
 
-    def _token(self, real_auth_client, captured_email, email="test@example.com"):
-        from tests.api.test_auth_api import _register
-        _register(real_auth_client, captured_email, email=email)
-        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
-        return r.json()["access_token"]
-
-    def test_positiv_berechnet_offene_routen_und_ueberspringt_bereits_vorhandene(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_berechnet_offene_routen_und_ueberspringt_bereits_vorhandene(self, real_auth_client, db_session, monkeypatch):
         from app import models as m
+        from tests.api.test_auth_api import _token
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         user = db_session.query(m.User).filter_by(email="test@example.com").one()
         user.home_lat, user.home_lng = 52.5200, 13.4050  # Berlin
@@ -1010,10 +1003,11 @@ class TestBackfillDriveDistance:
         db_session.refresh(no_ort_coords)
         assert no_ort_coords.drive_distance_km is None
 
-    def test_negativ_ohne_home_location_liefert_leeres_ergebnis(self, real_auth_client, captured_email, db_session):
+    def test_negativ_ohne_home_location_liefert_leeres_ergebnis(self, real_auth_client, db_session):
         from app import models as m
+        from tests.api.test_auth_api import _token
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         user = db_session.query(m.User).filter_by(email="test@example.com").one()
         application_factory(db_session, ort="München", ort_lat=48.1351, ort_lng=11.5820, user_id=user.id)
@@ -1024,10 +1018,11 @@ class TestBackfillDriveDistance:
         assert resp.status_code == 200
         assert resp.json() == {"total": 0, "updated": 0, "errors": []}
 
-    def test_negativ_routing_fehlschlag_wird_als_fehler_gemeldet(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_negativ_routing_fehlschlag_wird_als_fehler_gemeldet(self, real_auth_client, db_session, monkeypatch):
         from app import models as m
+        from tests.api.test_auth_api import _token
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         user = db_session.query(m.User).filter_by(email="test@example.com").one()
         user.home_lat, user.home_lng = 52.5200, 13.4050

@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.1',
+    date: '2026-07-31',
+    changes: [
+      'Removed the email-verification-code step from registration — creating an account now signs you in immediately, no code to check for or enter. This was slowing down/blocking sign-up unnecessarily for a self-hosted personal tool, especially with a transactional-email provider (like Resend) whose free/sandbox tier restricts delivery to a single verified address, which would otherwise make it hard to add more than one real user. Password reset is unaffected and still emails a code, since that flow\'s security actually depends on it.',
+    ],
+  },
+  {
     version: '4.7.0',
     date: '2026-07-31',
     changes: [

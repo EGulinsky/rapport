@@ -1536,8 +1536,9 @@ def claim_unowned_data(db, user_id: int) -> None:
     """Weist einem Konto alle Zeilen zu, die noch keinem Nutzer gehören
     (user_id IS NULL) — der einmalige Übergang von der bisherigen Ein-
     Personen-Installation zu echten Benutzerkonten. Wird ausschließlich für
-    das allererste bestätigte Konto aufgerufen (siehe verify_email() in
-    app/routers/auth.py)."""
+    das allererste je registrierte Konto aufgerufen (siehe register() in
+    app/routers/auth.py — vor der Entfernung des E-Mail-Bestätigungsschritts
+    war dies an das erste *verifizierte* Konto gekoppelt)."""
     from sqlalchemy import text
 
     for table in _USER_SCOPED_TABLES:

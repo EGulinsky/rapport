@@ -581,16 +581,8 @@ export const api = {
 
   auth: {
     register: (email: string, password: string, ui_language: string = 'en') =>
-      request<{ message: string }>('/auth/register', {
+      request<AuthTokenResponse>('/auth/register', {
         method: 'POST', body: JSON.stringify({ email, password, ui_language }),
-      }),
-    verifyEmail: (email: string, code: string) =>
-      request<AuthTokenResponse>('/auth/verify-email', {
-        method: 'POST', body: JSON.stringify({ email, code }),
-      }),
-    resendCode: (email: string) =>
-      request<{ message: string }>('/auth/resend-code', {
-        method: 'POST', body: JSON.stringify({ email }),
       }),
     login: (email: string, password: string) =>
       request<AuthTokenResponse>('/auth/login', {

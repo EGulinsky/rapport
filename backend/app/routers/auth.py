@@ -1,11 +1,10 @@
 """
-Benutzerkonten: Registrierung mit E-Mail-Bestätigung per Code, Login,
+Benutzerkonten: einfache Registrierung (kein E-Mail-Bestätigungsschritt mehr —
+siehe git-history für die entfernte verify-email/resend-code-Variante), Login,
 Passwort-Reset per Code sowie Passwort-Änderung im eingeloggten Zustand.
 
-POST /api/auth/register          — Konto anlegen, Bestätigungscode per E-Mail
-POST /api/auth/verify-email      — Code prüfen, Konto aktivieren, JWT zurückgeben
-POST /api/auth/resend-code       — neuen Bestätigungscode senden (unverifiziertes Konto)
-POST /api/auth/login             — Login, JWT zurückgeben
+POST /api/auth/register          — Konto anlegen, JWT direkt zurückgeben
+POST /api/auth/login              — Login, JWT zurückgeben
 POST /api/auth/forgot-password   — Reset-Code per E-Mail (immer 200, keine User-Enumeration)
 POST /api/auth/reset-password    — Reset-Code prüfen, neues Passwort setzen
 GET  /api/auth/me                — aktueller Nutzer (erfordert Login)
@@ -51,18 +50,9 @@ class RegisterPayload(BaseModel):
     ui_language: str = Field(default="en", pattern="^(de|en)$")
 
 
-class VerifyEmailPayload(BaseModel):
-    email: EmailStr
-    code: str
-
-
 class LoginPayload(BaseModel):
     email: EmailStr
     password: str
-
-
-class ResendCodePayload(BaseModel):
-    email: EmailStr
 
 
 class ForgotPasswordPayload(BaseModel):
@@ -188,65 +178,34 @@ def _consume_code(db: Session, user: models.User, code: str, purpose: str) -> mo
     return entry
 
 
-@router.post("/register", status_code=201)
+@router.post("/register", response_model=AuthTokenResponse, status_code=201)
 def register(payload: RegisterPayload, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter_by(email=payload.email).first()
     if existing:
         raise api_error(409, ErrorKey.AUTH_EMAIL_ALREADY_REGISTERED, "Diese E-Mail-Adresse ist bereits registriert.")
 
+    # Checked before inserting the new row: is this the very first account
+    # ever created? If so, it inherits the complete pre-account
+    # (user_id IS NULL) data set from before user accounts existed — see
+    # claim_unowned_data()'s docstring. Formerly gated on "first verified
+    # account" in the now-removed verify-email step; registration itself is
+    # the equivalent moment now that there's no separate verification step.
+    is_first_account_ever = db.query(models.User).count() == 0
+
     user = models.User(
         email=payload.email,
         password_hash=hash_password(payload.password),
-        email_verified=False,
+        email_verified=True,
         ui_language=payload.ui_language,
     )
     db.add(user)
-    db.flush()
-
-    code = _issue_code(db, user, "verify_email")
-    try:
-        send_verification_code(user.email, code, "verify_email", user.ui_language)
-    except EmailNotConfigured as e:
-        raise api_error(502, ErrorKey.AUTH_EMAIL_SEND_FAILED, str(e))
-
-    return {"message": "Konto angelegt. Bitte den Bestätigungscode aus der E-Mail eingeben."}
-
-
-@router.post("/verify-email", response_model=AuthTokenResponse)
-def verify_email(payload: VerifyEmailPayload, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter_by(email=payload.email).first()
-    if not user:
-        raise api_error(404, ErrorKey.AUTH_ACCOUNT_NOT_FOUND, "Konto nicht gefunden.")
-    if user.email_verified:
-        raise api_error(400, ErrorKey.AUTH_ALREADY_VERIFIED, "E-Mail-Adresse ist bereits bestätigt.")
-
-    # Vor dem Markieren prüfen: ist dies das allererste je bestätigte Konto?
-    # Falls ja, gehört diesem Konto der komplette bisherige (kontolose)
-    # Datenbestand aus der Zeit vor den Benutzerkonten (siehe claim_unowned_data()).
-    is_first_verified_ever = db.query(models.User).filter_by(email_verified=True).count() == 0
-
-    _consume_code(db, user, payload.code, "verify_email")
-    user.email_verified = True
     db.commit()
+    db.refresh(user)
 
-    if is_first_verified_ever:
+    if is_first_account_ever:
         claim_unowned_data(db, user.id)
 
     return AuthTokenResponse(access_token=create_access_token(user.id))
-
-
-@router.post("/resend-code")
-def resend_code(payload: ResendCodePayload, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter_by(email=payload.email).first()
-    if user and not user.email_verified:
-        code = _issue_code(db, user, "verify_email")
-        try:
-            send_verification_code(user.email, code, "verify_email", user.ui_language)
-        except EmailNotConfigured as e:
-            raise api_error(502, ErrorKey.AUTH_EMAIL_SEND_FAILED, str(e))
-    # Immer dieselbe Antwort — verhindert Rückschlüsse auf registrierte/verifizierte
-    # Adressen (User-Enumeration), analog zu forgot-password.
-    return {"message": "Falls ein unbestätigtes Konto mit dieser E-Mail-Adresse existiert, wurde ein neuer Code gesendet."}
 
 
 @router.post("/login", response_model=AuthTokenResponse)
@@ -254,8 +213,6 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
     user = db.query(models.User).filter_by(email=payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise api_error(401, ErrorKey.AUTH_LOGIN_FAILED, "E-Mail oder Passwort ist falsch.")
-    if not user.email_verified:
-        raise api_error(403, ErrorKey.AUTH_EMAIL_NOT_VERIFIED, "E-Mail-Adresse ist noch nicht bestätigt.")
 
     return AuthTokenResponse(access_token=create_access_token(user.id))
 

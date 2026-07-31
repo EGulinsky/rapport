@@ -152,11 +152,11 @@ backend/app/
 ```
 frontend/src/
 ├── App.tsx                 Root component: tabs (Applications/Contacts/Companies/Calendar/Analytics/rapportGPT), toolbar, modal orchestration
-├── AppRoutes.tsx             Routing: /login, /register, /verify-email, /forgot-password, /reset-password, protected root route
+├── AppRoutes.tsx             Routing: /login, /register, /forgot-password, /reset-password, protected root route
 ├── types.ts                 TypeScript types, status labels/colors, constants
 ├── api/client.ts             Fetch wrapper for all backend calls, grouped by namespace; attaches bearer token, handles 401 centrally
 ├── context/AuthContext.tsx    Login state, token in localStorage, login()/register()/logout()/…, propagates user.ui_language to i18next on login/refresh/logout
-├── pages/auth/                LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, AuthLayout
+├── pages/auth/                LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage, AuthLayout
 ├── i18n/                       react-i18next setup (see §9): index.ts (provider/registration), useLocale.ts, formatDate.ts, errorMessage.ts, statusLabels.ts, locales/{de,en}/*.json per feature area
 └── components/
     ├── RequireAuth.tsx          Route guard: redirects to /login when not signed in
@@ -193,15 +193,13 @@ frontend/src/
 
 Swagger UI: `http://localhost:8000/docs`
 
-All endpoints except `/api/auth/register`, `/api/auth/verify-email`, `/api/auth/resend-code`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/startup-check`, and `/health` require `Authorization: Bearer <jwt>`. Details in [§7](#7-authentication--multi-tenancy).
+All endpoints except `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/startup-check`, and `/health` require `Authorization: Bearer <jwt>`. Details in [§7](#7-authentication--multi-tenancy).
 
 ### Authentication
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/auth/register` | Create account, confirmation code by email (409 if already registered) |
-| `POST` | `/api/auth/verify-email` | Verify code, activate account, return JWT |
-| `POST` | `/api/auth/resend-code` | Send a new confirmation code (unverified account) |
+| `POST` | `/api/auth/register` | Create account, return JWT directly (409 if already registered) — no email-verification step |
 | `POST` | `/api/auth/login` | Login, return JWT (403 if email not confirmed) |
 | `POST` | `/api/auth/forgot-password` | Reset code by email (always 200, no user enumeration) |
 | `POST` | `/api/auth/reset-password` | Verify reset code, set new password |
@@ -688,7 +686,7 @@ erDiagram
 |---|---|---|
 | `email` | VARCHAR UNIQUE, indexed | |
 | `password_hash` | VARCHAR | bcrypt |
-| `email_verified` | BOOLEAN | Only `true` after code confirmation |
+| `email_verified` | BOOLEAN | Always `true` on new accounts (v4.7.1 removed the email-verification step) — kept in the schema rather than dropped, per the additive-migration convention |
 | `created_at` | DATETIME | |
 | `vorname` / `nachname` / `linkedin_url` | VARCHAR NULL | Profile fields (Settings → Account) |
 | `cv_filename` / `cv_content_type` / `cv_size_bytes` / `cv_storage_path` | | Optional uploaded CV, stored at `{DB_DIR}/user_files/{user_id}/{filename}` (same pattern as `attachments.py`); text fed into AI assessment (§3.6) |
@@ -700,11 +698,13 @@ erDiagram
 
 #### `email_verification_codes`
 
+Still used for password reset (`purpose="reset_password"`); the `"verify_email"` purpose value is only ever seen on historical rows from before v4.7.1 — registration no longer writes any.
+
 | Column | Type | Description |
 |---|---|---|
 | `user_id` | INTEGER FK NOT NULL | → `users.id` |
 | `code` | VARCHAR(6) | |
-| `purpose` | VARCHAR | `verify_email` \| `reset_password` |
+| `purpose` | VARCHAR | `reset_password` (`verify_email` historical only) |
 | `expires_at` | DATETIME | 15-minute validity |
 | `used_at` | DATETIME NULL | Prevents reuse |
 
@@ -837,31 +837,27 @@ Functions in `app/ai/provider.py`: `encrypt_api_key()` / `decrypt_api_key()`.
 
 rapport is a multi-account system: several accounts can use the same installation, each seeing exclusively its own data. Registration remains permanently open (no invite requirement).
 
-### 7.1 Registration, Verification, Login
+### 7.1 Registration, Login
+
+Registration is a single step — no email-verification code (removed in v4.7.1; see git history for the earlier verify-email/resend-code flow). `User.email_verified` remains in the schema (always `true` going forward, historical rows keep whatever value they had) rather than being dropped, per the project's additive-migration convention — nothing gates on it anymore.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant FE as Frontend
     participant BE as Backend
-    participant Mail as SMTP (Resend)
 
     U->>FE: email + password
     FE->>BE: POST /api/auth/register
-    BE->>BE: create user (email_verified=false), 6-digit code (valid 15 min)
-    BE->>Mail: send confirmation code
-    BE-->>FE: 201
-    U->>FE: enter code (or "resend code")
-    FE->>BE: POST /api/auth/verify-email
-    BE->>BE: email_verified=true
-    alt first account ever confirmed
+    BE->>BE: create user (email_verified=true)
+    alt first account ever registered
         BE->>BE: claim_unowned_data() – assign previous user_id=NULL rows to this account
     end
     BE-->>FE: JWT (valid 7 days)
     FE->>FE: token in localStorage, all further requests with Authorization: Bearer
 ```
 
-Password reset works analogously via the same code mechanism (`purpose="reset_password"` instead of `"verify_email"`), triggered via `POST /api/auth/forgot-password` (always 200, no user enumeration) → `POST /api/auth/reset-password`. Passwords: bcrypt hash (`app/auth/security.py`). Codes: `EmailVerificationCode`, `used_at` prevents reuse. SMTP configuration (currently Resend as the provider) via env vars `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`; without these, `register`/`forgot-password` return `502 EmailNotConfigured` (the DB row including the code is still committed before the send attempt fails).
+Password reset still uses the original code-by-email mechanism (`purpose="reset_password"` on `EmailVerificationCode` — the `"verify_email"` purpose value is no longer written, only ever seen on historical rows), triggered via `POST /api/auth/forgot-password` (always 200, no user enumeration) → `POST /api/auth/reset-password`. Passwords: bcrypt hash (`app/auth/security.py`). Codes: `used_at` prevents reuse. SMTP configuration (currently Resend as the provider) via env vars `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`; without these, `forgot-password` returns `502 EmailNotConfigured` (the DB row including the code is still committed before the send attempt fails).
 
 ### 7.2 Central Tenant Filter
 
@@ -875,7 +871,7 @@ Instead of adding `.filter_by(user_id=...)` to every query individually across ~
 
 ### 7.3 Data Migration on First Rollout
 
-Before accounts were introduced, all rows belonged to no one (`user_id IS NULL`). `claim_unowned_data()` (`database.py`) is called once inside the `verify-email` transaction if this is the first account ever confirmed, and assigns all `user_id IS NULL` rows across all ~20 tables to that account.
+Before accounts were introduced, all rows belonged to no one (`user_id IS NULL`). `claim_unowned_data()` (`database.py`) is called once inside the `register()` transaction if this is the very first account ever registered, and assigns all `user_id IS NULL` rows across all ~20 tables to that account. (Before the email-verification step was removed in v4.7.1, this fired on the first *verified* account instead — see §7.1.)
 
 ### 7.4 Known Open Items
 

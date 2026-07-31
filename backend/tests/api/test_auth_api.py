@@ -1,7 +1,9 @@
-"""L2 API — /api/auth/*: Registrierung mit E-Mail-Bestätigung, Login,
-Passwort-Reset per Code, Passwort-Änderung. E-Mail-Versand wird an der
-Netzwerkgrenze gemockt (app.routers.auth.send_verification_code), damit kein
-echter SMTP-Server nötig ist.
+"""L2 API — /api/auth/*: simple registration (email+password, JWT returned
+directly — no email-verification step; see git history for the removed
+verify-email/resend-code flow), login, password-reset per code, password
+change. E-Mail-Versand (heute nur noch für Passwort-Reset relevant) wird an
+der Netzwerkgrenze gemockt (app.routers.auth.send_verification_code), damit
+kein echter SMTP-Server nötig ist.
 """
 import pytest
 
@@ -16,151 +18,71 @@ TESTPW_WRONG = "not-a-real-secret-fixture-WRONG"
 TESTPW_TOO_SHORT = "abcd123"
 
 
-def _register(real_auth_client, captured_email, email="test@example.com", password=TESTPW_ORIGINAL):
-    resp = real_auth_client.post("/api/auth/register", json={"email": email, "password": password})
-    return resp
+def _register(real_auth_client, email="test@example.com", password=TESTPW_ORIGINAL, ui_language=None):
+    payload = {"email": email, "password": password}
+    if ui_language is not None:
+        payload["ui_language"] = ui_language
+    return real_auth_client.post("/api/auth/register", json=payload)
+
+
+def _token(real_auth_client, email="test@example.com", password=TESTPW_ORIGINAL) -> str:
+    return _register(real_auth_client, email=email, password=password).json()["access_token"]
 
 
 class TestRegister:
-    def test_positiv_registrierung_sendet_bestaetigungscode(self, real_auth_client, captured_email):
-        resp = _register(real_auth_client, captured_email)
+    def test_positiv_registrierung_liefert_token_direkt(self, real_auth_client):
+        resp = _register(real_auth_client)
 
         assert resp.status_code == 201
-        assert captured_email["to"] == "test@example.com"
-        assert captured_email["purpose"] == "verify_email"
-        assert len(captured_email["code"]) == 6
+        assert "access_token" in resp.json()
 
-    def test_negativ_doppelte_email_liefert_409(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        resp = _register(real_auth_client, captured_email)
+    def test_negativ_doppelte_email_liefert_409(self, real_auth_client):
+        _register(real_auth_client)
+        resp = _register(real_auth_client)
         assert resp.status_code == 409
         assert resp.json()["detail"]["error_key"] == "auth.email_already_registered"
 
-    def test_negativ_zu_kurzes_passwort_liefert_422(self, real_auth_client, captured_email):
+    def test_negativ_zu_kurzes_passwort_liefert_422(self, real_auth_client):
         resp = real_auth_client.post("/api/auth/register", json={"email": "kurz@example.com", "password": TESTPW_TOO_SHORT})
         assert resp.status_code == 422
 
-    def test_negativ_ungueltige_email_liefert_422(self, real_auth_client, captured_email):
+    def test_negativ_ungueltige_email_liefert_422(self, real_auth_client):
         resp = real_auth_client.post("/api/auth/register", json={"email": "keine-email", "password": TESTPW_ORIGINAL})
         assert resp.status_code == 422
 
-    def test_positiv_ui_language_default_ist_englisch(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
-        token = verify_resp.json()["access_token"]
+    def test_positiv_ui_language_default_ist_englisch(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert resp.json()["ui_language"] == "en"
 
-    def test_positiv_ui_language_kann_explizit_de_gesetzt_werden(self, real_auth_client, captured_email):
-        resp = real_auth_client.post(
-            "/api/auth/register",
-            json={"email": "test@example.com", "password": TESTPW_ORIGINAL, "ui_language": "de"},
-        )
+    def test_positiv_ui_language_kann_explizit_de_gesetzt_werden(self, real_auth_client):
+        resp = _register(real_auth_client, ui_language="de")
         assert resp.status_code == 201
-        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
-        token = verify_resp.json()["access_token"]
+        token = resp.json()["access_token"]
 
         me_resp = real_auth_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert me_resp.json()["ui_language"] == "de"
 
-    def test_negativ_ui_language_unbekannter_wert_liefert_422(self, real_auth_client, captured_email):
+    def test_negativ_ui_language_unbekannter_wert_liefert_422(self, real_auth_client):
         resp = real_auth_client.post(
             "/api/auth/register",
             json={"email": "test@example.com", "password": TESTPW_ORIGINAL, "ui_language": "fr"},
         )
         assert resp.status_code == 422
 
-    def test_positiv_bestaetigungsmail_wird_in_gewaehlter_sprache_verschickt(self, real_auth_client, captured_email):
-        real_auth_client.post(
-            "/api/auth/register",
-            json={"email": "test@example.com", "password": TESTPW_ORIGINAL, "ui_language": "en"},
-        )
-        assert captured_email["ui_language"] == "en"
-
-
-class TestVerifyEmail:
-    def test_positiv_richtiger_code_aktiviert_konto_und_liefert_token(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-
-        resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
-
-        assert resp.status_code == 200
-        assert "access_token" in resp.json()
-
-    def test_negativ_falscher_code_wird_abgelehnt(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-
-        resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": "000000"})
-
-        assert resp.status_code == 400
-        assert resp.json()["detail"]["error_key"] == "auth.code_invalid"
-
-    def test_negativ_bereits_bestaetigtes_konto_kann_nicht_erneut_bestaetigt_werden(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        code = captured_email["code"]
-        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": code})
-
-        resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": code})
-
-        assert resp.status_code == 400
-        assert resp.json()["detail"]["error_key"] == "auth.already_verified"
-
-    def test_negativ_unbekannte_email_liefert_404(self, real_auth_client):
-        resp = real_auth_client.post("/api/auth/verify-email", json={"email": "nichtregistriert@example.com", "code": "123456"})
-        assert resp.status_code == 404
-
-
-class TestResendCode:
-    def test_positiv_neuer_code_kann_bestaetigten(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-
-        resp = real_auth_client.post("/api/auth/resend-code", json={"email": "test@example.com"})
-
-        assert resp.status_code == 200
-        assert captured_email["purpose"] == "verify_email"
-        neuer_code = captured_email["code"]
-        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": neuer_code})
-        assert verify_resp.status_code == 200
-
-    def test_negativ_bereits_bestaetigtes_konto_bekommt_keinen_neuen_code(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
-        captured_email.clear()
-
-        resp = real_auth_client.post("/api/auth/resend-code", json={"email": "test@example.com"})
-
-        assert resp.status_code == 200
-        assert captured_email == {}  # kein Versand ausgelöst
-
-    def test_corner_case_unbekannte_email_liefert_trotzdem_200_ohne_versand(self, real_auth_client, captured_email):
-        resp = real_auth_client.post("/api/auth/resend-code", json={"email": "nichtregistriert@example.com"})
-
-        assert resp.status_code == 200
-        assert captured_email == {}  # keine User-Enumeration: gleiche Antwort, kein Versand
-
 
 class TestLogin:
-    def test_positiv_login_nach_verifizierung(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+    def test_positiv_login_nach_registrierung(self, real_auth_client):
+        _register(real_auth_client)
 
         resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_ORIGINAL})
 
         assert resp.status_code == 200
         assert "access_token" in resp.json()
 
-    def test_negativ_login_vor_verifizierung_wird_abgelehnt(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-
-        resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_ORIGINAL})
-
-        assert resp.status_code == 403
-        assert resp.json()["detail"]["error_key"] == "auth.email_not_verified"
-
-    def test_negativ_falsches_passwort(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+    def test_negativ_falsches_passwort(self, real_auth_client):
+        _register(real_auth_client)
 
         resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_WRONG})
 
@@ -173,10 +95,8 @@ class TestLogin:
 
 
 class TestMe:
-    def test_positiv_liefert_eigene_daten_mit_gueltigem_token(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        verify_resp = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
-        token = verify_resp.json()["access_token"]
+    def test_positiv_liefert_eigene_daten_mit_gueltigem_token(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
 
@@ -194,13 +114,8 @@ class TestMe:
 
 
 class TestChangePassword:
-    def _token(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        r = real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
-        return r.json()["access_token"]
-
-    def test_positiv_passwort_aendern_und_neu_einloggen(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_passwort_aendern_und_neu_einloggen(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.post(
             "/api/auth/change-password",
@@ -212,8 +127,8 @@ class TestChangePassword:
         login_resp = real_auth_client.post("/api/auth/login", json={"email": "test@example.com", "password": TESTPW_NEW})
         assert login_resp.status_code == 200
 
-    def test_negativ_falsches_altes_passwort(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_falsches_altes_passwort(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.post(
             "/api/auth/change-password",
@@ -226,8 +141,7 @@ class TestChangePassword:
 
 class TestForgotUndResetPassword:
     def test_positiv_voller_reset_fluss(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+        _register(real_auth_client)
 
         resp = real_auth_client.post("/api/auth/forgot-password", json={"email": "test@example.com"})
         assert resp.status_code == 200
@@ -250,8 +164,7 @@ class TestForgotUndResetPassword:
         assert resp.status_code == 200
 
     def test_negativ_falscher_reset_code_wird_abgelehnt(self, real_auth_client, captured_email):
-        _register(real_auth_client, captured_email)
-        real_auth_client.post("/api/auth/verify-email", json={"email": "test@example.com", "code": captured_email["code"]})
+        _register(real_auth_client)
         real_auth_client.post("/api/auth/forgot-password", json={"email": "test@example.com"})
 
         resp = real_auth_client.post(
@@ -261,62 +174,72 @@ class TestForgotUndResetPassword:
 
         assert resp.status_code == 400
 
-    def test_negativ_verify_code_kann_nicht_fuer_reset_missbraucht_werden(self, real_auth_client, captured_email):
-        # Codes sind zweckgebunden (purpose) — ein noch gültiger Verifizierungs-Code
-        # darf nicht als Passwort-Reset-Code akzeptiert werden.
-        _register(real_auth_client, captured_email)
-        verify_code = captured_email["code"]
+    def test_negativ_falscher_purpose_code_wird_fuer_reset_abgelehnt(self, real_auth_client, db_session):
+        # Codes sind zweckgebunden (purpose) — ein Code, der für einen anderen
+        # Zweck ausgestellt wurde, darf nicht als Passwort-Reset-Code
+        # akzeptiert werden. Seit der Entfernung des E-Mail-Bestätigungs-
+        # schritts stellt register() keine "verify_email"-Codes mehr aus, also
+        # wird hier direkt einer angelegt, um die purpose-Prüfung weiterhin
+        # abzudecken ("verify_email" bleibt ein gültiger Wert in der
+        # purpose-Spalte für historische Zeilen).
+        from datetime import datetime, timedelta, timezone
+        from app import models
+
+        _register(real_auth_client, email="purposetest@example.com")
+        user = db_session.query(models.User).filter_by(email="purposetest@example.com").one()
+        db_session.add(models.EmailVerificationCode(
+            user_id=user.id, code="111111", purpose="verify_email",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        ))
+        db_session.commit()
 
         resp = real_auth_client.post(
             "/api/auth/reset-password",
-            json={"email": "test@example.com", "code": verify_code, "new_password": TESTPW_RESET},
+            json={"email": "purposetest@example.com", "code": "111111", "new_password": TESTPW_RESET},
         )
 
         assert resp.status_code == 400
 
 
-class TestClaimOnFirstVerify:
-    def test_positiv_erstes_bestaetigtes_konto_erbt_bisherigen_datenbestand(self, real_auth_client, captured_email, db_session):
+class TestClaimOnFirstRegistration:
+    """claim_unowned_data() (pre-account, user_id IS NULL rows adopted by the
+    very first account) used to trigger on the first *verified* account; now
+    that there's no verification step, the equivalent moment is the first
+    account ever *registered* — see register() in auth.py."""
+
+    def test_positiv_erstes_konto_erbt_bisherigen_datenbestand(self, real_auth_client, db_session):
         from app import models
         from tests.factories import application_factory
 
         app = application_factory(db_session, user_id=None)
         db_session.commit()
 
-        _register(real_auth_client, captured_email, email="first@example.com")
-        resp = real_auth_client.post("/api/auth/verify-email", json={"email": "first@example.com", "code": captured_email["code"]})
-        assert resp.status_code == 200
+        resp = _register(real_auth_client, email="first@example.com")
+        assert resp.status_code == 201
 
         user = db_session.query(models.User).filter_by(email="first@example.com").one()
         db_session.refresh(app)
         assert app.user_id == user.id
 
-    def test_negativ_zweites_konto_erbt_nichts(self, real_auth_client, captured_email, db_session):
+    def test_negativ_zweites_konto_erbt_nichts(self, real_auth_client, db_session):
         from app import models
         from tests.factories import application_factory
 
         app = application_factory(db_session, user_id=None)
         db_session.commit()
 
-        _register(real_auth_client, captured_email, email="first@example.com")
-        real_auth_client.post("/api/auth/verify-email", json={"email": "first@example.com", "code": captured_email["code"]})
+        _register(real_auth_client, email="first@example.com")
         first_user = db_session.query(models.User).filter_by(email="first@example.com").one()
 
-        _register(real_auth_client, captured_email, email="second@example.com")
-        real_auth_client.post("/api/auth/verify-email", json={"email": "second@example.com", "code": captured_email["code"]})
+        _register(real_auth_client, email="second@example.com")
 
         db_session.refresh(app)
         assert app.user_id == first_user.id  # unverändert, gehört weiterhin dem ersten Konto
 
 
 class TestProfileAndCv:
-    def _token(self, real_auth_client, captured_email, email="test@example.com"):
-        _register(real_auth_client, captured_email, email=email)
-        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
-        return r.json()["access_token"]
-
-    def test_positiv_profil_speichern(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_profil_speichern(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.patch(
             "/api/auth/profile",
@@ -334,8 +257,8 @@ class TestProfileAndCv:
         resp = real_auth_client.patch("/api/auth/profile", json={"vorname": "Ada"})
         assert resp.status_code == 401
 
-    def test_positiv_ui_language_kann_geaendert_werden(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_ui_language_kann_geaendert_werden(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.patch(
             "/api/auth/profile", json={"ui_language": "de"},
@@ -345,12 +268,12 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert resp.json()["ui_language"] == "de"
 
-    def test_corner_case_profil_update_ohne_ui_language_aendert_sie_nicht(self, real_auth_client, captured_email):
+    def test_corner_case_profil_update_ohne_ui_language_aendert_sie_nicht(self, real_auth_client):
         """Ein Profil-Save aus einem anderen Tab (z.B. Vorname) darf die zuvor
         gesetzte UI-Sprache nicht klammheimlich zurücksetzen, nur weil das Feld
         im Payload fehlt — anders als vorname/nachname/linkedin_url, die dieser
         Endpoint bewusst unconditional überschreibt."""
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         real_auth_client.patch(
             "/api/auth/profile", json={"ui_language": "de"},
             headers={"Authorization": f"Bearer {token}"},
@@ -364,7 +287,7 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert resp.json()["ui_language"] == "de"
 
-    def test_positiv_sprachwechsel_pusht_an_gepaarten_agent(self, real_auth_client, captured_email, db_session):
+    def test_positiv_sprachwechsel_pusht_an_gepaarten_agent(self, real_auth_client, db_session):
         """Ein Sprachwechsel im Account-Panel muss auch den bereits gepaarten
         Agent aktualisieren — nicht nur beim (Wieder-)Speichern des Agent-Tokens
         in Settings → Agent (siehe test_settings_agent_api.py::TestAgentUiLanguagePush)."""
@@ -372,7 +295,7 @@ class TestProfileAndCv:
         from app import models
         from app.ai.provider import encrypt_api_key
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         db_session.add(models.AgentSettings(user_id=1, token_enc=encrypt_api_key("AgentToken123")))
         db_session.commit()
 
@@ -396,10 +319,10 @@ class TestProfileAndCv:
         assert url.endswith("/config")
         assert payload == {"ui_language": "de"}
 
-    def test_negativ_kein_push_ohne_gepaarten_agent(self, real_auth_client, captured_email):
+    def test_negativ_kein_push_ohne_gepaarten_agent(self, real_auth_client):
         from unittest.mock import MagicMock, patch
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         calls = []
 
         async def fake_patch(self, url, **kw):
@@ -415,12 +338,12 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert len(calls) == 0
 
-    def test_negativ_kein_push_wenn_sprache_unveraendert(self, real_auth_client, captured_email, db_session):
+    def test_negativ_kein_push_wenn_sprache_unveraendert(self, real_auth_client, db_session):
         from unittest.mock import MagicMock, patch
         from app import models
         from app.ai.provider import encrypt_api_key
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         db_session.add(models.AgentSettings(user_id=1, token_enc=encrypt_api_key("AgentToken123")))
         db_session.commit()
 
@@ -441,8 +364,8 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert len(calls) == 0
 
-    def test_corner_case_profil_felder_koennen_wieder_geleert_werden(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_corner_case_profil_felder_koennen_wieder_geleert_werden(self, real_auth_client):
+        token = _token(real_auth_client)
         real_auth_client.patch(
             "/api/auth/profile", json={"vorname": "Ada", "nachname": "Lovelace", "linkedin_url": "https://example.com"},
             headers={"Authorization": f"Bearer {token}"},
@@ -456,8 +379,8 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert resp.json()["vorname"] is None
 
-    def test_positiv_cv_hochladen(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_cv_hochladen(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.post(
             "/api/auth/cv",
@@ -470,8 +393,8 @@ class TestProfileAndCv:
         assert body["cv_filename"] == "lebenslauf.pdf"
         assert body["cv_size_bytes"] == len(b"%PDF-1.4 fake cv content")
 
-    def test_negativ_falsche_dateiendung_wird_abgelehnt(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_falsche_dateiendung_wird_abgelehnt(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.post(
             "/api/auth/cv",
@@ -482,9 +405,9 @@ class TestProfileAndCv:
         assert resp.status_code == 400
         assert resp.json()["detail"]["error_key"] == "auth.cv_type_invalid"
 
-    def test_negativ_zu_grosse_datei_wird_abgelehnt(self, real_auth_client, captured_email, monkeypatch):
+    def test_negativ_zu_grosse_datei_wird_abgelehnt(self, real_auth_client, monkeypatch):
         monkeypatch.setattr("app.routers.auth.MAX_CV_BYTES", 10)
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
 
         resp = real_auth_client.post(
             "/api/auth/cv",
@@ -495,8 +418,8 @@ class TestProfileAndCv:
         assert resp.status_code == 413
         assert resp.json()["detail"]["error_key"] == "auth.cv_too_large"
 
-    def test_positiv_cv_erneut_hochladen_ersetzt_alte_datei(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_cv_erneut_hochladen_ersetzt_alte_datei(self, real_auth_client):
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.post("/api/auth/cv", files={"file": ("alt.pdf", b"alte version", "application/pdf")}, headers=headers)
 
@@ -505,8 +428,8 @@ class TestProfileAndCv:
         assert resp.status_code == 201
         assert resp.json()["cv_filename"] == "neu.pdf"
 
-    def test_positiv_cv_herunterladen(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_cv_herunterladen(self, real_auth_client):
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.post("/api/auth/cv", files={"file": ("lebenslauf.pdf", b"cv inhalt", "application/pdf")}, headers=headers)
 
@@ -515,15 +438,15 @@ class TestProfileAndCv:
         assert resp.status_code == 200
         assert resp.content == b"cv inhalt"
 
-    def test_negativ_cv_herunterladen_ohne_upload_liefert_404(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_cv_herunterladen_ohne_upload_liefert_404(self, real_auth_client):
+        token = _token(real_auth_client)
 
         resp = real_auth_client.get("/api/auth/cv", headers={"Authorization": f"Bearer {token}"})
 
         assert resp.status_code == 404
 
-    def test_positiv_cv_loeschen(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_cv_loeschen(self, real_auth_client):
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.post("/api/auth/cv", files={"file": ("lebenslauf.pdf", b"cv inhalt", "application/pdf")}, headers=headers)
 
@@ -533,12 +456,12 @@ class TestProfileAndCv:
         me_resp = real_auth_client.get("/api/auth/me", headers=headers)
         assert me_resp.json()["cv_filename"] is None
 
-    def test_positiv_cv_upload_extrahiert_und_cached_text(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_cv_upload_extrahiert_und_cached_text(self, real_auth_client, db_session, monkeypatch):
         """Extraction happens once at upload time, not per AI assessment —
         see User.cv_extracted_text's docstring in models.py for why."""
         from app import models
         monkeypatch.setattr("app.cv_extract.extract_cv_text", lambda path: "Extracted résumé text")
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
 
         resp = real_auth_client.post(
             "/api/auth/cv",
@@ -550,9 +473,9 @@ class TestProfileAndCv:
         user = db_session.query(models.User).filter_by(email="test@example.com").one()
         assert user.cv_extracted_text == "Extracted résumé text"
 
-    def test_positiv_cv_loeschen_leert_extrahierten_text(self, real_auth_client, captured_email, db_session):
+    def test_positiv_cv_loeschen_leert_extrahierten_text(self, real_auth_client, db_session):
         from app import models
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.post("/api/auth/cv", files={"file": ("lebenslauf.pdf", b"cv inhalt", "application/pdf")}, headers=headers)
         user = db_session.query(models.User).filter_by(email="test@example.com").one()
@@ -567,13 +490,8 @@ class TestProfileAndCv:
 
 
 class TestSalaryDefaults:
-    def _token(self, real_auth_client, captured_email, email="test@example.com"):
-        _register(real_auth_client, captured_email, email=email)
-        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
-        return r.json()["access_token"]
-
-    def test_positiv_speichern_und_lesen(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_speichern_und_lesen(self, real_auth_client):
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
 
         resp = real_auth_client.patch(
@@ -596,8 +514,8 @@ class TestSalaryDefaults:
 
         assert real_auth_client.get("/api/auth/me", headers=headers).json()["default_salary_expectation_min"] == 60000
 
-    def test_negativ_max_ohne_min_liefert_400(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_max_ohne_min_liefert_400(self, real_auth_client):
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile",
             json={"default_salary_expectation_max": 70000},
@@ -605,8 +523,8 @@ class TestSalaryDefaults:
         )
         assert resp.status_code == 400
 
-    def test_negativ_max_kleiner_min_liefert_400(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_max_kleiner_min_liefert_400(self, real_auth_client):
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile",
             json={"default_salary_expectation_min": 70000, "default_salary_expectation_max": 60000},
@@ -614,8 +532,8 @@ class TestSalaryDefaults:
         )
         assert resp.status_code == 400
 
-    def test_negativ_nur_fixum_ohne_bonus_liefert_400(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_nur_fixum_ohne_bonus_liefert_400(self, real_auth_client):
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile",
             json={"default_salary_expectation_min": 60000, "default_salary_expectation_min_fixed": 50000},
@@ -623,8 +541,8 @@ class TestSalaryDefaults:
         )
         assert resp.status_code == 400
 
-    def test_negativ_fixum_plus_bonus_ungleich_gesamt_liefert_400(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_negativ_fixum_plus_bonus_ungleich_gesamt_liefert_400(self, real_auth_client):
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile",
             json={
@@ -636,8 +554,8 @@ class TestSalaryDefaults:
         )
         assert resp.status_code == 400
 
-    def test_positiv_fixum_plus_bonus_gleich_gesamt_wird_akzeptiert(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_positiv_fixum_plus_bonus_gleich_gesamt_wird_akzeptiert(self, real_auth_client):
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile",
             json={
@@ -649,8 +567,8 @@ class TestSalaryDefaults:
         )
         assert resp.status_code == 200
 
-    def test_corner_case_anderer_profil_save_loescht_salary_defaults_nicht(self, real_auth_client, captured_email):
-        token = self._token(real_auth_client, captured_email)
+    def test_corner_case_anderer_profil_save_loescht_salary_defaults_nicht(self, real_auth_client):
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.patch(
             "/api/auth/profile",
@@ -677,12 +595,7 @@ class TestHomeLocation:
     ApplicationModal) -- geocoded once when home_location changes (see
     update_profile() in auth.py), not on every profile save."""
 
-    def _token(self, real_auth_client, captured_email, email="test@example.com"):
-        _register(real_auth_client, captured_email, email=email)
-        r = real_auth_client.post("/api/auth/verify-email", json={"email": email, "code": captured_email["code"]})
-        return r.json()["access_token"]
-
-    def test_positiv_speichern_geocodiert_und_setzt_koordinaten(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_speichern_geocodiert_und_setzt_koordinaten(self, real_auth_client, db_session, monkeypatch):
         from app import models
 
         async def fake_geocode_one(term, api_key):
@@ -690,7 +603,7 @@ class TestHomeLocation:
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile", json={"home_location": "Berlin, Deutschland"},
             headers={"Authorization": f"Bearer {token}"},
@@ -702,14 +615,14 @@ class TestHomeLocation:
         assert user.home_lat == 52.52
         assert user.home_lng == 13.405
 
-    def test_negativ_geocoding_fehlschlag_laesst_koordinaten_leer(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_negativ_geocoding_fehlschlag_laesst_koordinaten_leer(self, real_auth_client, db_session, monkeypatch):
         from app import models
 
         async def fake_geocode_one(term, api_key):
             return None
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         resp = real_auth_client.patch(
             "/api/auth/profile", json={"home_location": "Nirgendwostadt"},
             headers={"Authorization": f"Bearer {token}"},
@@ -720,14 +633,14 @@ class TestHomeLocation:
         assert user.home_lat is None
         assert user.home_lng is None
 
-    def test_positiv_leeren_loescht_koordinaten(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_leeren_loescht_koordinaten(self, real_auth_client, db_session, monkeypatch):
         from app import models
 
         async def fake_geocode_one(term, api_key):
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland"}, headers=headers)
 
@@ -739,7 +652,7 @@ class TestHomeLocation:
         assert user.home_lat is None
         assert user.home_lng is None
 
-    def test_negativ_unveraenderte_home_location_geokodiert_nicht_erneut(self, real_auth_client, captured_email, monkeypatch):
+    def test_negativ_unveraenderte_home_location_geokodiert_nicht_erneut(self, real_auth_client, monkeypatch):
         """A profile save that doesn't touch home_location (e.g. just vorname)
         must not burn an extra geocoding call every time."""
         calls = []
@@ -749,7 +662,7 @@ class TestHomeLocation:
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         real_auth_client.patch("/api/auth/profile", json={"home_location": "Berlin, Deutschland"}, headers=headers)
         assert len(calls) == 1
@@ -758,7 +671,7 @@ class TestHomeLocation:
 
         assert len(calls) == 1
 
-    def test_positiv_aenderung_loescht_cached_drive_distance_fuer_alle_apps(self, real_auth_client, captured_email, db_session, monkeypatch):
+    def test_positiv_aenderung_loescht_cached_drive_distance_fuer_alle_apps(self, real_auth_client, db_session, monkeypatch):
         # Every application's cached drive_distance_km/drive_duration_min was
         # computed from the OLD home coordinates -- must be cleared in bulk
         # so a stale distance never lingers after moving (see
@@ -770,7 +683,7 @@ class TestHomeLocation:
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
-        token = self._token(real_auth_client, captured_email)
+        token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
         user = db_session.query(models.User).filter_by(email="test@example.com").one()
         app = application_factory(db_session, ort="München", ort_lat=48.1351, ort_lng=11.5820,
