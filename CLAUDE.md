@@ -207,7 +207,7 @@ All 1840 backend tests (566 unit / 341 component / 676 api / 257 integration) an
 
 ### Commits (this session, newest first)
 ```
-(pending — see git log after push)
+88494df Add AI match score & success probability per application (v4.7.0)
 ```
 
 ---
