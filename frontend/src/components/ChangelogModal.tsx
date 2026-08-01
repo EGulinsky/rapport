@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.10',
+    date: '2026-08-01',
+    changes: [
+      'Fixed the audit log for real this time: mouse/trackpad scrolling was still scrolling the page behind it instead of the log itself — the previous fix bounded the table\'s height correctly, but nothing stopped an unconsumed scroll gesture from passing through the dialog to the page underneath. The dialog now locks background scrolling while open.',
+    ],
+  },
+  {
     version: '4.7.9',
     date: '2026-08-01',
     changes: [

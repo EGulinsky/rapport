@@ -60,6 +60,20 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Without this, wheel/trackpad scrolling chains straight through the
+  // fixed-position backdrop to the page underneath the moment the cursor
+  // isn't exactly over the inner scrollable table (or once that table hits
+  // its own scroll boundary) -- min-h-0 alone fixes the *layout* (the table
+  // actually gets a bounded height to scroll within), but nothing stops the
+  // browser from handing an unconsumed scroll gesture to whatever's behind
+  // a `position: fixed` element, since fixed positioning doesn't establish
+  // a scroll-chaining boundary on its own.
+  useEffect(() => {
+    const original = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = original }
+  }, [])
+
   function changePage(delta: number) {
     const next = page + delta
     setPage(next)
@@ -144,7 +158,7 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
         </div>
 
         {/* Table */}
-        <div className="overflow-auto flex-1 min-h-0">
+        <div className="overflow-auto flex-1 min-h-0 overscroll-contain">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
               <tr>

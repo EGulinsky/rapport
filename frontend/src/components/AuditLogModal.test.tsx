@@ -68,6 +68,30 @@ describe('AuditLogModal', () => {
     expect(await screen.findByText('Keine Einträge')).toBeInTheDocument()
   })
 
+  it('positiv: sperrt Body-Scroll waehrend geoeffnet und stellt ihn beim Schliessen wieder her', async () => {
+    // Regression: without this, mouse/trackpad scrolling chained straight
+    // through the fixed-position backdrop to the page underneath -- min-h-0
+    // alone (the earlier fix) only bounds the table's own height, it doesn't
+    // stop an unconsumed scroll gesture from reaching whatever's behind a
+    // `position: fixed` element.
+    document.body.style.overflow = ''
+    const { unmount } = render(<AuditLogModal onClose={vi.fn()} />)
+    await screen.findByText('Zeitpunkt')
+
+    expect(document.body.style.overflow).toBe('hidden')
+
+    unmount()
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('positiv: Tabellen-Container hat overscroll-contain, um Scroll-Chaining zu stoppen', async () => {
+    const { container } = render(<AuditLogModal onClose={vi.fn()} />)
+    await screen.findByText('Zeitpunkt')
+
+    const scrollContainer = container.querySelector('.overflow-auto')
+    expect(scrollContainer?.className).toContain('overscroll-contain')
+  })
+
   describe('in English', () => {
     beforeEach(() => {
       i18n.changeLanguage('en')
