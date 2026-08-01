@@ -11,20 +11,25 @@ Technical architecture with diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 
 ## Download (recommended for non-developers)
 
-Prebuilt installers for macOS, Windows, and Linux are attached to each
-[GitHub Release](https://github.com/EGulinsky/rapport/releases) — download
-`Rapport-Installer-<version>.dmg` (macOS), `Rapport-Setup-<version>.msi`
-(Windows — a real Windows Installer package: Start Menu shortcut and a
-proper uninstaller registered in Add/Remove Programs), or
-`rapport-installer-<version>-linux.tar.gz` (Linux). Running it does
-everything in one step on every platform: installs Docker automatically if
-it's missing, pulls the prebuilt app images, starts them, and opens the app
-in your browser — no manual Docker setup or terminal commands needed. See
-[installer/README.md](installer/README.md) for details on what it does
-under the hood.
+Requires a working [Docker](https://www.docker.com/) installation (Docker
+Desktop on macOS/Windows, Docker Engine on Linux) — install that yourself
+first, then:
 
-The same releases also include `Rapport-Agent-<version>.{dmg,zip,tar.gz}` —
-the separate native helper for local file/notes/calls access, see
+```bash
+curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/.env.example
+mv .env.example .env   # optional: set JWT_SECRET_KEY explicitly, otherwise one is auto-generated
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Then open <http://localhost:3000>. This pulls the prebuilt, production-ready
+`ghcr.io/egulinsky/rapport-{backend,frontend}` images — no repo checkout, no
+local build. See the comments in `docker-compose.prod.yml` for how to pin a
+specific released version instead of always tracking `:latest`.
+
+[GitHub Releases](https://github.com/EGulinsky/rapport/releases) also
+include `Rapport-Agent-<version>.{dmg,zip,tar.gz}` — the separate native
+helper for local file/notes/calls access, see
 [agent/README.md](agent/README.md).
 
 ## Requirements (developer setup)

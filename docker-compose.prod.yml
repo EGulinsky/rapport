@@ -1,0 +1,59 @@
+name: rapport
+
+# Production distribution for end users: pulls the prebuilt backend/frontend
+# images from GHCR (published by .github/workflows/release.yml's
+# publish-images job on every GitHub release) instead of building anything
+# locally — no Playwright/Chromium build step, no repo checkout needed.
+# Requires only a working Docker installation (Docker Desktop on macOS/
+# Windows, Docker Engine on Linux) — nothing here installs Docker itself.
+#
+# Usage:
+#   curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/docker-compose.prod.yml
+#   curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/.env.example
+#   mv .env.example .env   # fill in JWT_SECRET_KEY if you want to set it explicitly (optional)
+#   docker compose -f docker-compose.prod.yml up -d
+#   open http://localhost:3000
+#
+# To pin a specific version instead of always tracking :latest, replace both
+# image tags below with a released version, e.g. ghcr.io/egulinsky/rapport-
+# backend:4.7.3 (see https://github.com/EGulinsky/rapport/releases for the
+# list of published versions/tags).
+#
+# Deliberately slimmer than the developer docker-compose.yml in this repo:
+# no Seq (structured-log viewer, a developer/ops convenience — backend/app/
+# logger.py already treats it as optional and fails silently if unreachable).
+
+services:
+  backend:
+    image: ghcr.io/egulinsky/rapport-backend:latest
+    container_name: rapport-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=sqlite:////app/data/jobtracker.db
+      - TZ=Europe/Berlin
+      - LOG_LEVEL=INFO
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+    volumes:
+      - rapport-data:/app/data
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    image: ghcr.io/egulinsky/rapport-frontend:latest
+    container_name: rapport-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  rapport-data:
+    name: rapport-data

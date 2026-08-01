@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.3',
+    date: '2026-07-31',
+    changes: [
+      'Replaced the downloadable per-OS installer app (which tried to silently install Docker itself, the most fragile and least-tested part of the whole flow) with a single production docker-compose.yml that just pulls the already-published Docker images — you install Docker yourself, then one command starts everything. See the updated Download section in the README.',
+    ],
+  },
+  {
     version: '4.7.2',
     date: '2026-07-31',
     changes: [

@@ -1,13 +1,13 @@
 name: Release Artifacts
 
 # Builds and publishes everything attached to a GitHub release: the Rapport
-# Agent installer for macOS/Windows/Linux, the Rapport Installer (backend/
-# frontend bootstrap) for the same three platforms, and the backend/frontend
-# Docker images themselves (pushed to GHCR so the installer can `docker pull`
-# prebuilt images instead of building Chromium locally). Deliberately
-# decoupled from ci.yml's push-triggered jobs — this only runs when a
-# release is published (or manually via workflow_dispatch), not on every
-# push to main.
+# Agent installer for macOS/Windows/Linux, and the backend/frontend Docker
+# images themselves (pushed to GHCR — the actual production-ready
+# deliverable for running the app itself; see docker-compose.prod.yml at
+# the repo root for the end-user distribution path, which just pulls these
+# images — no separate installer/bootstrap app). Deliberately decoupled from
+# ci.yml's push-triggered jobs — this only runs when a release is published
+# (or manually via workflow_dispatch), not on every push to main.
 
 on:
   release:
@@ -105,9 +105,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
 
       # GHCR packages pushed via GITHUB_TOKEN default to private regardless
-      # of repo visibility — without this, an end user's `docker pull` on
-      # the installer's bundled compose file fails with "unauthorized".
-      # Idempotent, safe to run on every release.
+      # of repo visibility — without this, an end user's `docker pull` via
+      # docker-compose.prod.yml fails with "unauthorized". Idempotent, safe
+      # to run on every release.
       - name: Make packages public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -230,112 +230,3 @@ jobs:
             "agent/packaging/dist/rapport-agent-${{ steps.version.outputs.version }}-linux.tar.gz" \
             --clobber
 
-  installer-macos:
-    name: Build Rapport Installer macOS .dmg
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Resolve version
-        id: version
-        run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Install packaging dependencies
-        working-directory: installer
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install -r packaging/requirements-packaging.txt
-
-      - name: Build .dmg
-        working-directory: installer
-        run: packaging/build_dmg.sh "${{ steps.version.outputs.version }}"
-
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "${{ steps.version.outputs.tag }}" \
-            "installer/packaging/dist/Rapport-Installer-${{ steps.version.outputs.version }}.dmg" \
-            --clobber
-
-  installer-windows:
-    name: Build Rapport Installer Windows Setup.msi
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      # A real Windows Installer package (a single MSI, WixUI_InstallDir's own
-      # license/directory/progress/finish wizard) instead of the previous
-      # PyInstaller+NSIS approach -- no Python involved. WiX itself is pulled
-      # in via NuGet PackageReferences in RapportPackage.wixproj during
-      # `dotnet build`, so no separate CLI tool install step is needed here
-      # (unlike NSIS's choco install above). windows-latest already has a
-      # .NET SDK preinstalled.
-      - name: Resolve version
-        id: version
-        shell: bash
-        run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Build Setup.msi
-        working-directory: installer/packaging/windows-wix
-        shell: pwsh
-        run: ./build_windows_wix.ps1 -Version "${{ steps.version.outputs.version }}"
-
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh release upload "${{ steps.version.outputs.tag }}" \
-            "installer/packaging/windows-wix/dist/Rapport-Setup-${{ steps.version.outputs.version }}.msi" \
-            --clobber
-
-  installer-linux:
-    name: Build Rapport Installer Linux .tar.gz
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Resolve version
-        id: version
-        run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Install packaging dependencies
-        working-directory: installer
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install -r packaging/requirements-packaging-linux.txt
-
-      - name: Build .tar.gz
-        working-directory: installer
-        run: bash packaging/build_linux.sh "${{ steps.version.outputs.version }}"
-
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "${{ steps.version.outputs.tag }}" \
-            "installer/packaging/dist/rapport-installer-${{ steps.version.outputs.version }}-linux.tar.gz" \
-            --clobber
