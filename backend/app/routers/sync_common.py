@@ -314,11 +314,18 @@ def _upsert_contact(
     event_date=None,
     extra: dict | None = None,
     user_id: Optional[int] = None,
+    match_signal: Optional[str] = None,
 ) -> None:
     """Create contact if not existing, always ensure link to application.
 
     extra: optional dict with keys telefon, rolle — applied to new contacts
     and used to fill empty fields on existing ones (existing values win).
+
+    match_signal: an already-translated description (from find_hint_apps()/
+    find_apps_from_addresses() via _classify_deterministic()'s det dict, or
+    the AI reasoning for the AI-classified path) of why this event's app_id
+    was picked — logged on the contact-link audit entry so a wrong link can
+    be traced back to its actual cause instead of just "linked to app X".
     """
     from app import models as _models
     email_addr = (email_addr or "").lower().strip()
@@ -378,8 +385,23 @@ def _upsert_contact(
             old_v, existing.rolle = existing.rolle, extra['rolle']
             add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
                       field="rolle", old_value=old_v, new_value=existing.rolle, user_id=user_id)
-        # INSERT OR IGNORE bypasses ORM relationship tracking — no autoflush race
+        # Check before the INSERT OR IGNORE (which can't tell us afterward
+        # whether the row already existed) so a contact re-matched to an
+        # application it's already linked to on every subsequent sync run
+        # doesn't spam the audit log with a duplicate "linked" entry.
+        already_linked = db.execute(
+            text("SELECT 1 FROM contact_application WHERE contact_id = :cid AND application_id = :aid"),
+            {"cid": existing.id, "aid": app_id},
+        ).first()
         db.execute(_LINK_SQL, {"cid": existing.id, "aid": app_id})
+        if not already_linked:
+            if match_signal:
+                add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
+                          reason_key="contact_linked_to_app_with_signal",
+                          reason_params={"match_signal": match_signal}, user_id=user_id)
+            else:
+                add_audit(db, "update", "sync", contact_id=existing.id, app_id=app_id,
+                          reason_key="contact_linked_to_app", user_id=user_id)
         db.expire(existing, ["applications"])
         from app.routers.sync_linkedin import attach_linkedin_messages_for_contact
         attach_linkedin_messages_for_contact(db, existing, user_id)
@@ -418,11 +440,12 @@ def upsert_contact_from_sender(
     event_date=None,
     body: str = "",
     user_id: Optional[int] = None,
+    match_signal: Optional[str] = None,
 ) -> None:
     """Parse 'Display Name <email@host>', extract footer info, and upsert contact."""
     name, addr = parseaddr(raw_sender or "")
     extra = _extract_footer_info(body, name) if body else {}
-    _upsert_contact(db, name, addr, app_id, firma, is_headhunter, event_date, extra, user_id=user_id)
+    _upsert_contact(db, name, addr, app_id, firma, is_headhunter, event_date, extra, user_id=user_id, match_signal=match_signal)
 
 
 # ── In-memory progress tracking ───────────────────────────────────────────────
@@ -863,24 +886,31 @@ def find_apps_from_addresses(
     to_cc_val: str,
     contact_email_index: dict[str, list[dict]],
     contact_domain_index: dict[str, list[dict]],
+    lang: str = "de",
 ) -> list[dict]:
-    """Match applications by FROM/TO/CC email addresses only — no content analysis."""
+    """Match applications by FROM/TO/CC email addresses only — no content analysis.
+
+    Each returned app_dict carries a "matched_via" key — a human-readable,
+    already-translated description of the concrete signal that caused the
+    match (the exact address or domain) — so a later audit-log entry can say
+    *why* a mail/contact was attached to this application instead of just
+    recording that it was."""
     seen_ids: set[int] = set()
     result: list[dict] = []
 
-    def _add(app_dict: dict) -> None:
+    def _add(app_dict: dict, matched_via: str) -> None:
         if app_dict["id"] not in seen_ids:
-            result.append(app_dict)
+            result.append({**app_dict, "matched_via": matched_via})
             seen_ids.add(app_dict["id"])
 
     for addr in extract_email_addresses(from_val + "," + to_cc_val):
         for app_dict in contact_email_index.get(addr, []):
-            _add(app_dict)
+            _add(app_dict, t("matched_via_email", lang, email=addr))
         if "@" in addr:
             domain = addr.split("@")[1]
             if domain not in _GENERIC_EMAIL_DOMAINS:
                 for app_dict in contact_domain_index.get(domain, []):
-                    _add(app_dict)
+                    _add(app_dict, t("matched_via_domain", lang, domain=domain))
 
     return result
 
@@ -889,32 +919,35 @@ def find_hint_apps(
     raw_text: str,
     term_to_apps: dict[str, list[dict]],
     contact_domain_index: Optional[dict[str, list[dict]]] = None,
+    lang: str = "de",
 ) -> list[dict]:
-    """Return apps matched by firm-name substring, contact email domain, or firm-in-domain."""
+    """Return apps matched by firm-name substring, contact email domain, or
+    firm-in-domain. Each returned app_dict carries a "matched_via" key — see
+    find_apps_from_addresses() for why."""
     text_lower = raw_text.lower()
     seen_ids: set[int] = set()
     hints: list[dict] = []
 
-    def _add(app_dict: dict) -> None:
+    def _add(app_dict: dict, matched_via: str) -> None:
         if app_dict["id"] not in seen_ids:
-            hints.append(app_dict)
+            hints.append({**app_dict, "matched_via": matched_via})
             seen_ids.add(app_dict["id"])
 
     for term, apps in term_to_apps.items():
         if term.lower() in text_lower:
             for a in apps:
-                _add(a)
+                _add(a, t("matched_via_term", lang, term=term))
 
     for domain in extract_email_domains(raw_text):
         if contact_domain_index:
             for a in contact_domain_index.get(domain, []):
-                _add(a)
+                _add(a, t("matched_via_domain", lang, domain=domain))
         domain_core = domain.split(".")[0]
         for term, apps in term_to_apps.items():
             tl = term.lower()
             if len(tl) >= 4 and (tl in domain or domain_core in tl):
                 for a in apps:
-                    _add(a)
+                    _add(a, t("matched_via_domain_term", lang, term=term, domain=domain))
 
     return hints
 
@@ -926,6 +959,7 @@ def find_matching_apps(
     contact_email_index: dict[str, list[dict]],
     contact_domain_index: dict[str, list[dict]],
     term_to_apps: dict[str, list[dict]],
+    lang: str = "de",
 ) -> list[dict]:
     """Unified mail-matching used identically by both Gmail and iCloud Mail
     (bulk and targeted) — combines find_apps_from_addresses() (exact contact
@@ -939,7 +973,11 @@ def find_matching_apps(
     the call site (subject-only at a cheap header-only pass, subject+body
     once fetched) — callers should re-run this once the body is available
     even if an earlier pass already matched, since body-only company/role
-    mentions can add matches a header-only pass couldn't see."""
+    mentions can add matches a header-only pass couldn't see.
+
+    Address matches are checked first, so when both an address match and a
+    text hint would explain the same app, the returned "matched_via" favors
+    the stronger, less ambiguous address-based signal."""
     seen_ids: set[int] = set()
     result: list[dict] = []
 
@@ -948,9 +986,9 @@ def find_matching_apps(
             result.append(app_dict)
             seen_ids.add(app_dict["id"])
 
-    for a in find_apps_from_addresses(from_val, to_cc_val, contact_email_index, contact_domain_index):
+    for a in find_apps_from_addresses(from_val, to_cc_val, contact_email_index, contact_domain_index, lang):
         _add(a)
-    for a in find_hint_apps(raw_text, term_to_apps, contact_domain_index):
+    for a in find_hint_apps(raw_text, term_to_apps, contact_domain_index, lang):
         _add(a)
 
     return result
@@ -1038,31 +1076,44 @@ def _classify_deterministic(
     """
     # Calendar events: always a gespräch
     if source in ('gcal', 'icloud_cal'):
+        match_signal = hint_apps[0].get('matched_via')
+        reason = t("calendar_always_interview", lang)
+        if match_signal:
+            reason = t("reason_with_match_signal", lang, reason=reason, match_signal=match_signal)
         return {
             'app_id': hint_apps[0]['id'],
             'typ': 'gespräch',
             'titel': _extract_title_from_raw(raw_text) or 'Termin',
             'status': None,
             'notiz': None,
-            'reason': t("calendar_always_interview", lang),
+            'reason': reason,
+            'match_signal': match_signal,
         }
 
     # Local documents: firm from filename/folder name, always notiz
     if source == 'local_files':
         if len(hint_apps) == 1:
+            match_signal = hint_apps[0].get('matched_via')
+            reason = t("local_file_note", lang)
+            if match_signal:
+                reason = t("reason_with_match_signal", lang, reason=reason, match_signal=match_signal)
             return {
                 'app_id': hint_apps[0]['id'],
                 'typ': 'notiz',
                 'titel': _extract_title_from_raw(raw_text) or 'Dokument',
                 'status': None,
                 'notiz': None,
-                'reason': t("local_file_note", lang),
+                'reason': reason,
+                'match_signal': match_signal,
             }
         return None  # multiple matches for a file → skip
 
     # Single firm match: classify event type by keywords
     if len(hint_apps) == 1:
+        match_signal = hint_apps[0].get('matched_via')
         typ, status, reason = _classify_type_from_text(raw_text, lang)
+        if match_signal:
+            reason = t("reason_with_match_signal", lang, reason=reason, match_signal=match_signal)
         notiz: Optional[str] = None
         if source == 'icloud_notes':
             notiz = _extract_body_preview(raw_text, max_len=300)
@@ -1078,11 +1129,16 @@ def _classify_deterministic(
             'status': status,
             'notiz': notiz,
             'reason': reason,
+            'match_signal': match_signal,
         }
 
     # Multiple firm matches → pick first app
     first_app = hint_apps[0]
+    match_signal = first_app.get('matched_via')
     typ, status, reason = _classify_type_from_text(raw_text, lang)
+    combined_reason = t("reason_with_match_count", lang, reason=reason, count=len(hint_apps))
+    if match_signal:
+        combined_reason = t("reason_with_match_signal", lang, reason=combined_reason, match_signal=match_signal)
     notiz: Optional[str] = None
     if source == 'icloud_notes':
         notiz = _extract_body_preview(raw_text, max_len=300)
@@ -1094,7 +1150,8 @@ def _classify_deterministic(
         'titel': _extract_title_from_raw(raw_text) or source,
         'status': status,
         'notiz': notiz,
-        'reason': t("reason_with_match_count", lang, reason=reason, count=len(hint_apps)),
+        'reason': combined_reason,
+        'match_signal': match_signal,
     }
 
 
@@ -1186,6 +1243,7 @@ def _save_deterministic_event(
             event_date=datum,
             body=raw_text,
             user_id=user_id,
+            match_signal=det.get('match_signal'),
         )
 
     # Queue status change for user review (PendingMatch)
@@ -1350,6 +1408,7 @@ def save_classified_event(
             event_date=datum,
             body=raw_text,
             user_id=user_id,
+            match_signal=ai_reason,
         )
 
     # Queue status change for user review (never apply automatically)

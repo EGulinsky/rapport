@@ -135,7 +135,7 @@ async def _do_local_files(user_id: int) -> dict:
             update_progress("local_files", folder_idx, total, t("folder_progress", lang, current=folder_idx + 1, total=total, name=subfolder_name))
 
             # Match subfolder name against firm index
-            hint_apps = find_hint_apps(subfolder_name, term_to_apps)
+            hint_apps = find_hint_apps(subfolder_name, term_to_apps, lang=lang)
             if not hint_apps:
                 skipped += len(subfolder_files)
                 continue

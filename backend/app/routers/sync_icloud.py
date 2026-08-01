@@ -371,7 +371,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
             # email address, unlike Gmail.
             quick_hints = find_matching_apps(
                 sender, to_cc, f"Von: {sender}\nBetreff: {subject}",
-                contact_email_index, contact_domain_index, term_to_apps,
+                contact_email_index, contact_domain_index, term_to_apps, lang,
             )
             if not quick_hints:
                 synced_ids.add(msg_id)
@@ -393,7 +393,7 @@ async def _do_icloud_mail(user_id: int) -> dict:
             # instead of the account owner's own name for sent mail.
             to_recipients = ", ".join(p.strip() for p in to_cc.split(",") if p.strip())
             raw = f"Von: {sender}\nAn: {to_recipients}\nBetreff: {subject}\n\n{body}"
-            hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps)
+            hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps, lang)
 
             try:
                 ok = await process_item(db, "icloud_mail", msg_id, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
@@ -555,7 +555,7 @@ async def _sync_notes_with_api(
             continue
 
         raw = f"Titel: {title}\n\n{content_text[:2000]}"
-        hint_apps = find_hint_apps(raw, term_to_apps)
+        hint_apps = find_hint_apps(raw, term_to_apps, lang=lang)
 
         try:
             ok = await process_item(db, "icloud_notes", note_key, raw, None, hint_apps=hint_apps, user_id=user_id)
@@ -665,7 +665,7 @@ async def _do_icloud_notes(user_id: int) -> dict:
                 continue
 
             raw = f"Titel: {title}\n\n{body[:2000]}"
-            hint_apps = find_hint_apps(raw, term_to_apps)
+            hint_apps = find_hint_apps(raw, term_to_apps, lang=lang)
             if not hint_apps:
                 # No known firm mentioned → can never match an application; skip AI
                 skipped += 1
@@ -977,7 +977,7 @@ async def _do_icloud_cal(user_id: int) -> dict:
                 + (f"Teilnehmer: {', '.join(participants)}\n" if participants else "")
                 + f"Beschreibung: {desc[:800]}"
             )
-            hint_apps = find_hint_apps(raw, term_to_apps)
+            hint_apps = find_hint_apps(raw, term_to_apps, lang=lang)
 
             try:
                 ok = await process_item(db, "icloud_cal", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)
@@ -1130,7 +1130,7 @@ async def _do_icloud_reminders(user_id: int) -> dict:
                 pass
 
             raw = f"Erinnerung: {summary}\n{desc[:800]}"
-            hint_apps = find_hint_apps(raw, term_to_apps)
+            hint_apps = find_hint_apps(raw, term_to_apps, lang=lang)
 
             try:
                 ok = await process_item(db, "icloud_todo", uid, raw, date_hint, hint_apps=hint_apps, user_id=user_id)

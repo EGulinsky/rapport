@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.6',
+    date: '2026-08-01',
+    changes: [
+      'Audit log: mail, calendar, and contact-link entries created by sync now record the concrete matching signal — the contact email/domain, or company/role keyword — that caused the item to be attached to a given application, instead of only the event-type reason. Previously a contact silently re-linked to a newly-matched application left no audit trail at all; that link now always writes an entry as well.',
+    ],
+  },
+  {
     version: '4.7.5',
     date: '2026-08-01',
     changes: [

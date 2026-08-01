@@ -529,7 +529,7 @@ async def _do_gmail(user_id: int) -> dict:
                 continue
 
             quick_text = f"Von: {sender}\nBetreff: {subject}"
-            hint_apps = find_matching_apps(sender, to_cc, quick_text, contact_email_index, contact_domain_index, term_to_apps)
+            hint_apps = find_matching_apps(sender, to_cc, quick_text, contact_email_index, contact_domain_index, term_to_apps, lang)
             if not hint_apps:
                 mark_synced(db, "gmail", msg_id, user_id)
                 skipped += 1
@@ -581,7 +581,7 @@ async def _do_gmail(user_id: int) -> dict:
             # Re-check with the full body — always a superset of the phase-1
             # (subject-only) result, since raw only adds text; can surface a
             # company/role mentioned only in the body, not the subject.
-            hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps)
+            hint_apps = find_matching_apps(sender, to_cc, raw, contact_email_index, contact_domain_index, term_to_apps, lang)
 
             _t0 = _time.perf_counter()
             try:
@@ -877,7 +877,7 @@ async def _do_gcal(user_id: int) -> dict:
             # ever match it to an application.
             hint_apps = find_matching_apps(
                 org_email, att_emails, f"{summary} {desc}",
-                contact_email_index, contact_domain_index, term_to_apps,
+                contact_email_index, contact_domain_index, term_to_apps, lang,
             )
             if not hint_apps:
                 skipped += 1
