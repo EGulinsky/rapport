@@ -26,6 +26,32 @@ from app.cv_extract import extract_text_from_file
 MAX_JD_ATTACHMENTS = 3
 MAX_JD_TEXT_CHARS = 3000
 
+# agent/text_extract.py returns this literal string (never raises) when its
+# own extraction fails -- must not be mistaken for real extracted text, or a
+# German error message would get fed to the AI prompt as if it were the JD.
+_AGENT_EXTRACT_ERROR_PREFIX = "[Fehler beim Lesen:"
+
+
+async def _extract_via_agent(db: Session, path: str) -> str | None:
+    """local_files-synced "file" Events have no Attachment row at all -- the
+    file lives on the user's Mac, not in the backend's managed storage (see
+    routers/sync_files.py, which only ever stores the host path in
+    Event.notiz) -- so the backend container can't read it directly and has
+    to ask the agent to extract the text itself via its existing
+    GET /files/file endpoint."""
+    from app.agent_client import agent_get
+
+    try:
+        resp = await agent_get(db, "/files/file", params={"path": path}, timeout=25)
+        if resp.status_code != 200:
+            return None
+        text = (resp.json() or {}).get("text")
+    except Exception:
+        return None
+    if not text or text.startswith(_AGENT_EXTRACT_ERROR_PREFIX):
+        return None
+    return text[:MAX_JD_TEXT_CHARS]
+
 
 async def resolve_jd_texts(db: Session, app: models.Application) -> list[dict]:
     """Returns up to MAX_JD_ATTACHMENTS {"filename": str, "text": str}
@@ -43,15 +69,20 @@ async def resolve_jd_texts(db: Session, app: models.Application) -> list[dict]:
 
     jd_texts: list[dict] = []
     for ev in events:
-        for att in ev.attachments:
-            if len(jd_texts) >= MAX_JD_ATTACHMENTS:
-                break
-            full_path = os.path.join(ATTACHMENTS_ROOT, att.storage_path)
-            text = extract_text_from_file(full_path, max_chars=MAX_JD_TEXT_CHARS)
-            if text:
-                jd_texts.append({"filename": att.filename, "text": text})
         if len(jd_texts) >= MAX_JD_ATTACHMENTS:
             break
+        if ev.attachments:
+            for att in ev.attachments:
+                if len(jd_texts) >= MAX_JD_ATTACHMENTS:
+                    break
+                full_path = os.path.join(ATTACHMENTS_ROOT, att.storage_path)
+                text = extract_text_from_file(full_path, max_chars=MAX_JD_TEXT_CHARS)
+                if text:
+                    jd_texts.append({"filename": att.filename, "text": text})
+        elif ev.source == "local_files" and ev.notiz:
+            text = await _extract_via_agent(db, ev.notiz)
+            if text:
+                jd_texts.append({"filename": ev.titel or os.path.basename(ev.notiz), "text": text})
 
     if jd_texts:
         return jd_texts

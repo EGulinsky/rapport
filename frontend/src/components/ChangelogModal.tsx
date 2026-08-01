@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.8',
+    date: '2026-08-01',
+    changes: [
+      'Fixed the audit log no longer scrolling once its content grew past the modal\'s height.',
+      'AI match score/success probability now also read job-description text from files attached via local-folder sync, not just manually uploaded ones — these had no stored copy in the app\'s own file storage and were silently invisible to scoring, since the file only exists on the Mac itself.',
+    ],
+  },
+  {
     version: '4.7.7',
     date: '2026-08-01',
     changes: [

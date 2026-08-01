@@ -144,7 +144,7 @@ export default function AuditLogModal({ onClose, initialAppId }: Props) {
         </div>
 
         {/* Table */}
-        <div className="overflow-auto flex-1">
+        <div className="overflow-auto flex-1 min-h-0">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
               <tr>

@@ -109,3 +109,116 @@ class TestResolveJdTexts:
         assert result == []
         db_session.refresh(app)
         assert app.jd_link_text_cache is None
+
+
+class TestResolveJdTextsLocalFiles:
+    """local_files-synced "file" Events (folder-watch attachments, see
+    routers/sync_files.py) never get an Attachment row -- the file lives on
+    the user's Mac, not in the backend's managed storage -- so they're only
+    reachable through the agent's own text-extraction endpoint. Production
+    incident (2026-08): an application's PDF requirements doc arrived this
+    way and was silently invisible to scoring."""
+
+    async def test_positiv_local_files_event_ohne_attachment_wird_ueber_agent_gelesen(self, db_session):
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="file", source="local_files",
+            titel="Anforderungen.pdf", notiz="/Users/eugen/Stellen/Anforderungen.pdf",
+        )
+        db_session.commit()
+
+        class _FakeResp:
+            status_code = 200
+            def json(self):
+                return {"name": "Anforderungen.pdf", "path": "/Users/eugen/Stellen/Anforderungen.pdf",
+                        "text": "Wir suchen einen Senior Engineer mit 5 Jahren Erfahrung."}
+
+        async def _fake_agent_get(db, path, params=None, timeout=30):
+            assert path == "/files/file"
+            assert params == {"path": "/Users/eugen/Stellen/Anforderungen.pdf"}
+            return _FakeResp()
+
+        with patch("app.agent_client.agent_get", new=_fake_agent_get):
+            result = await resolve_jd_texts(db_session, app)
+
+        assert len(result) == 1
+        assert result[0]["filename"] == "Anforderungen.pdf"
+        assert "Senior Engineer" in result[0]["text"]
+
+    async def test_negativ_agent_fehler_marker_text_wird_nicht_uebernommen(self, db_session):
+        """agent/text_extract.py returns a literal "[Fehler beim Lesen: ...]"
+        string (never raises) when its own extraction fails -- must not be
+        fed to the AI prompt as if it were the real job description."""
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="file", source="local_files",
+            titel="Kaputt.pdf", notiz="/Users/eugen/Stellen/Kaputt.pdf",
+        )
+        db_session.commit()
+
+        class _FakeResp:
+            status_code = 200
+            def json(self):
+                return {"text": "[Fehler beim Lesen: PDF ist verschlüsselt]"}
+
+        async def _fake_agent_get(db, path, params=None, timeout=30):
+            return _FakeResp()
+
+        with patch("app.agent_client.agent_get", new=_fake_agent_get):
+            result = await resolve_jd_texts(db_session, app)
+
+        assert result == []
+
+    async def test_negativ_agent_nicht_erreichbar_wird_still_uebersprungen(self, db_session):
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="file", source="local_files",
+            titel="Anforderungen.pdf", notiz="/Users/eugen/Stellen/Anforderungen.pdf",
+        )
+        db_session.commit()
+
+        async def _fake_agent_get(db, path, params=None, timeout=30):
+            raise ConnectionError("Agent nicht erreichbar")
+
+        with patch("app.agent_client.agent_get", new=_fake_agent_get):
+            result = await resolve_jd_texts(db_session, app)
+
+        assert result == []
+
+    async def test_negativ_datei_nicht_gefunden_404_wird_uebersprungen(self, db_session):
+        app = application_factory(db_session)
+        event_factory(
+            db_session, app, typ="file", source="local_files",
+            titel="Geloescht.pdf", notiz="/Users/eugen/Stellen/Geloescht.pdf",
+        )
+        db_session.commit()
+
+        class _FakeResp:
+            status_code = 404
+            def json(self):
+                return {}
+
+        async def _fake_agent_get(db, path, params=None, timeout=30):
+            return _FakeResp()
+
+        with patch("app.agent_client.agent_get", new=_fake_agent_get):
+            result = await resolve_jd_texts(db_session, app)
+
+        assert result == []
+
+    async def test_positiv_echtes_attachment_hat_vorrang_vor_local_files_fallback(self, db_session):
+        """When a "file" event already has a real Attachment row, the
+        local_files/agent fallback must never even be attempted for it."""
+        app = application_factory(db_session)
+        ev = event_factory(db_session, app, typ="file", source="local_files", notiz="/some/path.pdf")
+        store_attachment(db_session, ev.id, "real-upload.txt", b"Echter Upload-Inhalt", user_id=app.user_id)
+        db_session.commit()
+
+        async def _fake_agent_get(db, path, params=None, timeout=30):
+            raise AssertionError("agent_get should not be called when a real Attachment exists")
+
+        with patch("app.agent_client.agent_get", new=_fake_agent_get):
+            result = await resolve_jd_texts(db_session, app)
+
+        assert len(result) == 1
+        assert result[0]["filename"] == "real-upload.txt"
