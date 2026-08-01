@@ -17,15 +17,15 @@ first, then:
 
 ```bash
 curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/docker-compose.prod.yml
-curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/.env.example
-mv .env.example .env   # optional: set JWT_SECRET_KEY explicitly, otherwise one is auto-generated
 docker compose -f docker-compose.prod.yml up -d
 ```
 
 Then open <http://localhost:3000>. This pulls the prebuilt, production-ready
 `ghcr.io/egulinsky/rapport-{backend,frontend}` images — no repo checkout, no
-local build. See the comments in `docker-compose.prod.yml` for how to pin a
-specific released version instead of always tracking `:latest`.
+local build, no `.env` file needed (a `JWT_SECRET_KEY` is auto-generated and
+persisted on first start; set your own via an env var only if you specifically
+need to pin it). See the comments in `docker-compose.prod.yml` for how to pin
+a specific released version instead of always tracking `:latest`.
 
 [GitHub Releases](https://github.com/EGulinsky/rapport/releases) also
 include `Rapport-Agent-<version>.{dmg,zip,tar.gz}` — the separate native

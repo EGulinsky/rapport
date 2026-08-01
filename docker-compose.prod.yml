@@ -9,10 +9,13 @@ name: rapport
 #
 # Usage:
 #   curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/docker-compose.prod.yml
-#   curl -O https://raw.githubusercontent.com/EGulinsky/rapport/main/.env.example
-#   mv .env.example .env   # fill in JWT_SECRET_KEY if you want to set it explicitly (optional)
 #   docker compose -f docker-compose.prod.yml up -d
 #   open http://localhost:3000
+#
+# No .env file needed — JWT_SECRET_KEY below defaults to empty, and the
+# backend auto-generates + persists its own secret on first start
+# (app/auth/security.py::_jwt_secret()) whenever it's unset. Only set the
+# env var yourself if you specifically need to pin it to a known value.
 #
 # To pin a specific version instead of always tracking :latest, replace both
 # image tags below with a released version, e.g. ghcr.io/egulinsky/rapport-
