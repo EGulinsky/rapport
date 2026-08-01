@@ -1395,16 +1395,32 @@ async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[
 _CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/"
 
 
-async def _scrape_linkedin_connections(context, max_pages: int = 50, lang: str = "de") -> list[dict]:
+async def _scrape_linkedin_connections(context, max_scrolls: int = 60, lang: str = "de") -> list[dict]:
     """Scrapes the user's own LinkedIn connections list ("My Network" →
     Connections) into contact candidates ({"name","headline","profile_url"}).
 
-    Reuses _parse_people_anchors for the per-card text parsing (identical
-    card markup to the people-search-results page). Pagination follows
-    _scrape_category's "click Next" strategy since this list is
-    server-paginated, not infinite-scroll — but each page still needs a
-    scroll-to-bottom first to force LinkedIn's lazy card rendering, same as
-    the job-tracker tabs.
+    Two things distinguish this page's markup from the people-search-results
+    page (real, live-verified — the reused _parse_people_anchors approach
+    silently returned zero results here before this was caught):
+
+    1. **No connection-degree marker.** Every entry here is already a 1st-
+       degree connection by definition, so LinkedIn doesn't render the
+       "• 1st"/"• 2nd" badge this page's cards carry on the search-results
+       page — _parse_people_anchors' degree-marker filter (needed there to
+       reject "mutual connections" mention-links) rejects every real card
+       here, since none of them ever have that marker.
+    2. **Each card renders two `a[href*='/in/']` anchors for the same
+       profile URL**: one wrapping only the avatar image (empty
+       `inner_text()`), one wrapping the name+headline text block. Dedup is
+       done by href, but only once a non-empty-text anchor for that href is
+       seen — the empty photo-only anchor is skipped without being recorded,
+       so it doesn't shadow the real one.
+
+    Pagination is scroll-triggered (infinite scroll, no "Next" button, no
+    `?page=` param) rather than the job-tracker's click-based pagination —
+    keeps scrolling to the bottom until two consecutive scrolls yield no new
+    candidates (or `max_scrolls` is hit), which also naturally terminates
+    once the account's actual connection count is reached.
 
     Best-effort like every other LinkedIn scraper in this module: any
     failure (layout change, rate limit, no session) returns whatever was
@@ -1426,43 +1442,43 @@ async def _scrape_linkedin_connections(context, max_pages: int = 50, lang: str =
         return []
 
     try:
-        for page_num in range(max_pages):
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await asyncio.sleep(1)
+        stall_scrolls = 0
+        for scroll_num in range(max_scrolls):
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await asyncio.sleep(1.5)
 
             anchors = await page.locator("a[href*='/in/']").all()
-            candidates.extend(await _parse_people_anchors(anchors, seen_urls))
-            _state["step"] = t("li_connections_page_result", lang, page=page_num + 1, count=len(candidates))
+            before = len(candidates)
+            for a in anchors:
+                href = await a.get_attribute("href")
+                if not href or "/in/" not in href:
+                    continue
+                url = href.split("?")[0].rstrip("/")
+                if url in seen_urls:
+                    continue
+                raw_text = (await a.inner_text()).strip()
+                if not raw_text:
+                    continue  # the avatar-only duplicate anchor for this same profile
+                seen_urls.add(url)
+                lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+                if not lines:
+                    continue
+                name = lines[0]
+                headline = lines[1] if len(lines) > 1 else None
+                candidates.append({
+                    "name": name[:200],
+                    "headline": (headline[:300] if headline else None),
+                    "profile_url": url,
+                })
 
-            if page_num >= max_pages - 1:
-                break
+            _state["step"] = t("li_connections_page_result", lang, page=scroll_num + 1, count=len(candidates))
 
-            clicked_next = False
-            next_selectors = [
-                "button[aria-label*='Next']:not([disabled])",
-                "button[aria-label*='next' i]:not([disabled])",
-                ".artdeco-pagination__button--next:not([disabled])",
-            ]
-            for sel in next_selectors:
-                loc = page.locator(sel).first
-                try:
-                    if await loc.count() > 0 and await loc.is_visible(timeout=1000):
-                        await loc.scroll_into_view_if_needed(timeout=3000)
-                        await asyncio.sleep(0.5)
-                        await loc.click(timeout=5000)
-                        try:
-                            await page.wait_for_load_state("networkidle", timeout=15000)
-                        except Exception:
-                            await asyncio.sleep(3)
-                        clicked_next = True
-                        break
-                except Exception:
-                    pass
-
-            if not clicked_next:
-                break
+            if len(candidates) == before:
+                stall_scrolls += 1
+                if stall_scrolls >= 2:
+                    break
+            else:
+                stall_scrolls = 0
     except Exception as e:
         log.debug("LinkedIn-Kontakte: Scraping-Fehler: {}", e)
     finally:

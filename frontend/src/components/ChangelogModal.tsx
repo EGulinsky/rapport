@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.12',
+    date: '2026-08-01',
+    changes: [
+      'Fixed LinkedIn contacts sync silently finding nothing: real connections never carry the "1st-degree" marker the scraper required (that only appears on the search-results page, reused by mistake), and each connection actually renders two overlapping links (photo + name), which the old dedup logic mishandled. Pagination was also switched from a nonexistent "Next" button to real scroll-triggered loading.',
+    ],
+  },
+  {
     version: '4.7.11',
     date: '2026-08-01',
     changes: [
