@@ -1153,7 +1153,7 @@ const DEFAULT_SYNC: SyncSettings = {
   icloud_enabled: false, icloud_mail_enabled: false, icloud_cal_enabled: false,
   icloud_notes_enabled: false, icloud_reminders_enabled: false,
   icloud_contacts_enabled: false, icloud_calls_enabled: false,
-  linkedin_enabled: false,
+  linkedin_enabled: false, linkedin_contacts_enabled: false,
   files_enabled: false,
   audit_log_level: 'normal',
 }
@@ -1243,6 +1243,8 @@ function SyncControlPanel() {
 
       <SyncGroup label={t('syncControl.linkedin')} enabled={settings.linkedin_enabled} onToggle={v => toggle('linkedin_enabled', v)}>
         <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.linkedinHint')}</div>
+        <SyncRow label={t('syncControl.contacts')} enabled={settings.linkedin_contacts_enabled} onToggle={v => toggle('linkedin_contacts_enabled', v)} />
+        <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.linkedinContactsHint')}</div>
       </SyncGroup>
 
       <SyncGroup label={t('syncControl.localDocuments')} enabled={settings.files_enabled} onToggle={v => toggle('files_enabled', v)}>

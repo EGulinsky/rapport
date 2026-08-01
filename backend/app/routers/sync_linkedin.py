@@ -1313,6 +1313,59 @@ _DEGREE_SUFFIX_RE = re.compile(r"\s*•\s*(1st|2nd|3rd\+?)\s*$", re.IGNORECASE)
 _DEGREE_MARKER_RE = re.compile(r"•\s*(1st|2nd|3rd\+?)", re.IGNORECASE)
 
 
+async def _parse_people_anchors(anchors, seen_urls: set[str], limit: int | None = None) -> list[dict]:
+    """Turns a list of Playwright `a[href*='/in/']` locators into
+    ({"name","headline","profile_url"}) candidates — the card-parsing core
+    shared by _linkedin_search_people (search-results page) and
+    _scrape_linkedin_connections (connections-list page), whose card markup
+    (name/degree/headline/buttons all inside one link) is identical.
+
+    LinkedIn's result pages also link people who are only *mentioned* as
+    "X, Y and 20 other mutual connections" inside a FOREIGN card — these
+    mention-links share the same /in/ URL structure as real cards but carry
+    only the bare name as text (no connection-degree marker). Live-observed
+    (search for 'Michael Schmidt'): without this filter, those mentions
+    consumed the `limit` before real further results were scanned, making it
+    look like only the first results page came back. A real card always has
+    a connection-degree marker ("• 1st/2nd/3rd") in its text.
+
+    `seen_urls` is mutated in place so callers can dedupe across repeated
+    calls (e.g. paginated scraping).
+    """
+    candidates: list[dict] = []
+    for a in anchors:
+        href = await a.get_attribute("href")
+        if not href or "/in/" not in href:
+            continue
+        url = href.split("?")[0].rstrip("/")
+        if url in seen_urls:
+            continue
+
+        raw_text = await a.inner_text()
+        if not _DEGREE_MARKER_RE.search(raw_text):
+            continue
+        seen_urls.add(url)
+
+        lines = []
+        for ln in raw_text.splitlines():
+            ln = _DEGREE_SUFFIX_RE.sub("", ln).strip()
+            if ln and ln.lower() not in _PEOPLE_NOISE:
+                lines.append(ln)
+        if not lines:
+            continue
+        name = lines[0]
+        headline = lines[1] if len(lines) > 1 else None
+
+        candidates.append({
+            "name": name[:200],
+            "headline": (headline[:300] if headline else None),
+            "profile_url": url,
+        })
+        if limit is not None and len(candidates) >= limit:
+            break
+    return candidates
+
+
 async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[dict]:
     """Sucht LinkedIn-Personen, liefert bis zu `limit` Kandidaten
     ({"name","headline","profile_url"}). Best-effort — jeder Fehler (Layout-
@@ -1325,56 +1378,93 @@ async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[
     (Verbindungsgrad, Button-Beschriftungen) explizit herausgefiltert statt
     blind die zweite Zeile als Headline zu vertrauen.
     """
-    candidates: list[dict] = []
     page = await context.new_page()
     try:
         search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(query)}"
         await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1500)
         anchors = await page.locator("a[href*='/in/']").all()
-        seen_urls: set[str] = set()
-        for a in anchors:
-            href = await a.get_attribute("href")
-            if not href or "/in/" not in href:
-                continue
-            url = href.split("?")[0].rstrip("/")
-            if url in seen_urls:
-                continue
-
-            raw_text = await a.inner_text()
-            # LinkedIns Ergebnisseite verlinkt auch Personen, die nur als
-            # "X, Y und 20 weitere gemeinsame Kontakte" in einer FREMDEN Karte
-            # erwähnt werden — diese Erwähnungs-Links haben dieselbe /in/-URL-
-            # Struktur wie echte Suchergebnisse, aber nur den nackten Namen als
-            # Text (kein Verbindungsgrad). Live beobachtet (Suche nach 'Michael
-            # Schmidt'): ohne Filter landeten diese Erwähnungen als Kandidaten
-            # ohne Firma/Headline im Ergebnis und verbrauchten das `limit`-
-            # Kontingent, bevor echte weitere Treffer gescannt wurden — wirkte
-            # wie "nur die erste Trefferseite". Ein echtes Suchergebnis hat
-            # immer einen Verbindungsgrad ("• 1st/2nd/3rd") im Kartentext.
-            if not _DEGREE_MARKER_RE.search(raw_text):
-                continue
-            seen_urls.add(url)
-
-            lines = []
-            for ln in raw_text.splitlines():
-                ln = _DEGREE_SUFFIX_RE.sub("", ln).strip()
-                if ln and ln.lower() not in _PEOPLE_NOISE:
-                    lines.append(ln)
-            if not lines:
-                continue
-            name = lines[0]
-            headline = lines[1] if len(lines) > 1 else None
-
-            candidates.append({
-                "name": name[:200],
-                "headline": (headline[:300] if headline else None),
-                "profile_url": url,
-            })
-            if len(candidates) >= limit:
-                break
+        return await _parse_people_anchors(anchors, set(), limit)
     except Exception as e:
         log.debug("LinkedIn-Personensuche Fehler für '{}': {}", query, e)
+        return []
+    finally:
+        await page.close()
+
+
+_CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+
+
+async def _scrape_linkedin_connections(context, max_pages: int = 50, lang: str = "de") -> list[dict]:
+    """Scrapes the user's own LinkedIn connections list ("My Network" →
+    Connections) into contact candidates ({"name","headline","profile_url"}).
+
+    Reuses _parse_people_anchors for the per-card text parsing (identical
+    card markup to the people-search-results page). Pagination follows
+    _scrape_category's "click Next" strategy since this list is
+    server-paginated, not infinite-scroll — but each page still needs a
+    scroll-to-bottom first to force LinkedIn's lazy card rendering, same as
+    the job-tracker tabs.
+
+    Best-effort like every other LinkedIn scraper in this module: any
+    failure (layout change, rate limit, no session) returns whatever was
+    collected so far rather than aborting the whole contacts sync.
+    """
+    candidates: list[dict] = []
+    seen_urls: set[str] = set()
+    page = await context.new_page()
+    try:
+        await page.goto(_CONNECTIONS_URL, wait_until="domcontentloaded", timeout=30000)
+    except Exception as e:
+        log.debug("LinkedIn-Kontakte: goto fehlgeschlagen: {}", e)
+        await page.close()
+        return []
+
+    landed_url = page.url
+    if "login" in landed_url or "authwall" in landed_url:
+        await page.close()
+        return []
+
+    try:
+        for page_num in range(max_pages):
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(1)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(1.5)
+
+            anchors = await page.locator("a[href*='/in/']").all()
+            candidates.extend(await _parse_people_anchors(anchors, seen_urls))
+            _state["step"] = t("li_connections_page_result", lang, page=page_num + 1, count=len(candidates))
+
+            if page_num >= max_pages - 1:
+                break
+
+            clicked_next = False
+            next_selectors = [
+                "button[aria-label*='Next']:not([disabled])",
+                "button[aria-label*='next' i]:not([disabled])",
+                ".artdeco-pagination__button--next:not([disabled])",
+            ]
+            for sel in next_selectors:
+                loc = page.locator(sel).first
+                try:
+                    if await loc.count() > 0 and await loc.is_visible(timeout=1000):
+                        await loc.scroll_into_view_if_needed(timeout=3000)
+                        await asyncio.sleep(0.5)
+                        await loc.click(timeout=5000)
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=15000)
+                        except Exception:
+                            await asyncio.sleep(3)
+                        clicked_next = True
+                        break
+                except Exception:
+                    pass
+
+            if not clicked_next:
+                break
+    except Exception as e:
+        log.debug("LinkedIn-Kontakte: Scraping-Fehler: {}", e)
     finally:
         await page.close()
     return candidates
@@ -1396,6 +1486,60 @@ def _split_headline(headline: Optional[str]) -> tuple[Optional[str], Optional[st
             rolle, firma = headline.split(sep, 1)
             return rolle.strip() or None, firma.strip() or None
     return headline.strip() or None, None
+
+
+async def _sync_contacts_from_linkedin(db: Session, user_id: Optional[int]) -> tuple[int, list[str], list[int]]:
+    """Scrapes the user's own LinkedIn connections and imports them the same
+    unconditional way iCloud/Google contacts are (_sync_contacts_from_parsed
+    in sync_icloud.py) — every connection gets imported, no per-contact
+    relevance gating; linking to an application only happens afterwards via
+    the same mention-based backfill _sync_all_contacts() already runs for
+    every provider.
+
+    No first/last-name split is attempted (unlike vCard/Google contacts,
+    which have a structured field for it) — same "don't guess" choice
+    already made for the manual LinkedIn people-search import
+    (import_people()), since a plain "first token = Vorname" split on a
+    LinkedIn display name isn't reliable across naming conventions.
+
+    Requires an existing LinkedIn session (same _get_linkedin_context reuse
+    as company/people sync — no login attempt here, matching every other
+    LinkedIn contacts/company entry point). Returns (0, [], []) without an
+    error when no session is configured, mirroring how _sync_all_contacts
+    already silently skips a provider with no credentials."""
+    from app.routers.sync_company import _get_linkedin_context
+    from app.routers.sync_icloud import _sync_contacts_from_parsed
+
+    li_ctx = None
+    try:
+        li_ctx = await _get_linkedin_context(user_id)
+    except Exception as e:
+        log.warning("LinkedIn-Kontakte: Browser-Start fehlgeschlagen: {}", e)
+    if not li_ctx:
+        return 0, [], []
+
+    playwright, browser, context = li_ctx
+    try:
+        raw_candidates = await _scrape_linkedin_connections(context)
+    finally:
+        await browser.close()
+        await playwright.stop()
+
+    parsed_list = []
+    for cand in raw_candidates:
+        name = cand["name"]
+        rolle, firma = _split_headline(cand.get("headline"))
+        parsed_list.append({
+            "name": name, "vorname": None, "fn": name, "email": None,
+            "firma": firma, "rolle": rolle, "linkedin_url": cand["profile_url"],
+            "phones": [],
+        })
+
+    lang = resolve_ui_language(db, user_id)
+    return await _sync_contacts_from_parsed(
+        parsed_list, db, user_id, lang, "linkedin_contacts",
+        "contact_imported_linkedin_connections", "contact_imported_linkedin_connections_with_reason",
+    )
 
 
 @router.get("/people/search")

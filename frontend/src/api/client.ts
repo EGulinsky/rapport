@@ -329,7 +329,7 @@ export const api = {
   },
 
   sync: {
-    progress: () => request<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean; created: number; updated: number; skipped: number }>>('/sync/google/progress'),
+    progress: () => request<Record<string, { label: string; step: string; current: number; total: number; percent: number; done: boolean; created: number; updated: number; skipped: number; current_item: string | null }>>('/sync/google/progress'),
     batchResults: () => request<Record<string, { done: boolean; processed?: number; created?: number; skipped?: number; updated?: number; errors?: string[] }>>('/sync/google/batch/results'),
     googleStatus: () => request<GoogleSyncStatus>('/sync/google/status'),
     googleSaveCredentials: (data: { client_id: string; client_secret: string }) =>

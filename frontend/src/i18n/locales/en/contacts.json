@@ -76,6 +76,8 @@
     "resyncMenuTitle": "Re-Sync",
     "resyncMenuSubtitle": "Overwrite with the latest data from every connected service.",
     "syncResult": "{{synced}} synced, {{notFound}} without a match",
+    "syncCurrentItem": "Processing: {{name}}",
+    "syncLiveCounts": "{{created}} new · {{updated}} updated · {{skipped}} skipped",
     "genericError": "Something went wrong"
   },
   "contactModal": {

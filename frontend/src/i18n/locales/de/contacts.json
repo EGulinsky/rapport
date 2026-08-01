@@ -76,6 +76,8 @@
     "resyncMenuTitle": "Re-Sync",
     "resyncMenuSubtitle": "Mit den aktuellen Daten aus jedem verbundenen Dienst überschreiben.",
     "syncResult": "{{synced}} synchronisiert, {{notFound}} ohne passenden Kontakt",
+    "syncCurrentItem": "Verarbeite: {{name}}",
+    "syncLiveCounts": "{{created}} neu · {{updated}} aktualisiert · {{skipped}} übersprungen",
     "genericError": "Etwas ist schiefgelaufen"
   },
   "contactModal": {

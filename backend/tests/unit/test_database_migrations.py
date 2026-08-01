@@ -282,6 +282,22 @@ class TestMigrateSyncSettingsFiles:
         db_module._migrate_sync_settings_files()  # must not raise
 
 
+class TestMigrateSyncSettingsLinkedinContacts:
+    def test_positiv_fuegt_spalte_mit_default_0_hinzu(self, db_path):
+        _drop_columns(db_path, "sync_settings", "linkedin_contacts_enabled")
+        db_module._migrate_sync_settings_linkedin_contacts()
+        assert "linkedin_contacts_enabled" in _cols(db_path, "sync_settings")
+
+    def test_negativ_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "sync_settings")
+        db_module._migrate_sync_settings_linkedin_contacts()  # must not raise
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_sync_settings_linkedin_contacts()
+        db_module._migrate_sync_settings_linkedin_contacts()  # must not raise
+        assert "linkedin_contacts_enabled" in _cols(db_path, "sync_settings")
+
+
 class TestMigrateGoogleEmail:
     def test_positiv_fuegt_spalte_hinzu(self, db_path):
         _drop_columns(db_path, "google_sync", "gmail_email")

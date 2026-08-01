@@ -416,30 +416,37 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
         )}
       </div>
 
-      {syncing && Object.keys(syncLive).length > 0 && (() => {
-        const entries = Object.values(syncLive)
-        const total = entries.reduce((sum, e) => sum + e.total, 0)
-        const current = entries.reduce((sum, e) => sum + e.current, 0)
-        return (
-          <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2" data-testid="contacts-sync-status-bar">
-            <div className="flex items-center justify-between text-xs text-gray-500 gap-3">
-              <span className="truncate">{entries.map(e => `${e.label}: ${e.step}`).join(' · ')}</span>
-              <span className="flex items-center gap-1.5 text-indigo-500 shrink-0">
-                <span className="animate-spin inline-block h-3 w-3 border-b-2 border-indigo-400 rounded-full" />
-                {total > 0 ? `${current}/${total}` : ''}
-              </span>
-            </div>
-            {total > 0 && (
-              <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${(current / total) * 100}%` }}
-                />
+      {syncing && Object.keys(syncLive).length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3" data-testid="contacts-sync-status-bar">
+          {Object.entries(syncLive).map(([key, e]) => (
+            <div key={key} className="space-y-1" data-testid={`contacts-sync-source-${key}`}>
+              <div className="flex items-center justify-between text-xs gap-3">
+                <span className="truncate font-medium text-gray-700">{e.label}</span>
+                <span className="flex items-center gap-1.5 text-indigo-500 shrink-0">
+                  {!e.done && <span className="animate-spin inline-block h-3 w-3 border-b-2 border-indigo-400 rounded-full" />}
+                  {e.total > 0 ? `${e.current}/${e.total}` : ''}
+                </span>
               </div>
-            )}
-          </div>
-        )
-      })()}
+              {e.total > 0 && (
+                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                    style={{ width: `${(e.current / e.total) * 100}%` }}
+                  />
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs text-gray-400 gap-3">
+                <span className="truncate">{e.current_item ? t('view.syncCurrentItem', { name: e.current_item }) : e.step}</span>
+                {(e.created > 0 || e.updated > 0 || e.skipped > 0) && (
+                  <span className="shrink-0">
+                    {t('view.syncLiveCounts', { created: e.created, updated: e.updated, skipped: e.skipped })}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {syncMsg && (
         <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-2 text-sm text-indigo-700">{syncMsg}</div>

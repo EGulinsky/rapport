@@ -57,7 +57,10 @@ describe('ContactsView — unscoped Sync zeigt Live-Fortschritt statt zu blockie
       .mockResolvedValueOnce({ contacts_manual_sync: { done: false } })
       .mockResolvedValueOnce({ contacts_manual_sync: { done: true, synced: [1, 2], not_found: [], errors: [] } })
     ;(api.sync.progress as ReturnType<typeof vi.fn>).mockResolvedValue({
-      icloud_contacts: { label: 'iCloud Kontakte', step: '3/5', current: 3, total: 5, percent: 60, done: false, created: 0, updated: 0, skipped: 0 },
+      icloud_contacts: {
+        label: 'iCloud Kontakte', step: 'Kontakte werden geladen…', current: 3, total: 5, percent: 60,
+        done: false, created: 0, updated: 0, skipped: 0, current_item: null,
+      },
     })
 
     renderView()
@@ -86,6 +89,42 @@ describe('ContactsView — unscoped Sync zeigt Live-Fortschritt statt zu blockie
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
     expect(screen.queryByTestId('contacts-sync-status-bar')).toBeNull()
     expect(api.contacts.listAll).toHaveBeenCalledTimes(2) // initial load + post-sync reload
+  })
+
+  it('positiv: zeigt jede Quelle einzeln mit aktuellem Kontaktnamen und Live-Zahlen', async () => {
+    ;(api.contacts.syncICloud as ReturnType<typeof vi.fn>).mockResolvedValue({
+      started: true, synced: [], not_found: [], errors: [],
+    })
+    ;(api.sync.batchResults as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ contacts_manual_sync: { done: false } })
+    ;(api.sync.progress as ReturnType<typeof vi.fn>).mockResolvedValue({
+      icloud_contacts: {
+        label: 'iCloud Kontakte', step: 'Kontakte werden geladen…', current: 3, total: 5, percent: 60,
+        done: false, created: 1, updated: 2, skipped: 0, current_item: 'Jane Doe',
+      },
+      google_contacts: {
+        label: 'Google Kontakte', step: 'Kontakte werden geladen…', current: 10, total: 10, percent: 100,
+        done: true, created: 4, updated: 6, skipped: 1, current_item: null,
+      },
+    })
+
+    renderView()
+    await waitFor(() => expect(api.contacts.listAll).toHaveBeenCalled())
+
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByTestId('contacts-sync-toggle'))
+    fireEvent.click(screen.getByTestId('contacts-sync-menu-sync'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+
+    // Both sources rendered as distinct rows, not merged into one bar.
+    expect(screen.getByTestId('contacts-sync-source-icloud_contacts')).toBeTruthy()
+    expect(screen.getByTestId('contacts-sync-source-google_contacts')).toBeTruthy()
+    // The live contact name the backend is currently processing.
+    expect(screen.getByText('Verarbeite: Jane Doe')).toBeTruthy()
+    // Running created/updated/skipped tallies, previously computed server-side but discarded.
+    expect(screen.getByText('1 neu · 2 aktualisiert · 0 übersprungen')).toBeTruthy()
+    expect(screen.getByText('4 neu · 6 aktualisiert · 1 übersprungen')).toBeTruthy()
   })
 
   it('negativ: gescopte Sync (Kontakte ausgewählt) läuft weiterhin synchron ohne Polling', async () => {

@@ -676,6 +676,7 @@ class SyncSettings(Base):
     icloud_contacts_enabled  = Column(Boolean, default=False, nullable=False)
     icloud_calls_enabled     = Column(Boolean, default=False, nullable=False)
     linkedin_enabled         = Column(Boolean, default=False, nullable=False)
+    linkedin_contacts_enabled = Column(Boolean, default=False, nullable=False)
     files_enabled            = Column(Boolean, default=False, nullable=False)
     # "off" | "normal" | "verbose"
     audit_log_level          = Column(String, default="normal", nullable=False, server_default="normal")

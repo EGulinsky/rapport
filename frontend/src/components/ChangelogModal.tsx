@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.11',
+    date: '2026-08-01',
+    changes: [
+      'Contacts sync: the progress display now shows every source (iCloud, Google, LinkedIn) as its own row with a live progress bar, the contact currently being processed, and running new/updated/skipped counts — instead of one merged bar with no detail.',
+      'New: LinkedIn contacts sync — imports your LinkedIn connections the same way iCloud/Google Contacts already do (via the existing LinkedIn session, no extra login). Off by default; enable it in Settings → Sync → LinkedIn → Contacts.',
+    ],
+  },
+  {
     version: '4.7.10',
     date: '2026-08-01',
     changes: [

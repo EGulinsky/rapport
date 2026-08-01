@@ -602,6 +602,37 @@ def _migrate_sync_settings_google_contacts():
     conn.close()
 
 
+def _migrate_sync_settings_linkedin_contacts():
+    """Add linkedin_contacts_enabled column to sync_settings table if missing.
+
+    Defaults to 0 (off) for everyone, existing accounts included -- unlike
+    google_contacts_enabled's DEFAULT 1 backfill (Google contacts already
+    synced unconditionally under the older, coarser google_enabled flag
+    before that sub-toggle existed), LinkedIn contacts sync is a genuinely
+    new capability with real risk (a Playwright scrape of LinkedIn's own
+    connections page, more sensitive to automated access than the
+    already-scraped job-search pages) -- nobody should start scraping their
+    connections without explicitly opting in."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sync_settings'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(sync_settings)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "linkedin_contacts_enabled" not in cols:
+        cur.execute("ALTER TABLE sync_settings ADD COLUMN linkedin_contacts_enabled INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_attachments():
     """Create attachments table if missing."""
     import sqlite3
@@ -1614,6 +1645,7 @@ def init_db():
     _migrate_google_contacts()
     _migrate_sync_settings_files()
     _migrate_sync_settings_google_contacts()
+    _migrate_sync_settings_linkedin_contacts()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
     _migrate_attachments()

@@ -1,12 +1,14 @@
 """L1 Component — _sync_all_contacts() in sync_icloud.py: orchestration of
-both contacts providers (iCloud CardDAV + Google People API) behind the
-single unified "sync contacts" action.
+all three contacts providers (iCloud CardDAV + Google People API + LinkedIn
+connections) behind the single unified "sync contacts" action.
 
-Both providers' fetch functions are mocked at their own module boundary
-(fetch_all_vcards / fetch_all_google_contacts) — this test is only about the
-orchestration logic (which provider runs when, error isolation, last_sync
-stamping), not about vCard/People-API parsing, which are covered by
-test_sync_icloud_contacts.py and test_google_contacts_fetch.py respectively.
+All providers' fetch functions are mocked at their own module boundary
+(fetch_all_vcards / fetch_all_google_contacts / _sync_contacts_from_linkedin)
+— this test is only about the orchestration logic (which provider runs when,
+error isolation, last_sync stamping, the LinkedIn opt-in gate), not about
+vCard/People-API/connections-scrape parsing, which are covered by
+test_sync_icloud_contacts.py, test_google_contacts_fetch.py, and
+test_sync_contacts_from_linkedin.py respectively.
 """
 from unittest.mock import AsyncMock, patch
 
@@ -41,6 +43,20 @@ def _google_cfg(db_session) -> models.GoogleSync:
 
 def _google_person(name: str, email: str) -> dict:
     return {"name": name, "vorname": None, "fn": name, "email": email, "phones": [], "firma": None, "rolle": None, "linkedin_url": None}
+
+
+def _linkedin_sync_settings(db_session, enabled: bool) -> models.SyncSettings:
+    cfg = models.SyncSettings(linkedin_contacts_enabled=enabled)
+    db_session.add(cfg)
+    db_session.commit()
+    return cfg
+
+
+def _linkedin_session(db_session) -> models.LinkedInSync:
+    cfg = models.LinkedInSync(email="li@example.com", password_enc=encrypt_api_key("pw"), session_cookies="[]")
+    db_session.add(cfg)
+    db_session.commit()
+    return cfg
 
 
 class TestSyncAllContacts:
@@ -106,6 +122,44 @@ class TestSyncAllContacts:
         assert any("CardDAV" in e for e in errors)
         db_session.refresh(google_cfg)
         assert google_cfg.contacts_last_sync is not None
+
+    async def test_positiv_linkedin_kontakte_aktiv_wenn_zugeschaltet_und_session_vorhanden(self, db_session, monkeypatch):
+        _linkedin_sync_settings(db_session, enabled=True)
+        _linkedin_session(db_session)
+        with patch(
+            "app.routers.sync_linkedin._sync_contacts_from_linkedin",
+            new=AsyncMock(return_value=(1, [], [42])),
+        ) as mocked:
+            created, errors, touched_ids, updated = await _sync_all_contacts(db_session, None, "de")
+
+        mocked.assert_awaited_once()
+        assert created == 1
+        assert touched_ids == [42]
+        assert errors == []
+
+    async def test_negativ_linkedin_kontakte_uebersprungen_wenn_toggle_aus(self, db_session, monkeypatch):
+        _linkedin_sync_settings(db_session, enabled=False)
+        _linkedin_session(db_session)
+        with patch(
+            "app.routers.sync_linkedin._sync_contacts_from_linkedin",
+            new=AsyncMock(return_value=(1, [], [42])),
+        ) as mocked:
+            created, errors, touched_ids, updated = await _sync_all_contacts(db_session, None, "de")
+
+        mocked.assert_not_awaited()
+        assert created == 0
+
+    async def test_negativ_linkedin_kontakte_uebersprungen_ohne_session(self, db_session, monkeypatch):
+        _linkedin_sync_settings(db_session, enabled=True)
+        # Keine LinkedInSync-Zeile angelegt -> keine gültige Session.
+        with patch(
+            "app.routers.sync_linkedin._sync_contacts_from_linkedin",
+            new=AsyncMock(return_value=(1, [], [42])),
+        ) as mocked:
+            created, errors, touched_ids, updated = await _sync_all_contacts(db_session, None, "de")
+
+        mocked.assert_not_awaited()
+        assert created == 0
 
     async def test_positiv_ohne_jede_konfiguration_liefert_leeres_ergebnis(self, db_session):
         created, errors, touched_ids, updated = await _sync_all_contacts(db_session, None, "de")

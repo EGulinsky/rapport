@@ -138,6 +138,7 @@
     "callList": "Call list",
     "linkedin": "LinkedIn",
     "linkedinHint": "LinkedIn scraper (configured in the \"LinkedIn\" tab)",
+    "linkedinContactsHint": "Reads your LinkedIn connections via a browser scrape (reuses the existing LinkedIn session from the \"LinkedIn\" tab) — off by default, since this accesses LinkedIn's own connections page rather than the already-scraped job postings.",
     "localDocuments": "Local documents",
     "localDocumentsHint": "Folder configuration in the \"Documents\" tab",
     "auditLog": "Audit log",

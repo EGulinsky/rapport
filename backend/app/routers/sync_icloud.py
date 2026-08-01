@@ -1294,15 +1294,20 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
 
     icloud_cfg = _get_cfg(db)
     google_cfg = _get_google_cfg(db)
+    sync_settings = db.query(models.SyncSettings).first()
+    li_cfg = db.query(models.LinkedInSync).first()
+    linkedin_contacts_active = bool(
+        sync_settings and sync_settings.linkedin_contacts_enabled and li_cfg and li_cfg.session_cookies
+    )
 
     # Progress tracking lives here (not in each caller) so that BOTH entry
     # points — the global "Sync all" button (sync_contacts()) and the
     # Contacts-tab button's own background run (sync_contacts_icloud()) —
     # get identical, complete live progress for free, per provider. Google's
-    # entry is only initialized once we're actually about to run it (not
-    # up front alongside iCloud's) — otherwise a cancel during the iCloud
-    # phase would leave google_contacts stuck showing "loading" forever,
-    # since nothing would ever update or finish it.
+    # and LinkedIn's entries are only initialized once we're actually about
+    # to run them (not up front alongside iCloud's) — otherwise a cancel
+    # during an earlier phase would leave a later source stuck showing
+    # "loading" forever, since nothing would ever update or finish it.
     if icloud_cfg:
         init_progress("icloud_contacts", t("label_icloud_contacts", lang), t("loading_contacts", lang), lang=lang)
 
@@ -1326,6 +1331,16 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
         touched_ids.extend(ids)
         google_cfg.contacts_last_sync = datetime.now(timezone.utc)
         finish_progress("google_contacts", lang=lang, created=c, skipped=len(errs))
+
+    if linkedin_contacts_active and not _CONTACTS_SYNC_CANCEL:
+        from app.routers.sync_linkedin import _sync_contacts_from_linkedin
+
+        init_progress("linkedin_contacts", t("label_linkedin_contacts", lang), t("loading_contacts", lang), lang=lang)
+        c, errs, ids = await _sync_contacts_from_linkedin(db, user_id)
+        created += c
+        errors.extend(errs)
+        touched_ids.extend(ids)
+        finish_progress("linkedin_contacts", lang=lang, created=c, skipped=len(errs))
 
     db.commit()
 

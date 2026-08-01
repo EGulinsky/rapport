@@ -138,6 +138,7 @@
     "callList": "Anrufliste",
     "linkedin": "LinkedIn",
     "linkedinHint": "LinkedIn Scraper (konfiguriert in Tab „LinkedIn\")",
+    "linkedinContactsHint": "Liest deine LinkedIn-Kontakte über einen Browser-Scrape aus (nutzt die bestehende LinkedIn-Session aus Tab „LinkedIn\") — standardmäßig aus, da dies auf LinkedIns eigene Verbindungsseite zugreift statt auf die bereits gescrapten Stellenanzeigen.",
     "localDocuments": "Lokale Dokumente",
     "localDocumentsHint": "Ordner-Konfiguration im Tab „Dokumente\"",
     "auditLog": "Audit-Log",
