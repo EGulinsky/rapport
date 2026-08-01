@@ -31,6 +31,14 @@ def _seed_floor(db_session, app, days_ago=60):
     event_factory(db_session, app, datum=date.today() - timedelta(days=days_ago), source="icloud_mail")
 
 
+# Relative to today() rather than a hardcoded literal — a fixed date eventually
+# drifts past the 60-day floor above as the test suite keeps getting run on
+# later real-world dates (confirmed: broke in CI the day the clock crossed
+# from 2026-07-31 to 2026-08-01). 30 days ago stays safely between the floor
+# and today regardless of when the suite runs.
+_RECENT_DATUM = (date.today() - timedelta(days=30)).isoformat()
+
+
 class TestSaveClassifiedEvent:
     def test_negativ_niedrige_konfidenz_wird_uebersprungen(self, db_session):
         app = application_factory(db_session)
@@ -116,7 +124,7 @@ class TestSaveClassifiedEvent:
 
         save_classified_event(
             db_session, "gmail", "ext_4",
-            {"confidence": 0.9, "relevant": True, "datum": "2026-06-01"},
+            {"confidence": 0.9, "relevant": True, "datum": _RECENT_DATUM},
             "Betreff: Einladung zum Gespräch\n\nInhalt ohne Extract", None, _target_app(app),
         )
 
@@ -162,7 +170,7 @@ class TestSaveClassifiedEvent:
 
         save_classified_event(
             db_session, "gmail", "ext_6",
-            {"confidence": 0.9, "relevant": True, "datum": "2026-06-01", "extract": "Hallo"},
+            {"confidence": 0.9, "relevant": True, "datum": _RECENT_DATUM, "extract": "Hallo"},
             "Von: Jane Doe <jane@contoso.com>\nBetreff: Hallo\n\nInhalt", None, _target_app(app),
         )
 
@@ -176,7 +184,7 @@ class TestSaveClassifiedEvent:
 
         save_classified_event(
             db_session, "gmail", "ext_7",
-            {"confidence": 0.8, "relevant": True, "datum": "2026-06-01", "extract": "Einladung", "suggested_main_status": "hr"},
+            {"confidence": 0.8, "relevant": True, "datum": _RECENT_DATUM, "extract": "Einladung", "suggested_main_status": "hr"},
             "Betreff: Einladung\n\nInhalt", None, _target_app(app),
         )
         db_session.flush()
@@ -193,7 +201,7 @@ class TestSaveClassifiedEvent:
 
         save_classified_event(
             db_session, "gmail", "ext_8",
-            {"confidence": 0.8, "relevant": True, "datum": "2026-06-01", "extract": "Info", "suggested_main_status": "hr"},
+            {"confidence": 0.8, "relevant": True, "datum": _RECENT_DATUM, "extract": "Info", "suggested_main_status": "hr"},
             "Betreff: Info\n\nInhalt", None, _target_app(app),
         )
 
@@ -207,7 +215,7 @@ class TestSaveClassifiedEvent:
         app = application_factory(db_session, main_status="applied")
         _seed_floor(db_session, app)
         db_session.commit()
-        result = {"confidence": 0.8, "relevant": True, "datum": "2026-06-01", "extract": "Einladung", "suggested_main_status": "hr"}
+        result = {"confidence": 0.8, "relevant": True, "datum": _RECENT_DATUM, "extract": "Einladung", "suggested_main_status": "hr"}
 
         save_classified_event(db_session, "gmail", "ext_9", result, "Betreff: A\n\nX", None, _target_app(app))
         # Zweiter Aufruf mit identischer external_id (z.B. erneuter Sync-Lauf) —
