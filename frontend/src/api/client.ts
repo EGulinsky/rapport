@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, LinkedInConnectionsImportResult, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
+import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesStatus, LinkedInConnectionsImportResult, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
 
 const BASE = '/api'
 
@@ -408,16 +408,9 @@ export const api = {
     // CV. Reuses the existing LinkedIn session cookies (getConfig/saveConfig
     // above), not a separate login.
     syncOwnProfile: () => request<{ synced_at: string; chars: number }>('/sync/linkedin/profile', { method: 'POST' }),
-    // Message sync (replaces the removed live inbox scraper): upload the
-    // official LinkedIn data-export messages.csv, matched to contacts by
-    // name and turned into timeline events, same as importCv/importExcel.
-    importMessages: async (file: File): Promise<LinkedInMessagesImportResult> => {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await authFetch(`${BASE}/sync/linkedin/messages/import`, { method: 'POST', body: form })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json()
-    },
+    // Messages are scraped live as part of the LinkedIn job sync (run() above)
+    // and matched to contacts by name into timeline events — this just reads
+    // the resulting status, no separate upload/import action.
     getMessagesStatus: () => request<LinkedInMessagesStatus>('/sync/linkedin/messages/status'),
     // Connections import (replaces the removed live connections-list scraper,
     // v4.7.13): upload the official LinkedIn data-export Connections.csv —

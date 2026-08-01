@@ -603,6 +603,8 @@ export interface LinkedInSyncCategoryCount {
   created: number
   updated: number
   skipped: number
+  status: 'pending' | 'active' | 'done'
+  current_page: number
 }
 
 export interface LinkedInSyncStatus {
@@ -618,13 +620,6 @@ export interface LinkedInSyncStatus {
   current_item: string | null
   started_at: string | null
   finished_at: string | null
-}
-
-export interface LinkedInMessagesImportResult {
-  conversations_imported: number
-  conversations_updated: number
-  events_created: number
-  errors: string[]
 }
 
 export interface LinkedInMessagesStatus {

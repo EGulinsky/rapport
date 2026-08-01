@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import asyncio
 import csv
-import io
 import json
 import re
 import time
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, UploadFile
@@ -75,6 +74,8 @@ _state: dict = {
     # throughout the whole run instead of only during the final DB-write loop.
     "category_counts": [],
     "current_item": None,  # "Company — Job Title" while _process() is running
+    "msg_processed": 0,    # LinkedInMessage rows created-or-updated by the live messages scrape
+    "msg_created": 0,      # timeline events created from those messages
     "started_at": None,
     "finished_at": None,
 }
@@ -97,6 +98,8 @@ def _reset_state():
         "errors": [],
         "category_counts": [],
         "current_item": None,
+        "msg_processed": 0,
+        "msg_created": 0,
         "started_at": None,
         "finished_at": None,
     })
@@ -638,13 +641,18 @@ def _extract_jobs_from_text(text: str, seen_keys: set[str], default_status: str,
     return new_jobs, len(anchor_indices)
 
 
-async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "", label: str = "", lang: str = "de") -> list[dict]:
+async def _scrape_category(page, card_type: str, default_status: str, seen_ids: set[str], max_pages: int = 99, url: str = "", label: str = "", lang: str = "de", progress_cb: Optional[Callable[[int, int], None]] = None) -> list[dict]:
     """Read one LinkedIn job-tracker tab via page text and 'Add note' delimiters.
 
     Pagination strategy:
     1. Primary: click artdeco Next button (scroll into view first)
     2. Fallback: detect page number buttons via aria-label
     3. Stop when no new jobs found on a page or no Next button visible
+
+    `progress_cb(page_num, count)` — if given, called after each page is
+    scraped (1-indexed page number, running job count so far) so the caller
+    can surface live per-tab progress (which page of e.g. the ARCHIVED tab
+    is currently being read) instead of only a single generic status line.
     """
     base_url = url if url else _TRACKER + card_type.lower()
     jobs: list[dict] = []
@@ -694,6 +702,8 @@ async def _scrape_category(page, card_type: str, default_status: str, seen_ids: 
         new_jobs, chunk_count = _extract_jobs_from_text(text, seen_keys, default_status, raw_links)
         jobs.extend(new_jobs)
         _state["step"] = t("li_page_result", lang, label=label or card_type, page=page_num + 1, count=len(jobs))
+        if progress_cb:
+            progress_cb(page_num + 1, len(jobs))
 
         has_next_text = bool(re.search(r'\bNext\b', text[-2000:], re.IGNORECASE))
         log.debug("[LI pag] {} p{}: {} chunks, {} neue Jobs (gesamt {}), next_in_text={}",
@@ -1161,7 +1171,8 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 # Shouldn't happen (every card_type is seeded below before any
                 # job referencing it is processed) — fail soft with a fresh
                 # entry rather than crashing the sync over a display detail.
-                entry = {"card_type": card_type, "label": card_type, "found": 0, "created": 0, "updated": 0, "skipped": 0}
+                entry = {"card_type": card_type, "label": card_type, "found": 0, "created": 0, "updated": 0, "skipped": 0,
+                         "status": "pending", "current_page": 0}
                 _state["category_counts"].append(entry)
                 return entry
 
@@ -1195,20 +1206,26 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
                 search_categories = _categories_for_individual_sync(target_app)
                 _state["category_counts"] = [
-                    {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0}
+                    {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0,
+                     "status": "pending", "current_page": 0}
                     for ct, lbl, *_ in search_categories
                 ]
 
                 found_job: dict | None = None
                 cats_searched = 0
                 for card_type, label, default_status, max_pages, cat_url in search_categories:
+                    _cc_entry(card_type)["status"] = "active"
                     _state["step"] = t("li_page_loading", lang, label=label, page=1)
-                    cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label, lang=lang)
+                    cat_jobs = await _scrape_category(
+                        page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label, lang=lang,
+                        progress_cb=lambda p, c, ct=card_type: _cc_entry(ct).update({"current_page": p, "found": c}),
+                    )
                     for j in cat_jobs:
                         j["_card_type"] = card_type
                         j["_label"] = label
                     cats_searched += 1
                     _cc_entry(card_type)["found"] = len(cat_jobs)
+                    _cc_entry(card_type)["status"] = "done"
                     log.info("[LI kat] {}: {} gefunden", label, len(cat_jobs))
                     _state["step"] = t("li_jobs_searching_match", lang, label=label, count=len(cat_jobs))
 
@@ -1221,6 +1238,24 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                     if found_job:
                         log.info("[LI] Match in Kategorie '{}' nach {} Kategorien", label, cats_searched)
                         break
+
+                # Scrape messages for this application too (individual sync).
+                # Same live inbox scraper as the batch sync — restricted here
+                # to attaching only this application's own linked contacts
+                # afterward, so an individual sync doesn't reach across into
+                # unrelated applications' timelines.
+                if target_app is not None:
+                    _state["step"] = t("li_messages_loading_inbox", lang)
+                    msg_convs, msg_errors = await _scrape_linkedin_messages(page, db, user_id, lang=lang)
+                    msg_imported, msg_updated = _upsert_linkedin_messages(msg_convs, db, user_id)
+                    db.flush()
+                    msg_events_created = 0
+                    for contact in target_app.contacts:
+                        msg_events_created += attach_linkedin_messages_for_contact(db, contact, user_id)
+                    db.commit()
+                    _state["msg_processed"] = msg_imported + msg_updated
+                    _state["msg_created"] = msg_events_created
+                    errors.extend(msg_errors)
 
                 await browser.close()
 
@@ -1237,24 +1272,46 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
             # ── Batch-Sync: alle Kategorien sammeln, dann verarbeiten ───────────────
             else:
                 _state["category_counts"] = [
-                    {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0}
+                    {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0,
+                     "status": "pending", "current_page": 0}
                     for ct, lbl, *_ in CATEGORIES
                 ]
 
                 # Dedup by firma|title — later categories (higher priority) overwrite earlier
                 all_jobs_by_key: dict[str, dict] = {}
                 for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
+                    _cc_entry(card_type)["status"] = "active"
                     _state["step"] = t("li_page_loading", lang, label=label, page=1)
-                    cat_jobs = await _scrape_category(page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label, lang=lang)
+                    cat_jobs = await _scrape_category(
+                        page, card_type, default_status, set(), max_pages=max_pages, url=cat_url, label=label, lang=lang,
+                        progress_cb=lambda p, c, ct=card_type: _cc_entry(ct).update({"current_page": p, "found": c}),
+                    )
                     for j in cat_jobs:
                         j["_card_type"] = card_type
                         j["_label"] = label
                         dedup_key = f"{j.get('company', '').lower().strip()} | {j.get('title', '').lower().strip()}"
                         all_jobs_by_key[dedup_key] = j
                     _cc_entry(card_type)["found"] = len(cat_jobs)
+                    _cc_entry(card_type)["status"] = "done"
                     log.info("[LI kat] {}: {} gefunden (gesamt {})", label, len(cat_jobs), len(all_jobs_by_key))
                     _state["step"] = t("li_jobs_found_total", lang, label=label, count=len(cat_jobs), total=len(all_jobs_by_key))
                 all_jobs = list(all_jobs_by_key.values())
+
+                # Scrape messages before closing the browser session (restores
+                # the behavior removed in v4.5.5, now against the actual
+                # scrollable conversation-list container instead of window/
+                # body — see _scrape_linkedin_messages' docstring).
+                _state["step"] = t("li_messages_loading_inbox", lang)
+                msg_convs, msg_errors = await _scrape_linkedin_messages(page, db, user_id, lang=lang)
+                msg_imported, msg_updated = _upsert_linkedin_messages(msg_convs, db, user_id)
+                db.flush()
+                msg_events_created = 0
+                for contact in db.query(models.Contact).filter(models.Contact.applications.any()).all():
+                    msg_events_created += attach_linkedin_messages_for_contact(db, contact, user_id)
+                db.commit()
+                _state["msg_processed"] = msg_imported + msg_updated
+                _state["msg_created"] = msg_events_created
+                errors.extend(msg_errors)
 
                 await browser.close()
 
@@ -1641,88 +1698,192 @@ async def sync_own_profile(db: Session = Depends(get_db), current_user: models.U
     return {"synced_at": current_user.linkedin_profile_synced_at, "chars": len(text)}
 
 
-# ── LinkedIn message import (CSV, replaces the removed live inbox scraper) ───
+# ── LinkedIn message sync (live scraper) ─────────────────────────────────────
+# A live scraper here was removed in v4.5.5 ("only ever scrolled the page
+# once via window.scrollTo, not the conversation list's own internally-
+# scrollable panel, so it reliably missed most conversations") and replaced
+# by a CSV import. Restored in v4.7.14 at the user's explicit request (after
+# being shown that removal reason) applying the same fix that solved the
+# same root-cause bug in the LinkedIn-connections scraper: the real
+# scrollable region is `.msg-conversations-container__conversations-list`,
+# not window/body. A second, independent LinkedIn UI change since the old
+# code was written (live-verified): conversation rows no longer carry a
+# real `<a href="/messaging/thread/...">` at all — the row is a plain
+# clickable <div>, and the stable conversation ID only appears in the URL
+# after clicking it. Every conversation must therefore be clicked (not
+# page.goto'd) to learn its ID, so — like the old code — only conversations
+# whose sidebar text actually mentions a known contact/company are opened;
+# everything else is skipped without a click.
 
-_REQUIRED_MESSAGE_CSV_COLUMNS = {"CONVERSATION ID", "FROM", "TO", "DATE", "CONTENT", "FOLDER"}
+_MSG_ITEM_SELECTOR = "li.msg-conversation-listitem"
+_MSG_LIST_SELECTOR = ".msg-conversations-container__conversations-list"
 
 
-def _parse_message_csv_date(s: Optional[str]) -> Optional[datetime]:
-    """LinkedIn's export format: '2026-07-16 17:36:22 UTC'."""
-    s = (s or "").strip()
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return None
+async def _scrape_linkedin_messages(page, db: Session, user_id: Optional[int], lang: str = "de", max_scrolls: int = 30) -> tuple[list[dict], list[str]]:
+    """Scrapes the account's own LinkedIn inbox for conversations relevant to
+    known contacts/companies, returning parsed dicts in the same shape the
+    old CSV importer produced (conversation_id/participant_name/
+    participant_profile_url/last_message_date/last_message_preview/
+    message_count/folder) so they feed the same LinkedInMessage upsert +
+    attach_linkedin_messages_for_contact() pipeline either way.
 
+    Matching (same two-pass strategy as the pre-v4.5.5 scraper): a sidebar
+    mention of a known contact's display name (primary) or a known company
+    name (secondary, ≥5 chars to dodge "SAP"/"BMW"-style noise) marks a
+    conversation relevant — only relevant ones get opened, so this stays
+    fast even for a large inbox instead of clicking through every thread.
 
-def _aggregate_messages_csv(content: str) -> tuple[list[dict], list[str]]:
-    """Parse a LinkedIn 'messages.csv' export (one row per individual message)
-    and aggregate rows by CONVERSATION ID into one dict per conversation —
-    mirrors the old scraper's own granularity (one timeline event per
-    conversation, not per message). Returns (conversations, row-level errors).
+    last_message_date is best-effort scrape time, not the real message
+    timestamp — LinkedIn's sidebar only shows an ambiguous relative date
+    ("Jul 31", no year) that isn't reliably parseable without opening every
+    single thread's exact-timestamp tooltip, which isn't worth the extra
+    cost here.
     """
-    reader = csv.DictReader(io.StringIO(content))
-    fieldnames = set(reader.fieldnames or [])
-    missing = _REQUIRED_MESSAGE_CSV_COLUMNS - fieldnames
-    if missing:
-        raise ValueError(
-            f"Fehlende Spalten: {', '.join(sorted(missing))} — ist das wirklich messages.csv aus dem LinkedIn-Datenexport?"
-        )
+    from app.dedup import norm_firma
 
-    rows = list(reader)
-    if not rows:
+    name_map: dict[str, str] = {}
+    try:
+        contacts_with_apps = db.query(models.Contact).filter(models.Contact.applications.any()).all()
+        for contact in contacts_with_apps:
+            key = (contact.display_name or "").lower().strip()
+            if len(key) >= 3:
+                name_map[key] = contact.display_name
+    except Exception:
+        pass
+
+    company_set: set[str] = set()
+    for app in db.query(models.Application).all():
+        for raw in filter(None, [app.firma, getattr(app, "zielfirma_bei_hh", None)]):
+            key = norm_firma(raw)
+            if len(key) >= 5:
+                company_set.add(key)
+
+    if not name_map and not company_set:
         return [], []
 
-    # LinkedIn's export has no "is this me" marker — the account owner's own
-    # name is whichever name appears most often across FROM+TO (it appears
-    # on every single row, either as sender or recipient).
-    name_counts: dict[str, int] = {}
-    for r in rows:
-        for name in (r.get("FROM", ""), r.get("TO", "")):
-            name = (name or "").strip()
-            if name:
-                name_counts[name] = name_counts.get(name, 0) + 1
-    self_name = max(name_counts, key=name_counts.get) if name_counts else None
-
     errors: list[str] = []
-    convs: dict[str, dict] = {}
-    for i, r in enumerate(rows, start=2):
-        cid = (r.get("CONVERSATION ID") or "").strip()
-        if not cid:
-            errors.append(f"Zeile {i}: keine CONVERSATION ID, übersprungen")
-            continue
+    convs: list[dict] = []
 
-        frm = (r.get("FROM") or "").strip()
-        to = (r.get("TO") or "").strip()
-        is_outgoing = frm == self_name
-        participant = to if is_outgoing else frm
-        participant_url = (
-            (r.get("RECIPIENT PROFILE URLS") or "").split("\n")[0].strip() if is_outgoing
-            else (r.get("SENDER PROFILE URL") or "").strip()
-        )
-        msg_date = _parse_message_csv_date(r.get("DATE"))
-        content_text = (r.get("CONTENT") or "").strip()
-        folder = (r.get("FOLDER") or "").strip()
+    try:
+        await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
+    except Exception as e:
+        return [], [f"Messages-Scraper: goto fehlgeschlagen: {e}"]
 
-        conv = convs.setdefault(cid, {
-            "conversation_id": cid,
-            "participant_name": participant,
-            "participant_profile_url": participant_url or None,
-            "last_message_date": msg_date,
-            "last_message_preview": content_text or None,
-            "message_count": 0,
-            "folder": folder or None,
-        })
-        conv["message_count"] += 1
-        if msg_date and (conv["last_message_date"] is None or msg_date >= conv["last_message_date"]):
-            conv["last_message_date"] = msg_date
-            conv["last_message_preview"] = content_text or conv["last_message_preview"]
-            if folder:
-                conv["folder"] = folder
+    landed_url = page.url
+    if "login" in landed_url or "authwall" in landed_url:
+        return [], []
 
-    return list(convs.values()), errors
+    seen_ids: set[str] = set()
+    stall_scrolls = 0
+    for _scroll_num in range(max_scrolls):
+        try:
+            await page.evaluate(
+                f"() => {{ const ul = document.querySelector('{_MSG_LIST_SELECTOR}'); if (ul) ul.scrollTo(0, ul.scrollHeight); }}"
+            )
+        except Exception:
+            pass
+        await asyncio.sleep(1.5)
+
+        try:
+            items = await page.locator(_MSG_ITEM_SELECTOR).all()
+        except Exception:
+            items = []
+
+        new_count = 0
+        for li in items:
+            ember_id = await li.get_attribute("id")
+            if not ember_id or ember_id in seen_ids:
+                continue
+            seen_ids.add(ember_id)
+            new_count += 1
+
+            try:
+                raw_text = await li.inner_text()
+            except Exception:
+                continue
+            sidebar_text = raw_text.lower()
+
+            matched_name = next((display for key, display in name_map.items() if key in sidebar_text), None)
+            matched_company = matched_name is None and any(c in sidebar_text for c in company_set)
+            if not matched_name and not matched_company:
+                continue
+
+            _state["step"] = t("li_messages_opening_thread", lang, name=matched_name or "?")
+            try:
+                await li.locator(".msg-conversation-listitem__link").first.click(timeout=5000)
+                await page.wait_for_url(re.compile(r"/messaging/thread/"), timeout=8000)
+            except Exception as e:
+                errors.append(f"Messages-Scraper: Konversation konnte nicht geöffnet werden: {e}")
+                continue
+
+            m = re.search(r"/messaging/thread/([^/?#]+)", page.url)
+            if not m:
+                continue
+            conversation_id = m.group(1)
+
+            try:
+                detail_text = await page.inner_text("body")
+            except Exception:
+                detail_text = ""
+
+            lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+            participant = matched_name or (lines[0] if lines else "Unbekannt")
+            preview_lines = [ln.strip() for ln in detail_text.splitlines() if len(ln.strip()) > 20]
+            preview = preview_lines[-1][:300] if preview_lines else None
+
+            convs.append({
+                "conversation_id": conversation_id,
+                "participant_name": participant[:200],
+                "participant_profile_url": None,
+                "last_message_date": datetime.now(timezone.utc),
+                "last_message_preview": preview,
+                "message_count": 1,
+                "folder": None,
+            })
+
+        _state["step"] = t("li_messages_scanned", lang, count=len(seen_ids))
+        if new_count == 0:
+            stall_scrolls += 1
+            if stall_scrolls >= 2:
+                break
+        else:
+            stall_scrolls = 0
+
+    return convs, errors
+
+
+def _upsert_linkedin_messages(convs: list[dict], db: Session, user_id: Optional[int]) -> tuple[int, int]:
+    """Create-or-update one LinkedInMessage row per scraped conversation dict
+    (same upsert shape the old CSV importer used) and returns
+    (imported, updated) counts. Callers still need to run
+    attach_linkedin_messages_for_contact() themselves afterward."""
+    imported = 0
+    updated = 0
+    for c in convs:
+        existing = db.query(models.LinkedInMessage).filter_by(
+            user_id=user_id, conversation_id=c["conversation_id"],
+        ).first()
+        norm = _normalize_name(c["participant_name"])
+        if existing:
+            existing.participant_name = c["participant_name"]
+            existing.participant_name_normalized = norm
+            existing.participant_profile_url = c["participant_profile_url"]
+            existing.last_message_date = c["last_message_date"]
+            existing.last_message_preview = c["last_message_preview"]
+            existing.message_count = c["message_count"]
+            existing.folder = c["folder"]
+            updated += 1
+        else:
+            db.add(models.LinkedInMessage(
+                user_id=user_id, conversation_id=c["conversation_id"],
+                participant_name=c["participant_name"], participant_name_normalized=norm,
+                participant_profile_url=c["participant_profile_url"],
+                last_message_date=c["last_message_date"], last_message_preview=c["last_message_preview"],
+                message_count=c["message_count"], folder=c["folder"],
+            ))
+            imported += 1
+    return imported, updated
 
 
 def attach_linkedin_messages_for_contact(db: Session, contact: "models.Contact", user_id: Optional[int] = None) -> int:
@@ -1774,75 +1935,6 @@ def attach_linkedin_messages_for_contact(db: Session, contact: "models.Contact",
     return created
 
 
-class LinkedInMessagesImportResult(BaseModel):
-    conversations_imported: int
-    conversations_updated: int
-    events_created: int
-    errors: list[str] = []
-
-
-@router.post("/messages/import", response_model=LinkedInMessagesImportResult)
-async def import_linkedin_messages(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Nur .csv Dateien erlaubt")
-
-    raw = await file.read()
-    try:
-        content = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=422, detail="CSV konnte nicht gelesen werden (Encoding)")
-
-    try:
-        convs, parse_errors = _aggregate_messages_csv(content)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    imported = 0
-    updated = 0
-    for c in convs:
-        existing = db.query(models.LinkedInMessage).filter_by(
-            user_id=current_user.id, conversation_id=c["conversation_id"],
-        ).first()
-        norm = _normalize_name(c["participant_name"])
-        if existing:
-            existing.participant_name = c["participant_name"]
-            existing.participant_name_normalized = norm
-            existing.participant_profile_url = c["participant_profile_url"]
-            existing.last_message_date = c["last_message_date"]
-            existing.last_message_preview = c["last_message_preview"]
-            existing.message_count = c["message_count"]
-            existing.folder = c["folder"]
-            updated += 1
-        else:
-            db.add(models.LinkedInMessage(
-                user_id=current_user.id, conversation_id=c["conversation_id"],
-                participant_name=c["participant_name"], participant_name_normalized=norm,
-                participant_profile_url=c["participant_profile_url"],
-                last_message_date=c["last_message_date"], last_message_preview=c["last_message_preview"],
-                message_count=c["message_count"], folder=c["folder"],
-            ))
-            imported += 1
-    db.flush()
-
-    events_created = 0
-    contacts = (
-        db.query(models.Contact)
-        .filter_by(user_id=current_user.id)
-        .filter(models.Contact.applications.any())
-        .all()
-    )
-    for contact in contacts:
-        events_created += attach_linkedin_messages_for_contact(db, contact, current_user.id)
-
-    db.commit()
-    return LinkedInMessagesImportResult(
-        conversations_imported=imported, conversations_updated=updated,
-        events_created=events_created, errors=parse_errors,
-    )
 
 
 class LinkedInMessagesStatus(BaseModel):

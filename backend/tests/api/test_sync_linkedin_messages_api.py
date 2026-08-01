@@ -1,248 +1,248 @@
-"""L2 API -- POST /api/sync/linkedin/messages/import and GET .../status.
+"""L0/L1 -- live LinkedIn inbox scraper (_scrape_linkedin_messages(),
+_upsert_linkedin_messages()) plus the resulting attach_linkedin_messages_for_contact()
+matching/date-floor/umlaut behavior, and L2 GET /api/sync/linkedin/messages/status.
 
-Replaces the removed live inbox scraper (_scrape_messages(), removed v4.5.5):
-the user uploads their official LinkedIn data-export messages.csv instead.
-Builds real CSV bytes (no hand-mocks) matching LinkedIn's actual export
-columns, uploaded via the client fixture -- same style as
-tests/api/test_import_excel_api.py.
+Replaces the CSV-import test file removed alongside POST
+/api/sync/linkedin/messages/import (v4.7.14): messages are now scraped live
+from the account's own LinkedIn inbox as part of the LinkedIn job sync
+(_async_sync() in sync_linkedin.py), matched against known contacts/companies
+by name (same two-pass strategy as the original pre-v4.5.5 live scraper).
+attach_linkedin_messages_for_contact()'s matching/date-floor/umlaut logic is
+unchanged from the CSV-import era -- only where LinkedInMessage rows come
+from changed -- so those cases are covered here directly against the DB
+rather than via file upload.
 """
-import csv
-import io
+import unicodedata
 from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app import models
+from app.routers.sync_linkedin import (
+    _scrape_linkedin_messages,
+    _upsert_linkedin_messages,
+    attach_linkedin_messages_for_contact,
+)
 from tests.factories import application_factory, contact_factory, seed_floor
 
 pytestmark = pytest.mark.api
 
-_COLUMNS = [
-    "CONVERSATION ID", "CONVERSATION TITLE", "FROM", "SENDER PROFILE URL",
-    "TO", "RECIPIENT PROFILE URLS", "DATE", "SUBJECT", "CONTENT", "FOLDER", "ATTACHMENTS",
-]
 
-SELF_NAME = "Max Mustermann"
-
-
-def _build_csv(rows: list[dict], columns: list[str] | None = None) -> bytes:
-    columns = columns or _COLUMNS
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=columns)
-    writer.writeheader()
-    for r in rows:
-        writer.writerow(r)
-    return buf.getvalue().encode("utf-8")
-
-
-def _message_row(conv_id, frm, to, date, content, folder="INBOX", other_url="https://www.linkedin.com/in/other-person"):
-    # SELF_NAME must appear most often across FROM/TO for self-name auto-detection.
-    return {
-        "CONVERSATION ID": conv_id,
-        "CONVERSATION TITLE": "",
-        "FROM": frm,
-        "SENDER PROFILE URL": "https://www.linkedin.com/in/max-mustermann" if frm == SELF_NAME else other_url,
-        "TO": to,
-        "RECIPIENT PROFILE URLS": other_url if frm == SELF_NAME else "https://www.linkedin.com/in/max-mustermann",
-        "DATE": date,
-        "SUBJECT": "",
-        "CONTENT": content,
-        "FOLDER": folder,
-        "ATTACHMENTS": "",
-    }
-
-
-def _filler_rows() -> list[dict]:
-    """Two disjoint conversations that only ever mention SELF_NAME, to
-    unambiguously establish it as the most-frequent name across the whole
-    file for self-name auto-detection. Needed because a real export has
-    thousands of rows (SELF_NAME dominates trivially); these minimal test
-    fixtures would otherwise tie SELF_NAME's count against the one other
-    participant being tested, making self-name detection a coin flip."""
-    return [
-        _message_row("filler-1", SELF_NAME, "Filler Contact One", "2020-01-01 00:00:00 UTC", "filler",
-                      other_url="https://www.linkedin.com/in/filler-one"),
-        _message_row("filler-2", "Filler Contact Two", SELF_NAME, "2020-01-01 00:00:00 UTC", "filler",
-                      other_url="https://www.linkedin.com/in/filler-two"),
-    ]
-
-
-def _upload(client, content: bytes, filename="messages.csv"):
-    return client.post(
-        "/api/sync/linkedin/messages/import",
-        files={"file": (filename, content, "text/csv")},
+def _fake_messages_page(item_specs: list[tuple[str, str, str]], landed_url: str = "https://www.linkedin.com/messaging/"):
+    """item_specs: list of (ember_id, sidebar_raw_text, thread_id_after_click)."""
+    page = MagicMock()
+    page.url = landed_url
+    page.goto = AsyncMock()
+    page.evaluate = AsyncMock()
+    page.wait_for_url = AsyncMock()
+    page.inner_text = AsyncMock(
+        return_value="A detail-page line long enough to be picked up as the preview text for the conversation."
     )
 
+    items = []
+    for ember_id, raw_text, thread_id in item_specs:
+        li = MagicMock()
+        li.get_attribute = AsyncMock(return_value=ember_id)
+        li.inner_text = AsyncMock(return_value=raw_text)
 
-class TestImportMessagesValidation:
-    def test_negativ_falsche_dateiendung_wird_abgelehnt(self, client):
-        resp = _upload(client, b"anything", filename="messages.txt")
-        assert resp.status_code == 400
+        async def _click(timeout=None, _page=page, _thread_id=thread_id):
+            _page.url = f"https://www.linkedin.com/messaging/thread/{_thread_id}/"
 
-    def test_negativ_falsche_spalten_werden_abgelehnt(self, client):
-        # e.g. Connections.csv uploaded by mistake
-        content = _build_csv(
-            [{"First Name": "Anna", "Last Name": "Schmidt"}],
-            columns=["First Name", "Last Name"],
-        )
-        resp = _upload(client, content)
-        assert resp.status_code == 422
+        link = MagicMock()
+        link.click = AsyncMock(side_effect=_click)
+        link_locator = MagicMock()
+        link_locator.first = link
+        li.locator = MagicMock(return_value=link_locator)
+        items.append(li)
+
+    list_locator = MagicMock()
+    list_locator.all = AsyncMock(return_value=items)
+    page.locator = MagicMock(return_value=list_locator)
+    return page
 
 
-class TestImportMessagesMatching:
-    def test_positiv_bestehender_kontakt_bekommt_ein_event(self, client, db_session):
+@pytest.fixture(autouse=True)
+def _no_real_sleep(monkeypatch):
+    monkeypatch.setattr("app.routers.sync_linkedin.asyncio.sleep", AsyncMock())
+
+
+class TestScrapeLinkedinMessages:
+    async def test_negativ_ohne_bekannten_kontakt_oder_firma_kein_seitenaufruf(self, db_session):
+        page = _fake_messages_page([])
+
+        convs, errors = await _scrape_linkedin_messages(page, db_session, user_id=1)
+
+        assert convs == []
+        assert errors == []
+        page.goto.assert_not_called()
+
+    async def test_negativ_login_wall_gibt_leere_liste(self, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        db_session.commit()
+
+        page = _fake_messages_page([], landed_url="https://www.linkedin.com/checkpoint/login/")
+
+        convs, errors = await _scrape_linkedin_messages(page, db_session, user_id=1)
+
+        assert convs == []
+        assert errors == []
+
+    async def test_positiv_kontakt_treffer_oeffnet_konversation(self, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        db_session.commit()
+
+        raw_text = "Anna Recruiterin\nThanks for reaching out"
+        page = _fake_messages_page([("ember123", raw_text, "abcThreadId")])
+
+        convs, errors = await _scrape_linkedin_messages(page, db_session, user_id=1)
+
+        assert errors == []
+        assert len(convs) == 1
+        conv = convs[0]
+        assert conv["conversation_id"] == "abcThreadId"
+        assert conv["participant_name"] == "Anna Recruiterin"
+        assert conv["message_count"] == 1
+
+    async def test_negativ_unbekannte_konversation_wird_nicht_geoeffnet(self, db_session):
+        app = application_factory(db_session, firma="Contoso")
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        db_session.commit()
+
+        raw_text = "Someone Else Entirely\nNot related at all"
+        page = _fake_messages_page([("ember456", raw_text, "shouldNotOpen")])
+
+        convs, errors = await _scrape_linkedin_messages(page, db_session, user_id=1)
+
+        assert convs == []
+        assert errors == []
+
+    async def test_positiv_firmen_treffer_ohne_kontakt_oeffnet_konversation(self, db_session):
+        app = application_factory(db_session, firma="Contoso Solutions")
+        seed_floor(db_session, app, days_ago=30)
+        db_session.commit()
+
+        raw_text = "Someone at Contoso Solutions\nAre you still interested?"
+        page = _fake_messages_page([("ember789", raw_text, "companyThreadId")])
+
+        convs, errors = await _scrape_linkedin_messages(page, db_session, user_id=1)
+
+        assert errors == []
+        assert len(convs) == 1
+        assert convs[0]["conversation_id"] == "companyThreadId"
+        # No contact name matched -- participant falls back to the sidebar's
+        # own first line rather than a resolved contact display name.
+        assert convs[0]["participant_name"] == "Someone at Contoso Solutions"
+
+
+class TestUpsertLinkedinMessages:
+    def test_positiv_neue_konversation_wird_angelegt(self, db_session):
+        convs = [{
+            "conversation_id": "conv-new", "participant_name": "Ben Recruiter",
+            "participant_profile_url": None, "last_message_date": datetime(2026, 7, 1),
+            "last_message_preview": "Hi there", "message_count": 2, "folder": None,
+        }]
+
+        imported, updated = _upsert_linkedin_messages(convs, db_session, user_id=1)
+        db_session.flush()
+
+        assert (imported, updated) == (1, 0)
+        row = db_session.query(models.LinkedInMessage).filter_by(conversation_id="conv-new").first()
+        assert row is not None
+        assert row.participant_name == "Ben Recruiter"
+        assert row.message_count == 2
+
+    def test_positiv_bestehende_konversation_wird_aktualisiert(self, db_session):
+        first = [{
+            "conversation_id": "conv-upd", "participant_name": "Ben Recruiter",
+            "participant_profile_url": None, "last_message_date": datetime(2026, 7, 1),
+            "last_message_preview": "Hi there", "message_count": 1, "folder": None,
+        }]
+        _upsert_linkedin_messages(first, db_session, user_id=1)
+        db_session.commit()
+
+        second = [{
+            "conversation_id": "conv-upd", "participant_name": "Ben Recruiter",
+            "participant_profile_url": None, "last_message_date": datetime(2026, 7, 3),
+            "last_message_preview": "Following up", "message_count": 2, "folder": None,
+        }]
+        imported, updated = _upsert_linkedin_messages(second, db_session, user_id=1)
+
+        assert (imported, updated) == (0, 1)
+        row = db_session.query(models.LinkedInMessage).filter_by(conversation_id="conv-upd").first()
+        assert row.message_count == 2
+        assert row.last_message_preview == "Following up"
+
+
+def _make_message(db_session, conversation_id: str, participant_name: str, last_message_date: datetime) -> models.LinkedInMessage:
+    from app.routers.sync_linkedin import _normalize_name
+    msg = models.LinkedInMessage(
+        user_id=1, conversation_id=conversation_id, participant_name=participant_name,
+        participant_name_normalized=_normalize_name(participant_name),
+        participant_profile_url="https://www.linkedin.com/in/other-person",
+        last_message_date=last_message_date, last_message_preview="preview", message_count=1, folder=None,
+    )
+    db_session.add(msg)
+    db_session.flush()
+    return msg
+
+
+class TestAttachMatching:
+    def test_positiv_bestehender_kontakt_bekommt_ein_event(self, db_session):
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
         app.contacts.append(contact)
         seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-1", SELF_NAME, "Anna Recruiterin", "2026-07-16 17:36:22 UTC", "Hi, following up"),
-            _message_row("conv-1", "Anna Recruiterin", SELF_NAME, "2026-07-17 09:00:00 UTC", "Thanks for reaching out"),
-        ])
+        _make_message(db_session, "conv-1", "Anna Recruiterin", datetime(2026, 7, 17, 9, 0, 0))
+        db_session.commit()
 
-        resp = _upload(client, content)
+        created = attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
 
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["conversations_imported"] == 3  # conv-1 + 2 filler
-        assert body["events_created"] == 1
-
+        assert created == 1
         event = db_session.query(models.Event).filter_by(application_id=app.id, source="linkedin_msg").first()
         assert event is not None
         assert event.external_id == "conv-1"
         assert event.typ == "mail"
-        assert "Anna Recruiterin" in event.titel
-        assert event.notiz == "Thanks for reaching out\n(2 Nachrichten)"
-        # external_url (the participant's own profile) lets the timeline/
-        # contact modal open LinkedIn on the web, same as clicking a Gmail
-        # or Google Calendar entry opens those.
         assert event.external_url == "https://www.linkedin.com/in/other-person"
-        # Event.datum stays date-only; datum_zeit carries the full timestamp
-        # of the conversation's latest message, for same-day sort ordering.
-        assert event.datum == date(2026, 7, 17)
-        assert event.datum_zeit == datetime(2026, 7, 17, 9, 0, 0)
 
-        conv = db_session.query(models.LinkedInMessage).filter_by(conversation_id="conv-1").first()
-        assert conv is not None
-        assert conv.message_count == 2
-
-    def test_positiv_ohne_passenden_kontakt_wird_gespeichert_aber_kein_event(self, client, db_session):
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-2", "Unknown Recruiter", SELF_NAME, "2026-07-16 12:00:00 UTC", "Hello there"),
-        ])
-
-        resp = _upload(client, content)
-
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 0
-        assert db_session.query(models.LinkedInMessage).filter_by(conversation_id="conv-2").first() is not None
-        assert db_session.query(models.Event).filter_by(source="linkedin_msg").count() == 0
-
-    def test_positiv_umlaut_in_unterschiedlicher_unicode_form_matcht_trotzdem(self, client, db_session):
-        import unicodedata
+    def test_positiv_reattach_erzeugt_kein_duplikat(self, db_session):
         app = application_factory(db_session, firma="Contoso")
-        # Contact stored with the NFD (decomposed) form of the umlaut.
+        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
+        app.contacts.append(contact)
+        seed_floor(db_session, app, days_ago=30)
+        db_session.commit()
+
+        _make_message(db_session, "conv-2", "Anna Recruiterin", datetime(2026, 7, 17, 9, 0, 0))
+        db_session.commit()
+
+        attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
+        second_run_created = attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
+
+        assert second_run_created == 0
+        assert db_session.query(models.Event).filter_by(source="linkedin_msg", external_id="conv-2").count() == 1
+
+    def test_positiv_umlaut_in_unterschiedlicher_unicode_form_matcht_trotzdem(self, db_session):
+        app = application_factory(db_session, firma="Contoso")
         nfd_name = unicodedata.normalize("NFD", "Jörgen Müller")
         contact = contact_factory(db_session, name=nfd_name, vorname=None)
         app.contacts.append(contact)
         seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
-        # CSV row uses the NFC (precomposed) form -- must still match.
         nfc_name = unicodedata.normalize("NFC", "Jörgen Müller")
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-3", nfc_name, SELF_NAME, "2026-07-16 12:00:00 UTC", "Guten Tag"),
-        ])
-
-        resp = _upload(client, content)
-
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 1
-
-    def test_positiv_reupload_aktualisiert_ohne_events_zu_duplizieren(self, client, db_session):
-        app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
-        app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)
+        _make_message(db_session, "conv-3", nfc_name, datetime(2026, 7, 16, 12, 0, 0))
         db_session.commit()
 
-        content1 = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-4", SELF_NAME, "Anna Recruiterin", "2026-07-16 12:00:00 UTC", "First message"),
-        ])
-        resp1 = _upload(client, content1)
-        assert resp1.status_code == 200
-        assert resp1.json()["conversations_imported"] == 3  # conv-4 + 2 filler
-        assert resp1.json()["events_created"] == 1
+        created = attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
 
-        # Re-upload: same conversation continued with a newer message.
-        content2 = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-4", SELF_NAME, "Anna Recruiterin", "2026-07-16 12:00:00 UTC", "First message"),
-            _message_row("conv-4", "Anna Recruiterin", SELF_NAME, "2026-07-18 08:00:00 UTC", "A reply, much later"),
-        ])
-        resp2 = _upload(client, content2)
-
-        assert resp2.status_code == 200
-        assert resp2.json()["conversations_updated"] == 3  # conv-4 + 2 filler, all already exist
-        assert resp2.json()["conversations_imported"] == 0
-        assert resp2.json()["events_created"] == 0  # event already exists, no duplicate
-        assert db_session.query(models.Event).filter_by(source="linkedin_msg", external_id="conv-4").count() == 1
-
-        conv = db_session.query(models.LinkedInMessage).filter_by(conversation_id="conv-4").first()
-        assert conv.message_count == 2
-
-
-class TestRetroactiveAttach:
-    def test_positiv_neuer_kontakt_bekommt_bestehende_nachrichten_zugewiesen(self, client, db_session):
-        app = application_factory(db_session, firma="Contoso")
-        seed_floor(db_session, app, days_ago=30)
-        db_session.commit()
-
-        # Import first -- no matching contact yet.
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-5", "Ben Recruiter", SELF_NAME, "2026-07-16 12:00:00 UTC", "Interested?"),
-        ])
-        resp = _upload(client, content)
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 0
-
-        # Now create+link a matching contact via the application's Contacts tab.
-        resp2 = client.post(f"/api/applications/{app.id}/contacts", json={"name": "Ben Recruiter"})
-        assert resp2.status_code == 201
-
-        event = db_session.query(models.Event).filter_by(application_id=app.id, source="linkedin_msg").first()
-        assert event is not None
-        assert event.external_id == "conv-5"
-
-
-class TestMessagesStatus:
-    def test_positiv_status_spiegelt_import_wider(self, client, db_session):
-        resp0 = client.get("/api/sync/linkedin/messages/status")
-        assert resp0.status_code == 200
-        assert resp0.json()["conversation_count"] == 0
-        assert resp0.json()["last_imported_at"] is None
-
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-6", "Someone", SELF_NAME, "2026-07-16 12:00:00 UTC", "Hi"),
-        ])
-        _upload(client, content)
-
-        resp1 = client.get("/api/sync/linkedin/messages/status")
-        assert resp1.status_code == 200
-        assert resp1.json()["conversation_count"] == 3  # conv-6 + 2 filler
-        assert resp1.json()["last_imported_at"] is not None
-
-
-def _fmt(d: date) -> str:
-    return f"{d.isoformat()} 12:00:00 UTC"
+        assert created == 1
 
 
 class TestDateFloor:
@@ -251,139 +251,64 @@ class TestDateFloor:
     timed sync at all; a message dated before the earliest existing dated
     event on the application must not be attached either."""
 
-    def test_negativ_ohne_jeden_bestehenden_termin_kein_event(self, client, db_session):
-        # Brand-new application, zero dated events yet -- no floor to anchor to.
+    def test_negativ_ohne_jeden_bestehenden_termin_kein_event(self, db_session):
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
         app.contacts.append(contact)
         db_session.commit()
 
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-floor-1", SELF_NAME, "Anna Recruiterin", _fmt(date.today()), "Hallo"),
-        ])
-        resp = _upload(client, content)
+        _make_message(db_session, "conv-floor-1", "Anna Recruiterin", datetime.combine(date.today(), datetime.min.time()))
+        db_session.commit()
 
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 0
+        created = attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
+
+        assert created == 0
         assert db_session.query(models.Event).filter_by(source="linkedin_msg").count() == 0
 
-    def test_negativ_nachricht_vor_dem_floor_wird_nicht_angehaengt(self, client, db_session):
+    def test_negativ_nachricht_vor_dem_floor_wird_nicht_angehaengt(self, db_session):
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
         app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)  # floor = today - 30 days
+        seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
-        too_old = date.today() - timedelta(days=60)
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-floor-2", SELF_NAME, "Anna Recruiterin", _fmt(too_old), "Vor der Bewerbung"),
-        ])
-        resp = _upload(client, content)
+        too_old = datetime.combine(date.today() - timedelta(days=60), datetime.min.time())
+        _make_message(db_session, "conv-floor-2", "Anna Recruiterin", too_old)
+        db_session.commit()
 
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 0
-        assert db_session.query(models.Event).filter_by(source="linkedin_msg", external_id="conv-floor-2").count() == 0
+        created = attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
 
-    def test_positiv_nachricht_nach_dem_floor_wird_angehaengt(self, client, db_session):
+        assert created == 0
+
+    def test_positiv_nachricht_nach_dem_floor_wird_angehaengt(self, db_session):
         app = application_factory(db_session, firma="Contoso")
         contact = contact_factory(db_session, name="Anna Recruiterin", vorname=None)
         app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)  # floor = today - 30 days
+        seed_floor(db_session, app, days_ago=30)
         db_session.commit()
 
-        recent = date.today() - timedelta(days=5)
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-floor-3", SELF_NAME, "Anna Recruiterin", _fmt(recent), "Nach der Bewerbung"),
-        ])
-        resp = _upload(client, content)
+        recent = datetime.combine(date.today() - timedelta(days=5), datetime.min.time())
+        _make_message(db_session, "conv-floor-3", "Anna Recruiterin", recent)
+        db_session.commit()
 
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 1
+        created = attach_linkedin_messages_for_contact(db_session, contact, user_id=1)
+
+        assert created == 1
         event = db_session.query(models.Event).filter_by(source="linkedin_msg", external_id="conv-floor-3").first()
-        assert event is not None
-        assert event.datum == recent
+        assert event.datum == recent.date()
 
 
-class TestUmlautTransliterationMatching:
-    """Real-world case reported after shipping: a contact stored with a German
-    umlaut wasn't matched against LinkedIn's own export, which spelled the
-    same person using the ASCII digraph substitute for that umlaut instead.
-    Covers both matching directions plus a mix of all four German
-    umlaut/eszett substitutions."""
+class TestMessagesStatus:
+    def test_positiv_status_spiegelt_gescrapte_daten_wider(self, client, db_session):
+        resp0 = client.get("/api/sync/linkedin/messages/status")
+        assert resp0.status_code == 200
+        assert resp0.json()["conversation_count"] == 0
+        assert resp0.json()["last_imported_at"] is None
 
-    def test_positiv_kontakt_mit_umlaut_matcht_csv_mit_ue(self, client, db_session):
-        app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Hans-Peter Grünwald", vorname=None)
-        app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)
+        _make_message(db_session, "conv-status-1", "Someone", datetime(2026, 7, 16, 12, 0, 0))
         db_session.commit()
 
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-umlaut-1", "Hans-Peter Gruenwald", SELF_NAME,
-                          _fmt(date.today() - timedelta(days=1)), "Sehr geehrter Herr Gruenwald"),
-        ])
-        resp = _upload(client, content)
-
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 1
-        event = db_session.query(models.Event).filter_by(application_id=app.id, source="linkedin_msg").first()
-        assert event is not None
-        assert event.external_id == "conv-umlaut-1"
-
-    def test_positiv_kontakt_mit_ue_matcht_csv_mit_umlaut(self, client, db_session):
-        # Reverse direction: contact stored with the ASCII digraph, CSV has the umlaut.
-        app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Hans-Peter Gruenwald", vorname=None)
-        app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)
-        db_session.commit()
-
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-umlaut-2", "Hans-Peter Grünwald", SELF_NAME,
-                          _fmt(date.today() - timedelta(days=1)), "Guten Tag"),
-        ])
-        resp = _upload(client, content)
-
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 1
-
-    def test_positiv_alle_vier_umlaut_varianten_in_einem_namen(self, client, db_session):
-        app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Bärbel Preißler-Öztürk", vorname=None)
-        app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)
-        db_session.commit()
-
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-umlaut-3", "Baerbel Preissler-Oeztuerk", SELF_NAME,
-                          _fmt(date.today() - timedelta(days=1)), "Hallo"),
-        ])
-        resp = _upload(client, content)
-
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 1
-
-    def test_negativ_unterschiedliche_nachnamen_werden_nicht_verwechselt(self, client, db_session):
-        # Sanity check: transliteration must not cause false-positive matches
-        # between genuinely different people.
-        app = application_factory(db_session, firma="Contoso")
-        contact = contact_factory(db_session, name="Hans-Peter Grünwald", vorname=None)
-        app.contacts.append(contact)
-        seed_floor(db_session, app, days_ago=30)
-        db_session.commit()
-
-        content = _build_csv([
-            *_filler_rows(),
-            _message_row("conv-umlaut-4", "Hans-Peter Baumann", SELF_NAME,
-                          _fmt(date.today() - timedelta(days=1)), "Hallo"),
-        ])
-        resp = _upload(client, content)
-
-        assert resp.status_code == 200
-        assert resp.json()["events_created"] == 0
+        resp1 = client.get("/api/sync/linkedin/messages/status")
+        assert resp1.status_code == 200
+        assert resp1.json()["conversation_count"] == 1
+        assert resp1.json()["last_imported_at"] is not None

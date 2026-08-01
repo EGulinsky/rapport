@@ -488,11 +488,11 @@ class SyncedItem(Base):
 
 
 class LinkedInMessage(Base):
-    """One row per LinkedIn message conversation, imported from the official
-    "Get a copy of your data" CSV export (messages.csv) — replaces the live
-    Playwright inbox scraper, which only ever scrolled the page once and
-    missed most conversations. See attach_linkedin_messages_for_contact()
-    in sync_linkedin.py for how these get turned into timeline events."""
+    """One row per LinkedIn message conversation, populated by the live
+    Playwright inbox scraper (_scrape_linkedin_messages() in
+    sync_linkedin.py, part of the batch LinkedIn job sync). See
+    attach_linkedin_messages_for_contact() in sync_linkedin.py for how
+    these get turned into timeline events."""
     __tablename__ = "linkedin_messages"
 
     id                           = Column(Integer, primary_key=True)

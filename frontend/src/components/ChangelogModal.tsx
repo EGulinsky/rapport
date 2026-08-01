@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.14',
+    date: '2026-08-01',
+    changes: [
+      'LinkedIn job sync now shows live per-category progress (which of the 6 job-tracker tabs — Saved, Draft, Applied (unconfirmed), Applied, Interviews, Archived — is currently running, and which page of it) instead of only a final result once the whole sync finishes.',
+      'LinkedIn messages are back to being scraped live from your inbox instead of requiring a messages.csv upload — the previous CSV-import workaround (v4.7.7) is removed. The original live scraper was retired in an earlier version for reliably missing most conversations; the actual cause (scrolling the wrong page region) is the same bug just fixed for LinkedIn Connections, so it applies here too. Runs automatically as part of both an individual application\'s LinkedIn sync and the full "Sync now" — no separate action needed.',
+    ],
+  },
+  {
     version: '4.7.13',
     date: '2026-08-01',
     changes: [
