@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.7',
+    date: '2026-08-01',
+    changes: [
+      'Rapport Agent: now checks Full Disk Access (phone/WhatsApp call history) and the Notes Automation permission at startup and every 30 minutes, and pushes a native notification the moment either one goes missing — a permission silently getting revoked (e.g. after rebuilding/reinstalling the agent) used to only surface indirectly, as calls or notes quietly stopping being synced with no visible cause.',
+      'Fixed a contact sync bug where a date written in a mail signature right after a "T:"/"M:"/"Fon:" line (e.g. a target/meeting date, not a phone label) could be mistaken for a phone number and saved as one.',
+    ],
+  },
+  {
     version: '4.7.6',
     date: '2026-08-01',
     changes: [

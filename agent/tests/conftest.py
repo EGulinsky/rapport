@@ -46,15 +46,30 @@ class FakeNotesProvider(NotesProvider):
 
 
 class FakeCallsProvider(CallsProvider):
-    def __init__(self, calls: list[dict[str, Any]] | None = None, healthy: bool = True):
+    def __init__(
+        self,
+        calls: list[dict[str, Any]] | None = None,
+        healthy: bool = True,
+        phone_accessible: bool | None = None,
+        whatsapp_accessible: bool | None = None,
+    ):
         self._calls = calls if calls is not None else []
         self._healthy = healthy
+        # Independently overridable for tests exercising the permission
+        # monitor, which distinguishes the two -- default to `healthy` so
+        # every existing caller of FakeCallsProvider(healthy=...) is unaffected.
+        self._phone_accessible = healthy if phone_accessible is None else phone_accessible
+        self._whatsapp_accessible = healthy if whatsapp_accessible is None else whatsapp_accessible
 
     def list_calls(self, since_days: int, source: str = "all") -> list[dict[str, Any]]:
         return self._calls
 
     def health(self) -> dict[str, Any]:
-        return {"ok": self._healthy, "phone_accessible": self._healthy, "whatsapp_accessible": self._healthy}
+        return {
+            "ok": self._healthy,
+            "phone_accessible": self._phone_accessible,
+            "whatsapp_accessible": self._whatsapp_accessible,
+        }
 
 
 @pytest.fixture

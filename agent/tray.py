@@ -175,18 +175,22 @@ def executable_command() -> tuple[str, list[str]]:
     return sys.executable, ["-m", "agent.tray"]
 
 
-def _start_server_thread(config: AgentConfig) -> None:
+def _start_server_thread(
+    config: AgentConfig,
+    files_provider,
+    notes_provider,
+    calls_provider,
+) -> None:
     import uvicorn
 
     from agent.config import restart_process
     from agent.main import create_app
-    from agent.providers import factory
 
     app = create_app(
         config,
-        files_provider=factory.make_files_provider(),
-        notes_provider=factory.make_notes_provider(),
-        calls_provider=factory.make_calls_provider(),
+        files_provider=files_provider,
+        notes_provider=notes_provider,
+        calls_provider=calls_provider,
         restart_agent=restart_process,
     )
     thread = threading.Thread(
@@ -203,12 +207,25 @@ def main() -> None:
 
     _redirect_stdio_if_headless()
     config = AgentConfig.load_or_create()
-    _start_server_thread(config)
+
+    # Built once here (not inside _start_server_thread) so the same provider
+    # instances can also be handed to the macOS menu bar's periodic
+    # permission check below -- constructing a second set there would check
+    # a different MacCallsProvider/MacNotesProvider instance than the one
+    # actually serving /calls and /notes, which is harmless today (both are
+    # stateless wrappers around the same OS resources) but an easy trap for
+    # future state to fall into.
+    from agent.providers import factory
+    files_provider = factory.make_files_provider()
+    notes_provider = factory.make_notes_provider()
+    calls_provider = factory.make_calls_provider()
+
+    _start_server_thread(config, files_provider, notes_provider, calls_provider)
 
     system = sys.platform
     if system == "darwin":
         from agent.menubar import run_menubar_app
-        run_menubar_app(config)
+        run_menubar_app(config, notes_provider, calls_provider)
     else:
         run_tray_app(config)
 

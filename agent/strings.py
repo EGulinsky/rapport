@@ -20,6 +20,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uninstall_confirm_cancel": "Abbrechen",
         "about": "Über Rapport Agent",
         "about_message": "Version {version}\nPlattform: {platform}\nPort: {port}",
+        "perm_lost_calls_phone": "Zugriff auf Anrufliste verloren — Volle Festplattenzugriff für Rapport Agent in Systemeinstellungen → Datenschutz & Sicherheit prüfen.",
+        "perm_lost_calls_whatsapp": "Zugriff auf WhatsApp-Anrufe verloren — Volle Festplattenzugriff für Rapport Agent in Systemeinstellungen → Datenschutz & Sicherheit prüfen.",
+        "perm_lost_notes": "Zugriff auf Notizen verloren — Automatisierungs-Berechtigung für Rapport Agent → Notizen in Systemeinstellungen → Datenschutz & Sicherheit prüfen.",
     },
     "en": {
         "running_on_port": "Running on port {port}",
@@ -35,6 +38,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uninstall_confirm_cancel": "Cancel",
         "about": "About Rapport Agent",
         "about_message": "Version {version}\nPlatform: {platform}\nPort: {port}",
+        "perm_lost_calls_phone": "Lost access to phone call history — check Full Disk Access for Rapport Agent in System Settings → Privacy & Security.",
+        "perm_lost_calls_whatsapp": "Lost access to WhatsApp call history — check Full Disk Access for Rapport Agent in System Settings → Privacy & Security.",
+        "perm_lost_notes": "Lost access to Notes — check the Automation permission for Rapport Agent → Notes in System Settings → Privacy & Security.",
     },
 }
 

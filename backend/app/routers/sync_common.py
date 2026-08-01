@@ -236,6 +236,37 @@ _BARE_PHONE_RE = re.compile(
     r'(?<!\w)(\+49[\s\-]?[\d\s\-\(\)\/\.]{7,18}\d|0[\d]{2,4}[\s\/\-]?[\d]{3,}[\d\s\-\/\.]*\d)(?!\w)',
 )
 
+# A date written as three slash/dot/dash-separated groups with the same
+# separator throughout (e.g. "07/29/2026") -- real phone numbers are never
+# shaped exactly this way (a genuine 3-group phone's middle group is never
+# just 1-2 digits the way a day/month is), but _PHONE_RE's bare single-letter
+# labels ("M.", "T.") plus its permissive separator class happily capture one
+# anyway when it follows such a label in a footer for an unrelated reason
+# (e.g. "T: 07/29/2026" meaning a target/meeting date, not "Telephone").
+_DATE_SHAPE_RE = re.compile(r'^(\d{1,4})([/.\-])(\d{1,2})\2(\d{1,4})$')
+
+
+def _looks_like_date(candidate: str) -> bool:
+    m = _DATE_SHAPE_RE.match(re.sub(r'\s', '', candidate))
+    if not m:
+        return False
+    g1, sep, g2, g3 = m.groups()
+    fmts = []
+    if len(g1) == 4:
+        fmts.append(f'%Y{sep}%m{sep}%d')
+    if len(g3) == 4:
+        fmts += [f'%m{sep}%d{sep}%Y', f'%d{sep}%m{sep}%Y']
+    elif len(g3) == 2:
+        fmts += [f'%m{sep}%d{sep}%y', f'%d{sep}%m{sep}%y']
+    compact = f'{g1}{sep}{g2}{sep}{g3}'
+    for fmt in fmts:
+        try:
+            datetime.strptime(compact, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
+
 # Title/role explicitly labelled
 _TITLE_LABEL_RE = re.compile(
     r'(?:Position|Titel|Title|Job\s*[Tt]itle|Funktion|Rolle|Role|Designation)\s*[:\-]\s*(.+)',
@@ -264,13 +295,13 @@ def _extract_footer_info(body: str, sender_name: str) -> dict:
     m = _PHONE_RE.search(body)
     if m:
         phone = re.sub(r'\s+', ' ', m.group(1)).strip().rstrip('.,;')
-        if len(re.sub(r'\D', '', phone)) >= 7:
+        if len(re.sub(r'\D', '', phone)) >= 7 and not _looks_like_date(phone):
             info['telefon'] = phone
     elif not info.get('telefon'):
         m2 = _BARE_PHONE_RE.search(body)
         if m2:
             phone = re.sub(r'\s+', ' ', m2.group(1)).strip().rstrip('.,;')
-            if len(re.sub(r'\D', '', phone)) >= 7:
+            if len(re.sub(r'\D', '', phone)) >= 7 and not _looks_like_date(phone):
                 info['telefon'] = phone
 
     # ── Role ──────────────────────────────────────────────────────────────
