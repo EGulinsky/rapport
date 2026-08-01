@@ -58,6 +58,26 @@ export function filterProgressEntries(progress: Record<string, ProgressEntry>): 
     .filter((p): p is ProgressEntry => !!p && (p.total > 0 || p.done))
 }
 
+// `total`/`processed` on LinkedInSyncStatus only become meaningful once
+// every job category has been scraped (see sync_linkedin.py::_async_sync) --
+// category scraping plus the messages scrape that now runs right after it
+// make up most of the sync's wall time, so a naive processed/total percent
+// sits at 0% for that whole stretch even though category_counts is already
+// tracking real per-category progress. Blend category_counts' own status
+// (pending/active/done) in as the first 90% of the bar, reserving the last
+// 10% for the final per-job processing pass once total is known. Exported
+// as a pure function so this can be tested directly, same rationale as
+// filterProgressEntries above.
+export function computeLinkedInProgressPercent(status: LinkedInSyncStatus): number {
+  const catCounts = status.category_counts || []
+  const catProgress = catCounts.length > 0
+    ? catCounts.reduce((sum, c) => sum + (c.status === 'done' ? 1 : c.status === 'active' ? 0.5 : 0), 0) / catCounts.length
+    : 0
+  return status.total > 0
+    ? 90 + Math.round(((status.processed || 0) / status.total) * 10)
+    : Math.round(catProgress * 90)
+}
+
 export function SyncButton({ onSynced, onReviewOpen }: Props) {
   const { t } = useTranslation('sync')
   const [syncing, setSyncing] = useState(false)
@@ -271,13 +291,13 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
 
   const progressEntries = filterProgressEntries(progress)
 
-  // Synthetic LinkedIn progress entry for the overlay
+  // Synthetic LinkedIn progress entry for the overlay.
   const liProgressEntry: ProgressEntry | null = (syncing && liStatus && liStatus.status !== 'idle') ? {
     label: 'LinkedIn',
     step: liStatus.step || '',
     current: liStatus.processed || 0,
     total: liStatus.total || 0,
-    percent: liStatus.total > 0 ? Math.round(((liStatus.processed || 0) / liStatus.total) * 100) : 0,
+    percent: computeLinkedInProgressPercent(liStatus),
     done: ['done', 'error', 'needs_login'].includes(liStatus.status),
     created: liStatus.created || 0,
     updated: liStatus.updated || 0,

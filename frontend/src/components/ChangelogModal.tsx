@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.15',
+    date: '2026-08-01',
+    changes: [
+      'Fixed the LinkedIn sync progress bar (in the global "Sync now" overlay) sitting frozen at 0% for the whole scraping phase, even though the step text underneath was updating — the bar only ever computed itself from a job count that\'s not known until every category has finished scraping, which is now most of the sync\'s runtime. It now tracks real per-category progress the whole way through instead of only jumping once at the very end.',
+    ],
+  },
+  {
     version: '4.7.14',
     date: '2026-08-01',
     changes: [

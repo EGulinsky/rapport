@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { filterProgressEntries } from './SyncButton'
+import { filterProgressEntries, computeLinkedInProgressPercent } from './SyncButton'
+import type { LinkedInSyncStatus, LinkedInSyncCategoryCount } from '../types'
 
 function entry(overrides: Partial<Parameters<typeof filterProgressEntries>[0][string]> = {}) {
   return {
@@ -67,5 +68,70 @@ describe('filterProgressEntries', () => {
     }
 
     expect(filterProgressEntries(progress)).toHaveLength(0)
+  })
+})
+
+function catCount(overrides: Partial<LinkedInSyncCategoryCount> = {}): LinkedInSyncCategoryCount {
+  return {
+    card_type: 'APPLIED', label: 'Applied', found: 0, created: 0, updated: 0, skipped: 0,
+    status: 'pending', current_page: 0,
+    ...overrides,
+  }
+}
+
+function liStatus(overrides: Partial<LinkedInSyncStatus> = {}): LinkedInSyncStatus {
+  return {
+    status: 'running', step: '', processed: 0, total: 0, created: 0, updated: 0, skipped: 0,
+    errors: [], category_counts: [], current_item: null, started_at: null, finished_at: null,
+    ...overrides,
+  }
+}
+
+describe('computeLinkedInProgressPercent', () => {
+  it('is 0% before any category has started, instead of staying frozen once scraping begins', () => {
+    const status = liStatus({
+      category_counts: [catCount({ status: 'pending' }), catCount({ status: 'pending' })],
+    })
+
+    expect(computeLinkedInProgressPercent(status)).toBe(0)
+  })
+
+  it('reproduces the reported bug: total stays 0 through the whole category-scraping phase, so a', () => {
+    // naive processed/total percent would sit at 0% here even though real
+    // work (2 of 4 categories done, one active) is happening -- this is
+    // exactly what the user saw as "the bar is always at 0%".
+    const status = liStatus({
+      total: 0, processed: 0,
+      category_counts: [
+        catCount({ status: 'done' }), catCount({ status: 'done' }),
+        catCount({ status: 'active' }), catCount({ status: 'pending' }),
+      ],
+    })
+
+    expect(computeLinkedInProgressPercent(status)).toBeGreaterThan(0)
+    expect(computeLinkedInProgressPercent(status)).toBe(56) // (2 + 0.5) / 4 * 90, rounded
+  })
+
+  it('reaches 90% once every category is done but total/processed are not yet known', () => {
+    const status = liStatus({
+      total: 0, processed: 0,
+      category_counts: [catCount({ status: 'done' }), catCount({ status: 'done' })],
+    })
+
+    expect(computeLinkedInProgressPercent(status)).toBe(90)
+  })
+
+  it('climbs from 90% to 100% during the final per-job processing pass once total is known', () => {
+    const halfway = liStatus({
+      total: 10, processed: 5,
+      category_counts: [catCount({ status: 'done' }), catCount({ status: 'done' })],
+    })
+    const finished = liStatus({
+      total: 10, processed: 10,
+      category_counts: [catCount({ status: 'done' }), catCount({ status: 'done' })],
+    })
+
+    expect(computeLinkedInProgressPercent(halfway)).toBe(95)
+    expect(computeLinkedInProgressPercent(finished)).toBe(100)
   })
 })
