@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.4',
+    date: '2026-08-01',
+    changes: [
+      'Kanban board filters: several status tabs can now be selected at once instead of just one; a rejected application still shows up under its last real status while a filter is active (previously it silently disappeared as soon as any specific status tab was selected, because the filter compared against its actual "rejected" status instead of where it was rejected from); and columns now cap at a sensible width instead of stretching to fill the whole row when only one or two are visible after filtering.',
+    ],
+  },
+  {
     version: '4.7.3',
     date: '2026-07-31',
     changes: [

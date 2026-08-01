@@ -291,8 +291,12 @@ export function KanbanBoard({ columns, onSelect, onChanged, onOpenCompany, updat
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="overflow-x-auto w-full pb-8" style={{ scrollbarGutter: 'stable' }}>
         <div
-          className="grid gap-4 px-4 sm:px-6 lg:px-8 pb-4"
-          style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(220px, 1fr))` }}
+          // Columns cap at a fixed max width (justify-start keeps them
+          // packed to the left) instead of stretching to 1fr — with few
+          // columns visible (e.g. filtered down to one or two), cards no
+          // longer balloon out to fill the whole row.
+          className="grid gap-4 px-4 sm:px-6 lg:px-8 pb-4 justify-start"
+          style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(220px, 300px))` }}
         >
           {columns.map(({ status, items }) => (
             <DroppableColumn key={status} status={status} items={items} onSelect={onSelect} onOpenCompany={onOpenCompany} updatedIds={updatedIds} />

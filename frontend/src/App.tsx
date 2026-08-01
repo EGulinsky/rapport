@@ -89,7 +89,9 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState<MainStatus | 'all'>('all')
+  // Empty set = "All" (no status filter active). Multi-select: several
+  // pipeline stages can be toggled on at once.
+  const [filterStatuses, setFilterStatuses] = useState<Set<MainStatus>>(new Set())
   const [showRejected, setShowRejected] = useState(false)
   const [showGhostingOnly, setShowGhostingOnly] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
@@ -150,8 +152,12 @@ export default function App() {
     setLoading(true)
     try {
       const [appsData, statsData] = await Promise.all([
+        // main_status is deliberately not sent here — status-tab filtering
+        // (incl. rejected apps placed under their pre-rejection status, and
+        // several statuses selectable at once) is applied client-side below
+        // against this unfiltered-by-status result, so switching tabs is
+        // instant and doesn't need a round-trip.
         api.applications.list({
-          main_status: filterStatus === 'all' ? undefined : filterStatus,
           search: appsCompanyFilter ? undefined : (debouncedSearch || undefined),
           company_profile_id: appsCompanyFilter?.id,
           show_rejected: showRejected || showGhostingOnly,
@@ -193,7 +199,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [filterStatus, debouncedSearch, showRejected, appsCompanyFilter])
+  }, [debouncedSearch, showRejected, showGhostingOnly, appsCompanyFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -242,11 +248,17 @@ export default function App() {
 
   const visibleApps = showGhostingOnly ? apps.filter(a => a.ghosting) : apps
 
+  // Table view: literal main_status membership (unaffected by the Kanban
+  // "last active status" re-homing below — a rejected app's real main_status
+  // is always "rejected" there, same as before this only lived server-side).
+  const tableApps = filterStatuses.size > 0
+    ? visibleApps.filter(a => filterStatuses.has(a.main_status))
+    : visibleApps
+
   const cleanupScope = CLEANUP_SCOPE_BY_VIEW[mainView]
   const cleanupScopeLabel = cleanupScope ? t(`cleanupScope.${mainView}`) : undefined
 
   // Rejected apps appear in their last-active column, not a separate "Abgesagt" column
-  const kanbanColumns: MainStatus[] = MAIN_PIPELINE
   function kanbanColumnForApp(a: Application): MainStatus {
     if (a.abgesagt) {
       const pre = a.pre_rejection_status
@@ -254,6 +266,17 @@ export default function App() {
     }
     return a.main_status
   }
+  // Several status tabs can be selected at once (filterStatuses); an empty
+  // set means "All". Only the selected columns are considered at all here —
+  // matching is against kanbanColumnForApp() (the *effective* column), not
+  // the raw main_status, so a rejected app whose pre_rejection_status is one
+  // of the selected statuses still shows up under that column while filtered
+  // — the whole point of pre_rejection_status, previously bypassed whenever
+  // any specific status tab was active because the old server-side filter
+  // compared against the literal (always "rejected") main_status instead.
+  const kanbanColumns: MainStatus[] = filterStatuses.size > 0
+    ? MAIN_PIPELINE.filter(s => filterStatuses.has(s))
+    : MAIN_PIPELINE
   const kanbanByStatus = kanbanColumns.map(s => ({
     status: s,
     items: visibleApps
@@ -265,7 +288,16 @@ export default function App() {
         const db2 = b.letztes_update ?? b.datum_bewerbung ?? ''
         return db2.localeCompare(da)
       }),
-  })).filter(col => col.items.length > 0 || filterStatus === col.status)
+  })).filter(col => col.items.length > 0 || filterStatuses.has(col.status))
+
+  function toggleFilterStatus(s: MainStatus) {
+    setFilterStatuses(prev => {
+      const next = new Set(prev)
+      if (next.has(s)) next.delete(s)
+      else next.add(s)
+      return next
+    })
+  }
 
   return (
     <BackendGate>
@@ -529,13 +561,13 @@ export default function App() {
 
         {/* Controls row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          {/* Status filter tabs */}
+          {/* Status filter tabs — several selectable at once; "All" clears the selection */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
-              onClick={() => setFilterStatus('all')}
+              onClick={() => setFilterStatuses(new Set())}
               className={clsx(
                 'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                filterStatus === 'all' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                filterStatuses.size === 0 ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               )}
             >
               {t('filters.all')}
@@ -543,10 +575,11 @@ export default function App() {
             {MAIN_PIPELINE.map(s => (
               <button
                 key={s}
-                onClick={() => setFilterStatus(s)}
+                onClick={() => toggleFilterStatus(s)}
+                aria-pressed={filterStatuses.has(s)}
                 className={clsx(
                   'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                  filterStatus === s ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  filterStatuses.has(s) ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                 )}
               >
                 {mainStatusLabel(s)}
@@ -615,7 +648,7 @@ export default function App() {
         {/* Table (only in table mode — Kanban is rendered outside max-w-7xl below) */}
         {viewMode === 'table' && (
           <ApplicationTable
-            applications={visibleApps}
+            applications={tableApps}
             onSelect={setSelectedId}
             onStatusChanged={load}
             selectedIds={selectedAppIds}
