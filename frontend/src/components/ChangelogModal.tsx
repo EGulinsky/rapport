@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.9',
+    date: '2026-08-01',
+    changes: [
+      '"Score all" (AI match score/success probability) now only recomputes active applications, the same scope every other bulk sync source already uses — a rejected application\'s outcome is already known, so it no longer spends an AI call re-scoring it on every run.',
+    ],
+  },
+  {
     version: '4.7.8',
     date: '2026-08-01',
     changes: [

@@ -577,7 +577,8 @@ PROGRESS_KEY_AI_SCORING = "ai_scoring"
 
 async def _run_score_all(user_id: int) -> None:
     """Background task for POST /score-all: recomputes match_score/
-    success_probability for every one of the user's applications.
+    success_probability for every one of the user's active (non-rejected)
+    applications, same scope as the regular bulk sync sources.
     Sequential with a provider-based throttle (5s gemini/groq — free-tier RPM
     limits — else 1s), mirroring the removed traffic-light assessment's
     ai-assess-all batch throttle. Stops the whole batch immediately on
@@ -597,7 +598,18 @@ async def _run_score_all(user_id: int) -> None:
     scored = 0
     try:
         user = db.query(models.User).get(user_id)
-        apps = db.query(models.Application).filter(models.Application.user_id == user_id).all()
+        # Active applications only, same as every other bulk-sync index
+        # (build_firm_index()/build_contact_domain_index() etc. in
+        # sync_common.py) -- a rejected application's outcome is already
+        # known and its match/success numbers aren't actionable anymore, so
+        # spending an AI call re-scoring it on every "Score all" run just
+        # burns rate-limit budget for no benefit. signed stays included --
+        # it's not excluded from the pipeline the same way rejected is (see
+        # MAIN_PIPELINE in frontend/src/types.ts).
+        apps = db.query(models.Application).filter(
+            models.Application.user_id == user_id,
+            models.Application.main_status != "rejected",
+        ).all()
         apply_ghosting_overrides(db, apps)
 
         cfg = db.query(models.AiSettings).first()

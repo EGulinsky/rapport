@@ -103,6 +103,33 @@ class TestRunScoreAllEndToEnd:
         assert result["errors"] == []
         assert fake_ai_provider.calls == []
 
+    async def test_negativ_abgesagte_bewerbungen_werden_uebersprungen(
+        self, db_session, fake_ai_provider
+    ):
+        """Same active-applications scope every other bulk sync source uses
+        (build_firm_index()/the contact indices in sync_common.py) -- a
+        rejected application's outcome is already known, so re-scoring it on
+        every "Score all" run just burns AI-rate-limit budget for nothing."""
+        _persist_current_user(db_session)
+        _ai_settings_for_user(db_session)
+        app_active = application_factory(db_session, main_status="hr")
+        ev_active = event_factory(db_session, app_active, typ="file")
+        store_attachment(db_session, ev_active.id, "jd.txt", b"Anforderungen...", user_id=app_active.user_id)
+        app_rejected = application_factory(db_session, main_status="rejected")
+        ev_rejected = event_factory(db_session, app_rejected, typ="file")
+        store_attachment(db_session, ev_rejected.id, "jd.txt", b"Anforderungen...", user_id=app_rejected.user_id)
+        db_session.commit()
+
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await _run_score_all(1)
+
+        result = get_batch_results()[PROGRESS_KEY_AI_SCORING]
+        assert result["scored"] == 1
+        db_session.refresh(app_rejected)
+        assert app_rejected.ai_score_computed_at is None
+
 
 class TestRunScoreAllThrottle:
     async def test_positiv_5s_pause_zwischen_apps_fuer_groq(self, db_session, fake_ai_provider, monkeypatch):
