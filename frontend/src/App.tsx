@@ -277,6 +277,12 @@ export default function App() {
   const kanbanColumns: MainStatus[] = filterStatuses.size > 0
     ? MAIN_PIPELINE.filter(s => filterStatuses.has(s))
     : MAIN_PIPELINE
+  // Every column in kanbanColumns is always rendered, even with zero items
+  // (DroppableColumn shows an empty-state placeholder) — a swimlane has to
+  // actually exist as a drop target to drag a card into it, so an empty
+  // column disappearing (as it used to whenever it had no apps and wasn't
+  // the actively-selected filter tab) made that status unreachable via
+  // drag-and-drop.
   const kanbanByStatus = kanbanColumns.map(s => ({
     status: s,
     items: visibleApps
@@ -288,7 +294,7 @@ export default function App() {
         const db2 = b.letztes_update ?? b.datum_bewerbung ?? ''
         return db2.localeCompare(da)
       }),
-  })).filter(col => col.items.length > 0 || filterStatuses.has(col.status))
+  }))
 
   function toggleFilterStatus(s: MainStatus) {
     setFilterStatuses(prev => {

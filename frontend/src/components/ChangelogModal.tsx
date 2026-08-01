@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.5',
+    date: '2026-08-01',
+    changes: [
+      'Kanban board: every status column within the current filter now stays visible even when it has no applications, instead of disappearing — so an empty column remains a valid drag-and-drop target to move a card into.',
+    ],
+  },
+  {
     version: '4.7.4',
     date: '2026-08-01',
     changes: [
