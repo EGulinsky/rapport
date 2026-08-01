@@ -11,7 +11,7 @@ import type { SalaryDefaults } from '../api/client'
 import { SUPPORTED_LANGUAGES, LANGUAGE_NAMES, type SupportedLanguage } from '../i18n'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate, formatDateTime } from '../i18n/formatDate'
-import type { AiSettingsWrite, AiModelInfo, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInMessagesStatus, LinkedInMessagesImportResult, BackupStatus, AgentHealth } from '../types'
+import type { AiSettingsWrite, AiModelInfo, GoogleSyncStatus, SyncResult, ICloudSyncStatus, CallsStatus, SyncSettings, FilesConfig, LinkedInSyncStatus, LinkedInMessagesStatus, LinkedInMessagesImportResult, LinkedInConnectionsImportResult, BackupStatus, AgentHealth } from '../types'
 import clsx from 'clsx'
 
 interface Props { onClose: () => void; onReviewOpen?: () => void }
@@ -1153,7 +1153,7 @@ const DEFAULT_SYNC: SyncSettings = {
   icloud_enabled: false, icloud_mail_enabled: false, icloud_cal_enabled: false,
   icloud_notes_enabled: false, icloud_reminders_enabled: false,
   icloud_contacts_enabled: false, icloud_calls_enabled: false,
-  linkedin_enabled: false, linkedin_contacts_enabled: false,
+  linkedin_enabled: false,
   files_enabled: false,
   audit_log_level: 'normal',
 }
@@ -1243,8 +1243,6 @@ function SyncControlPanel() {
 
       <SyncGroup label={t('syncControl.linkedin')} enabled={settings.linkedin_enabled} onToggle={v => toggle('linkedin_enabled', v)}>
         <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.linkedinHint')}</div>
-        <SyncRow label={t('syncControl.contacts')} enabled={settings.linkedin_contacts_enabled} onToggle={v => toggle('linkedin_contacts_enabled', v)} />
-        <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.linkedinContactsHint')}</div>
       </SyncGroup>
 
       <SyncGroup label={t('syncControl.localDocuments')} enabled={settings.files_enabled} onToggle={v => toggle('files_enabled', v)}>
@@ -1296,6 +1294,9 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
   const [messagesUploading, setMessagesUploading] = useState(false)
   const [messagesError, setMessagesError] = useState<string | null>(null)
   const [messagesResult, setMessagesResult] = useState<LinkedInMessagesImportResult | null>(null)
+  const [connectionsUploading, setConnectionsUploading] = useState(false)
+  const [connectionsError, setConnectionsError] = useState<string | null>(null)
+  const [connectionsResult, setConnectionsResult] = useState<LinkedInConnectionsImportResult | null>(null)
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -1325,6 +1326,18 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
       await loadMessagesStatus()
     } catch (e: unknown) { setMessagesError(e instanceof Error ? e.message : String(e)) }
     finally { setMessagesUploading(false) }
+  }
+
+  async function uploadConnections(file: File) {
+    // Deliberately does NOT call onSynced() — that closes the whole Settings
+    // modal and opens the review queue, appropriate after a full LinkedIn job
+    // sync but not for a simple contacts import with no review step.
+    setConnectionsError(null); setConnectionsUploading(true); setConnectionsResult(null)
+    try {
+      const result = await api.linkedin.importConnections(file)
+      setConnectionsResult(result)
+    } catch (e: unknown) { setConnectionsError(e instanceof Error ? e.message : String(e)) }
+    finally { setConnectionsUploading(false) }
   }
 
   async function handleSave() {
@@ -1596,6 +1609,45 @@ function LinkedInPanel({ onSynced }: { onSynced: () => void }) {
           <input
             type="file" accept=".csv" className="hidden" disabled={messagesUploading}
             onChange={e => { const f = e.target.files?.[0]; if (f) uploadMessages(f); e.target.value = '' }}
+          />
+        </label>
+      </div>
+
+      {/* Connections import (CSV, replaces the removed live connections-list scraper) */}
+      <div className="space-y-3 border-t border-gray-100 pt-4">
+        <h4 className="text-xs font-semibold text-gray-700">{t('linkedin.connectionsTitle')}</h4>
+        <p className="text-xs text-gray-500">{t('linkedin.connectionsHint')}</p>
+
+        {connectionsError && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {connectionsError}
+          </div>
+        )}
+
+        {connectionsResult && (
+          <div className="flex gap-2 flex-wrap">
+            {connectionsResult.created > 0 && (
+              <div className="flex flex-col items-center px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700">
+                <span className="text-base font-bold leading-tight">{connectionsResult.created}</span>
+                <span className="text-[10px] font-medium">{t('linkedin.connectionsStatNew')}</span>
+              </div>
+            )}
+            {connectionsResult.errors.length > 0 && (
+              <details className="text-xs text-red-600 w-full">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-700">{t('linkedin.errorsCount', { count: connectionsResult.errors.length })}</summary>
+                <ul className="mt-1 space-y-0.5 ml-2">{connectionsResult.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+              </details>
+            )}
+          </div>
+        )}
+
+        <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 px-3 py-5 text-xs text-gray-400 cursor-pointer hover:border-[#0077B5]/40 hover:text-[#0077B5]">
+          {connectionsUploading ? <Loader className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {connectionsUploading ? t('linkedin.connectionsUploading') : t('linkedin.connectionsUploadPrompt')}
+          <input
+            type="file" accept=".csv" className="hidden" disabled={connectionsUploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) uploadConnections(f); e.target.value = '' }}
           />
         </label>
       </div>

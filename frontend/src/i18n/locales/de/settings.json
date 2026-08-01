@@ -138,7 +138,6 @@
     "callList": "Anrufliste",
     "linkedin": "LinkedIn",
     "linkedinHint": "LinkedIn Scraper (konfiguriert in Tab „LinkedIn\")",
-    "linkedinContactsHint": "Liest deine LinkedIn-Kontakte über einen Browser-Scrape aus (nutzt die bestehende LinkedIn-Session aus Tab „LinkedIn\") — standardmäßig aus, da dies auf LinkedIns eigene Verbindungsseite zugreift statt auf die bereits gescrapten Stellenanzeigen.",
     "localDocuments": "Lokale Dokumente",
     "localDocumentsHint": "Ordner-Konfiguration im Tab „Dokumente\"",
     "auditLog": "Audit-Log",
@@ -187,7 +186,12 @@
     "messagesLastImportedSuffix": " · Zuletzt aktualisiert: {{date}}",
     "messagesStatNew": "Neu",
     "messagesStatUpdated": "Aktualisiert",
-    "messagesStatEvents": "Einträge erstellt"
+    "messagesStatEvents": "Einträge erstellt",
+    "connectionsTitle": "Kontakte",
+    "connectionsHint": "LinkedIn-Kontaktexport hochladen (\"Kopie deiner Daten anfordern\" → Connections.csv), um sie als Kontakte zu importieren — ein einmaliger Import, kein wiederkehrender Sync, da sich Kontakte deutlich seltener ändern als Mails oder Termine. Jederzeit erneut hochladen, um neue Kontakte zu erfassen.",
+    "connectionsUploadPrompt": "Zum Hochladen der Connections.csv klicken",
+    "connectionsUploading": "Wird hochgeladen…",
+    "connectionsStatNew": "Neu"
   },
   "backup": {
     "title": "Datenbank-Backup",

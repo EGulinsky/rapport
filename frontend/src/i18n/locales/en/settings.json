@@ -138,7 +138,6 @@
     "callList": "Call list",
     "linkedin": "LinkedIn",
     "linkedinHint": "LinkedIn scraper (configured in the \"LinkedIn\" tab)",
-    "linkedinContactsHint": "Reads your LinkedIn connections via a browser scrape (reuses the existing LinkedIn session from the \"LinkedIn\" tab) — off by default, since this accesses LinkedIn's own connections page rather than the already-scraped job postings.",
     "localDocuments": "Local documents",
     "localDocumentsHint": "Folder configuration in the \"Documents\" tab",
     "auditLog": "Audit log",
@@ -187,7 +186,12 @@
     "messagesLastImportedSuffix": " · Last updated: {{date}}",
     "messagesStatNew": "New",
     "messagesStatUpdated": "Updated",
-    "messagesStatEvents": "Events created"
+    "messagesStatEvents": "Events created",
+    "connectionsTitle": "Connections",
+    "connectionsHint": "Upload your LinkedIn connections export (\"Get a copy of your data\" → Connections.csv) to import them as contacts — a one-time import, not a recurring sync, since connections change far less often than mail or calendar. Re-upload any time to pick up new connections.",
+    "connectionsUploadPrompt": "Click to upload Connections.csv",
+    "connectionsUploading": "Uploading…",
+    "connectionsStatNew": "New"
   },
   "backup": {
     "title": "Database backup",

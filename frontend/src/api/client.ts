@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
+import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesImportResult, LinkedInMessagesStatus, LinkedInConnectionsImportResult, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
 
 const BASE = '/api'
 
@@ -419,6 +419,17 @@ export const api = {
       return res.json()
     },
     getMessagesStatus: () => request<LinkedInMessagesStatus>('/sync/linkedin/messages/status'),
+    // Connections import (replaces the removed live connections-list scraper,
+    // v4.7.13): upload the official LinkedIn data-export Connections.csv —
+    // a one-time import, not a recurring sync, since connections change far
+    // less often than mail/calendar/applications.
+    importConnections: async (file: File): Promise<LinkedInConnectionsImportResult> => {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await authFetch(`${BASE}/sync/linkedin/connections/import`, { method: 'POST', body: form })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
   },
 
   attachments: {

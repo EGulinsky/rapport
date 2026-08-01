@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.13',
+    date: '2026-08-01',
+    changes: [
+      'LinkedIn contacts sync is now a one-time CSV import instead of a live scrape: upload your official LinkedIn connections export (Settings & Privacy → Get a copy of your data → Connections.csv) under Settings → LinkedIn → Connections. Live-testing against a real 1,558-connection account showed the previous scraping approach was fundamentally too slow for a recurring sync (it also never found the right scrollable page region) — connections change far less often than mail or calendar, so importing on your own schedule fits better than an automatic background sync. The "Contacts" toggle under Settings → Sync → LinkedIn has been removed; the global Contacts sync now covers iCloud and Google only, same as before this feature existed.',
+    ],
+  },
+  {
     version: '4.7.12',
     date: '2026-08-01',
     changes: [

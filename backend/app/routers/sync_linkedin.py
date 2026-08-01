@@ -1392,100 +1392,6 @@ async def _linkedin_search_people(context, query: str, limit: int = 10) -> list[
         await page.close()
 
 
-_CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/"
-
-
-async def _scrape_linkedin_connections(context, max_scrolls: int = 60, lang: str = "de") -> list[dict]:
-    """Scrapes the user's own LinkedIn connections list ("My Network" →
-    Connections) into contact candidates ({"name","headline","profile_url"}).
-
-    Two things distinguish this page's markup from the people-search-results
-    page (real, live-verified — the reused _parse_people_anchors approach
-    silently returned zero results here before this was caught):
-
-    1. **No connection-degree marker.** Every entry here is already a 1st-
-       degree connection by definition, so LinkedIn doesn't render the
-       "• 1st"/"• 2nd" badge this page's cards carry on the search-results
-       page — _parse_people_anchors' degree-marker filter (needed there to
-       reject "mutual connections" mention-links) rejects every real card
-       here, since none of them ever have that marker.
-    2. **Each card renders two `a[href*='/in/']` anchors for the same
-       profile URL**: one wrapping only the avatar image (empty
-       `inner_text()`), one wrapping the name+headline text block. Dedup is
-       done by href, but only once a non-empty-text anchor for that href is
-       seen — the empty photo-only anchor is skipped without being recorded,
-       so it doesn't shadow the real one.
-
-    Pagination is scroll-triggered (infinite scroll, no "Next" button, no
-    `?page=` param) rather than the job-tracker's click-based pagination —
-    keeps scrolling to the bottom until two consecutive scrolls yield no new
-    candidates (or `max_scrolls` is hit), which also naturally terminates
-    once the account's actual connection count is reached.
-
-    Best-effort like every other LinkedIn scraper in this module: any
-    failure (layout change, rate limit, no session) returns whatever was
-    collected so far rather than aborting the whole contacts sync.
-    """
-    candidates: list[dict] = []
-    seen_urls: set[str] = set()
-    page = await context.new_page()
-    try:
-        await page.goto(_CONNECTIONS_URL, wait_until="domcontentloaded", timeout=30000)
-    except Exception as e:
-        log.debug("LinkedIn-Kontakte: goto fehlgeschlagen: {}", e)
-        await page.close()
-        return []
-
-    landed_url = page.url
-    if "login" in landed_url or "authwall" in landed_url:
-        await page.close()
-        return []
-
-    try:
-        stall_scrolls = 0
-        for scroll_num in range(max_scrolls):
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await asyncio.sleep(1.5)
-
-            anchors = await page.locator("a[href*='/in/']").all()
-            before = len(candidates)
-            for a in anchors:
-                href = await a.get_attribute("href")
-                if not href or "/in/" not in href:
-                    continue
-                url = href.split("?")[0].rstrip("/")
-                if url in seen_urls:
-                    continue
-                raw_text = (await a.inner_text()).strip()
-                if not raw_text:
-                    continue  # the avatar-only duplicate anchor for this same profile
-                seen_urls.add(url)
-                lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
-                if not lines:
-                    continue
-                name = lines[0]
-                headline = lines[1] if len(lines) > 1 else None
-                candidates.append({
-                    "name": name[:200],
-                    "headline": (headline[:300] if headline else None),
-                    "profile_url": url,
-                })
-
-            _state["step"] = t("li_connections_page_result", lang, page=scroll_num + 1, count=len(candidates))
-
-            if len(candidates) == before:
-                stall_scrolls += 1
-                if stall_scrolls >= 2:
-                    break
-            else:
-                stall_scrolls = 0
-    except Exception as e:
-        log.debug("LinkedIn-Kontakte: Scraping-Fehler: {}", e)
-    finally:
-        await page.close()
-    return candidates
-
-
 def _split_headline(headline: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     """'Senior Engineer at Contoso' → (rolle, firma). Best-effort — viele
     LinkedIn-Headlines (v.a. individuell angepasste, ohne Firmenerwähnung,
@@ -1502,60 +1408,6 @@ def _split_headline(headline: Optional[str]) -> tuple[Optional[str], Optional[st
             rolle, firma = headline.split(sep, 1)
             return rolle.strip() or None, firma.strip() or None
     return headline.strip() or None, None
-
-
-async def _sync_contacts_from_linkedin(db: Session, user_id: Optional[int]) -> tuple[int, list[str], list[int]]:
-    """Scrapes the user's own LinkedIn connections and imports them the same
-    unconditional way iCloud/Google contacts are (_sync_contacts_from_parsed
-    in sync_icloud.py) — every connection gets imported, no per-contact
-    relevance gating; linking to an application only happens afterwards via
-    the same mention-based backfill _sync_all_contacts() already runs for
-    every provider.
-
-    No first/last-name split is attempted (unlike vCard/Google contacts,
-    which have a structured field for it) — same "don't guess" choice
-    already made for the manual LinkedIn people-search import
-    (import_people()), since a plain "first token = Vorname" split on a
-    LinkedIn display name isn't reliable across naming conventions.
-
-    Requires an existing LinkedIn session (same _get_linkedin_context reuse
-    as company/people sync — no login attempt here, matching every other
-    LinkedIn contacts/company entry point). Returns (0, [], []) without an
-    error when no session is configured, mirroring how _sync_all_contacts
-    already silently skips a provider with no credentials."""
-    from app.routers.sync_company import _get_linkedin_context
-    from app.routers.sync_icloud import _sync_contacts_from_parsed
-
-    li_ctx = None
-    try:
-        li_ctx = await _get_linkedin_context(user_id)
-    except Exception as e:
-        log.warning("LinkedIn-Kontakte: Browser-Start fehlgeschlagen: {}", e)
-    if not li_ctx:
-        return 0, [], []
-
-    playwright, browser, context = li_ctx
-    try:
-        raw_candidates = await _scrape_linkedin_connections(context)
-    finally:
-        await browser.close()
-        await playwright.stop()
-
-    parsed_list = []
-    for cand in raw_candidates:
-        name = cand["name"]
-        rolle, firma = _split_headline(cand.get("headline"))
-        parsed_list.append({
-            "name": name, "vorname": None, "fn": name, "email": None,
-            "firma": firma, "rolle": rolle, "linkedin_url": cand["profile_url"],
-            "phones": [],
-        })
-
-    lang = resolve_ui_language(db, user_id)
-    return await _sync_contacts_from_parsed(
-        parsed_list, db, user_id, lang, "linkedin_contacts",
-        "contact_imported_linkedin_connections", "contact_imported_linkedin_connections_with_reason",
-    )
 
 
 @router.get("/people/search")
@@ -2010,3 +1862,94 @@ def get_linkedin_messages_status(
         conversation_count=count,
         last_imported_at=last.imported_at if last else None,
     )
+
+
+# ── LinkedIn connections import (CSV, replaces the removed live scraper) ─────
+# A live Playwright scrape of the connections list ("My Network" -> Connections)
+# was tried here (v4.7.11/v4.7.12) but replaced by this CSV import (v4.7.13):
+# live-tested against a real 1,558-connection account, the scrape needed
+# real infrastructure (the actual scrollable container turned out to be an
+# inner <main> element, not window/body — document.body.scrollHeight never
+# changes on this page at all) and would still take several minutes per
+# sync for a large account. Connections change far less often than mail/
+# calendar/applications, so a one-time (re-run-when-you-like) CSV import —
+# same shape as the messages import above — fits the actual usage pattern
+# better than a recurring background scrape.
+
+_CONNECTIONS_CSV_HEADER_PREFIX = "First Name,Last Name,URL"
+
+
+def _parse_linkedin_connections_csv(content: str) -> list[dict]:
+    """Parses LinkedIn's official Connections.csv export (Settings & Privacy
+    -> Data privacy -> Get a copy of your data) into the same normalized
+    dict shape _sync_contacts_from_parsed() (sync_icloud.py) already expects
+    from iCloud/Google contacts.
+
+    The real export (verified against an actual 1,559-line file) starts with
+    a "Notes:" line and a quoted disclaimer paragraph before the real header
+    row (`First Name,Last Name,URL,Email Address,Company,Position,Connected
+    On`) — csv.DictReader can't be pointed at "the right line" directly, so
+    the header row is located by its known column prefix first. Unlike the
+    old scraper's un-splittable display name, this export gives First/Last
+    Name directly — no headline-guessing needed, and Company/Position map
+    straight onto firma/rolle.
+    """
+    lines = content.splitlines()
+    header_idx = next((i for i, ln in enumerate(lines) if ln.startswith(_CONNECTIONS_CSV_HEADER_PREFIX)), None)
+    if header_idx is None:
+        return []
+
+    reader = csv.DictReader(lines[header_idx:])
+    parsed: list[dict] = []
+    for row in reader:
+        vorname = (row.get("First Name") or "").strip()
+        nachname = (row.get("Last Name") or "").strip()
+        if not vorname and not nachname:
+            continue
+        fn = f"{vorname} {nachname}".strip()
+        name = nachname or fn
+        email = (row.get("Email Address") or "").strip() or None
+        firma = (row.get("Company") or "").strip() or None
+        rolle = (row.get("Position") or "").strip() or None
+        url = (row.get("URL") or "").strip() or None
+        parsed.append({
+            "name": name[:200], "vorname": (vorname[:200] if vorname else None), "fn": fn[:200],
+            "email": email, "firma": (firma[:200] if firma else None), "rolle": (rolle[:300] if rolle else None),
+            "linkedin_url": url, "phones": [],
+        })
+    return parsed
+
+
+class LinkedInConnectionsImportResult(BaseModel):
+    created: int
+    errors: list[str] = []
+
+
+@router.post("/connections/import", response_model=LinkedInConnectionsImportResult)
+async def import_linkedin_connections(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from app.routers.sync_icloud import _sync_contacts_from_parsed
+
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Nur .csv Dateien erlaubt")
+
+    raw = await file.read()
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=422, detail="CSV konnte nicht gelesen werden (Encoding)")
+
+    parsed_list = _parse_linkedin_connections_csv(content)
+    if not parsed_list:
+        raise HTTPException(status_code=422, detail="Keine Verbindungen in der Datei gefunden")
+
+    lang = resolve_ui_language(db, current_user.id)
+    created, errors, _touched_ids = await _sync_contacts_from_parsed(
+        parsed_list, db, current_user.id, lang, "linkedin_connections_import",
+        "contact_imported_linkedin_connections", "contact_imported_linkedin_connections_with_reason",
+    )
+    db.commit()
+    return LinkedInConnectionsImportResult(created=created, errors=errors)

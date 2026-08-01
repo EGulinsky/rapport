@@ -230,7 +230,6 @@ def get_sync_settings(db: Session = Depends(get_db), current_user: models.User =
         "icloud_contacts_enabled": cfg.icloud_contacts_enabled,
         "icloud_calls_enabled": cfg.icloud_calls_enabled,
         "linkedin_enabled": cfg.linkedin_enabled,
-        "linkedin_contacts_enabled": cfg.linkedin_contacts_enabled,
         "files_enabled": cfg.files_enabled,
         "audit_log_level": cfg.audit_log_level or "normal",
     }

@@ -152,16 +152,14 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
       const filesOn   = (syncCfg?.files_enabled ?? true) && (filesCfg?.enabled ?? false) && !!(filesCfg?.folder_path)
 
       // Contacts first (fast, no AI) — calls matching depends on them being present.
-      // A single sync covers all three providers server-side, so fire it
-      // whenever any of iCloud/Google/LinkedIn contacts is enabled. Unlike
-      // iCloud/Google (default-on, backfilling pre-existing behavior),
-      // LinkedIn contacts defaults to off — it's a genuinely new, riskier
-      // capability (see linkedin_contacts_enabled's migration comment) that
-      // nobody should be opted into automatically.
+      // A single sync covers both providers server-side, so fire it whenever
+      // either iCloud or Google contacts is enabled. LinkedIn contacts are
+      // handled separately via a one-time CSV import in Settings — connections
+      // change far less often than mail/calendar, so they're not part of this
+      // recurring sync.
       const icloudContactsOn = icloudOn && (syncCfg?.icloud_contacts_enabled ?? true)
       const googleContactsOn = googleOn && (syncCfg?.google_contacts_enabled ?? true)
-      const linkedinContactsOn = !!(syncCfg?.linkedin_contacts_enabled)
-      if (icloudContactsOn || googleContactsOn || linkedinContactsOn) {
+      if (icloudContactsOn || googleContactsOn) {
         await api.icloud.syncContacts().catch(() => null)
       }
 

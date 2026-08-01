@@ -516,7 +516,6 @@ export interface SyncSettings {
   icloud_contacts_enabled: boolean
   icloud_calls_enabled: boolean
   linkedin_enabled: boolean
-  linkedin_contacts_enabled: boolean
   files_enabled: boolean
   audit_log_level: 'off' | 'normal' | 'verbose'
 }
@@ -631,6 +630,11 @@ export interface LinkedInMessagesImportResult {
 export interface LinkedInMessagesStatus {
   conversation_count: number
   last_imported_at: string | null
+}
+
+export interface LinkedInConnectionsImportResult {
+  created: number
+  errors: string[]
 }
 
 export interface AnalyticsFunnelItem {

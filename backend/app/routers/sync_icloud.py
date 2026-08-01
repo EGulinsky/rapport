@@ -1274,6 +1274,15 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
     (global batch endpoint) and sync_contacts_icloud() (Contacts-tab button,
     unscoped case) so the two entry points can't drift.
 
+    LinkedIn contacts are deliberately NOT part of this orchestrator — a
+    live Playwright scrape of LinkedIn's connections list was tried here
+    (v4.7.11/v4.7.12) but replaced by a one-time CSV import (v4.7.13,
+    import_linkedin_connections()) after a live scraping session on a
+    1,558-connection account showed it would take many minutes per sync
+    and needed real infra (scroll-container detection, pagination) that
+    isn't worth carrying for data that changes far less often than mail/
+    calendar/applications. See docs/ARCHITECTURE.md's LinkedIn section.
+
     Callers are responsible for checking that at least one provider is
     configured before calling this (raising 400 otherwise) — this function
     itself just silently skips whichever provider has no credentials.
@@ -1294,20 +1303,15 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
 
     icloud_cfg = _get_cfg(db)
     google_cfg = _get_google_cfg(db)
-    sync_settings = db.query(models.SyncSettings).first()
-    li_cfg = db.query(models.LinkedInSync).first()
-    linkedin_contacts_active = bool(
-        sync_settings and sync_settings.linkedin_contacts_enabled and li_cfg and li_cfg.session_cookies
-    )
 
     # Progress tracking lives here (not in each caller) so that BOTH entry
     # points — the global "Sync all" button (sync_contacts()) and the
     # Contacts-tab button's own background run (sync_contacts_icloud()) —
     # get identical, complete live progress for free, per provider. Google's
-    # and LinkedIn's entries are only initialized once we're actually about
-    # to run them (not up front alongside iCloud's) — otherwise a cancel
-    # during an earlier phase would leave a later source stuck showing
-    # "loading" forever, since nothing would ever update or finish it.
+    # entry is only initialized once we're actually about to run it (not
+    # up front alongside iCloud's) — otherwise a cancel during the iCloud
+    # phase would leave google_contacts stuck showing "loading" forever,
+    # since nothing would ever update or finish it.
     if icloud_cfg:
         init_progress("icloud_contacts", t("label_icloud_contacts", lang), t("loading_contacts", lang), lang=lang)
 
@@ -1331,16 +1335,6 @@ async def _sync_all_contacts(db: Session, user_id: Optional[int], lang: str) -> 
         touched_ids.extend(ids)
         google_cfg.contacts_last_sync = datetime.now(timezone.utc)
         finish_progress("google_contacts", lang=lang, created=c, skipped=len(errs))
-
-    if linkedin_contacts_active and not _CONTACTS_SYNC_CANCEL:
-        from app.routers.sync_linkedin import _sync_contacts_from_linkedin
-
-        init_progress("linkedin_contacts", t("label_linkedin_contacts", lang), t("loading_contacts", lang), lang=lang)
-        c, errs, ids = await _sync_contacts_from_linkedin(db, user_id)
-        created += c
-        errors.extend(errs)
-        touched_ids.extend(ids)
-        finish_progress("linkedin_contacts", lang=lang, created=c, skipped=len(errs))
 
     db.commit()
 
