@@ -1049,6 +1049,40 @@ def _backfill_company_profiles():
     conn.close()
 
 
+def _backfill_invalid_company_websites():
+    """LinkedIn's company-About-page scrape (sync_company.py's
+    _linkedin_scrape_about()) used to store the visible text of the "Website"
+    link instead of its href — LinkedIn renders that link's label as literally
+    "Home" for many companies, so a large fraction of profiles ended up with
+    website="Home" (or similar single-word garbage like "http://*"). Cleanup's
+    duplicate-company detection groups purely by website domain, so every
+    company that hit this bug got bucketed together as "duplicates" of each
+    other (fixed for future scrapes in sync_company.py; this repairs existing
+    rows by nulling out any website that isn't a real domain)."""
+    import sqlite3
+    from urllib.parse import urlparse
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='company_profiles'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("SELECT id, website FROM company_profiles WHERE website IS NOT NULL")
+    rows = cur.fetchall()
+    for row_id, website in rows:
+        try:
+            host = urlparse(website if "//" in website else f"//{website}").hostname or ""
+        except Exception:
+            host = ""
+        if not host or "." not in host:
+            cur.execute("UPDATE company_profiles SET website = NULL WHERE id=?", (row_id,))
+    conn.commit()
+    conn.close()
+
+
 def _migrate_contact_company_profile():
     import sqlite3
     db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
@@ -1698,6 +1732,7 @@ def init_db():
     _migrate_ui_language()
     _migrate_company_profiles()
     _backfill_company_profiles()
+    _backfill_invalid_company_websites()
     _backfill_events()
     _migrate_gespraeche_to_events()
     _backfill_event_datum_zeit_noon()

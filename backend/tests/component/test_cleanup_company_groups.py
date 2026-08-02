@@ -92,6 +92,21 @@ class TestFindCompanyGroups:
         assert names == {"Contoso AG", "Contoso PV"}
         assert unresolved.name_display in names
 
+    def test_corner_case_wortartiger_nicht_domain_wert_erzeugt_keine_dublette(self, db_session):
+        # Live-Regressionsfall (2026-08-02): sync_company.py's LinkedIn-About-
+        # Scrape las früher den sichtbaren Linktext statt der href des
+        # "Website"-Links -- LinkedIn zeigt für viele Firmen dort nur "Home"
+        # an. 104 von 936 völlig unabhängigen Firmenprofilen landeten dadurch
+        # unter dem gleichen falschen "home"-Bucket, mit EDAG Group als Keeper
+        # (höchster _company_score) -- alle anderen erschienen fälschlich als
+        # deren Dublette/Tochterfirma zum Zusammenführen vorgeschlagen.
+        company_profile_factory(db_session, name_display="EDAG Group", website="Home")
+        company_profile_factory(db_session, name_display="Knorr-Bremse", website="Home")
+
+        groups = _find_company_groups(db_session)
+
+        assert groups == []
+
     def test_corner_case_verknuepfung_ausserhalb_des_buckets_zaehlt_nicht(self, db_session):
         # parent_company_id zeigt auf eine Firma AUSSERHALB dieser Domain-
         # Gruppe (z.B. ein anderer Datenfehler) — darf die beiden Profile in

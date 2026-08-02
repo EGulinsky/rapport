@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.19',
+    date: '2026-08-02',
+    changes: [
+      'Fixed a company-sync bug that caused unrelated companies to be suggested as duplicates/subsidiaries of each other in Cleanup — LinkedIn\'s "Website" field is sometimes shown with the link label "Home" instead of the actual domain, which was being stored as-is and then used to (falsely) group every company that hit this bug together. The real website URL is now resolved from the link itself, invalid values are never stored, and existing "Home" values in the database are automatically repaired.',
+    ],
+  },
+  {
     version: '4.7.18',
     date: '2026-08-02',
     changes: [

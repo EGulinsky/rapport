@@ -60,6 +60,11 @@ def _domain(url: str | None) -> str | None:
     try:
         host = urlparse(url if "//" in url else f"//{url}").hostname or ""
         host = host.removeprefix("www.")
+        # A bare word with no dot (e.g. a scrape artifact like "Home") isn't a
+        # real domain — treating it as one would bucket every company that
+        # ever hit that scrape bug together as "duplicates" of each other.
+        if host and "." not in host:
+            return None
         return host if host and host not in _GENERIC_DOMAINS else None
     except Exception:
         return None

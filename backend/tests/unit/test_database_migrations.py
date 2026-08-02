@@ -110,7 +110,7 @@ class TestNoFreshDbGuard:
         "_migrate_sync_settings_files", "_migrate_google_email", "_migrate_attachments",
         "_migrate_event_external_id", "_migrate_linkedin_job_id",
         "_migrate_pre_rejection_status", "_migrate_audit_log", "_migrate_audit_log_entities",
-        "_migrate_company_profiles", "_backfill_company_profiles",
+        "_migrate_company_profiles", "_backfill_company_profiles", "_backfill_invalid_company_websites",
         "_migrate_contact_company_profile", "_migrate_company_logo",
         "_migrate_company_parent", "_migrate_contact_vorname", "_migrate_ai_assessment",
         "_migrate_application_ort", "_migrate_add_user_id_columns", "_migrate_user_profile",
@@ -434,6 +434,40 @@ class TestBackfillCompanyProfiles:
     def test_negativ_company_profiles_tabelle_fehlt_wird_uebersprungen(self, db_path):
         _drop_table(db_path, "company_profiles")
         db_module._backfill_company_profiles()  # must not raise
+
+
+class TestBackfillInvalidCompanyWebsites:
+    def test_positiv_nullt_wortartige_website_ohne_punkt(self, db_path):
+        # Live-Regressionsfall (2026-08-02): sync_company.py's LinkedIn-Scrape
+        # las früher den sichtbaren Linktext ("Home") statt der href des
+        # "Website"-Links -- 104 von 936 Firmenprofilen im Produktivsystem
+        # landeten dadurch mit website="Home", was cleanup.py's Domain-
+        # basierte Dublettenerkennung dazu brachte, alle betroffenen (völlig
+        # unabhängigen) Firmen als Dublette voneinander vorzuschlagen.
+        _exec(db_path, "INSERT INTO company_profiles (name_norm, name_display, website, sync_status) VALUES ('edaggroup', 'EDAG Group', 'Home', 'synced')")
+        _exec(db_path, "INSERT INTO company_profiles (name_norm, name_display, website, sync_status) VALUES ('knorrbremse', 'Knorr-Bremse', 'Home', 'synced')")
+        _exec(db_path, "INSERT INTO company_profiles (name_norm, name_display, website, sync_status) VALUES ('wildcard', 'Wildcard AG', 'http://*', 'synced')")
+
+        db_module._backfill_invalid_company_websites()
+
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("SELECT name_display, website FROM company_profiles ORDER BY name_display").fetchall()
+        conn.close()
+        assert rows == [("EDAG Group", None), ("Knorr-Bremse", None), ("Wildcard AG", None)]
+
+    def test_negativ_echte_domain_bleibt_unangetastet(self, db_path):
+        _exec(db_path, "INSERT INTO company_profiles (name_norm, name_display, website, sync_status) VALUES ('contoso', 'Contoso AG', 'https://www.contoso.com', 'synced')")
+
+        db_module._backfill_invalid_company_websites()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT website FROM company_profiles WHERE name_display='Contoso AG'").fetchone()
+        conn.close()
+        assert row[0] == "https://www.contoso.com"
+
+    def test_negativ_company_profiles_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "company_profiles")
+        db_module._backfill_invalid_company_websites()  # must not raise
 
 
 class TestMigrateContactCompanyProfile:

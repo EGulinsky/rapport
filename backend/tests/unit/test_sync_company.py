@@ -30,6 +30,7 @@ from app.routers.sync_company import (
     _fetch_logo_with_clearbit_fallback,
     _linkedin_scrape_about,
     _linkedin_search_candidates,
+    _looks_like_domain,
     _parse_year,
     _throttled_get,
     _wikidata_search_one,
@@ -104,6 +105,22 @@ class TestDomainFromUrl:
         # ist der einzige reale Weg in den except-Zweig (None/leerer String
         # laufen beide klaglos durch urlparse()).
         assert _domain_from_url("http://[::1") is None
+
+
+class TestLooksLikeDomain:
+    def test_positiv_echte_domain(self):
+        assert _looks_like_domain("https://edag.com") is True
+
+    def test_negativ_wortartiger_linktext_ohne_punkt(self):
+        # Live-Regressionsfall: LinkedIns "Website"-Link zeigt bei vielen
+        # Firmen den Text "Home" statt der Domain an.
+        assert _looks_like_domain("Home") is False
+
+    def test_negativ_wildcard_ohne_domain(self):
+        assert _looks_like_domain("http://*") is False
+
+    def test_corner_case_leerer_string(self):
+        assert _looks_like_domain("") is False
 
 
 class TestClassifyCompanyType:
@@ -442,7 +459,7 @@ class TestLinkedinSearchCandidates:
         assert [c["name"] for c in result] == ["Contoso"]
 
 
-def _fake_about_page(main_text: str):
+def _fake_about_page(main_text: str, link_hrefs: dict[str, str] | None = None):
     page = MagicMock()
     page.goto = AsyncMock()
     page.wait_for_timeout = AsyncMock()
@@ -450,6 +467,16 @@ def _fake_about_page(main_text: str):
     main_locator = MagicMock()
     main_locator.inner_text = AsyncMock(return_value=main_text)
     page.locator = MagicMock(return_value=main_locator)
+
+    link_hrefs = link_hrefs or {}
+
+    def _get_by_role(role, name=None, exact=None):
+        link_locator = MagicMock()
+        link_locator.get_attribute = AsyncMock(return_value=link_hrefs.get(name))
+        link_locator.first = link_locator
+        return link_locator
+
+    page.get_by_role = MagicMock(side_effect=_get_by_role)
     return page
 
 
@@ -504,6 +531,37 @@ class TestLinkedinScrapeAbout:
         result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/bigcorp")
 
         assert result["employee_count"] == 10001
+
+    async def test_positiv_website_label_home_wird_ueber_href_aufgeloest(self):
+        # Live-Regressionsfall (2026-08-02): LinkedIn zeigt das "Website"-Feld
+        # bei vielen Firmen nur mit dem sichtbaren Linktext "Home" an, statt
+        # der Domain -- inner_text() liefert dann "Home" statt der echten URL.
+        # 104 von 936 Firmenprofilen im Produktivsystem hatten dadurch
+        # website="Home", was cleanup.py's Domain-basierte Dublettenerkennung
+        # dazu brachte, alle betroffenen (völlig unabhängigen) Firmen als
+        # Dublette voneinander vorzuschlagen. Der echte href des Links muss
+        # verwendet werden statt des Labels.
+        about_text = "\n".join(["Website", "Home"])
+        page = _fake_about_page(about_text, link_hrefs={"Home": "https://edag.com"})
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/edag")
+
+        assert result["website"] == "https://edag.com"
+
+    async def test_negativ_website_label_ohne_aufloesbaren_href_wird_verworfen(self):
+        # Wenn weder der Linktext noch der href eine echte Domain hergeben,
+        # darf gar kein "website" gesetzt werden -- sonst landet erneut
+        # Datenmüll ("Home") in der DB, der Firmen fälschlich gruppiert.
+        about_text = "\n".join(["Website", "Home"])
+        page = _fake_about_page(about_text, link_hrefs={})  # kein href hinterlegt
+        context = MagicMock()
+        context.new_page = AsyncMock(return_value=page)
+
+        result = await _linkedin_scrape_about(context, "https://www.linkedin.com/company/unknown")
+
+        assert "website" not in result
 
     async def test_negativ_headquarters_wird_nie_extrahiert(self):
         # Live-Regressionsfall (reale Firmenprofile mit ungewöhnlicher Feldbelegung): LinkedIns

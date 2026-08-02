@@ -65,6 +65,16 @@ def _domain_from_url(url: str) -> str | None:
         return None
 
 
+def _looks_like_domain(value: str) -> bool:
+    """Rejects scrape artifacts like "Home" or "http://*" that aren't real
+    domains — a bare hostname with no dot can't be one."""
+    try:
+        host = urlparse(value if "//" in value else f"//{value}").hostname or ""
+    except Exception:
+        return False
+    return bool(host) and "." in host
+
+
 def _classify_company_type(employee_count: int | None, founded_year: int | None) -> str | None:
     """Grobe Heuristik aus Mitarbeiterzahl + Gründungsjahr — nur wenn frische Daten vorliegen."""
     if not employee_count:
@@ -388,7 +398,20 @@ async def _linkedin_scrape_about(context, company_url: str) -> dict:
 
         website = _after("Website")
         if website:
-            result["website"] = website.strip()[:500]
+            website = website.strip()
+            # LinkedIn renders the "Website" field as a link whose visible
+            # label is sometimes just "Home" instead of the domain (inner_text()
+            # only sees the label, not the href) — resolve the actual href of
+            # that link when possible, and never store a non-domain label as
+            # "the website" even if the href lookup itself fails.
+            href = None
+            try:
+                href = await page.get_by_role("link", name=website, exact=True).first.get_attribute("href")
+            except Exception:
+                href = None
+            candidate = (href or website).strip()
+            if _looks_like_domain(candidate):
+                result["website"] = candidate[:500]
 
         result["linkedin_company_url"] = company_url
     except Exception as e:
