@@ -19,7 +19,7 @@ import {
 } from '../types'
 import { useStatusLabels } from '../i18n/statusLabels'
 import { useLocale } from '../i18n/useLocale'
-import { formatDate } from '../i18n/formatDate'
+import { formatDate, formatDateTime } from '../i18n/formatDate'
 import { errorMessage } from '../i18n/errorMessage'
 
 function parentPath(p: string): string {
@@ -1284,6 +1284,22 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
               ) : (
                 <p className="text-sm text-gray-400 italic">{t('aiScoring.notYetComputed')}</p>
               )}
+              {app?.feedback_entries != null && app.feedback_entries.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{t('aiScoring.feedbackTitle')}</p>
+                  <p className="text-[11px] text-gray-400 mb-1.5">{t('aiScoring.feedbackHint')}</p>
+                  <ul className="space-y-1.5">
+                    {[...app.feedback_entries].reverse().map(f => (
+                      <li key={f.id} className="text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5">
+                        <p className="whitespace-pre-wrap">{f.text}</p>
+                        {f.created_at && (
+                          <p className="mt-0.5 text-[10px] text-gray-400">{formatDateTime(f.created_at, locale)}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -1304,6 +1320,22 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />{app.stellenanzeige_url}
               </a>
             ) : <span className="text-gray-400 italic text-sm">{t('overview.noLink')}</span>}
+          </div>
+
+          {/* Bewerberzahl */}
+          <div className={!editing && updatedFields?.has('bewerberzahl') ? 'rounded px-2 py-1 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+              {t('overview.candidateCount')}{updDot('bewerberzahl')}
+            </p>
+            {editing ? (
+              <input type="number" min={0}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={draft.bewerberzahl ?? ''} placeholder={t('overview.candidateCountPlaceholder')}
+                onChange={e => setDraft(d => ({ ...d, bewerberzahl: e.target.value === '' ? undefined : Number(e.target.value) }))}
+              />
+            ) : app?.bewerberzahl != null ? (
+              <p className="text-sm text-gray-700">{app.bewerberzahl}</p>
+            ) : <span className="text-gray-400 italic text-sm">{t('overview.candidateCountUnknown')}</span>}
           </div>
 
           {/* Kommentar */}

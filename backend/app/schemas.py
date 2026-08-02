@@ -164,6 +164,7 @@ class ApplicationBase(BaseModel):
     letztes_update: Optional[date] = None
     kommentar: Optional[str] = None
     stellenanzeige_url: Optional[str] = None
+    bewerberzahl: Optional[int] = None
     gespraech_1: Optional[str] = None
     gespraech_2: Optional[str] = None
     gespraech_3: Optional[str] = None
@@ -212,6 +213,7 @@ class ApplicationUpdate(BaseModel):
     letztes_update: Optional[date] = None
     kommentar: Optional[str] = None
     stellenanzeige_url: Optional[str] = None
+    bewerberzahl: Optional[int] = None
     gespraech_1: Optional[str] = None
     gespraech_2: Optional[str] = None
     gespraech_3: Optional[str] = None
@@ -232,6 +234,14 @@ class ApplicationUpdate(BaseModel):
     salary_budget_max_bonus: Optional[int] = None
     salary_expectation_company_car: Optional[bool] = None
     salary_budget_company_car: Optional[bool] = None
+
+
+class ApplicationFeedbackRead(BaseModel):
+    id: int
+    text: str
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
 
 
 class ApplicationRead(ApplicationBase):
@@ -259,6 +269,7 @@ class ApplicationRead(ApplicationBase):
     success_probability: Optional[int] = None
     success_probability_reasoning: Optional[str] = None
     ai_score_computed_at: Optional[datetime] = None
+    feedback_entries: List[ApplicationFeedbackRead] = []
     contacts: List[ContactRead] = []
     events: List[EventRead] = []
 

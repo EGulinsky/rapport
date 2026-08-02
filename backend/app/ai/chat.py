@@ -36,6 +36,11 @@ application(s) that matter.
 - Call get_company_detail for company background (industry, size, etc.), not just the name you already know.
 - Call get_user_profile at most once per conversation, only when the user's own background (CV/LinkedIn) \
 is relevant (e.g. "should I apply", "how do I compare").
+- If the user comments on or corrects an application's match_score/success_probability assessment (e.g. \
+"the role actually needs 10 years of Java, I have none" or "they already told me informally I didn't get it"), \
+call add_assessment_feedback to permanently save that note so future re-assessments take it into account. \
+First make sure you know which specific application they mean (via list_applications/get_application_detail) \
+— ask a clarifying question instead of guessing if it's ambiguous.
 - If a tool returns an error (e.g. application not found, or several company matches), say so plainly and \
 ask a clarifying question instead of guessing.
 - Answer only in {language_name}, regardless of the language of any retrieved data.
@@ -100,6 +105,21 @@ TOOLS = [
             "name": "get_user_profile",
             "description": "Get the user's own background: name, cached CV text, cached LinkedIn profile text. Use when a question needs the user's own qualifications (e.g. fit for a role, comparison to a job posting).",
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_assessment_feedback",
+            "description": "Permanently save the user's own note/correction about an application's match_score or success_probability AI assessment. The note is appended to an append-only log (never overwritten) and fed into every future recompute of both scores. Triggers an immediate recompute so the user sees the updated numbers right away. Only call this once you know which specific application_id the user means.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "application_id": {"type": "integer", "description": "The application's id, from list_applications/get_application_detail."},
+                    "feedback": {"type": "string", "description": "The user's note, in their own words (e.g. \"the role needs 10 years of Java, I have none\")."},
+                },
+                "required": ["application_id", "feedback"],
+            },
         },
     },
 ]
@@ -252,6 +272,47 @@ def _tool_get_user_profile(current_user: models.User) -> dict:
     return result
 
 
+async def _tool_add_assessment_feedback(db: Session, current_user: models.User, args: dict) -> dict:
+    app_id = args.get("application_id")
+    feedback = (args.get("feedback") or "").strip()
+    if not feedback:
+        return {"error": "missing_argument", "message": "feedback text is required."}
+
+    # Tenant-scoped automatically: the session's with_loader_criteria filter
+    # (database.py::set_session_user) already restricts this query to
+    # current_user's own applications, same as every read tool above.
+    a = db.query(models.Application).filter(models.Application.id == app_id).first()
+    if not a:
+        return {"error": "not_found", "message": f"No application with id {app_id}."}
+
+    db.add(models.ApplicationFeedback(application_id=a.id, user_id=current_user.id, text=feedback))
+    db.commit()
+
+    result = {"saved": True, "feedback_count": len(a.feedback_entries)}
+
+    # Best-effort immediate recompute, same swallow contract as
+    # sync_targeted.py's scoring step -- saving the note must never fail
+    # just because scoring is unavailable/rate-limited/broken right now.
+    try:
+        from app.ai.provider import AINotConfigured, AIRateLimited
+        from app.routers.applications import score_application
+
+        lang = resolve_ui_language(db, current_user.id)
+        scored = await score_application(db, a, current_user, lang)
+        if scored:
+            result["match_score"] = a.match_score
+            result["success_probability"] = a.success_probability
+        else:
+            result["rescore_note"] = "Feedback saved, but scores could not be recomputed (no job description text available)."
+    except (AINotConfigured, AIRateLimited) as e:
+        result["rescore_note"] = f"Feedback saved, but scores could not be recomputed right now: {e}"
+    except Exception as e:
+        log.warning("add_assessment_feedback: rescore failed for app {}: {}", app_id, e)
+        result["rescore_note"] = "Feedback saved, but recomputing the scores failed unexpectedly."
+
+    return result
+
+
 async def _execute_tool(db: Session, current_user: models.User, name: str, args: dict) -> dict:
     try:
         if name == "list_applications":
@@ -262,6 +323,8 @@ async def _execute_tool(db: Session, current_user: models.User, name: str, args:
             return _tool_get_company_detail(db, args)
         if name == "get_user_profile":
             return _tool_get_user_profile(current_user)
+        if name == "add_assessment_feedback":
+            return await _tool_add_assessment_feedback(db, current_user, args)
         return {"error": "unknown_tool", "message": f"No such tool: {name}"}
     except Exception as e:
         log.warning("Chat tool {} failed: {}", name, e)

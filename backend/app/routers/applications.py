@@ -139,11 +139,20 @@ async def score_application(db: Session, app: "models.Application", user: "model
     """
     from datetime import datetime, timezone
 
+    from app.ai.historical_outcomes import compute_stage_outcomes
     from app.ai.jd_resolve import resolve_jd_texts
-    from app.ai.tasks import _build_profile_block, compute_match_score, compute_success_probability
+    from app.ai.tasks import (
+        _build_activity_stats_block,
+        _build_history_block,
+        _build_profile_block,
+        compute_match_score,
+        compute_success_probability,
+    )
     from app.ai.timeline_text import build_timeline_text
 
     apply_ghosting_overrides(db, [app])
+
+    feedback_entries = [f.text for f in app.feedback_entries]
 
     profile_block = _build_profile_block(user.cv_extracted_text, user.linkedin_profile_text)
     jd_texts = await resolve_jd_texts(db, app)
@@ -151,7 +160,8 @@ async def score_application(db: Session, app: "models.Application", user: "model
         return False
 
     match_result = await compute_match_score(
-        db, app.firma or "", app.rolle or "", profile_block, jd_texts, ui_language=lang,
+        db, app.firma or "", app.rolle or "", profile_block, jd_texts,
+        feedback_entries=feedback_entries, ui_language=lang,
     )
     app.match_score = match_result["match_score"]
     app.match_score_reasoning = match_result["reasoning"]
@@ -164,10 +174,13 @@ async def score_application(db: Session, app: "models.Application", user: "model
         )
     else:
         timeline_text = build_timeline_text(app.events)
+        activity_stats_block = _build_activity_stats_block(app)
+        history_block = _build_history_block(compute_stage_outcomes(db, user.id, app))
         prob_result = await compute_success_probability(
             db, app.firma or "", app.rolle or "", app.main_status, app.sub_status,
             app.match_score, app.match_score_reasoning, timeline_text, app.ghosting,
-            ui_language=lang,
+            activity_stats_block=activity_stats_block, history_block=history_block,
+            feedback_entries=feedback_entries, ui_language=lang,
         )
         app.success_probability = prob_result["success_probability"]
         app.success_probability_reasoning = prob_result["reasoning"]
@@ -694,6 +707,7 @@ async def extract_from_linkedin_url(
         result["firma"] = scraped_company
 
     result["stellenanzeige_url"] = payload.url
+    result["bewerberzahl"] = page_data.get("applicant_count")
     result["company_profile_id"] = None
     if result.get("firma"):
         profile, created = _find_or_create_company_profile(db, result["firma"], current_user.id)
@@ -830,6 +844,7 @@ async def update_application(
     # Capture field-level changes before applying them (verbose mode)
     AUDIT_FIELDS = {"firma", "rolle", "zielfirma_bei_hh", "wurde_besetzt_von", "quelle",
                     "datum_bewerbung", "letztes_update", "kommentar", "stellenanzeige_url",
+                    "bewerberzahl",
                     "ort", "is_headhunter",
                     "gespraech_1", "gespraech_2", "gespraech_3", "gespraech_4", "gespraech_5",
                     "salary_currency", "salary_expectation_min", "salary_expectation_max",

@@ -103,7 +103,7 @@ export const api = {
     stats: () => request<Stats>('/applications/stats'),
 
     extractFromLinkedInUrl: (url: string) =>
-      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null; stellenanzeige_url: string; company_profile_id: number | null }>(
+      request<{ firma: string; rolle: string; quelle: string; is_headhunter: boolean; zielfirma_bei_hh: string | null; kommentar: string | null; stellenanzeige_url: string; bewerberzahl: number | null; company_profile_id: number | null }>(
         '/applications/extract-from-linkedin-url',
         { method: 'POST', body: JSON.stringify({ url }) }
       ),

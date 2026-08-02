@@ -501,6 +501,17 @@ class TestMigrateAiScoring:
         db_module._migrate_ai_scoring()  # must not raise ("duplicate column")
 
 
+class TestMigrateBewerberzahl:
+    def test_positiv_fuegt_spalte_hinzu(self, db_path):
+        _drop_columns(db_path, "applications", "bewerberzahl")
+        db_module._migrate_bewerberzahl()
+        assert "bewerberzahl" in _cols(db_path, "applications")
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_bewerberzahl()
+        db_module._migrate_bewerberzahl()  # must not raise ("duplicate column")
+
+
 class TestMigrateAddUserIdColumns:
     def test_positiv_fuegt_user_id_zu_allen_tabellen_hinzu(self, db_path):
         for table in db_module._USER_SCOPED_TABLES:

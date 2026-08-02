@@ -104,6 +104,33 @@ class TestCreateApplication:
         assert resp.json()["ort"] is None
 
 
+class TestBewerberzahl:
+    def test_positiv_wird_bei_erstellung_gespeichert(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Test GmbH", "rolle": "Engineer", "bewerberzahl": 150,
+        })
+        assert resp.status_code == 201
+        assert resp.json()["bewerberzahl"] == 150
+
+    def test_negativ_ist_optional(self, client):
+        resp = client.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})
+        assert resp.status_code == 201
+        assert resp.json()["bewerberzahl"] is None
+
+    def test_positiv_kann_nachtraeglich_gesetzt_werden_und_wird_auditiert(self, client, db_session):
+        app = application_factory(db_session, firma="Contoso AG")
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"bewerberzahl": 42})
+
+        assert resp.status_code == 200
+        assert resp.json()["bewerberzahl"] == 42
+        entry = db_session.query(models.AuditLog).filter_by(app_id=app.id, field="bewerberzahl").first()
+        assert entry is not None
+        assert entry.new_value == "42"
+
+
 class TestCreateApplicationSalaryProfileDefaults:
     """create_application() falls back to the current user's
     default_salary_expectation_* (Settings -> Account) for any

@@ -66,6 +66,59 @@ class TestScoreApplicationNormalStatus:
         assert "MATCH-SCORE" in second_prompt
         assert "78" in second_prompt
 
+    async def test_positiv_zweiter_call_bekommt_kontakthaeufigkeit_und_bewerberzahl(self, db_session, ai_settings, fake_ai_provider):
+        user = _user(db_session)
+        app = application_factory(db_session, main_status="hr", bewerberzahl=87)
+        ev = event_factory(db_session, app, typ="file")
+        store_attachment(db_session, ev.id, "jd.txt", b"Anforderungen...", user_id=app.user_id)
+        event_factory(db_session, app, typ="mail", mail_direction="received")
+        db_session.commit()
+
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await score_application(db_session, app, user, "de")
+
+        second_prompt = fake_ai_provider.calls[1]["messages"][1]["content"]
+        assert "KONTAKTHÄUFIGKEIT" in second_prompt
+        assert "Bekannte Bewerberzahl" in second_prompt
+        assert "87" in second_prompt
+
+    async def test_positiv_beide_calls_bekommen_gespeichertes_feedback(self, db_session, ai_settings, fake_ai_provider):
+        user = _user(db_session)
+        app = application_factory(db_session, main_status="hr")
+        ev = event_factory(db_session, app, typ="file")
+        store_attachment(db_session, ev.id, "jd.txt", b"Anforderungen...", user_id=app.user_id)
+        db_session.add(models.ApplicationFeedback(application_id=app.id, user_id=user.id, text="Die Rolle braucht 10 Jahre Java."))
+        db_session.commit()
+
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await score_application(db_session, app, user, "de")
+
+        first_prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        second_prompt = fake_ai_provider.calls[1]["messages"][1]["content"]
+        assert "10 Jahre Java" in first_prompt
+        assert "10 Jahre Java" in second_prompt
+
+    async def test_positiv_historische_vergleichsdaten_werden_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        user = _user(db_session)
+        app = application_factory(db_session, main_status="hr")
+        ev = event_factory(db_session, app, typ="file")
+        store_attachment(db_session, ev.id, "jd.txt", b"Anforderungen...", user_id=app.user_id)
+        application_factory(db_session, main_status="rejected", pre_rejection_status="hr")
+        application_factory(db_session, main_status="signed")
+        db_session.commit()
+
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await score_application(db_session, app, user, "de")
+
+        second_prompt = fake_ai_provider.calls[1]["messages"][1]["content"]
+        assert "HISTORISCHE VERGLEICHSDATEN" in second_prompt
+
 
 class TestScoreApplicationTerminalStatus:
     async def test_positiv_rejected_nur_match_score_call_success_probability_0(self, db_session, ai_settings, fake_ai_provider):

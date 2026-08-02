@@ -223,6 +223,7 @@ class Application(Base):
     linkedin_job_id     = Column(String, nullable=True, index=True)
     stellenanzeige_url  = Column(String, nullable=True)
     pre_rejection_status = Column(String, nullable=True)
+    bewerberzahl        = Column(Integer, nullable=True)  # optional "number of candidates", prefillable from LinkedIn (see linkedin_job_description.py)
 
     # Company background data (populated by background sync)
     company_profile_id        = Column(Integer, ForeignKey("company_profiles.id"), nullable=True)
@@ -261,6 +262,7 @@ class Application(Base):
     events                  = relationship("Event", back_populates="application", cascade="all, delete-orphan")
     company_profile         = relationship("CompanyProfile", foreign_keys=[company_profile_id],        back_populates="applications")
     target_company_profile  = relationship("CompanyProfile", foreign_keys=[target_company_profile_id], back_populates="hh_applications")
+    feedback_entries        = relationship("ApplicationFeedback", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationFeedback.created_at")
 
     @property
     def abgesagt(self) -> bool:
@@ -306,6 +308,23 @@ class Application(Base):
 
     def __repr__(self):
         return f"<Application {self.firma} | {self.rolle}>"
+
+
+class ApplicationFeedback(Base):
+    """User-authored notes on an application's AI match_score/success_probability
+    assessment, entered via rapportGPT (ai/chat.py's add_assessment_feedback tool)
+    and never overwritten -- an append-only log fed into every future
+    compute_match_score()/compute_success_probability() call so the model keeps
+    the user's own corrections/context in view across re-assessments."""
+    __tablename__ = "application_feedback"
+
+    id             = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, index=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    text           = Column(Text, nullable=False)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("Application", back_populates="feedback_entries")
 
 
 class Contact(Base):

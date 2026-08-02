@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from app.linkedin_job_description import load_job_description, _DESCRIPTION_JS, _COMPANY_NAME_JS
+from app.linkedin_job_description import load_job_description, _DESCRIPTION_JS, _COMPANY_NAME_JS, _APPLICANT_COUNT_JS
 
 
 # ---------------------------------------------------------------------------
@@ -33,10 +33,12 @@ DEFAULT_HTML = "<div>Senior Software Engineer position requiring 5+ years experi
 class FakePage:
     def __init__(self, *, description: str = DEFAULT_HTML,
                  company: str = "Acme Corp",
+                 applicant_count: int | None = None,
                  goto_fail: bool = False,
                  login_url: bool = False):
         self._description = description
         self._company = company
+        self._applicant_count = applicant_count
         self._goto_fail = goto_fail
         self._login_url = login_url
         self.url = ""
@@ -57,6 +59,8 @@ class FakePage:
             return self._description
         if js == _COMPANY_NAME_JS:
             return self._company
+        if js == _APPLICANT_COUNT_JS:
+            return self._applicant_count
         return None
 
     async def wait_for_load_state(self, *args, **kw):
@@ -243,6 +247,40 @@ class TestLoadJobDescription:
         assert result["company"] == "Retrieved Corp"
         assert page._company_calls == 2
 
+    async def test_applicant_count_hit(self, db_session, monkeypatch):
+        _setup_linkedin(db_session)
+        page = FakePage(applicant_count=237)
+        _patch_playwright(monkeypatch, page)
+
+        result = await load_job_description("https://linkedin.com/jobs/1", db_session)
+
+        assert result["applicant_count"] == 237
+        assert _APPLICANT_COUNT_JS in page.evaluate_calls
+
+    async def test_applicant_count_miss_stays_none(self, db_session, monkeypatch):
+        _setup_linkedin(db_session)
+        _patch_playwright(monkeypatch, FakePage(applicant_count=None))
+
+        result = await load_job_description("https://linkedin.com/jobs/1", db_session)
+
+        assert result["applicant_count"] is None
+
+    async def test_applicant_count_evaluate_exception_is_soft_failure(self, db_session, monkeypatch):
+        _setup_linkedin(db_session)
+
+        class ExplodingPage(FakePage):
+            async def evaluate(self, js: str):
+                if js == _APPLICANT_COUNT_JS:
+                    raise Exception("evaluate crashed")
+                return await super().evaluate(js)
+
+        _patch_playwright(monkeypatch, ExplodingPage())
+
+        result = await load_job_description("https://linkedin.com/jobs/1", db_session)
+
+        assert result["applicant_count"] is None
+        assert result["description"] == DEFAULT_HTML
+
 
 # ---------------------------------------------------------------------------
 # JS-Struktur-Prüfung
@@ -263,3 +301,8 @@ class TestExtractionJs:
 
     def test_company_name_js_has_hiring_pattern(self):
         assert "hiring" in _COMPANY_NAME_JS.lower()
+
+    def test_applicant_count_js_contains_expected_patterns(self):
+        assert "bewerber" in _APPLICANT_COUNT_JS.lower()
+        assert "applicants" in _APPLICANT_COUNT_JS.lower()
+        assert "createTreeWalker" in _APPLICANT_COUNT_JS

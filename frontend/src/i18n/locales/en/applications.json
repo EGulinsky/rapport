@@ -90,6 +90,9 @@
     "jobPosting": "Job posting",
     "jobPostingPlaceholder": "https://…",
     "noLink": "No link",
+    "candidateCount": "Number of candidates",
+    "candidateCountPlaceholder": "e.g. 150",
+    "candidateCountUnknown": "Unknown",
     "comment": "Comment",
     "commentPlaceholder": "Notes on the application…",
     "noComment": "No comment",
@@ -261,6 +264,8 @@
     "title": "AI Assessment",
     "matchScore": "Match Score",
     "successProbability": "Success Probability",
-    "notYetComputed": "Not yet computed"
+    "notYetComputed": "Not yet computed",
+    "feedbackTitle": "Your feedback",
+    "feedbackHint": "Add a note via rapportGPT — it's kept permanently and taken into account on every future re-assessment."
   }
 }

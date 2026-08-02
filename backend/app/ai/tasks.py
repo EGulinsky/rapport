@@ -3,6 +3,7 @@ AI tasks for intelligent event matching and classification.
 All tasks return typed dicts; the caller decides what to persist.
 """
 from __future__ import annotations
+from datetime import date
 from sqlalchemy.orm import Session
 from app.ai.provider import complete, AINotConfigured, AIRateLimited
 from app.i18n_strings import resolve_ui_language  # noqa: F401 — re-exported for existing call sites/tests
@@ -361,9 +362,12 @@ _SCORE_LANGUAGE_NOTE = {
 }
 
 _MATCH_SCORE_SYSTEM = """\
-Du bist ein erfahrener Recruiting-Experte. Du bewertest, wie gut ein Bewerberprofil \
-zu einer Stellenanzeige passt. Antworte ausschließlich als valides JSON-Objekt, \
-kein Markdown, keine Erklärungen außerhalb des JSON.
+Du bist ein erfahrener, sehr anspruchsvoller Recruiting-Verantwortlicher in einem \
+Bewerbermarkt zugunsten der Firma (viele gut qualifizierte Bewerber pro Stelle). Du \
+bewertest kritisch, wie gut ein Bewerberprofil zu einer Stellenanzeige passt — ohne \
+Wohlwollen und ohne im Zweifel zugunsten des Bewerbers zu entscheiden. Antworte \
+ausschließlich als valides JSON-Objekt, kein Markdown, keine Erklärungen außerhalb \
+des JSON.
 """
 
 _SUCCESS_PROBABILITY_SYSTEM = """\
@@ -421,12 +425,71 @@ def _build_jd_block(jd_texts: list[dict]) -> str:
     return "=== STELLENANZEIGE(N) ===\n" + "\n\n".join(parts) + "\n\n"
 
 
+def _build_activity_stats_block(app) -> str:
+    """'=== KONTAKTHÄUFIGKEIT & -RICHTUNG ===' block for compute_success_probability —
+    a code-computed summary of contact frequency, who initiates contact (Event.
+    mail_direction), and (if set) the known candidate count, so the model doesn't
+    have to infer these purely from the free-text timeline."""
+    events = [e for e in app.events if e.datum]
+    received = sum(1 for e in events if e.mail_direction == "received")
+    sent = sum(1 for e in events if e.mail_direction == "sent")
+    dated_count = len(events)
+    contact_count = len(app.contacts)
+    last = max((e.datum for e in events), default=None)
+    days_since_last = (date.today() - last).days if last else None
+
+    lines = [
+        f"Anzahl Ereignisse gesamt: {dated_count}",
+        f"Anzahl verknüpfter Kontaktpersonen: {contact_count}",
+    ]
+    if received or sent:
+        direction_note = ""
+        if received > sent:
+            direction_note = "  (Firma meldet sich von sich aus)"
+        elif sent > received:
+            direction_note = "  (Kontakt geht überwiegend vom Bewerber aus)"
+        lines.append(f"E-Mails von der Firma erhalten: {received} · E-Mails selbst gesendet: {sent}{direction_note}")
+    if days_since_last is not None:
+        lines.append(f"Letzte Aktivität vor {days_since_last} Tagen")
+    bewerberzahl = getattr(app, "bewerberzahl", None)
+    if bewerberzahl:
+        lines.append(f"Bekannte Bewerberzahl (Momentaufnahme bei Veröffentlichung): {bewerberzahl}")
+
+    return "=== KONTAKTHÄUFIGKEIT & -RICHTUNG ===\n" + "\n".join(lines) + "\n\n"
+
+
+def _build_history_block(stats: dict | None) -> str:
+    """'=== HISTORISCHE VERGLEICHSDATEN ===' block for compute_success_probability —
+    see ai/historical_outcomes.py::compute_stage_outcomes()."""
+    if not stats:
+        return ""
+    return (
+        f"=== HISTORISCHE VERGLEICHSDATEN ===\n"
+        f"Von {stats['total']} bisherigen Bewerbungen, die mindestens die Phase "
+        f"\"{stats['stage_label']}\" erreicht haben, endeten {stats['signed']} mit einer "
+        f"Zusage und {stats['rejected']} mit einer Absage.\n\n"
+    )
+
+
+def _build_feedback_block(entries: list[str]) -> str:
+    """'=== HINWEISE DES BEWERBERS ZU FRÜHEREN EINSCHÄTZUNGEN ===' block — an
+    append-only log of user-authored notes (models.ApplicationFeedback, added
+    via rapportGPT's add_assessment_feedback tool, ai/chat.py), fed into both
+    compute_match_score() and compute_success_probability() since a correction
+    might target either assessment."""
+    if not entries:
+        return ""
+    numbered = "\n".join(f"- {e}" for e in entries)
+    return "=== HINWEISE DES BEWERBERS ZU FRÜHEREN EINSCHÄTZUNGEN ===\n" + numbered + "\n\n"
+
+
 async def compute_match_score(
     db: Session,
     firma: str,
     rolle: str,
     profile_block: str,
     jd_texts: list[dict],
+    feedback_entries: list[str] | None = None,
     ui_language: str = "de",
 ) -> dict:
     """How well does the applicant's profile (CV/LinkedIn, via profile_block)
@@ -434,6 +497,7 @@ async def compute_match_score(
     {"match_score": int 0-100, "reasoning": str}."""
     lang_note = _SCORE_LANGUAGE_NOTE.get(ui_language, _SCORE_LANGUAGE_NOTE["de"])
     jd_block = _build_jd_block(jd_texts)
+    feedback_block = _build_feedback_block(feedback_entries or [])
 
     prompt = f"""=== BEWERBUNG ===
 Firma: {firma}
@@ -447,11 +511,16 @@ Eine Zahl von 0 (kein erkennbarer Zusammenhang) bis 100 (nahezu perfekte Überei
    - Falls oben keine Stellenanzeige vorhanden ist: bewerte konservativ allein anhand von \
 Firma/Stelle-Name, ohne Details zu erfinden.
    - Falls oben kein Bewerberprofil vorhanden ist: bewerte konservativ, ohne Qualifikationen zu erfinden.
+   - Sei streng: Ziehe für jede fehlende oder nur teilweise erfüllte Kernanforderung \
+(z.B. Jahre Erfahrung, konkrete Technologie/Zertifizierung, Ausbildungsabschluss, \
+Sprachniveau) spürbar Punkte ab. Ein Wert über 80 ist nur gerechtfertigt, wenn \
+praktisch alle zentralen Anforderungen erkennbar erfüllt sind — reine Überschneidung \
+bei Soft Skills oder allgemeiner Berufserfahrung reicht nicht.
 
 2. "reasoning" — Warum diese Einschätzung? (2-3 Sätze, konkrete Übereinstimmungen und Lücken benennen, \
 keine Floskeln)
 
-{lang_note}
+{feedback_block}{lang_note}
 
 {{"match_score": <0-100>, "reasoning": "..."}}"""
 
@@ -478,14 +547,21 @@ async def compute_success_probability(
     match_reasoning: str,
     timeline_text: str,
     ghosting: bool,
+    activity_stats_block: str = "",
+    history_block: str = "",
+    feedback_entries: list[str] | None = None,
     ui_language: str = "de",
 ) -> dict:
-    """How likely is this application to still result in an offer, given the
-    match score and the application's actual activity history? Returns
-    {"success_probability": int 0-100, "reasoning": str}."""
+    """How likely is this application to still result in an offer? Goes beyond
+    raw activity/progress: also weighs contact frequency and who initiates
+    contact (activity_stats_block, see _build_activity_stats_block()), and how
+    comparable past applications actually turned out (history_block, see
+    ai/historical_outcomes.py). Returns {"success_probability": int 0-100,
+    "reasoning": str}."""
     lang_note = _SCORE_LANGUAGE_NOTE.get(ui_language, _SCORE_LANGUAGE_NOTE["de"])
     status_label = _STATUS_LABELS.get(main_status, main_status)
     ghosting_note = "\nHinweis: Diese Bewerbung gilt aktuell als Ghosting (lange keine echte Aktivität)." if ghosting else ""
+    feedback_block = _build_feedback_block(feedback_entries or [])
 
     prompt = f"""=== BEWERBUNG ===
 Firma: {firma}
@@ -498,13 +574,14 @@ Status: {status_label}{f" ({sub_status})" if sub_status else ""}{ghosting_note}
 === VOLLSTÄNDIGE TIMELINE (chronologisch) ===
 {timeline_text}
 
-=== AUFGABE ===
+{activity_stats_block}{history_block}{feedback_block}=== AUFGABE ===
 Gib ein JSON-Objekt mit genau zwei Feldern zurück:
 
 1. "success_probability" — Wie wahrscheinlich führt diese Bewerbung noch zu einem Angebot? \
-Eine Zahl von 0 (praktisch ausgeschlossen) bis 100 (so gut wie sicher). Berücksichtige sowohl den \
-Match-Score als auch den bisherigen Verlauf (Anzahl/Art der Gespräche, Tage seit letztem Kontakt, \
-erreichte Phase, Ghosting-Hinweis).
+Eine Zahl von 0 (praktisch ausgeschlossen) bis 100 (so gut wie sicher). Berücksichtige den \
+Match-Score, den bisherigen Gesprächsverlauf, die Kontakthäufigkeit und -richtung, die bekannte \
+Bewerberzahl (falls vorhanden), sowie die historischen Vergleichsdaten ähnlich weit fortgeschrittener \
+bisheriger Bewerbungen — nicht nur den reinen Zeitverlauf/die Aktivität.
 
 2. "reasoning" — Warum diese Einschätzung? (2-3 Sätze, konkrete Fakten aus Match-Score und Timeline nennen, \
 keine Floskeln)

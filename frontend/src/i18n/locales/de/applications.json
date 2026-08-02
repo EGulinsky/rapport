@@ -90,6 +90,9 @@
     "jobPosting": "Stellenanzeige",
     "jobPostingPlaceholder": "https://…",
     "noLink": "Kein Link",
+    "candidateCount": "Anzahl Bewerber",
+    "candidateCountPlaceholder": "z.B. 150",
+    "candidateCountUnknown": "Unbekannt",
     "comment": "Kommentar",
     "commentPlaceholder": "Notizen zur Bewerbung…",
     "noComment": "Kein Kommentar",
@@ -261,6 +264,8 @@
     "title": "KI-Einschätzung",
     "matchScore": "Match-Score",
     "successProbability": "Erfolgswahrscheinlichkeit",
-    "notYetComputed": "Noch nicht berechnet"
+    "notYetComputed": "Noch nicht berechnet",
+    "feedbackTitle": "Dein Feedback",
+    "feedbackHint": "Über rapportGPT einen Hinweis hinzufügen — wird dauerhaft gespeichert und bei jeder zukünftigen Neubewertung berücksichtigt."
   }
 }

@@ -10,6 +10,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.16',
+    date: '2026-08-02',
+    changes: [
+      'New optional "Number of candidates" field per application, editable in the Overview tab and prefilled automatically where available when importing a job posting from a LinkedIn URL.',
+      'The AI match score now grades more critically — from the perspective of a demanding hiring manager in a buyer\'s market, with points deducted for every unmet or only partially met requirement rather than giving the benefit of the doubt.',
+      'The AI success probability no longer relies mainly on activity/progress — it now also weighs how often contact happens and who initiates it (you vs. the company), the number of candidates if known, and how similar past applications (that reached at least the same stage) actually turned out.',
+      'You can now leave feedback on an application\'s AI assessment directly in rapportGPT (e.g. "this role actually needs 10 years of Java, I have none") — it\'s saved permanently, shown in the Overview tab, and taken into account on every future re-assessment, with scores updating immediately in the same reply.',
+    ],
+  },
+  {
     version: '4.7.15',
     date: '2026-08-01',
     changes: [

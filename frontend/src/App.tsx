@@ -804,6 +804,7 @@ interface NewApplicationPrefill {
   zielfirma_bei_hh: string | null
   kommentar: string | null
   stellenanzeige_url?: string
+  bewerberzahl?: number | null
   company_profile_id?: number | null
 }
 
@@ -885,6 +886,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
   const [form, setForm] = useState<{
     firma: string; company_profile_id: number | null; rolle: string; quelle: string; is_headhunter: boolean
     main_status: MainStatus; datum_bewerbung: string; zielfirma_bei_hh: string; kommentar: string; stellenanzeige_url: string
+    bewerberzahl: number | null
   }>({
     firma: initial?.firma ?? '',
     company_profile_id: initial?.company_profile_id ?? null,
@@ -896,6 +898,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
     zielfirma_bei_hh: initial?.zielfirma_bei_hh ?? '',
     kommentar: initial?.kommentar ?? '',
     stellenanzeige_url: initial?.stellenanzeige_url ?? '',
+    bewerberzahl: initial?.bewerberzahl ?? null,
   })
   const [saving, setSaving] = useState(false)
   const [firmaPicker, setFirmaPicker] = useState(false)
@@ -954,6 +957,7 @@ function NewApplicationModal({ initial, onClose, onSaved }: { initial?: NewAppli
         zielfirma_bei_hh: form.zielfirma_bei_hh || undefined,
         kommentar: form.kommentar || undefined,
         stellenanzeige_url: form.stellenanzeige_url || undefined,
+        bewerberzahl: form.bewerberzahl ?? undefined,
         // initial is only ever set from LinkedInImportModal's prefill (see
         // App.tsx's onExtracted handler) — skips the automatic post-create
         // LinkedIn sync since this data was just pulled from LinkedIn.

@@ -55,6 +55,7 @@ export interface Application {
   ghosting: boolean
   kommentar?: string
   stellenanzeige_url?: string
+  bewerberzahl?: number | null
   gespraech_1?: string
   gespraech_2?: string
   gespraech_3?: string
@@ -77,6 +78,7 @@ export interface Application {
   success_probability?: number | null
   success_probability_reasoning?: string | null
   ai_score_computed_at?: string | null
+  feedback_entries?: ApplicationFeedback[]
   salary_currency?: string | null
   salary_expectation_min?: number | null
   salary_expectation_max?: number | null
@@ -95,6 +97,12 @@ export interface Application {
   salary_mismatch: boolean
   drive_distance_km?: number | null
   drive_duration_min?: number | null
+}
+
+export interface ApplicationFeedback {
+  id: number
+  text: string
+  created_at?: string | null
 }
 
 export interface ContactPhone {

@@ -388,6 +388,36 @@ class TestComputeMatchScore:
         prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
         assert 'Write "reasoning" in English.' in prompt
 
+    async def test_positiv_system_prompt_fordert_strenge_bewertung(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+
+        await compute_match_score(db_session, firma="X", rolle="Y", profile_block="", jd_texts=[])
+
+        system_prompt = fake_ai_provider.calls[0]["messages"][0]["content"]
+        assert "anspruchsvoll" in system_prompt
+        user_prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "Sei streng" in user_prompt
+
+    async def test_positiv_feedback_entries_werden_im_prompt_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+
+        await compute_match_score(
+            db_session, firma="X", rolle="Y", profile_block="", jd_texts=[],
+            feedback_entries=["Die Rolle braucht 10 Jahre Java, ich habe keine."],
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "HINWEISE DES BEWERBERS" in prompt
+        assert "10 Jahre Java" in prompt
+
+    async def test_negativ_ohne_feedback_kein_hinweisblock(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("match_score_valid.json"))
+
+        await compute_match_score(db_session, firma="X", rolle="Y", profile_block="", jd_texts=[])
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "HINWEISE DES BEWERBERS" not in prompt
+
 
 class TestComputeSuccessProbability:
     async def test_positiv_liefert_probability_und_reasoning(self, db_session, ai_settings, fake_ai_provider):
@@ -447,3 +477,55 @@ class TestComputeSuccessProbability:
         assert "91/100" in prompt
         assert "Exzellenter Fit" in prompt
         assert "01.01.2026 [mail]" in prompt
+
+    async def test_positiv_aufgabe_erwaehnt_kontakthaeufigkeit_und_historie_nicht_nur_aktivitaet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=50, match_reasoning="...", timeline_text="...", ghosting=False,
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "Kontakthäufigkeit" in prompt
+        assert "historischen Vergleichsdaten" in prompt
+        assert "nicht nur den reinen Zeitverlauf/die Aktivität" in prompt
+
+    async def test_positiv_activity_stats_block_wird_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=50, match_reasoning="...", timeline_text="...", ghosting=False,
+            activity_stats_block="=== KONTAKTHÄUFIGKEIT & -RICHTUNG ===\nAnzahl Ereignisse gesamt: 3\n\n",
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "=== KONTAKTHÄUFIGKEIT & -RICHTUNG ===" in prompt
+        assert "Anzahl Ereignisse gesamt: 3" in prompt
+
+    async def test_positiv_history_block_wird_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=50, match_reasoning="...", timeline_text="...", ghosting=False,
+            history_block="=== HISTORISCHE VERGLEICHSDATEN ===\nVon 5 bisherigen Bewerbungen...\n\n",
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "=== HISTORISCHE VERGLEICHSDATEN ===" in prompt
+        assert "Von 5 bisherigen Bewerbungen" in prompt
+
+    async def test_positiv_feedback_entries_werden_eingebettet(self, db_session, ai_settings, fake_ai_provider):
+        fake_ai_provider.queue_content(load_fixture("success_probability_valid.json"))
+
+        await compute_success_probability(
+            db_session, firma="X", rolle="Y", main_status="hr", sub_status=None,
+            match_score=50, match_reasoning="...", timeline_text="...", ghosting=False,
+            feedback_entries=["Sie haben informell schon abgesagt."],
+        )
+
+        prompt = fake_ai_provider.calls[0]["messages"][1]["content"]
+        assert "HINWEISE DES BEWERBERS" in prompt
+        assert "informell schon abgesagt" in prompt

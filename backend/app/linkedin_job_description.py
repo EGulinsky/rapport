@@ -103,11 +103,36 @@ _COMPANY_NAME_JS = """() => {
     return '';
 }"""
 
+_APPLICANT_COUNT_JS = """() => {
+    // LinkedIn shows applicant-count text (e.g. "Über 200 Bewerber", "200 applicants",
+    // "Be among the first 25 applicants") near the job-posting header -- no stable
+    // selector exists (all classes hashed), so scan text nodes structurally like the
+    // other heuristics in this file. Best-effort only: returns null on no match, this
+    // number is never guaranteed to be exact or current.
+    const re = /(\\d[\\d.,]*)\\s*(bewerber|applicants?|people clicked apply)/i;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let tnode;
+    let scanned = 0;
+    while (tnode = walker.nextNode()) {
+        scanned++;
+        if (scanned > 4000) break;  // don't scan the whole page indefinitely
+        const text = (tnode.textContent || '').trim();
+        if (!text) continue;
+        const m = text.match(re);
+        if (m) {
+            const n = parseInt(m[1].replace(/[.,]/g, ''), 10);
+            if (!isNaN(n)) return n;
+        }
+    }
+    return null;
+}"""
+
 
 async def load_job_description(job_url: str, db: Session) -> dict:
-    """Load job description text and posting company name from a LinkedIn job posting page.
+    """Load job description text, posting company name, and (best-effort)
+    applicant count from a LinkedIn job posting page.
 
-    Returns {"description": str, "company": str | None}.
+    Returns {"description": str, "company": str | None, "applicant_count": int | None}.
     """
     cfg = db.query(models.LinkedInSync).first()
     if not cfg or not cfg.email or not cfg.password_enc:
@@ -206,9 +231,15 @@ async def load_job_description(job_url: str, db: Session) -> dict:
             except Exception:
                 pass
 
+        applicant_count = None
+        try:
+            applicant_count = await page.evaluate(_APPLICANT_COUNT_JS)
+        except Exception:
+            pass
+
         await browser.close()
 
     if not description:
         raise ValueError("Stellenbeschreibung konnte nicht extrahiert werden — Seitenstruktur evtl. geändert oder Zugriff verweigert.")
 
-    return {"description": description, "company": company or None}
+    return {"description": description, "company": company or None, "applicant_count": applicant_count}

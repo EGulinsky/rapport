@@ -84,6 +84,42 @@ class TestExtractFromLinkedinUrl:
 
         assert resp.status_code == 400
 
+    def test_positiv_bewerberzahl_wird_ins_ergebnis_uebernommen(self, client, db_session):
+        async def _fake_load(url, db):
+            return {"description": "Wir suchen einen Backend Engineer.", "company": "Contoso AG", "applicant_count": 42}
+
+        async def _fake_extract(db, text):
+            return {
+                "firma": "Contoso AG", "rolle": "Backend Engineer", "quelle": "LinkedIn",
+                "is_headhunter": False, "zielfirma_bei_hh": None, "kommentar": None,
+            }
+
+        with patch("app.linkedin_job_description.load_job_description", new=_fake_load), \
+             patch("app.ai.tasks.extract_application_from_text", new=_fake_extract), \
+             patch("app.routers.sync_company._run_sync_batch"):
+            resp = client.post("/api/applications/extract-from-linkedin-url", json={"url": "https://linkedin.com/jobs/view/1"})
+
+        assert resp.status_code == 200
+        assert resp.json()["bewerberzahl"] == 42
+
+    def test_positiv_fehlende_bewerberzahl_bleibt_none(self, client, db_session):
+        async def _fake_load(url, db):
+            return {"description": "Wir suchen einen Backend Engineer.", "company": "Contoso AG"}
+
+        async def _fake_extract(db, text):
+            return {
+                "firma": "Contoso AG", "rolle": "Backend Engineer", "quelle": "LinkedIn",
+                "is_headhunter": False, "zielfirma_bei_hh": None, "kommentar": None,
+            }
+
+        with patch("app.linkedin_job_description.load_job_description", new=_fake_load), \
+             patch("app.ai.tasks.extract_application_from_text", new=_fake_extract), \
+             patch("app.routers.sync_company._run_sync_batch"):
+            resp = client.post("/api/applications/extract-from-linkedin-url", json={"url": "https://linkedin.com/jobs/view/1"})
+
+        assert resp.status_code == 200
+        assert resp.json()["bewerberzahl"] is None
+
     def test_negativ_ai_rate_limit_liefert_429(self, client):
         from app.ai.provider import AIRateLimited
 
