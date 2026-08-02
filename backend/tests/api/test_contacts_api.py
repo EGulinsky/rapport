@@ -80,6 +80,21 @@ class TestListContacts:
         assert body["applications"][0]["company_name_display"] == "Acme Corp"
         assert body["company_website"] == "https://acme.example/"
 
+    def test_positiv_liefert_main_status_der_verlinkten_bewerbung(self, client, db_session):
+        # main_status must be exposed here so the frontend can signal a
+        # rejected application in the contacts table/modal (ApplicationBrief
+        # previously omitted it, only company_name_display was enriched).
+        app_obj = application_factory(db_session, firma="Contoso", main_status="rejected")
+        contact = contact_factory(db_session, name="Dana Rejected")
+        contact.applications.append(app_obj)
+        db_session.commit()
+
+        resp = client.get("/api/contacts/")
+
+        assert resp.status_code == 200
+        body = next(c for c in resp.json() if c["name"] == "Dana Rejected")
+        assert body["applications"][0]["main_status"] == "rejected"
+
     def test_corner_case_keine_kontakte_liefert_leere_liste(self, client):
         resp = client.get("/api/contacts/")
 

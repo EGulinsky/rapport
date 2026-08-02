@@ -95,4 +95,43 @@ describe('CompaniesView — zeigt angehängte Bewerbungen statt Standort-Spalte'
     expect(screen.getByText('Bewerbungen')).toBeInTheDocument()
     expect(screen.queryByText('Standort')).not.toBeInTheDocument()
   })
+
+  it('positiv: abgesagte Bewerbungen zeigen ein "Absage"-Signal, aktive nicht', async () => {
+    ;(api.companies.list as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeCompany({
+        applications: [
+          { id: 42, firma: 'Contoso AG', rolle: 'Backend Engineer', main_status: 'rejected' },
+          { id: 43, firma: 'Contoso AG', rolle: 'Frontend Engineer', main_status: 'applied' },
+        ],
+      }),
+    ])
+
+    render(<CompaniesView onOpenApplication={vi.fn()} onOpenCompany={vi.fn()} />)
+
+    await screen.findByText('Backend Engineer')
+    expect(screen.getByText('Absage')).toBeInTheDocument()
+    // only one rejected application among the two -> exactly one signal
+    expect(screen.getAllByText('Absage')).toHaveLength(1)
+  })
+})
+
+describe('CompaniesView — Standardsortierung', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    i18n.changeLanguage('de')
+  })
+
+  it('positiv: Firmen werden standardmäßig alphabetisch nach Name aufsteigend sortiert, nicht nach Bewerbungsanzahl', async () => {
+    ;(api.companies.list as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeCompany({ id: 1, name_display: 'Zeta GmbH', name_norm: 'zeta gmbh', app_count: 5, applications: [] }),
+      makeCompany({ id: 2, name_display: 'Adatum AG', name_norm: 'adatum ag', app_count: 0, applications: [] }),
+      makeCompany({ id: 3, name_display: 'Munddus Inc', name_norm: 'munddus inc', app_count: 2, applications: [] }),
+    ])
+
+    render(<CompaniesView onOpenApplication={vi.fn()} onOpenCompany={vi.fn()} />)
+
+    await screen.findByText('Zeta GmbH')
+    const names = screen.getAllByText(/GmbH|AG|Inc/).map(el => el.textContent)
+    expect(names).toEqual(['Adatum AG', 'Munddus Inc', 'Zeta GmbH'])
+  })
 })

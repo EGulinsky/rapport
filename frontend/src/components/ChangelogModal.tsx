@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.23',
+    date: '2026-08-02',
+    changes: [
+      'Companies view now sorts alphabetically by name ascending by default, instead of by application count.',
+      'Applications linked to a contact or company (in both the table views and the detail modals) now visibly signal when they\'ve been rejected, instead of looking identical to active ones.',
+    ],
+  },
+  {
     version: '4.7.22',
     date: '2026-08-02',
     changes: [

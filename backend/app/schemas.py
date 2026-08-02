@@ -67,6 +67,7 @@ class ApplicationBrief(BaseModel):
     id: int
     firma: str
     rolle: str
+    main_status: str
     company_name_display: Optional[str] = None
 
     model_config = {"from_attributes": True}

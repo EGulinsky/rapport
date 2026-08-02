@@ -170,7 +170,7 @@ export interface Contact {
 }
 
 export interface ContactWithApp extends Contact {
-  applications?: { id: number; firma: string; rolle: string; company_name_display?: string | null }[]
+  applications?: { id: number; firma: string; rolle: string; main_status: MainStatus; company_name_display?: string | null }[]
 }
 
 export interface ICloudContactCandidate {

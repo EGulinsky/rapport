@@ -26,7 +26,7 @@ function makeContact(overrides: Partial<ContactWithApp> = {}): ContactWithApp {
 }
 
 function makeApp(id: number, firma: string) {
-  return { id, firma, rolle: 'Dev', company_name_display: null as string | null }
+  return { id, firma, rolle: 'Dev', main_status: 'applied' as const, company_name_display: null as string | null }
 }
 
 describe('ContactModal — batch unlink of applications (mirrors app-side bulk-remove-contacts)', () => {

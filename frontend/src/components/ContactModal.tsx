@@ -9,6 +9,7 @@ import { PhoneListEditor, type PhoneEntry } from './PhoneListEditor'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate } from '../i18n/formatDate'
 import { errorMessage } from '../i18n/errorMessage'
+import { StatusBadge } from './StatusBadge'
 import clsx from 'clsx'
 
 interface Props {
@@ -489,10 +490,13 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                       />
                       <button
                         onClick={() => onOpenApplication?.(a.id)}
-                        className="flex-1 min-w-0 text-left"
+                        className="flex-1 min-w-0 flex items-center justify-between gap-2 text-left"
                       >
-                        <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
-                        <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
+                          <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
+                        </div>
+                        <StatusBadge status={a.main_status} size="sm" />
                       </button>
                     </div>
                   ))}
