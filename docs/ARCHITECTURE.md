@@ -693,6 +693,7 @@ erDiagram
 | `firma`, `rolle` | VARCHAR NOT NULL | Company, role |
 | `main_status` / `sub_status` | VARCHAR | See [Status Transitions](#4-status-transitions) |
 | `is_headhunter` / `zielfirma_bei_hh` | BOOLEAN / VARCHAR | Headhunter flag / target company when applying via a headhunter |
+| `zielfirma_bekannt` | BOOLEAN NOT NULL, default `True` | Whether `zielfirma_bei_hh` is a real, resolvable company name (`True`) vs. a generic non-identifying description (`False`, e.g. "confidential automotive client") — gates `_ensure_company_profile()` (applications.py) from ever creating/linking a `target_company_profile_id` (and thus becoming eligible for company sync) for a generic description |
 | `quelle`, `wurde_besetzt_von` | VARCHAR NULL | Source, filled by |
 | `datum_bewerbung`, `letztes_update` | DATE NULL | Application date, last update — `letztes_update` is overwritten in-memory on query by `max(events.datum ≤ today)` if larger |
 | `linkedin_job_id`, `stellenanzeige_url` | VARCHAR NULL | For LinkedIn sync matching / import origin (job posting URL) |

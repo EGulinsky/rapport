@@ -273,7 +273,7 @@ def _ensure_company_profile(db: Session, app: models.Application) -> None:
         profile, _ = _find_or_create_company_profile(db, app.firma, app.user_id)
         app.company_profile_id = profile.id
 
-    if app.is_headhunter and app.zielfirma_bei_hh:
+    if app.is_headhunter and app.zielfirma_bei_hh and app.zielfirma_bekannt:
         zprofile, _ = _find_or_create_company_profile(db, app.zielfirma_bei_hh, app.user_id)
         app.target_company_profile_id = zprofile.id
 
@@ -842,7 +842,7 @@ async def update_application(
         update_data["pre_rejection_status"] = old_main
 
     # Capture field-level changes before applying them (verbose mode)
-    AUDIT_FIELDS = {"firma", "rolle", "zielfirma_bei_hh", "wurde_besetzt_von", "quelle",
+    AUDIT_FIELDS = {"firma", "rolle", "zielfirma_bei_hh", "zielfirma_bekannt", "wurde_besetzt_von", "quelle",
                     "datum_bewerbung", "letztes_update", "kommentar", "stellenanzeige_url",
                     "bewerberzahl",
                     "ort", "is_headhunter",
@@ -866,7 +866,8 @@ async def update_application(
     direct_cp_id = update_data.pop("company_profile_id", None)
     direct_tcp_id = update_data.pop("target_company_profile_id", None)
 
-    firma_changed = "firma" in update_data or "zielfirma_bei_hh" in update_data or "is_headhunter" in update_data
+    firma_changed = ("firma" in update_data or "zielfirma_bei_hh" in update_data
+                      or "is_headhunter" in update_data or "zielfirma_bekannt" in update_data)
     ort_changed = "ort" in update_data
     # Invalidate the cached LinkedIn-JD scrape (ai/jd_resolve.py) when the
     # posting URL itself changes — a stale cache would otherwise keep
@@ -876,6 +877,14 @@ async def update_application(
         app.jd_link_text_fetched_at = None
     for field, value in update_data.items():
         setattr(app, field, value)
+
+    # Invariant: a target_company_profile_id must never survive the target
+    # company being marked "not known" (a generic description text like
+    # "confidential automotive client" is not a real company to link/sync) --
+    # enforced unconditionally rather than only when zielfirma_bekannt itself
+    # changed, so it also self-heals any pre-existing inconsistent data.
+    if not app.zielfirma_bekannt:
+        app.target_company_profile_id = None
 
     if ort_changed:
         await _geocode_ort(db, app, app.ort, current_user.id)
@@ -904,6 +913,7 @@ async def update_application(
             old_ziel = app.zielfirma_bei_hh
             app.target_company_profile_id = tcp.id
             app.zielfirma_bei_hh = tcp.name_display or tcp.name_norm
+            app.zielfirma_bekannt = True
             if str(old_ziel or "") != str(app.zielfirma_bei_hh or ""):
                 add_audit(db, "update", "user", app_id=app_id,
                           field="zielfirma_bei_hh", old_value=old_ziel, new_value=app.zielfirma_bei_hh,

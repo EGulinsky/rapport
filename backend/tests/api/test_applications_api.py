@@ -433,6 +433,87 @@ class TestUpdateApplication:
         assert resp.json()["ort"] == "Berlin, Deutschland"
 
 
+class TestHeadhunterTargetCompanyKnownFlag:
+    """zielfirma_bekannt gates whether _ensure_company_profile() (applications.py)
+    creates a CompanyProfile for a headhunter's target-company text -- a real
+    company name should get one (company sync eligible), a generic
+    non-identifying description must never get one."""
+
+    def test_positiv_bekannte_zielfirma_erstellt_company_profile(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Headhunter XY", "rolle": "Engineer", "is_headhunter": True,
+            "zielfirma_bei_hh": "Contoso Corp", "zielfirma_bekannt": True,
+        })
+
+        assert resp.status_code == 201
+        assert resp.json()["target_company_profile_id"] is not None
+
+    def test_negativ_generische_beschreibung_erstellt_kein_company_profile(self, client):
+        resp = client.post("/api/applications/", json={
+            "firma": "Headhunter XY", "rolle": "Engineer", "is_headhunter": True,
+            "zielfirma_bei_hh": "internationaler Automobilzulieferer, vertraulich",
+            "zielfirma_bekannt": False,
+        })
+
+        assert resp.status_code == 201
+        assert resp.json()["target_company_profile_id"] is None
+
+    def test_positiv_default_ist_bekannt_fuer_rueckwaertskompatibilitaet(self, client):
+        # No zielfirma_bekannt sent at all -- must default True so pre-existing
+        # HH-application creation flows keep behaving exactly as before this
+        # flag existed.
+        resp = client.post("/api/applications/", json={
+            "firma": "Headhunter XY", "rolle": "Engineer", "is_headhunter": True,
+            "zielfirma_bei_hh": "Contoso Corp",
+        })
+
+        assert resp.status_code == 201
+        assert resp.json()["zielfirma_bekannt"] is True
+        assert resp.json()["target_company_profile_id"] is not None
+
+    def test_positiv_umschalten_auf_nicht_bekannt_entfernt_bestehende_verknuepfung(self, client, db_session):
+        profile = company_profile_factory(db_session, name_display="Contoso Corp")
+        app = application_factory(
+            db_session, firma="Headhunter XY", is_headhunter=True,
+            zielfirma_bei_hh="Contoso Corp", zielfirma_bekannt=True,
+            target_company_profile_id=profile.id,
+        )
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"zielfirma_bekannt": False})
+
+        assert resp.status_code == 200
+        assert resp.json()["target_company_profile_id"] is None
+
+    def test_positiv_umschalten_auf_bekannt_erstellt_company_profile_nachtraeglich(self, client, db_session):
+        app = application_factory(
+            db_session, firma="Headhunter XY", is_headhunter=True,
+            zielfirma_bei_hh="Contoso Corp", zielfirma_bekannt=False,
+        )
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"zielfirma_bekannt": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["target_company_profile_id"] is not None
+
+    def test_negativ_aenderung_wird_auditiert(self, client, db_session):
+        db_session.add(models.SyncSettings(user_id=1, audit_log_level="verbose"))
+        app = application_factory(
+            db_session, firma="Headhunter XY", is_headhunter=True,
+            zielfirma_bei_hh="Contoso Corp", zielfirma_bekannt=True,
+        )
+        db_session.commit()
+
+        resp = client.patch(f"/api/applications/{app.id}", json={"zielfirma_bekannt": False})
+        assert resp.status_code == 200
+
+        entries = db_session.query(models.AuditLog).filter_by(
+            app_id=app.id, field="zielfirma_bekannt",
+        ).all()
+        assert len(entries) == 1
+
+
 class TestSalaryFields:
     def test_positiv_waehrung_defaultet_auf_eur_wenn_nicht_angegeben(self, client):
         resp = client.post("/api/applications/", json={"firma": "Test GmbH", "rolle": "Engineer"})

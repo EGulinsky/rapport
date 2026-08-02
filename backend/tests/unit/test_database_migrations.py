@@ -595,6 +595,26 @@ class TestMigrateBewerberzahl:
         db_module._migrate_bewerberzahl()  # must not raise ("duplicate column")
 
 
+class TestMigrateZielfirmaBekannt:
+    def test_positiv_fuegt_spalte_hinzu(self, db_path):
+        _drop_columns(db_path, "applications", "zielfirma_bekannt")
+        db_module._migrate_zielfirma_bekannt()
+        assert "zielfirma_bekannt" in _cols(db_path, "applications")
+
+    def test_positiv_backfillt_bestehende_zeilen_mit_1(self, db_path):
+        _drop_columns(db_path, "applications", "zielfirma_bekannt")
+        _exec(db_path, "INSERT INTO applications (firma, rolle, main_status) VALUES ('X', 'Y', 'applied')")
+        db_module._migrate_zielfirma_bekannt()
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT zielfirma_bekannt FROM applications").fetchone()
+        conn.close()
+        assert row[0] == 1
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_zielfirma_bekannt()
+        db_module._migrate_zielfirma_bekannt()  # must not raise ("duplicate column")
+
+
 class TestMigrateAddUserIdColumns:
     def test_positiv_fuegt_user_id_zu_allen_tabellen_hinzu(self, db_path):
         for table in db_module._USER_SCOPED_TABLES:

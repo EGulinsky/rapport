@@ -175,6 +175,15 @@ class Application(Base):
 
     is_headhunter       = Column(Boolean, default=False)
     zielfirma_bei_hh    = Column(String, nullable=True)
+    # Distinguishes the two states a headhunter's target-company text can be
+    # in: a real, resolvable company name (True -- gets its own CompanyProfile
+    # and is eligible for company sync) vs. a generic non-identifying
+    # description (e.g. "confidential automotive client, Stuttgart area")
+    # that must never be turned into a CompanyProfile or synced against
+    # LinkedIn/Wikidata, since there is no real company behind it. Default
+    # True so applications that already had a working target company profile
+    # before this flag existed keep behaving exactly as before.
+    zielfirma_bekannt   = Column(Boolean, default=True, nullable=False, server_default="1")
     quelle              = Column(String, nullable=True)
     wurde_besetzt_von   = Column(String, nullable=True)
     ort                 = Column(String, nullable=True)

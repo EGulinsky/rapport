@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.26',
+    date: '2026-08-02',
+    changes: [
+      'Headhunter applications gain a "Target company known" flag, distinguishing a real, resolvable target company name from a generic description (e.g. "confidential automotive client"). Only a known target company gets its own company profile — company sync, the clickable company link on the Kanban board/table, and the target-company detail no longer get created for a generic description that could never be meaningfully synced.',
+    ],
+  },
+  {
     version: '4.7.25',
     date: '2026-08-02',
     changes: [

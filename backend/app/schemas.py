@@ -158,6 +158,7 @@ class ApplicationBase(BaseModel):
     pre_rejection_status: Optional[str] = None
     is_headhunter: bool = False
     zielfirma_bei_hh: Optional[str] = None
+    zielfirma_bekannt: bool = True
     quelle: Optional[str] = None
     wurde_besetzt_von: Optional[str] = None
     ort: Optional[str] = None
@@ -207,6 +208,7 @@ class ApplicationUpdate(BaseModel):
     sub_status: Optional[str] = None
     is_headhunter: Optional[bool] = None
     zielfirma_bei_hh: Optional[str] = None
+    zielfirma_bekannt: Optional[bool] = None
     quelle: Optional[str] = None
     wurde_besetzt_von: Optional[str] = None
     ort: Optional[str] = None

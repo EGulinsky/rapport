@@ -1196,13 +1196,21 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
                   className="rounded border-gray-300 text-indigo-600" />
                 {t('headhunter')}
               </label>
+              {draft.is_headhunter && (
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={draft.zielfirma_bekannt !== false}
+                    onChange={e => setDraft(d => ({ ...d, zielfirma_bekannt: e.target.checked }))}
+                    className="rounded border-gray-300 text-indigo-600" />
+                  {t('overview.targetCompanyKnown')}
+                </label>
+              )}
             </div>
           )}
 
           {/* Meta fields */}
           {editing ? (
             <div className="grid grid-cols-2 gap-3">
-              {([['quelle', t('overview.sourcePlaceholder')], ['zielfirma_bei_hh', t('overview.targetCompanyPlaceholder')], ['wurde_besetzt_von', t('overview.filledByPlaceholder')]] as const).map(([key, placeholder]) => (
+              {([['quelle', t('overview.sourcePlaceholder')], ['zielfirma_bei_hh', draft.is_headhunter && draft.zielfirma_bekannt === false ? t('overview.targetCompanyGenericPlaceholder') : t('overview.targetCompanyPlaceholder')], ['wurde_besetzt_von', t('overview.filledByPlaceholder')]] as const).map(([key, placeholder]) => (
                 <input key={key}
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder={placeholder}
@@ -1232,7 +1240,13 @@ export function ApplicationModal({ appId, onClose, onSaved, onOpenCompany, onOpe
               )}
               {field(t('overview.fieldAppliedDate'), app?.datum_bewerbung)}
               {field(t('overview.fieldLastUpdate'), app?.letztes_update)}
-              {field(t('overview.fieldTargetCompany'), app?.zielfirma_bei_hh, 'zielfirma_bei_hh')}
+              {field(
+                t('overview.fieldTargetCompany'),
+                app?.zielfirma_bei_hh && app?.is_headhunter && !app.zielfirma_bekannt
+                  ? `${app.zielfirma_bei_hh} (${t('overview.targetCompanyGenericHint')})`
+                  : app?.zielfirma_bei_hh,
+                'zielfirma_bei_hh',
+              )}
               {field(t('overview.fieldFilledBy'), app?.wurde_besetzt_von, 'wurde_besetzt_von')}
               {app?.is_headhunter && (
                 <div className={updatedFields?.has('is_headhunter') ? 'rounded px-2 py-0.5 -mx-2 bg-amber-50 ring-1 ring-inset ring-amber-200' : ''}>

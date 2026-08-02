@@ -1392,6 +1392,27 @@ def _migrate_bewerberzahl():
     conn.close()
 
 
+def _migrate_zielfirma_bekannt():
+    """Adds zielfirma_bekannt -- distinguishes a headhunter's target-company
+    text being a real, resolvable company name (True) from a generic
+    non-identifying description (False), gating whether _ensure_company_profile()
+    (applications.py) creates a CompanyProfile for it. Default 1 so existing
+    headhunter applications keep behaving exactly as before this flag existed
+    (a CompanyProfile was always created whenever zielfirma_bei_hh was set)."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(applications)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "zielfirma_bekannt" not in cols:
+        cur.execute("ALTER TABLE applications ADD COLUMN zielfirma_bekannt INTEGER NOT NULL DEFAULT 1")
+    conn.commit()
+    conn.close()
+
+
 def _migrate_user_salary_defaults():
     """Default salary expectation on the user profile, copied into new
     applications' salary_expectation_* on create (see create_application() in
@@ -1765,6 +1786,7 @@ def init_db():
     _migrate_salary()
     _migrate_ai_scoring()
     _migrate_bewerberzahl()
+    _migrate_zielfirma_bekannt()
     Base.metadata.create_all(bind=engine)
     _migrate_add_user_id_columns()
     _migrate_contact_phones()

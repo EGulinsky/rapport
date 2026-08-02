@@ -45,6 +45,7 @@ export interface Application {
   pre_rejection_status?: string
   is_headhunter: boolean
   zielfirma_bei_hh?: string
+  zielfirma_bekannt: boolean
   quelle?: string
   wurde_besetzt_von?: string
   ort?: string
