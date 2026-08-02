@@ -82,6 +82,7 @@
     "contactsLabel": "Kontakte:",
     "filterAll": "Alle",
     "filterYes": "Ja",
+    "filterActive": "Aktiv",
     "filterNo": "Nein",
     "sync": "Sync",
     "syncCount": "Sync ({{count}})",

@@ -48,6 +48,7 @@
     "applicationsLabel": "Applications:",
     "filterAll": "All",
     "filterYes": "Yes",
+    "filterActive": "Active",
     "filterNo": "No",
     "merge": "Merge ({{count}})",
     "deleting": "Deleting…",

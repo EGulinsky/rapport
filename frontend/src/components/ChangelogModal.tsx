@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.25',
+    date: '2026-08-02',
+    changes: [
+      'Contacts and Companies views\' "Applications" filter now has a third "Active" option (alongside Yes/No), showing only contacts/companies that have at least one non-rejected application — useful for hiding entries whose only applications are already rejected.',
+    ],
+  },
+  {
     version: '4.7.24',
     date: '2026-08-02',
     changes: [

@@ -41,7 +41,7 @@ export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest
   const [loading, setLoading] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [appsFilter, setAppsFilter] = useState<'all' | 'yes' | 'no'>('all')
+  const [appsFilter, setAppsFilter] = useState<'all' | 'yes' | 'active' | 'no'>('all')
   const [contactsFilter, setContactsFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -265,6 +265,7 @@ export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest
   const sorted = useMemo(() => {
     let list = companies
     if (appsFilter === 'yes') list = list.filter(c => (c.app_count ?? 0) > 0)
+    if (appsFilter === 'active') list = list.filter(c => (c.applications ?? []).some(a => a.main_status !== 'rejected'))
     if (appsFilter === 'no') list = list.filter(c => (c.app_count ?? 0) === 0)
     if (contactsFilter === 'yes') list = list.filter(c => (c.contact_count ?? 0) > 0)
     if (contactsFilter === 'no') list = list.filter(c => (c.contact_count ?? 0) === 0)
@@ -340,10 +341,10 @@ export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest
         {loading && <span className="text-xs text-gray-400">{t('view.loading')}</span>}
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-xs text-gray-400">{t('view.applicationsLabel')}</span>
-          {(['all', 'yes', 'no'] as const).map(v => (
+          {(['all', 'yes', 'active', 'no'] as const).map(v => (
             <button key={v} onClick={() => setAppsFilter(v)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors ${appsFilter === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {v === 'all' ? t('view.filterAll') : v === 'yes' ? t('view.filterYes') : t('view.filterNo')}
+              {v === 'all' ? t('view.filterAll') : v === 'yes' ? t('view.filterYes') : v === 'active' ? t('view.filterActive') : t('view.filterNo')}
             </button>
           ))}
         </div>

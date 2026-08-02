@@ -48,6 +48,7 @@
     "applicationsLabel": "Bewerbungen:",
     "filterAll": "Alle",
     "filterYes": "Ja",
+    "filterActive": "Aktiv",
     "filterNo": "Nein",
     "merge": "Mergen ({{count}})",
     "deleting": "Löschen…",
