@@ -357,6 +357,8 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
   const { t } = useTranslation('cleanup')
   const [assigningId, setAssigningId] = useState<number | null>(null)
   const [assignedIds, setAssignedIds] = useState<Set<number>>(new Set())
+  const [mergingId, setMergingId] = useState<number | null>(null)
+  const [mergedIds, setMergedIds] = useState<Set<number>>(new Set())
 
   async function assignAsSubsidiary(childId: number) {
     setAssigningId(childId)
@@ -366,6 +368,17 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
       onAssigned()
     } finally {
       setAssigningId(null)
+    }
+  }
+
+  async function mergeIntoKeep(loserId: number) {
+    setMergingId(loserId)
+    try {
+      await api.merge.companies({ winner_id: group.keep.id, loser_ids: [loserId] })
+      setMergedIds(prev => new Set(prev).add(loserId))
+      onAssigned()
+    } finally {
+      setMergingId(null)
     }
   }
 
@@ -379,23 +392,37 @@ function CompanyGroupRow({ group, onAssigned }: { group: CompanyGroup; onAssigne
       </div>
       {group.remove.map(r => {
         const isAssigned = assignedIds.has(r.id)
+        const isMerged = mergedIds.has(r.id)
         return (
-          <div key={r.id} className={clsx('flex items-center gap-2 ml-4', isAssigned ? 'text-emerald-500' : 'text-gray-400')}>
-            {isAssigned ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Trash2 className="h-3 w-3 text-red-400 shrink-0" />}
+          <div key={r.id} className={clsx('flex items-center gap-2 ml-4', (isAssigned || isMerged) ? 'text-emerald-500' : 'text-gray-400')}>
+            {(isAssigned || isMerged) ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Trash2 className="h-3 w-3 text-red-400 shrink-0" />}
             <span>{r.name}</span>
             <span className="text-gray-300">{t('applicationsCount', { count: r.apps_count })} · {t('contactsCount', { count: r.contacts_count })}</span>
             {isAssigned ? (
               <span className="ml-auto text-[10px]">{t('assignedAsSubsidiary')}</span>
+            ) : isMerged ? (
+              <span className="ml-auto text-[10px]">{t('merged')}</span>
             ) : (
-              <button
-                type="button"
-                disabled={assigningId === r.id}
-                onClick={() => assignAsSubsidiary(r.id)}
-                className="ml-auto text-[10px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50"
-                title={t('assignSubsidiaryTitle', { child: r.name, parent: group.keep.name })}
-              >
-                {assigningId === r.id ? t('assigningAsSubsidiary') : t('assignAsSubsidiary')}
-              </button>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={mergingId === r.id}
+                  onClick={() => mergeIntoKeep(r.id)}
+                  className="text-[10px] font-medium text-red-600 hover:text-red-800 hover:underline disabled:opacity-50"
+                  title={t('mergeTitle', { loser: r.name, winner: group.keep.name })}
+                >
+                  {mergingId === r.id ? t('merging') : t('merge')}
+                </button>
+                <button
+                  type="button"
+                  disabled={assigningId === r.id}
+                  onClick={() => assignAsSubsidiary(r.id)}
+                  className="text-[10px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-50"
+                  title={t('assignSubsidiaryTitle', { child: r.name, parent: group.keep.name })}
+                >
+                  {assigningId === r.id ? t('assigningAsSubsidiary') : t('assignAsSubsidiary')}
+                </button>
+              </div>
             )}
           </div>
         )

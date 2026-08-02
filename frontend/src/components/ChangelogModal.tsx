@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.18',
+    date: '2026-08-02',
+    changes: [
+      'Company duplicate detection (Cleanup) now offers a "Merge" action next to "Assign as subsidiary" for each duplicate candidate — merging combines the two companies\' applications and contacts into one and removes the duplicate immediately, instead of only being possible in bulk when running the whole cleanup.',
+    ],
+  },
+  {
     version: '4.7.17',
     date: '2026-08-02',
     changes: [

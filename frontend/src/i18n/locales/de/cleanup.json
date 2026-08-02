@@ -44,6 +44,10 @@
   "assigningAsSubsidiary": "Ordne zu…",
   "assignedAsSubsidiary": "Als Tochterfirma zugeordnet",
   "assignSubsidiaryTitle": "{{child}} als Tochterfirma von {{parent}} eintragen, statt zusammenzuführen",
+  "merge": "Zusammenführen",
+  "merging": "Führe zusammen…",
+  "merged": "Zusammengeführt",
+  "mergeTitle": "{{loser}} in {{winner}} zusammenführen — überträgt Bewerbungen/Kontakte und löscht {{loser}}",
   "noTitle": "(kein Titel)",
   "note": "Notiz"
 }

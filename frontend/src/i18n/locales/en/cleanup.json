@@ -44,6 +44,10 @@
   "assigningAsSubsidiary": "Assigning…",
   "assignedAsSubsidiary": "Assigned as subsidiary",
   "assignSubsidiaryTitle": "Register {{child}} as a subsidiary of {{parent}} instead of merging",
+  "merge": "Merge",
+  "merging": "Merging…",
+  "merged": "Merged",
+  "mergeTitle": "Merge {{loser}} into {{winner}} — combines their applications/contacts and deletes {{loser}}",
   "noTitle": "(no title)",
   "note": "Note"
 }
