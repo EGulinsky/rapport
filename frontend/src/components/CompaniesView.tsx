@@ -30,7 +30,7 @@ const COMPANY_TYPE_COLORS: Record<string, string> = {
   other:       'bg-gray-100 text-gray-600',
 }
 
-export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey, onReviewOpen }: Props) {
+export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey, onReviewOpen }: Props) {
   const { t } = useTranslation('companies')
   const { t: tCommon } = useTranslation('common')
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
@@ -538,7 +538,7 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
               <Th k="industry" label={t('view.colIndustry')} />
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colType')}</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colSize')}</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colLocation')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{t('view.colApplications')}</th>
               <Th k="sync_status" label={t('view.colStatus')} />
             </tr>
           </thead>
@@ -551,7 +551,6 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
               </tr>
             )}
             {sorted.map(company => {
-              const location = [company.hq_city, company.hq_country].filter(Boolean).join(', ')
               const selected = selectedIds.has(company.id)
               return (
                 <tr
@@ -619,8 +618,22 @@ export function CompaniesView({ onOpenApplication: _onOpenApplication, onOpenCom
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {company.employee_range || '—'}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                    {location || '—'}
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    {company.applications && company.applications.length > 0 ? (
+                      <div className="flex flex-col gap-1">
+                        {company.applications.map(a => (
+                          <button
+                            key={a.id}
+                            onClick={() => onOpenApplication(a.id)}
+                            className="text-left hover:text-indigo-600 transition-colors"
+                          >
+                            <p className="font-medium text-gray-800 hover:text-indigo-600 leading-tight truncate max-w-[160px]">{a.rolle}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-300">{t('view.noApplications')}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {company.sync_status === 'pending' && (

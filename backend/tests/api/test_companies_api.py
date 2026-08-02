@@ -100,6 +100,30 @@ class TestListCompanies:
         child = next(c for c in resp.json() if c["name_display"] == "Tochter")
         assert child["parent_name"] == "Muttergesellschaft"
 
+    def test_positiv_liefert_verknuepfte_bewerbungen_pro_firma(self, client, db_session):
+        # Companies view zeigt angehängte Bewerbungen direkt in der Zeile an
+        # (wie die Contacts view) -- der Listen-Endpunkt muss dafür die volle
+        # applications-Liste mitliefern, nicht nur app_count.
+        company = company_profile_factory(db_session, name_display="Contoso AG")
+        app = application_factory(db_session, firma="Contoso AG", rolle="Backend Engineer", company_profile_id=company.id)
+        db_session.commit()
+
+        resp = client.get("/api/companies")
+
+        body = next(c for c in resp.json() if c["name_display"] == "Contoso AG")
+        assert len(body["applications"]) == 1
+        assert body["applications"][0]["id"] == app.id
+        assert body["applications"][0]["rolle"] == "Backend Engineer"
+
+    def test_negativ_ohne_bewerbungen_leere_liste(self, client, db_session):
+        company_profile_factory(db_session, name_display="Ohne Bewerbung")
+        db_session.commit()
+
+        resp = client.get("/api/companies")
+
+        body = next(c for c in resp.json() if c["name_display"] == "Ohne Bewerbung")
+        assert body["applications"] == []
+
 
 class TestGetCompany:
     def test_negativ_nicht_gefunden_liefert_404(self, client):

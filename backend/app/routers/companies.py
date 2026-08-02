@@ -21,6 +21,16 @@ _LINK_CANCEL = False
 _LINK_PROGRESS: dict = {"linked": 0, "created": 0, "total": 0, "done": False, "cancelled": False}
 
 
+class CompanyApplicationRef(BaseModel):
+    id: int
+    firma: str
+    rolle: str
+    main_status: str
+    datum_bewerbung: Optional[date] = None
+
+    model_config = {"from_attributes": True}
+
+
 class CompanyProfileListItem(BaseModel):
     id: int
     name_display: Optional[str] = None
@@ -38,6 +48,7 @@ class CompanyProfileListItem(BaseModel):
     has_logo: bool = False
     parent_company_id: Optional[int] = None
     parent_name: Optional[str] = None
+    applications: List[CompanyApplicationRef] = []
 
     model_config = {"from_attributes": True}
 
@@ -46,16 +57,6 @@ class CompanySubsidiaryRef(BaseModel):
     id: int
     name_display: Optional[str] = None
     name_norm: str
-
-    model_config = {"from_attributes": True}
-
-
-class CompanyApplicationRef(BaseModel):
-    id: int
-    firma: str
-    rolle: str
-    main_status: str
-    datum_bewerbung: Optional[date] = None
 
     model_config = {"from_attributes": True}
 
@@ -130,6 +131,22 @@ class CompanyUpdateRequest(BaseModel):
 def _app_count(p: CompanyProfile) -> int:
     ids = {a.id for a in p.applications} | {a.id for a in p.hh_applications}
     return len(ids)
+
+
+def _collect_applications(p: CompanyProfile) -> List[CompanyApplicationRef]:
+    seen: set[int] = set()
+    apps = []
+    for a in list(p.applications) + list(p.hh_applications):
+        if a.id not in seen:
+            seen.add(a.id)
+            apps.append(CompanyApplicationRef(
+                id=a.id,
+                firma=a.firma,
+                rolle=a.rolle,
+                main_status=a.main_status,
+                datum_bewerbung=a.datum_bewerbung,
+            ))
+    return apps
 
 
 def _collect_contacts(p: CompanyProfile) -> list:
@@ -260,6 +277,7 @@ def list_companies(
             has_logo=bool(p.logo_data),
             parent_company_id=p.parent_company_id,
             parent_name=id_to_name.get(p.parent_company_id) if p.parent_company_id else None,
+            applications=_collect_applications(p),
         )
         for p in profiles
     ]
@@ -270,18 +288,7 @@ def build_company_detail(profile: CompanyProfile) -> CompanyProfileDetail:
     applications + contacts) from a CompanyProfile ORM instance. Shared by
     the REST endpoint below and the rapportGPT get_company_detail tool
     (app/ai/chat.py) so both surfaces stay in sync from one implementation."""
-    seen = set()
-    apps = []
-    for a in list(profile.applications) + list(profile.hh_applications):
-        if a.id not in seen:
-            seen.add(a.id)
-            apps.append(CompanyApplicationRef(
-                id=a.id,
-                firma=a.firma,
-                rolle=a.rolle,
-                main_status=a.main_status,
-                datum_bewerbung=a.datum_bewerbung,
-            ))
+    apps = _collect_applications(profile)
 
     contacts_raw = _collect_contacts(profile)
     contacts = [

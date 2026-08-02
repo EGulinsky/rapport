@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.20',
+    date: '2026-08-02',
+    changes: [
+      'Companies view now shows each company\'s attached applications directly in the row (role, clickable to open — same as the Contacts view already does), replacing the Location column to make room.',
+    ],
+  },
+  {
     version: '4.7.19',
     date: '2026-08-02',
     changes: [
