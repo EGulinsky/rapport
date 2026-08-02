@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.17',
+    date: '2026-08-02',
+    changes: [
+      'Fixed contacts imported via manual LinkedIn people-search (Applications → LinkedIn tab → search & import) always landing entirely under last name, with first name left blank — the scraped name is now split the same way every other contact source already does, and previously-imported contacts get healed with the correct first/last name split the next time the same person comes up in a search.',
+    ],
+  },
+  {
     version: '4.7.16',
     date: '2026-08-02',
     changes: [

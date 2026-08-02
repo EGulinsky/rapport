@@ -80,3 +80,71 @@ class TestImportPeople:
         contact = db_session.query(models.Contact).filter_by(linkedin_url="https://www.linkedin.com/in/freiberufler").first()
         assert contact.rolle == "Freiberuflich"
         assert contact.firma is None
+
+    def test_positiv_name_wird_in_vorname_und_nachname_gesplittet(self, client, db_session):
+        """LinkedIn's people-search only exposes one display-name string, unlike
+        the CSV/iCloud/Google imports which have structured first/last-name
+        fields -- import_people() must split it itself rather than dumping
+        the whole string into `name` (which used to leave `vorname` NULL)."""
+        resp = client.post("/api/sync/linkedin/people/import", json={
+            "candidates": [{
+                "name": "Max Mustermann",
+                "profile_url": "https://www.linkedin.com/in/max-mustermann",
+            }],
+        })
+
+        assert resp.status_code == 200
+        contact = db_session.query(models.Contact).filter_by(linkedin_url="https://www.linkedin.com/in/max-mustermann").first()
+        assert contact.vorname == "Max"
+        assert contact.name == "Mustermann"
+        assert contact.display_name == "Max Mustermann"
+
+    def test_positiv_bestehender_kontakt_ueber_nachname_gefunden_statt_dupliziert(self, client, db_session):
+        """A contact already imported via the corrected split logic (name=
+        surname only) must be matched by that surname, not re-created as a
+        second row just because a fresh search result carries the full
+        display string again."""
+        contact_factory(db_session, name="Mustermann", vorname="Max", linkedin_url=None)
+        db_session.commit()
+
+        resp = client.post("/api/sync/linkedin/people/import", json={
+            "candidates": [{
+                "name": "Max Mustermann",
+                "profile_url": "https://www.linkedin.com/in/max-mustermann",
+            }],
+        })
+
+        assert resp.status_code == 200
+        assert resp.json() == {"imported": 0, "skipped": 1}
+        assert db_session.query(models.Contact).filter_by(name="Mustermann").count() == 1
+
+    def test_positiv_altkontakt_mit_vollem_namen_wird_nachtraeglich_gesplittet(self, client, db_session):
+        """A contact imported before this split fix existed has the full
+        display string in `name` and vorname=NULL -- re-importing the same
+        person must find that legacy row (not create a duplicate) and heal
+        it with the now-available vorname/name split."""
+        contact_factory(db_session, name="Max Mustermann", vorname=None, linkedin_url=None)
+        db_session.commit()
+
+        resp = client.post("/api/sync/linkedin/people/import", json={
+            "candidates": [{
+                "name": "Max Mustermann",
+                "profile_url": "https://www.linkedin.com/in/max-mustermann",
+            }],
+        })
+
+        assert resp.status_code == 200
+        assert resp.json() == {"imported": 0, "skipped": 1}
+        contact = db_session.query(models.Contact).filter_by(linkedin_url="https://www.linkedin.com/in/max-mustermann").first()
+        assert contact.vorname == "Max"
+        assert contact.name == "Mustermann"
+
+    def test_corner_case_einzelnes_wort_ohne_vorname(self, client, db_session):
+        resp = client.post("/api/sync/linkedin/people/import", json={
+            "candidates": [{"name": "Madonna", "profile_url": "https://www.linkedin.com/in/madonna"}],
+        })
+
+        assert resp.status_code == 200
+        contact = db_session.query(models.Contact).filter_by(linkedin_url="https://www.linkedin.com/in/madonna").first()
+        assert contact.name == "Madonna"
+        assert contact.vorname is None

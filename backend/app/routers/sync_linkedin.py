@@ -23,7 +23,7 @@ from app.i18n_strings import resolve_ui_language, t
 from app.database import get_db
 from app import models
 from app.routers.applications import _ensure_company_profile
-from app.routers.sync_common import _normalize_name, _predates_bewerbung, _to_naive_utc
+from app.routers.sync_common import _normalize_name, _predates_bewerbung, _split_name, _to_naive_utc
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
 
@@ -1518,18 +1518,35 @@ def import_people(
     imported = 0
     skipped = 0
     for cand in body.candidates:
+        # LinkedIn's people-search only exposes a single display-name string
+        # ("Max Mustermann"), unlike the CSV/iCloud/Google imports which have
+        # structured first/last-name source fields — split it the same
+        # best-effort way sync_common's own mail-signature contact creation
+        # does, rather than dumping the whole string into `name` (which left
+        # `vorname` permanently NULL and broke display_name's split).
+        nachname, vorname_val = _split_name(cand.name)
         existing = db.query(models.Contact).filter_by(linkedin_url=cand.profile_url).first()
         if not existing:
+            existing = db.query(models.Contact).filter_by(name=nachname).first()
+        if not existing and nachname != cand.name:
+            # Legacy contacts imported before this split existed have the full
+            # display string in `name` -- match those too instead of creating
+            # a duplicate.
             existing = db.query(models.Contact).filter_by(name=cand.name).first()
         if existing:
             skipped += 1
+            if vorname_val and not existing.vorname:
+                existing.vorname = vorname_val
+                existing.name = nachname
+            if not existing.linkedin_url:
+                existing.linkedin_url = cand.profile_url
             if app_obj and app_obj not in existing.applications:
                 existing.applications.append(app_obj)
                 attach_linkedin_messages_for_contact(db, existing, current_user.id)
             continue
         rolle, firma = _split_headline(cand.headline)
         contact = models.Contact(
-            name=cand.name, linkedin_url=cand.profile_url, rolle=rolle, firma=firma,
+            name=nachname, vorname=vorname_val or None, linkedin_url=cand.profile_url, rolle=rolle, firma=firma,
             user_id=current_user.id,
         )
         db.add(contact)

@@ -264,7 +264,9 @@ class TestImportPeople:
 
         assert resp.status_code == 200
         assert resp.json() == {"imported": 1, "skipped": 0}
-        contact = db_session.query(models.Contact).filter_by(name="Jane Doe").one()
+        contact = db_session.query(models.Contact).filter_by(linkedin_url="https://linkedin.com/in/jane").one()
+        assert contact.vorname == "Jane"
+        assert contact.name == "Doe"
         assert contact.firma == "Contoso"
         assert contact.rolle == "Recruiter"
 
