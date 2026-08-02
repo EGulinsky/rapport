@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.22',
+    date: '2026-08-02',
+    changes: [
+      'LinkedIn sync in Settings → Sync now has separate "Job tracker" and "Messages" toggles, so either half can be turned off independently — plus the existing global LinkedIn on/off toggle now actually takes effect (it was previously stored but never checked, so LinkedIn sync always ran whenever credentials were configured, regardless of the toggle). The "Sync now" button in the LinkedIn settings panel still always works when clicked, since that\'s an explicit single-source action; only the global "Sync now" button and automatic post-create matching respect the parent toggle.',
+    ],
+  },
+  {
     version: '4.7.21',
     date: '2026-08-02',
     changes: [

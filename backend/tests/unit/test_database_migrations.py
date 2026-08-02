@@ -122,6 +122,7 @@ class TestNoFreshDbGuard:
         "_migrate_event_mail_direction",
         "_migrate_user_home_location", "_migrate_application_ort_coords",
         "_migrate_application_drive_distance", "_migrate_backup_retention",
+        "_migrate_sync_settings_linkedin_granular",
     ])
     def test_positiv_kein_fehler_wenn_db_datei_fehlt(self, tmp_path, monkeypatch, fn_name):
         monkeypatch.setattr(db_module, "DATABASE_URL", f"sqlite:///{tmp_path}/does-not-exist.db")
@@ -296,6 +297,54 @@ class TestMigrateSyncSettingsLinkedinContacts:
         db_module._migrate_sync_settings_linkedin_contacts()
         db_module._migrate_sync_settings_linkedin_contacts()  # must not raise
         assert "linkedin_contacts_enabled" in _cols(db_path, "sync_settings")
+
+
+class TestMigrateSyncSettingsLinkedinGranular:
+    def test_positiv_fuegt_beide_spalten_hinzu(self, db_path):
+        _drop_columns(db_path, "sync_settings", "linkedin_job_tracker_enabled", "linkedin_messages_enabled")
+        db_module._migrate_sync_settings_linkedin_granular()
+        cols = _cols(db_path, "sync_settings")
+        assert "linkedin_job_tracker_enabled" in cols
+        assert "linkedin_messages_enabled" in cols
+
+    def test_negativ_tabelle_fehlt_wird_uebersprungen(self, db_path):
+        _drop_table(db_path, "sync_settings")
+        db_module._migrate_sync_settings_linkedin_granular()  # must not raise
+
+    def test_corner_case_idempotent_bei_zweitem_lauf(self, db_path):
+        db_module._migrate_sync_settings_linkedin_granular()
+        db_module._migrate_sync_settings_linkedin_granular()  # must not raise
+        assert "linkedin_job_tracker_enabled" in _cols(db_path, "sync_settings")
+
+    def test_positiv_backfill_setzt_linkedin_enabled_fuer_bereits_konfigurierte_konten(self, db_path):
+        # linkedin_enabled existierte bereits vorher, wurde aber nirgends
+        # gelesen -- ein Konto mit echter LinkedIn-Anmeldung (linkedin_sync-
+        # Zeile) lief bisher trotzdem immer, unabhängig vom (stale) Wert
+        # dieses Flags. Das Backfill muss genau diesen realen Ist-Zustand
+        # in den neu tatsächlich gelesenen Flag übernehmen.
+        _drop_columns(db_path, "sync_settings", "linkedin_job_tracker_enabled", "linkedin_messages_enabled")
+        _exec(db_path, "INSERT INTO users (id, email, password_hash, email_verified) VALUES (1, 'a@b.de', 'x', 1)")
+        _exec(db_path, "INSERT INTO linkedin_sync (user_id, email, password_enc) VALUES (1, 'a@b.de', 'enc')")
+        _exec(db_path, "INSERT INTO sync_settings (user_id, linkedin_enabled) VALUES (1, 0)")
+
+        db_module._migrate_sync_settings_linkedin_granular()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT linkedin_enabled FROM sync_settings WHERE user_id=1").fetchone()
+        conn.close()
+        assert row[0] == 1
+
+    def test_negativ_backfill_laesst_unkonfigurierte_konten_unangetastet(self, db_path):
+        _drop_columns(db_path, "sync_settings", "linkedin_job_tracker_enabled", "linkedin_messages_enabled")
+        _exec(db_path, "INSERT INTO users (id, email, password_hash, email_verified) VALUES (2, 'c@d.de', 'x', 1)")
+        _exec(db_path, "INSERT INTO sync_settings (user_id, linkedin_enabled) VALUES (2, 0)")
+
+        db_module._migrate_sync_settings_linkedin_granular()
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT linkedin_enabled FROM sync_settings WHERE user_id=2").fetchone()
+        conn.close()
+        assert row[0] == 0
 
 
 class TestMigrateGoogleEmail:

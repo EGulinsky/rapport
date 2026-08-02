@@ -524,6 +524,8 @@ export interface SyncSettings {
   icloud_contacts_enabled: boolean
   icloud_calls_enabled: boolean
   linkedin_enabled: boolean
+  linkedin_job_tracker_enabled: boolean
+  linkedin_messages_enabled: boolean
   files_enabled: boolean
   audit_log_level: 'off' | 'normal' | 'verbose'
 }

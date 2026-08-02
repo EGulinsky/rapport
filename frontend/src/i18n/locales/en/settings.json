@@ -137,6 +137,8 @@
     "contacts": "Contacts",
     "callList": "Call list",
     "linkedin": "LinkedIn",
+    "linkedinJobTracker": "Job tracker",
+    "linkedinMessages": "Messages",
     "linkedinHint": "LinkedIn scraper (configured in the \"LinkedIn\" tab)",
     "localDocuments": "Local documents",
     "localDocumentsHint": "Folder configuration in the \"Documents\" tab",

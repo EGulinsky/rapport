@@ -696,6 +696,11 @@ class SyncSettings(Base):
     icloud_calls_enabled     = Column(Boolean, default=False, nullable=False)
     linkedin_enabled         = Column(Boolean, default=False, nullable=False)
     linkedin_contacts_enabled = Column(Boolean, default=False, nullable=False)
+    # Sub-toggles for the two halves of _async_sync() (sync_linkedin.py) --
+    # default on so an account that already has linkedin_enabled=True keeps
+    # syncing both halves exactly as before these toggles existed.
+    linkedin_job_tracker_enabled = Column(Boolean, default=True, nullable=False)
+    linkedin_messages_enabled   = Column(Boolean, default=True, nullable=False)
     files_enabled            = Column(Boolean, default=False, nullable=False)
     # "off" | "normal" | "verbose"
     audit_log_level          = Column(String, default="normal", nullable=False, server_default="normal")

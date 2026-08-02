@@ -217,9 +217,19 @@ async def run_individual_sync_if_idle(app_id: int) -> None:
     db = SessionLocal()
     try:
         cfg = db.query(models.LinkedInSync).first()
+        sync_cfg = db.query(models.SyncSettings).first()
     finally:
         db.close()
     if not cfg:
+        return
+    # This function only ever runs automatically (right after a new
+    # application is created, never from an explicit user click) -- unlike
+    # the manual "Sync now" button in LinkedInPanel, it must respect the
+    # global on/off toggle. The job-tracker sub-toggle is checked too since
+    # that's the entire point of this call (matching the new app against
+    # LinkedIn job listings); _async_sync() itself independently re-checks
+    # both halves for the messages side.
+    if sync_cfg and not (sync_cfg.linkedin_enabled and sync_cfg.linkedin_job_tracker_enabled):
         return
     _reset_state()
     _state["status"] = "running"
@@ -1069,6 +1079,16 @@ def _run_sync_task(cfg_id: int, target_app_id: int | None = None):
     asyncio.run(_async_sync(cfg_id, target_app_id))
 
 
+def _linkedin_sync_flags(sync_cfg: "models.SyncSettings | None") -> tuple[bool, bool]:
+    """Reads (job_tracker_on, messages_on) from a SyncSettings row -- defaults
+    to (True, True) when no row exists yet, matching the columns' own
+    model-level defaults so an account with no settings row behaves exactly
+    like today's always-on-when-configured behavior."""
+    job_tracker_on = sync_cfg.linkedin_job_tracker_enabled if sync_cfg else True
+    messages_on = sync_cfg.linkedin_messages_enabled if sync_cfg else True
+    return job_tracker_on, messages_on
+
+
 async def _async_sync(cfg_id: int, target_app_id: int | None = None):
     from app.database import SessionLocal, set_session_user
 
@@ -1084,6 +1104,9 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
         if user_id is not None:
             set_session_user(db, user_id)
         lang = resolve_ui_language(db, user_id)
+
+        sync_cfg = db.query(models.SyncSettings).first()
+        job_tracker_on, messages_on = _linkedin_sync_flags(sync_cfg)
 
         email = cfg.email
         password = decrypt_api_key(cfg.password_enc)
@@ -1204,7 +1227,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 )
                 log.info("[LI] Individueller Sync App #{} — LI-ID: {}", target_app_id, target_li_job_id or "unbekannt")
 
-                search_categories = _categories_for_individual_sync(target_app)
+                search_categories = _categories_for_individual_sync(target_app) if job_tracker_on else []
                 _state["category_counts"] = [
                     {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0,
                      "status": "pending", "current_page": 0}
@@ -1244,7 +1267,7 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 # to attaching only this application's own linked contacts
                 # afterward, so an individual sync doesn't reach across into
                 # unrelated applications' timelines.
-                if target_app is not None:
+                if target_app is not None and messages_on:
                     _state["step"] = t("li_messages_loading_inbox", lang)
                     msg_convs, msg_errors = await _scrape_linkedin_messages(page, db, user_id, lang=lang)
                     msg_imported, msg_updated = _upsert_linkedin_messages(msg_convs, db, user_id)
@@ -1271,15 +1294,16 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
             # ── Batch-Sync: alle Kategorien sammeln, dann verarbeiten ───────────────
             else:
+                batch_categories = CATEGORIES if job_tracker_on else []
                 _state["category_counts"] = [
                     {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0,
                      "status": "pending", "current_page": 0}
-                    for ct, lbl, *_ in CATEGORIES
+                    for ct, lbl, *_ in batch_categories
                 ]
 
                 # Dedup by firma|title — later categories (higher priority) overwrite earlier
                 all_jobs_by_key: dict[str, dict] = {}
-                for card_type, label, default_status, max_pages, cat_url in CATEGORIES:
+                for card_type, label, default_status, max_pages, cat_url in batch_categories:
                     _cc_entry(card_type)["status"] = "active"
                     _state["step"] = t("li_page_loading", lang, label=label, page=1)
                     cat_jobs = await _scrape_category(
@@ -1301,21 +1325,22 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 # the behavior removed in v4.5.5, now against the actual
                 # scrollable conversation-list container instead of window/
                 # body — see _scrape_linkedin_messages' docstring).
-                _state["step"] = t("li_messages_loading_inbox", lang)
-                msg_convs, msg_errors = await _scrape_linkedin_messages(page, db, user_id, lang=lang)
-                msg_imported, msg_updated = _upsert_linkedin_messages(msg_convs, db, user_id)
-                db.flush()
-                msg_events_created = 0
-                for contact in db.query(models.Contact).filter(models.Contact.applications.any()).all():
-                    msg_events_created += attach_linkedin_messages_for_contact(db, contact, user_id)
-                db.commit()
-                _state["msg_processed"] = msg_imported + msg_updated
-                _state["msg_created"] = msg_events_created
-                errors.extend(msg_errors)
+                if messages_on:
+                    _state["step"] = t("li_messages_loading_inbox", lang)
+                    msg_convs, msg_errors = await _scrape_linkedin_messages(page, db, user_id, lang=lang)
+                    msg_imported, msg_updated = _upsert_linkedin_messages(msg_convs, db, user_id)
+                    db.flush()
+                    msg_events_created = 0
+                    for contact in db.query(models.Contact).filter(models.Contact.applications.any()).all():
+                        msg_events_created += attach_linkedin_messages_for_contact(db, contact, user_id)
+                    db.commit()
+                    _state["msg_processed"] = msg_imported + msg_updated
+                    _state["msg_created"] = msg_events_created
+                    errors.extend(msg_errors)
 
                 await browser.close()
 
-                if not all_jobs and _state["status"] != "needs_login":
+                if not all_jobs and job_tracker_on and _state["status"] != "needs_login":
                     _state["step"] = t("li_no_jobs_layout_changed", lang)
 
                 _state["raw_jobs"] = all_jobs

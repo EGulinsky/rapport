@@ -148,9 +148,23 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
 
       const pendingBefore = await api.review.count().then(r => r.count).catch(() => 0)
 
-      // Check LinkedIn config — fire in parallel if configured
+      // Load sync settings first — needed to decide whether LinkedIn should
+      // even be included in this global sync (linkedin_enabled), same
+      // parent-toggle gating every other source below already gets.
+      const syncCfg = await api.settings.getSync().catch(() => null)
+      const filesCfg = await api.settings.getFiles().catch(() => null)
+      const aiCfg = await api.settings.getAi().catch(() => null)
+      const googleOn  = syncCfg?.google_enabled  ?? true
+      const icloudOn  = syncCfg?.icloud_enabled  ?? true
+      const linkedinOn = syncCfg?.linkedin_enabled ?? true
+
+      // Check LinkedIn config — fire in parallel if configured and enabled.
+      // Job-tracker/messages sub-toggles aren't checked here: the backend's
+      // _async_sync() reads those itself and skips whichever half is off,
+      // regardless of who called it (global sync or the manual "Sync now"
+      // button in the LinkedIn settings panel).
       const liCfg = await api.linkedin.getConfig().catch(() => null)
-      const liEnabled = !!(liCfg?.configured)
+      const liEnabled = linkedinOn && !!(liCfg?.configured)
       let liSyncRunning = false
       if (liEnabled) {
         try {
@@ -162,13 +176,6 @@ export function SyncButton({ onSynced, onReviewOpen }: Props) {
           if (msg.includes('409') || msg.includes('already running')) liSyncRunning = true
         }
       }
-
-      // Load sync settings to skip disabled sources
-      const syncCfg = await api.settings.getSync().catch(() => null)
-      const filesCfg = await api.settings.getFiles().catch(() => null)
-      const aiCfg = await api.settings.getAi().catch(() => null)
-      const googleOn  = syncCfg?.google_enabled  ?? true
-      const icloudOn  = syncCfg?.icloud_enabled  ?? true
       const filesOn   = (syncCfg?.files_enabled ?? true) && (filesCfg?.enabled ?? false) && !!(filesCfg?.folder_path)
 
       // Contacts first (fast, no AI) — calls matching depends on them being present.

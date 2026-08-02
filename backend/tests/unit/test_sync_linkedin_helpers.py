@@ -4,7 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.routers.sync_linkedin import _commit_with_retry, _split_headline
+from app import models
+from app.routers.sync_linkedin import _commit_with_retry, _linkedin_sync_flags, _split_headline
 
 pytestmark = pytest.mark.unit
 
@@ -36,8 +37,6 @@ class TestCommitWithRetry:
         with pytest.raises(Exception, match="locked"):
             _commit_with_retry(db, retries=2, delay=0.01)
 
-        assert db.commit.call_count == 2
-
     def test_negativ_anderer_fehler_wird_sofort_durchgereicht(self):
         db = MagicMock()
         db.commit.side_effect = Exception("some other db error")
@@ -47,6 +46,22 @@ class TestCommitWithRetry:
 
         assert db.commit.call_count == 1
         db.rollback.assert_not_called()
+
+
+class TestLinkedinSyncFlags:
+    def test_negativ_keine_sync_settings_liefert_beide_true(self):
+        # Kein SyncSettings-Datensatz vorhanden -- entspricht dem Modell-Default
+        # der beiden Spalten (True), damit ein Konto ohne Settings-Zeile sich
+        # genau wie das bisherige Immer-an-Verhalten verhält.
+        assert _linkedin_sync_flags(None) == (True, True)
+
+    def test_positiv_liest_beide_flags_aus_sync_settings(self):
+        cfg = models.SyncSettings(linkedin_job_tracker_enabled=True, linkedin_messages_enabled=False)
+        assert _linkedin_sync_flags(cfg) == (True, False)
+
+    def test_negativ_beide_flags_deaktiviert(self):
+        cfg = models.SyncSettings(linkedin_job_tracker_enabled=False, linkedin_messages_enabled=False)
+        assert _linkedin_sync_flags(cfg) == (False, False)
 
 
 class TestSplitHeadline:

@@ -170,6 +170,11 @@ class TestSyncSettings:
 
         assert resp.status_code == 200
         assert resp.json()["audit_log_level"] == "normal"
+        # Sub-toggles für die zwei Hälften des LinkedIn-Syncs (Job-Tracker,
+        # Nachrichten) -- Modell-Default True, damit ein frisch angelegtes
+        # Konto sich wie das bisherige Immer-an-Verhalten verhält.
+        assert resp.json()["linkedin_job_tracker_enabled"] is True
+        assert resp.json()["linkedin_messages_enabled"] is True
         assert db_session.query(models.SyncSettings).count() == 1
 
     def test_positiv_speichert_bool_felder(self, client):
@@ -178,6 +183,16 @@ class TestSyncSettings:
         assert resp.status_code == 200
         assert resp.json()["gmail_enabled"] is False
         assert resp.json()["linkedin_enabled"] is True
+
+    def test_positiv_speichert_linkedin_granulare_toggles(self, client):
+        resp = client.post("/api/settings/sync", json={
+            "linkedin_job_tracker_enabled": False,
+            "linkedin_messages_enabled": True,
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["linkedin_job_tracker_enabled"] is False
+        assert resp.json()["linkedin_messages_enabled"] is True
 
     def test_positiv_speichert_audit_log_level(self, client):
         resp = client.post("/api/settings/sync", json={"audit_log_level": "verbose"})

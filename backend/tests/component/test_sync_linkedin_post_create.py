@@ -58,6 +58,44 @@ class TestRunIndividualSyncIfIdle:
 
         async_sync_mock.assert_awaited_once_with(cfg.id, 7)
 
+    async def test_negativ_no_op_wenn_linkedin_enabled_aus(self, db_session, monkeypatch):
+        db_session.add(models.LinkedInSync(email="user@example.com", password_enc="enc"))
+        db_session.add(models.SyncSettings(linkedin_enabled=False, linkedin_job_tracker_enabled=True))
+        db_session.commit()
+        async_sync_mock = AsyncMock()
+        monkeypatch.setattr(sync_linkedin_module, "_async_sync", async_sync_mock)
+
+        await sync_linkedin_module.run_individual_sync_if_idle(1)
+
+        async_sync_mock.assert_not_called()
+
+    async def test_negativ_no_op_wenn_job_tracker_aus(self, db_session, monkeypatch):
+        # Der ganze Zweck dieses automatischen Post-Create-Syncs ist der
+        # Job-Tracker-Abgleich der neuen Bewerbung gegen LinkedIn-Stellen --
+        # bei deaktiviertem Job-Tracker macht der Aufruf keinen Sinn, auch
+        # wenn linkedin_enabled selbst noch an ist.
+        db_session.add(models.LinkedInSync(email="user@example.com", password_enc="enc"))
+        db_session.add(models.SyncSettings(linkedin_enabled=True, linkedin_job_tracker_enabled=False))
+        db_session.commit()
+        async_sync_mock = AsyncMock()
+        monkeypatch.setattr(sync_linkedin_module, "_async_sync", async_sync_mock)
+
+        await sync_linkedin_module.run_individual_sync_if_idle(1)
+
+        async_sync_mock.assert_not_called()
+
+    async def test_positiv_laeuft_wenn_beide_flags_an(self, db_session, monkeypatch):
+        cfg = models.LinkedInSync(email="user@example.com", password_enc="enc")
+        db_session.add(cfg)
+        db_session.add(models.SyncSettings(linkedin_enabled=True, linkedin_job_tracker_enabled=True))
+        db_session.commit()
+        async_sync_mock = AsyncMock()
+        monkeypatch.setattr(sync_linkedin_module, "_async_sync", async_sync_mock)
+
+        await sync_linkedin_module.run_individual_sync_if_idle(9)
+
+        async_sync_mock.assert_awaited_once_with(cfg.id, 9)
+
     async def test_positiv_setzt_state_auf_running_vor_dem_sync(self, db_session, monkeypatch):
         db_session.add(models.LinkedInSync(email="user@example.com", password_enc="enc"))
         db_session.commit()

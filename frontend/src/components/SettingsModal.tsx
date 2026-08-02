@@ -1154,6 +1154,13 @@ const DEFAULT_SYNC: SyncSettings = {
   icloud_notes_enabled: false, icloud_reminders_enabled: false,
   icloud_contacts_enabled: false, icloud_calls_enabled: false,
   linkedin_enabled: false,
+  // Unlike every other source above, these two sub-toggles default to on —
+  // they gate the two halves of an *already*-configured LinkedIn sync
+  // (job tracker, messages), matching the SyncSettings model's own column
+  // defaults so an account with linkedin_enabled=true keeps both halves
+  // running exactly as before these toggles existed.
+  linkedin_job_tracker_enabled: true,
+  linkedin_messages_enabled: true,
   files_enabled: false,
   audit_log_level: 'normal',
 }
@@ -1242,6 +1249,8 @@ function SyncControlPanel() {
       </SyncGroup>
 
       <SyncGroup label={t('syncControl.linkedin')} enabled={settings.linkedin_enabled} onToggle={v => toggle('linkedin_enabled', v)}>
+        <SyncRow label={t('syncControl.linkedinJobTracker')} enabled={settings.linkedin_job_tracker_enabled} onToggle={v => toggle('linkedin_job_tracker_enabled', v)} />
+        <SyncRow label={t('syncControl.linkedinMessages')} enabled={settings.linkedin_messages_enabled} onToggle={v => toggle('linkedin_messages_enabled', v)} />
         <div className="px-4 py-2.5 text-xs text-gray-400">{t('syncControl.linkedinHint')}</div>
       </SyncGroup>
 

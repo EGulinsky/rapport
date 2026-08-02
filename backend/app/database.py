@@ -633,6 +633,51 @@ def _migrate_sync_settings_linkedin_contacts():
     conn.close()
 
 
+def _migrate_sync_settings_linkedin_granular():
+    """Adds linkedin_job_tracker_enabled/linkedin_messages_enabled -- default
+    on, so accounts already relying on LinkedIn sync keep getting both halves
+    exactly as before these sub-toggles existed.
+
+    Also, in this same one-time column-add guard, backfills linkedin_enabled
+    to on for any account that already has a linkedin_sync row (i.e. has
+    actually connected LinkedIn credentials before): linkedin_enabled existed
+    on the model already but was never read anywhere in the sync-execution
+    path (a dormant/decorative flag until this change wires it up in
+    SyncButton.tsx) -- most such accounts' stored value is therefore stale
+    False even though LinkedIn sync has genuinely been running for them the
+    whole time. Backfilling preserves that real current behavior instead of
+    silently turning LinkedIn off on upgrade. Guarded inside the same
+    "columns not yet added" check so it only ever runs the one time the
+    schema is actually upgraded -- never fights a user's later, deliberate
+    toggle-off."""
+    import sqlite3
+
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sync_settings'")
+    if not cur.fetchone():
+        conn.close()
+        return
+    cur.execute("PRAGMA table_info(sync_settings)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "linkedin_job_tracker_enabled" not in cols:
+        cur.execute("ALTER TABLE sync_settings ADD COLUMN linkedin_job_tracker_enabled INTEGER NOT NULL DEFAULT 1")
+        cur.execute("ALTER TABLE sync_settings ADD COLUMN linkedin_messages_enabled INTEGER NOT NULL DEFAULT 1")
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='linkedin_sync'")
+        if cur.fetchone():
+            cur.execute("""
+                UPDATE sync_settings SET linkedin_enabled = 1
+                WHERE linkedin_enabled = 0
+                  AND user_id IN (SELECT user_id FROM linkedin_sync WHERE user_id IS NOT NULL)
+            """)
+    conn.commit()
+    conn.close()
+
+
 def _migrate_attachments():
     """Create attachments table if missing."""
     import sqlite3
@@ -1697,6 +1742,7 @@ def init_db():
     _migrate_sync_settings_files()
     _migrate_sync_settings_google_contacts()
     _migrate_sync_settings_linkedin_contacts()
+    _migrate_sync_settings_linkedin_granular()
     _fix_mail_event_dates()
     _migrate_contacts_m2m()
     _migrate_attachments()
