@@ -33,7 +33,7 @@ function makeContact(overrides: Partial<ContactWithApp>): ContactWithApp {
   }
 }
 
-describe('Verlinkte Bewerbungen zeigen ein Absage-Signal (Kontakte)', () => {
+describe('Verlinkte Bewerbungen zeigen abgesagte Bewerbungen durchgestrichen (Kontakte)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.changeLanguage('de')
@@ -41,7 +41,7 @@ describe('Verlinkte Bewerbungen zeigen ein Absage-Signal (Kontakte)', () => {
     ;(api.contacts.getEvents as ReturnType<typeof vi.fn>).mockResolvedValue(emptyEvents)
   })
 
-  it('positiv: ContactsView-Tabelle zeigt "Absage" nur bei der abgesagten Bewerbung', async () => {
+  it('positiv: ContactsView-Tabelle streicht nur den Namen der abgesagten Bewerbung durch', async () => {
     const contact = makeContact({
       applications: [
         { id: 10, firma: 'Contoso', rolle: 'Backend', main_status: 'rejected', company_name_display: null },
@@ -52,15 +52,17 @@ describe('Verlinkte Bewerbungen zeigen ein Absage-Signal (Kontakte)', () => {
 
     render(<ContactsView onOpenApplication={vi.fn()} search="" onSearchChange={vi.fn()} />)
 
-    await screen.findByText('Contoso')
-    expect(screen.getByText('Absage')).toBeInTheDocument()
-    expect(screen.getAllByText('Absage')).toHaveLength(1)
+    const rejectedName = await screen.findByText('Contoso')
+    expect(rejectedName.className).toContain('line-through')
+    const activeName = screen.getByText('Fabrikam')
+    expect(activeName.className).not.toContain('line-through')
   })
 
-  it('positiv: ContactModal-Bewerbungen-Tab zeigt den vollen Status-Badge inkl. Absage', async () => {
+  it('positiv: ContactModal-Bewerbungen-Tab streicht den Namen durch statt eines Status-Badges bei Absage', async () => {
     const contact = makeContact({
       applications: [
         { id: 10, firma: 'Contoso', rolle: 'Backend', main_status: 'rejected', company_name_display: null },
+        { id: 20, firma: 'Fabrikam', rolle: 'Frontend', main_status: 'applied', company_name_display: null },
       ],
     })
     ;(api.contacts.listAll as ReturnType<typeof vi.fn>).mockResolvedValue([contact])
@@ -70,7 +72,10 @@ describe('Verlinkte Bewerbungen zeigen ein Absage-Signal (Kontakte)', () => {
     await waitFor(() => expect(api.contacts.listAll).toHaveBeenCalled())
     fireEvent.click(await screen.findByText(/Bewerbungen/))
 
-    await screen.findByText('Contoso')
-    expect(screen.getByTestId('status-badge-rejected')).toBeInTheDocument()
+    const rejectedName = await screen.findByText('Contoso')
+    expect(rejectedName.className).toContain('line-through')
+    expect(screen.queryByTestId('status-badge-rejected')).not.toBeInTheDocument()
+    // the active application still gets its normal status badge
+    expect(screen.getByTestId('status-badge-applied')).toBeInTheDocument()
   })
 })

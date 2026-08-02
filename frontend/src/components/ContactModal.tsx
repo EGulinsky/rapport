@@ -493,10 +493,12 @@ export function ContactModal({ id, onClose, onOpenApplication, onOpenCompany, on
                         className="flex-1 min-w-0 flex items-center justify-between gap-2 text-left"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800">{a.company_name_display ?? a.firma}</p>
+                          <p className={clsx('text-sm font-medium', a.main_status === 'rejected' ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800')}>
+                            {a.company_name_display ?? a.firma}
+                          </p>
                           <p className="text-xs text-gray-500 truncate">{a.rolle}</p>
                         </div>
-                        <StatusBadge status={a.main_status} size="sm" />
+                        {a.main_status !== 'rejected' && <StatusBadge status={a.main_status} size="sm" />}
                       </button>
                     </div>
                   ))}

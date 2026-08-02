@@ -9,7 +9,6 @@ import { CompanyLogo } from './CompanyLogo'
 import { CompanySearchInput } from './CompanySearchInput'
 import { useLocale } from '../i18n/useLocale'
 import { formatDate, collate } from '../i18n/formatDate'
-import { useStatusLabels } from '../i18n/statusLabels'
 import clsx from 'clsx'
 
 function CompanyCell({ contact, onOpenCompany, onChanged }: {
@@ -152,7 +151,6 @@ interface Props {
 export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearchChange: setSearch, companyFilter, onClearCompanyFilter, reloadKey }: Props) {
   const { t } = useTranslation('contacts')
   const locale = useLocale()
-  const { mainStatusLabel } = useStatusLabels()
   const [contacts, setContacts] = useState<ContactWithApp[]>([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -561,15 +559,10 @@ export function ContactsView({ onOpenApplication, onOpenCompany, search, onSearc
                           onClick={() => onOpenApplication(a.id)}
                           className="text-left hover:text-indigo-600 transition-colors"
                         >
-                          <p className={clsx('font-medium hover:text-indigo-600 leading-tight', a.main_status === 'rejected' ? 'text-gray-400' : 'text-gray-800')}>
+                          <p className={clsx('font-medium hover:text-indigo-600 leading-tight', a.main_status === 'rejected' ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800')}>
                             {a.company_name_display ?? a.firma}
                           </p>
                           <p className="text-xs text-gray-500 truncate max-w-[160px]">{a.rolle}</p>
-                          {a.main_status === 'rejected' && (
-                            <span className="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0 text-[10px] font-medium text-red-700 mt-0.5">
-                              {mainStatusLabel('rejected')}
-                            </span>
-                          )}
                         </button>
                       ))}
                     </div>

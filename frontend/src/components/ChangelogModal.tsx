@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.24',
+    date: '2026-08-02',
+    changes: [
+      'Rejected applications linked to a contact or company now show a crossed-out name instead of a red "Rejected" badge/tag, matching the strikethrough style already used on the Kanban board and applications table.',
+    ],
+  },
+  {
     version: '4.7.23',
     date: '2026-08-02',
     changes: [

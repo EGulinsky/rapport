@@ -96,7 +96,7 @@ describe('CompaniesView — zeigt angehängte Bewerbungen statt Standort-Spalte'
     expect(screen.queryByText('Standort')).not.toBeInTheDocument()
   })
 
-  it('positiv: abgesagte Bewerbungen zeigen ein "Absage"-Signal, aktive nicht', async () => {
+  it('positiv: abgesagte Bewerbungen werden durchgestrichen dargestellt, aktive nicht', async () => {
     ;(api.companies.list as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeCompany({
         applications: [
@@ -108,10 +108,10 @@ describe('CompaniesView — zeigt angehängte Bewerbungen statt Standort-Spalte'
 
     render(<CompaniesView onOpenApplication={vi.fn()} onOpenCompany={vi.fn()} />)
 
-    await screen.findByText('Backend Engineer')
-    expect(screen.getByText('Absage')).toBeInTheDocument()
-    // only one rejected application among the two -> exactly one signal
-    expect(screen.getAllByText('Absage')).toHaveLength(1)
+    const rejectedRole = await screen.findByText('Backend Engineer')
+    expect(rejectedRole.className).toContain('line-through')
+    const activeRole = screen.getByText('Frontend Engineer')
+    expect(activeRole.className).not.toContain('line-through')
   })
 })
 

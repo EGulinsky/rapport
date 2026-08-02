@@ -8,7 +8,6 @@ import { CompanyLogo } from './CompanyLogo'
 import { errorMessage } from '../i18n/errorMessage'
 import { formatDate } from '../i18n/formatDate'
 import { useLocale } from '../i18n/useLocale'
-import { useStatusLabels } from '../i18n/statusLabels'
 
 type SortKey = 'name' | 'industry' | 'apps' | 'sync_status'
 
@@ -37,7 +36,6 @@ export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest
   const { t } = useTranslation('companies')
   const { t: tCommon } = useTranslation('common')
   const locale = useLocale()
-  const { mainStatusLabel } = useStatusLabels()
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -632,16 +630,11 @@ export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest
                             onClick={() => onOpenApplication(a.id)}
                             className="text-left hover:text-indigo-600 transition-colors"
                           >
-                            <p className={clsx('font-medium hover:text-indigo-600 leading-tight', a.main_status === 'rejected' ? 'text-gray-400' : 'text-gray-800')}>
+                            <p className={clsx('font-medium hover:text-indigo-600 leading-tight', a.main_status === 'rejected' ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800')}>
                               {a.rolle}
                             </p>
                             {a.datum_bewerbung && (
                               <p className="text-xs text-gray-500 truncate max-w-[160px]">{formatDate(a.datum_bewerbung, locale)}</p>
-                            )}
-                            {a.main_status === 'rejected' && (
-                              <span className="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0 text-[10px] font-medium text-red-700 mt-0.5">
-                                {mainStatusLabel('rejected')}
-                              </span>
                             )}
                           </button>
                         ))}
