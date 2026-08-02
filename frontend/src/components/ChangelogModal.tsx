@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.21',
+    date: '2026-08-02',
+    changes: [
+      'Fixed readability of the new Companies-view applications list — the role text was being cut off at a fixed width instead of showing in full like the Contacts view does, and now also shows the application date underneath (matching Contacts view\'s exact two-line company/role layout).',
+    ],
+  },
+  {
     version: '4.7.20',
     date: '2026-08-02',
     changes: [

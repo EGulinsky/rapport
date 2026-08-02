@@ -6,6 +6,8 @@ import type { CompanyProfile, CompanySyncStatus } from '../types'
 import clsx from 'clsx'
 import { CompanyLogo } from './CompanyLogo'
 import { errorMessage } from '../i18n/errorMessage'
+import { formatDate } from '../i18n/formatDate'
+import { useLocale } from '../i18n/useLocale'
 
 type SortKey = 'name' | 'industry' | 'apps' | 'sync_status'
 
@@ -33,6 +35,7 @@ const COMPANY_TYPE_COLORS: Record<string, string> = {
 export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest, onNavigateToApps, onNavigateToContacts, reloadKey, onReviewOpen }: Props) {
   const { t } = useTranslation('companies')
   const { t: tCommon } = useTranslation('common')
+  const locale = useLocale()
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -627,7 +630,10 @@ export function CompaniesView({ onOpenApplication, onOpenCompany, onMergeRequest
                             onClick={() => onOpenApplication(a.id)}
                             className="text-left hover:text-indigo-600 transition-colors"
                           >
-                            <p className="font-medium text-gray-800 hover:text-indigo-600 leading-tight truncate max-w-[160px]">{a.rolle}</p>
+                            <p className="font-medium text-gray-800 hover:text-indigo-600 leading-tight">{a.rolle}</p>
+                            {a.datum_bewerbung && (
+                              <p className="text-xs text-gray-500 truncate max-w-[160px]">{formatDate(a.datum_bewerbung, locale)}</p>
+                            )}
                           </button>
                         ))}
                       </div>

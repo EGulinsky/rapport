@@ -60,6 +60,21 @@ describe('CompaniesView — zeigt angehängte Bewerbungen statt Standort-Spalte'
     expect(onOpenApplication).toHaveBeenCalledWith(42)
   })
 
+  it('positiv: Bewerbungsdatum wird als zweite Zeile angezeigt (gleiche Zweizeilen-Optik wie in der Kontakte-Ansicht)', async () => {
+    ;(api.companies.list as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeCompany({
+        applications: [
+          { id: 42, firma: 'Contoso AG', rolle: 'Backend Engineer', main_status: 'applied', datum_bewerbung: '2026-03-15' },
+        ],
+      }),
+    ])
+
+    render(<CompaniesView onOpenApplication={vi.fn()} onOpenCompany={vi.fn()} />)
+
+    await screen.findByText('Backend Engineer')
+    expect(screen.getByText('15.3.2026')).toBeInTheDocument()
+  })
+
   it('negativ: ohne Bewerbungen wird ein Platzhalter angezeigt, kein Standort mehr', async () => {
     ;(api.companies.list as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeCompany({ applications: [] }),
