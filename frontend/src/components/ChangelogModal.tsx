@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.30',
+    date: '2026-08-03',
+    changes: [
+      'Fixed Google Alerts and similar automated/bulk notification emails being matched and saved to an application\'s timeline just because they mentioned the company name — real correspondence (including from generic HR/recruiting mailboxes) still matches as before.',
+      'Fixed contacts created from mail signatures in "SURNAME Firstname" order (a common German corporate convention, e.g. "MEIER Jana") getting their first and last name swapped, which also created a duplicate contact instead of matching the existing correctly-named one.',
+    ],
+  },
+  {
     version: '4.7.29',
     date: '2026-08-03',
     changes: [

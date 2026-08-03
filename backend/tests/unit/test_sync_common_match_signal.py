@@ -14,6 +14,7 @@ import pytest
 
 from app.routers.sync_common import (
     _classify_deterministic,
+    _is_automated_sender,
     find_apps_from_addresses,
     find_hint_apps,
     find_matching_apps,
@@ -121,6 +122,58 @@ class TestFindMatchingApps:
         )
         assert len(result) == 1
         assert result[0]["matched_via"].startswith("Kontakt-E-Mail")
+
+    def test_negativ_google_alerts_wird_nicht_ueber_firmenname_gematcht(self):
+        # Regression (live incident, 2026-08-03): a Google Alerts news digest
+        # mentioning the company name isn't evidence the applicant's own
+        # application is involved -- it was being matched and saved as a
+        # timeline event on every sync before this fix.
+        app = _app(firma="Akkodis")
+        result = find_matching_apps(
+            "Google Alerts <googlealerts-noreply@google.com>", "",
+            "Neuigkeiten zu Akkodis: ...",
+            contact_email_index={},
+            contact_domain_index={},
+            term_to_apps={"Akkodis": [app]},
+        )
+        assert result == []
+
+    def test_positiv_adress_match_feuert_trotzdem_fuer_automatisierten_absender(self):
+        # An exact contact-email/domain match is the stronger signal and is
+        # never suppressed, even for a from-address that also looks
+        # automated -- only the weaker text-hint pass is skipped.
+        app = _app()
+        result = find_matching_apps(
+            "Google Alerts <googlealerts-noreply@google.com>", "",
+            "irrelevant",
+            contact_email_index={"googlealerts-noreply@google.com": [app]},
+            contact_domain_index={},
+            term_to_apps={},
+        )
+        assert len(result) == 1
+
+
+class TestIsAutomatedSender:
+    def test_positiv_google_alerts(self):
+        assert _is_automated_sender("Google Alerts <googlealerts-noreply@google.com>") is True
+
+    def test_positiv_noreply_variante(self):
+        assert _is_automated_sender("no-reply@example.com") is True
+
+    def test_negativ_echte_person(self):
+        assert _is_automated_sender("Jane Doe <jane@contoso.example>") is False
+
+    def test_negativ_leerer_from_header(self):
+        assert _is_automated_sender("") is False
+
+    def test_negativ_recruiting_mailbox_ist_nicht_automatisiert(self):
+        # Regression: a generic-but-real HR/recruiting mailbox ("talent@...")
+        # is correctly excluded from contact creation (_SKIP_CONTACT_LOCALS),
+        # but it still sends genuine, on-topic correspondence about an
+        # application and must keep matching by company/role mention —
+        # conflating the two lists broke exactly that (caught by existing
+        # gmail/icloud sync integration tests).
+        assert _is_automated_sender("Recruiting Team <talent@some-ats-vendor.example>") is False
 
 
 class TestClassifyDeterministicMatchSignal:

@@ -367,13 +367,16 @@ class Contact(Base):
 
     @property
     def display_name(self) -> str:
-        """Most contact-creation paths store only the surname in "name"
-        (structured N:-field split from vCard imports), so every user-facing
-        string (audit log, event titles, etc.) needs vorname + name, not name
-        alone. One path (mail-signature contact upsert, sync_common.py)
-        instead stores the already-full name in "name" and redundantly
-        duplicates the first name into "vorname" — guard against that
-        prepending vorname a second time ("Niklas Niklas Zoch")."""
+        """Contact-creation paths store only the surname in "name"
+        (structured N:-field split from vCard imports, or _split_name() in
+        sync_common.py's mail-signature contact upsert), so every
+        user-facing string (audit log, event titles, etc.) needs
+        vorname + name, not name alone. The startswith guard below is
+        defensive backward-compat for older rows from before the
+        mail-signature path was made consistent with the rest (it used to
+        store the already-full name in "name" and redundantly duplicate the
+        first name into "vorname") — without it, such a row would render
+        doubled ("Niklas Niklas Zoch")."""
         if not self.vorname:
             return self.name
         if self.name.lower().startswith(self.vorname.lower()):

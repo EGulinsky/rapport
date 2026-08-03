@@ -101,8 +101,12 @@ class TestSaveDeterministicEventAutor:
 
         contact = db_session.query(models.Contact).filter_by(email="carla@contoso-ag.example").first()
         assert contact is not None
-        assert contact.name == "Carla Fuchs"
+        # name holds only the surname (matching every other contact-creation
+        # path -- see _upsert_contact()/Contact.display_name), not the full
+        # raw sender name.
+        assert contact.name == "Fuchs"
         assert contact.vorname == "Carla"
+        assert contact.display_name == "Carla Fuchs"
 
 
 class TestSaveDeterministicEventAutorCalendar:

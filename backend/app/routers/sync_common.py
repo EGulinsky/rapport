@@ -152,14 +152,29 @@ def _split_name(name: str) -> tuple[str, str]:
     """Return (nachname, vorname) by best-effort parsing.
 
     Handles "Mehra, Malvika" (comma-separated, last first),
-    "Malvika Mehra" (first last), and single-token names.
-    Returns (name, "") for unrecognised patterns.
+    "Malvika Mehra" (first last), "DIVIVIER Timo" (all-caps surname
+    first, common in German corporate email signatures), and
+    single-token names. Returns (name, "") for unrecognised patterns.
     """
     if "," in name:
         parts = [p.strip() for p in name.split(",", 1)]
         return parts[0], parts[1]
     tokens = name.strip().split()
     if len(tokens) >= 2:
+        # German corporate signature convention: "NACHNAME Vorname" — an
+        # all-caps leading token followed by a normally-cased one is the
+        # reverse of the "Firstname Lastname" order assumed below, and
+        # naively taking the default split reverses the name (live incident:
+        # "DIVIVIER Timo" -> vorname "DIVIVIER" instead of "Timo", creating a
+        # duplicate of the existing correctly-named contact).
+        leading_upper = 0
+        for tok in tokens:
+            if tok.isalpha() and tok.isupper() and len(tok) > 1:
+                leading_upper += 1
+            else:
+                break
+        if leading_upper and leading_upper < len(tokens):
+            return " ".join(tokens[:leading_upper]), " ".join(tokens[leading_upper:])
         return tokens[-1], " ".join(tokens[:-1])
     return name.strip(), ""
 
@@ -384,7 +399,16 @@ def _upsert_contact(
             func.lower(_models.Contact.firma) == firma.strip().lower(),
         ).all()
         for c in candidates:
-            if _normalize_name(c.name) == norm_new:
+            # Compare against display_name, not the raw "name" column --
+            # some contact-creation paths (e.g. vCard imports) store only the
+            # surname in "name" with the first name split into "vorname",
+            # others store the full name in "name" -- comparing raw "name"
+            # values against each other silently fails across that mismatch
+            # (live incident: a "Timo Divivier" contact from LinkedIn import
+            # wasn't matched against a "Timo DIVIVIER <...>" mail sender,
+            # creating a duplicate). display_name reconstructs the full name
+            # consistently regardless of which convention created the row.
+            if _normalize_name(c.display_name) == norm_new:
                 existing = c
                 break
         if existing and not is_ats_tracking and not existing.email:
@@ -441,7 +465,13 @@ def _upsert_contact(
     raw_name = name.strip() or email_addr.split("@")[0]
     nachname, vorname = _split_name(raw_name)
     contact = _models.Contact(
-        name=raw_name,
+        # Store only the surname in "name" (with the first name in
+        # "vorname"), matching every other contact-creation path in the app
+        # (see Contact.display_name's docstring) -- previously this path
+        # stored the full raw sender name here instead, which broke
+        # display_name's reconstruction for "Surname Firstname"-ordered
+        # signatures (produced a doubled "Timo DIVIVIER Timo").
+        name=nachname,
         vorname=vorname or None,
         email=None if is_ats_tracking else email_addr,
         firma=firma or None,
@@ -983,6 +1013,41 @@ def find_hint_apps(
     return hints
 
 
+# Deliberately narrower than _SKIP_CONTACT_LOCALS/_SKIP_CONTACT_SUBSTRINGS
+# above: those also exclude generic-but-real HR/recruiting mailboxes
+# ("talent@...", "recruiting@...", "career@...") from getting a personal
+# Contact created, which is correct for that purpose, but those mailboxes
+# still send genuine, on-topic correspondence about an application — only
+# truly automated bulk/notification senders (newsletters, Google Alerts,
+# no-reply confirmations) should have their company-name mentions ignored
+# as an unreliable signal.
+_AUTOMATED_SENDER_LOCALS = frozenset({
+    "noreply", "no-reply", "donotreply", "notifications", "notification",
+    "mailer-daemon", "postmaster", "newsletter", "automatisch", "automated", "bounce",
+})
+_AUTOMATED_SENDER_SUBSTRINGS = ("noreply", "no-reply", "donotreply")
+
+
+def _is_automated_sender(from_val: str) -> bool:
+    """True if the message's From address is a known bulk/automated sender
+    (newsletters, Google Alerts, no-reply notifications, etc.). A
+    company-name/role text hint (find_hint_apps) is a far weaker signal than
+    an address match — a mention of the company name anywhere in the text,
+    regardless of who actually sent it — and is unreliable for these senders
+    specifically: a Google Alerts news digest mentioning e.g. "Akkodis" is
+    not evidence that the user's own application at Akkodis is involved, but
+    was being matched and saved as a timeline event on every sync before this
+    check (live incident: a dozen Google Alert emails cluttering one
+    application's timeline). Deliberately does NOT flag generic HR/recruiting
+    mailboxes ("talent@...", "recruiting@...") -- those send real,
+    on-topic correspondence and must keep matching by company/role mention."""
+    for addr in extract_email_addresses(from_val):
+        local = addr.split("@")[0].strip(".-_+") if "@" in addr else addr
+        if local in _AUTOMATED_SENDER_LOCALS or any(s in local for s in _AUTOMATED_SENDER_SUBSTRINGS):
+            return True
+    return False
+
+
 def find_matching_apps(
     from_val: str,
     to_cc_val: str,
@@ -1008,7 +1073,11 @@ def find_matching_apps(
 
     Address matches are checked first, so when both an address match and a
     text hint would explain the same app, the returned "matched_via" favors
-    the stronger, less ambiguous address-based signal."""
+    the stronger, less ambiguous address-based signal. The text-hint pass is
+    skipped entirely for known automated/bulk senders (see
+    _is_automated_sender) — an exact address/domain match can still fire for
+    them, though in practice that never happens since such senders are never
+    saved as a contact's own email."""
     seen_ids: set[int] = set()
     result: list[dict] = []
 
@@ -1019,8 +1088,9 @@ def find_matching_apps(
 
     for a in find_apps_from_addresses(from_val, to_cc_val, contact_email_index, contact_domain_index, lang):
         _add(a)
-    for a in find_hint_apps(raw_text, term_to_apps, contact_domain_index, lang):
-        _add(a)
+    if not _is_automated_sender(from_val):
+        for a in find_hint_apps(raw_text, term_to_apps, contact_domain_index, lang):
+            _add(a)
 
     return result
 
