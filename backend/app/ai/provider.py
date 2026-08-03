@@ -54,6 +54,28 @@ class AIToolsUnsupported(AIBadRequest):
     pass
 
 
+def _disable_gemini_thinking(kwargs: dict) -> None:
+    """Gemini's "2.5" model family (Flash, Flash-Lite, Pro) has hidden
+    "thinking"/reasoning tokens enabled by default, which count against
+    max_tokens -- for the JSON-mode structured-extraction calls this app
+    makes (match score, chat tool-calls, the settings connection test), a
+    thinking pass can consume the entire max_tokens budget before any answer
+    tokens are emitted, truncating the JSON response mid-string (observed as
+    a bare json.JSONDecodeError "Unterminated string..."). Flash-Lite doesn't
+    think by default and was unaffected, which is why only some Gemini models
+    triggered this. These tasks have no need for visible reasoning, so
+    disable thinking outright wherever the model supports the knob --
+    `get_supported_openai_params` only returns `reasoning_effort` for the
+    "2.5"+ family, so older non-thinking Gemini models (1.5, 2.0) are
+    correctly left untouched (passing the param there raises
+    litellm.UnsupportedParamsError instead of being silently ignored)."""
+    model = kwargs.get("model", "")
+    if not model.startswith("gemini/"):
+        return
+    if "reasoning_effort" in (litellm.get_supported_openai_params(model=model) or []):
+        kwargs["reasoning_effort"] = "none"
+
+
 def _build_request_kwargs(db: Session, messages: list[dict], max_tokens: int):
     """Shared by complete() and complete_with_tools(): loads the active
     AiSettings row, resolves+decrypts the matching AiProviderKey, and
@@ -72,6 +94,7 @@ def _build_request_kwargs(db: Session, messages: list[dict], max_tokens: int):
         "max_tokens": max_tokens,
         "temperature": 0.1,
     }
+    _disable_gemini_thinking(kwargs)
     key_row = db.query(AiProviderKey).filter(AiProviderKey.provider == cfg.provider).first()
     if key_row and key_row.api_key_enc:
         kwargs["api_key"] = decrypt_api_key(key_row.api_key_enc)

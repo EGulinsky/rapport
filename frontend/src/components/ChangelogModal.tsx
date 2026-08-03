@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.27',
+    date: '2026-08-02',
+    changes: [
+      'Fixed AI calls failing with "Provider-Fehler: Unterminated string..." for some Gemini models (e.g. Gemini 2.5 Flash) while others (e.g. Flash-Lite) worked fine. Those "thinking" models spend part of their token budget on hidden reasoning by default, which could consume the entire response budget and cut the JSON answer off mid-string — reasoning is now disabled for Gemini models that support the setting.',
+    ],
+  },
+  {
     version: '4.7.26',
     date: '2026-08-02',
     changes: [

@@ -262,6 +262,25 @@ class TestAiTest:
         assert resp.status_code == 200
         assert captured["api_base"] == "http://localhost:11434"
 
+    def test_positiv_gemini_25_modell_erhaelt_reasoning_effort_none(self, client):
+        # Regression: Gemini's "thinking" models (2.5 Flash/Pro) consumed the
+        # entire max_tokens budget on hidden reasoning, truncating the JSON
+        # response mid-string (see app/ai/provider.py::_disable_gemini_thinking).
+        captured = {}
+
+        async def _fake_acompletion(**kwargs):
+            from types import SimpleNamespace
+            captured.update(kwargs)
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))])
+
+        with patch.object(litellm, "acompletion", new=_fake_acompletion):
+            resp = client.post("/api/settings/ai/test", json={
+                "provider": "gemini", "model": "gemini/gemini-2.5-flash", "api_key": "sk-test", "enabled": True,
+            })
+
+        assert resp.status_code == 200
+        assert captured["reasoning_effort"] == "none"
+
     def test_negativ_rate_limit_liefert_429(self, client):
         async def _raise(**kwargs):
             raise litellm.RateLimitError(message="rate limited", llm_provider="groq", model="m")

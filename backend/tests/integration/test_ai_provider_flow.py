@@ -267,6 +267,43 @@ class TestTestConnection:
         assert "Unerwartete Antwort" in result
 
 
+class TestGeminiThinkingDisabled:
+    """Regression for a live-reported bug: selecting a "thinking"-enabled
+    Gemini model (2.5 Flash/Pro, unlike Flash-Lite which doesn't think by
+    default) caused every AI call to fail with a bare json.JSONDecodeError
+    ("Unterminated string...") — the hidden reasoning pass consumed the
+    entire max_tokens budget, truncating the JSON response mid-string. Fixed
+    by disabling thinking (reasoning_effort="none") for any Gemini model that
+    actually supports the knob (see _disable_gemini_thinking in provider.py)."""
+
+    async def test_positiv_gemini_25_flash_erhaelt_reasoning_effort_none(self, db_session, ai_settings, fake_ai_provider):
+        ai_settings.model = "gemini/gemini-2.5-flash"
+        fake_ai_provider.queue_content('{"ok": true}')
+
+        await ai_test_connection(db_session)
+
+        assert fake_ai_provider.calls[0]["reasoning_effort"] == "none"
+
+    async def test_negativ_aeltere_gemini_modelle_ohne_thinking_bleiben_unangetastet(self, db_session, ai_settings, fake_ai_provider):
+        # gemini-1.5-flash doesn't support reasoning_effort at all -- passing
+        # it would raise litellm.UnsupportedParamsError, so it must stay absent.
+        ai_settings.model = "gemini/gemini-1.5-flash"
+        fake_ai_provider.queue_content('{"ok": true}')
+
+        await ai_test_connection(db_session)
+
+        assert "reasoning_effort" not in fake_ai_provider.calls[0]
+
+    async def test_negativ_andere_provider_bleiben_unangetastet(self, db_session, ai_settings, fake_ai_provider):
+        # ai_settings already defaults to a groq model -- confirm the Gemini-only
+        # gate doesn't leak into other providers.
+        fake_ai_provider.queue_content('{"ok": true}')
+
+        await ai_test_connection(db_session)
+
+        assert "reasoning_effort" not in fake_ai_provider.calls[0]
+
+
 class TestExtractApplicationFromText:
     async def test_positiv_direkter_arbeitgeber(self, db_session, ai_settings, fake_ai_provider):
         fake_ai_provider.queue_content(

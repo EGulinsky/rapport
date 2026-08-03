@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models, schemas
-from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured
+from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, _disable_gemini_thinking
 from app.ai.tasks import test_connection
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
@@ -322,6 +322,7 @@ async def test_ai(
                 "temperature": 0.1,
                 "response_format": {"type": "json_object"},
             }
+            _disable_gemini_thinking(kwargs)
             if api_key:
                 kwargs["api_key"] = api_key
             if payload.base_url and payload.base_url.strip():
