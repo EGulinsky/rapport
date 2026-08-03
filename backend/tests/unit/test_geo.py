@@ -99,3 +99,19 @@ class TestSearchLocationPhoton:
             await search_location(q="Munich", current_user=en_user)
 
         assert captured["lang"] == "en"
+
+    async def test_positiv_sendet_identifizierenden_user_agent(self):
+        # Regression: Photon's nginx returns a bare 403 Forbidden for
+        # httpx's default "python-httpx/x.y.z" User-Agent (verified live
+        # against the real API on 2026-08-03) -- without a real one, the
+        # autocomplete silently returns nothing.
+        captured_headers = {}
+
+        async def fake_get(self, url, params=None, **kw):
+            captured_headers.update(self.headers)
+            return _mock_response(_PHOTON_RESPONSE_CITY_ONLY)
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            await search_location(q="München", current_user=_FAKE_USER)
+
+        assert "rapport-app" in captured_headers.get("user-agent", "")

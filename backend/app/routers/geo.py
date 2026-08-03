@@ -23,6 +23,13 @@ PHOTON_URL = "https://photon.komoot.io/api/"
 PHOTON_REVERSE_URL = "https://photon.komoot.io/reverse"
 OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving"
 
+# Photon's nginx returns a bare 403 Forbidden for httpx's default
+# "python-httpx/x.y.z" User-Agent (verified live) -- both free public
+# services also expect a real identifying UA per the OSM ecosystem's usual
+# etiquette (the same norm Nominatim's usage policy states explicitly).
+_USER_AGENT = "rapport-app/1.0 (https://github.com/EGulinsky/rapport)"
+_HEADERS = {"User-Agent": _USER_AGENT}
+
 
 def _build_photon_label(props: dict) -> str | None:
     """Build a human-readable label from a Photon feature's `properties`
@@ -60,7 +67,7 @@ async def driving_route(lat1: float, lng1: float, lat2: float, lng2: float) -> t
     geocode_one() below -- a routing hiccup should just leave the cached
     value unset rather than raise. Note OSRM's coordinate order is lng,lat,
     opposite of every other API used in this file."""
-    async with httpx.AsyncClient(timeout=8) as client:
+    async with httpx.AsyncClient(timeout=8, headers=_HEADERS) as client:
         try:
             resp = await client.get(
                 f"{OSRM_ROUTE_URL}/{lng1},{lat1};{lng2},{lat2}",
@@ -83,7 +90,7 @@ async def driving_route(lat1: float, lng1: float, lat2: float, lng2: float) -> t
 
 
 async def _search_photon(term: str, lang: str = "de") -> list[dict]:
-    async with httpx.AsyncClient(timeout=5) as client:
+    async with httpx.AsyncClient(timeout=5, headers=_HEADERS) as client:
         try:
             resp = await client.get(
                 PHOTON_URL,
@@ -129,7 +136,7 @@ async def geocode_one(term: str) -> tuple[float, float] | None:
     if not term:
         return None
 
-    async with httpx.AsyncClient(timeout=5) as client:
+    async with httpx.AsyncClient(timeout=5, headers=_HEADERS) as client:
         try:
             resp = await client.get(PHOTON_URL, params={"q": term, "limit": 1})
             resp.raise_for_status()
@@ -150,7 +157,7 @@ async def geocode_one(term: str) -> tuple[float, float] | None:
 async def reverse_geocode_one(lat: float, lng: float) -> str | None:
     """Reverse-geocode a lat/lng pair (from the browser's own geolocation) to
     a human-readable label, for the "use my location" button in Settings."""
-    async with httpx.AsyncClient(timeout=5) as client:
+    async with httpx.AsyncClient(timeout=5, headers=_HEADERS) as client:
         try:
             resp = await client.get(PHOTON_REVERSE_URL, params={"lat": lat, "lon": lng})
             resp.raise_for_status()

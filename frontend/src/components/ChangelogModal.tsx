@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.33',
+    date: '2026-08-03',
+    changes: [
+      'Fixed the new Photon-based location autocomplete (v4.7.32) returning no results at all: Photon\'s server rejects requests with the default User-Agent httpx sends, so every search silently came back empty. Outbound requests now identify the app properly.',
+    ],
+  },
+  {
     version: '4.7.32',
     date: '2026-08-03',
     changes: [

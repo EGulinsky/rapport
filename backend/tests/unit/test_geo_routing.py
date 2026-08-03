@@ -36,6 +36,10 @@ class TestDrivingRoute:
             # OSRM's coordinate order is lng,lat -- opposite of every other
             # API used in this file.
             assert "13.405,52.52;11.582,48.1351" in url
+            # Regression: Photon's nginx returns a bare 403 for httpx's
+            # default "python-httpx/x.y.z" User-Agent (verified live against
+            # the real API) -- both free public services need a real one.
+            assert "rapport-app" in self.headers.get("user-agent", "")
             return _mock_response(data)
 
         with patch("httpx.AsyncClient.get", new=fake_get):
@@ -69,6 +73,7 @@ class TestGeocodeOne:
 
         async def fake_get(self, url, params=None, **kw):
             assert "photon.komoot.io" in url
+            assert "rapport-app" in self.headers.get("user-agent", "")
             return _mock_response(data)
 
         with patch("httpx.AsyncClient.get", new=fake_get):
@@ -105,6 +110,7 @@ class TestReverseGeocodeOne:
 
         async def fake_get(self, url, params=None, **kw):
             assert "photon.komoot.io/reverse" in url
+            assert "rapport-app" in self.headers.get("user-agent", "")
             return _mock_response(data)
 
         with patch("httpx.AsyncClient.get", new=fake_get):
