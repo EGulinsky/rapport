@@ -419,16 +419,6 @@ class AiModelInfo(BaseModel):
     max_output_tokens: Optional[int] = None # only Gemini's API exposes this
 
 
-class MapsSettingsRead(BaseModel):
-    has_key: bool   # true if an encrypted Google Maps API key is stored
-
-    model_config = {"from_attributes": True}
-
-
-class MapsSettingsWrite(BaseModel):
-    api_key: Optional[str] = None   # plain text; None/empty = clear existing key
-
-
 class AgentSettingsRead(BaseModel):
     url: Optional[str] = None
     has_token: bool

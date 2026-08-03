@@ -49,7 +49,7 @@ def get_db():
 _SCOPED_MODEL_NAMES = [
     "CompanyProfile", "Application", "Contact", "MergeAlias", "Event", "Attachment",
     "GoogleSync", "SyncedItem", "PendingMatch", "ICloudSync", "CallsConfig", "LinkedInSync",
-    "AiSettings", "AiProviderKey", "ChatMessage", "MapsSettings", "AgentSettings", "SyncSettings", "AuditLog",
+    "AiSettings", "AiProviderKey", "ChatMessage", "AgentSettings", "SyncSettings", "AuditLog",
     "FilesConfig", "BackupConfig", "LogoSettings",
 ]
 
@@ -1443,7 +1443,7 @@ def _migrate_user_salary_defaults():
 _USER_SCOPED_TABLES = [
     "company_profiles", "applications", "contacts", "merge_aliases", "events",
     "attachments", "google_sync", "synced_items", "pending_matches", "icloud_sync",
-    "calls_config", "linkedin_sync", "ai_settings", "maps_settings", "agent_settings",
+    "calls_config", "linkedin_sync", "ai_settings", "agent_settings",
     "sync_settings", "audit_log", "files_config", "backup_config", "logo_settings",
 ]
 

@@ -10,6 +10,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.32',
+    date: '2026-08-03',
+    changes: [
+      'Location/address autocomplete now uses Photon (a free, keyless, OpenStreetMap-based service) instead of the previous dual setup — it returns full addresses and specific places (POIs) in addition to cities, not just cities.',
+      'Removed the paid Google Maps option entirely (it was never used): the API-key field, the Settings → Maps panel, and its backend endpoints are all gone. Location autocomplete is now always free.',
+    ],
+  },
+  {
     version: '4.7.31',
     date: '2026-08-03',
     changes: [

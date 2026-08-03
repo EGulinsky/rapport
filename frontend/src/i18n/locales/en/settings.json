@@ -11,7 +11,6 @@
     "linkedin": "LinkedIn",
     "backup": "Backup",
     "logos": "Logos",
-    "maps": "Maps",
     "agent": "Agent"
   },
   "shared": {
@@ -273,14 +272,6 @@
     "publicKeyLabel": "Logo.dev public key",
     "active": "Logo.dev active — logos are loaded preferentially",
     "inactive": "No key — only Google Favicons as fallback"
-  },
-  "maps": {
-    "title": "Location autocomplete",
-    "description": "With a Google Maps API key (Places API), location search on applications uses Google suggestions including specific places/POIs instead of just city names. Without a key, search falls back to OpenStreetMap (Nominatim) — works, but only returns cities. The key is stored encrypted and never sent to the browser.",
-    "apiKeyLabel": "Google Maps API key",
-    "keyStoredPlaceholder": "••••••••••• (saved)",
-    "active": "Google Places active — autocomplete also returns POIs",
-    "inactive": "No key — location search uses OpenStreetMap (cities only, no POIs)"
   },
   "agent": {
     "title": "Rapport Agent",

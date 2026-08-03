@@ -129,7 +129,7 @@ backend/app/
     ├── export_pdf.py           GET /api/export/pdf
     ├── attachments.py          File attachments on timeline events
     ├── settings.py             AI settings, logo API key, sync toggles
-    ├── geo.py                   Location autocomplete + forward/reverse geocoding (Google Places/Geocoding, fallback Nominatim), driving_route() car-navigation distance/duration (Google Distance Matrix, fallback OSRM)
+    ├── geo.py                   Location autocomplete + forward/reverse geocoding (Photon — free, keyless, OpenStreetMap-based), driving_route() car-navigation distance/duration (OSRM, free public routing server)
     ├── calendar.py             GET /api/calendar/events
     ├── analytics.py            Pipeline funnel and rejection statistics
     ├── audit_log.py            Read/delete audit trail
@@ -177,7 +177,7 @@ frontend/src/
     ├── MergeDialog.tsx                 AppMergeDialog / CompanyMergeDialog / ContactMergeDialog
     ├── CleanupModal.tsx                 Duplicate cleanup, context-sensitive (scope prop)
     ├── ReviewModal.tsx                   Review inbox for AI/sync suggestions
-    ├── SettingsModal.tsx                  Settings (tabs: Account/Sync/AI/Google/iCloud/Calls/Documents/LinkedIn/Backup/Logos/Maps/Agent)
+    ├── SettingsModal.tsx                  Settings (tabs: Account/Sync/AI/Google/iCloud/Calls/Documents/LinkedIn/Backup/Logos/Agent)
     ├── SyncButton.tsx                      Global sync trigger + progress indicator
     ├── ImportButton.tsx / ExportButton.tsx / PdfExportButton.tsx / ImportExportMenu.tsx
     ├── AuditLogModal.tsx                   Audit trail view
@@ -296,9 +296,9 @@ All endpoints except `/api/auth/register`, `/api/auth/login`, `/api/startup-chec
 | `GET` | `/api/analytics/summary` | Pipeline funnel + rejection statistics |
 | `GET`/`DELETE` | `/api/audit/` | Read / delete audit trail |
 | `GET`/`POST` | `/api/backup/*` | Backup configuration, manual run, restore |
-| `GET`/`POST`/`DELETE` | `/api/settings/*` | AI provider, logo key, sync toggles, documents folder, agent URL/token, maps API key |
+| `GET`/`POST`/`DELETE` | `/api/settings/*` | AI provider, logo key, sync toggles, documents folder, agent URL/token |
 | `GET` | `/api/startup-check` | Health/bridge connectivity check |
-| `GET` | `/api/geo/search` | Location autocomplete (Google Places, fallback Nominatim) |
+| `GET` | `/api/geo/search` | Location autocomplete (Photon — free, keyless, cities/addresses/POIs) |
 | `GET` | `/health` | Health check |
 
 ---
@@ -567,7 +567,7 @@ Two more fixes (v4.6.17), both live-reported: **(1)** `cleanup_run()`'s per-row 
 - **Excel import/export** — `openpyxl`, "Tracking" sheet, 17 columns, status mapping via `EXCEL_IMPORT_MAP`/`EXCEL_EXPORT_MAP`
 - **Contact upsert from sync** — `upsert_contact_from_sender()`: email address as dedup key, footer extraction for phone/role, `INSERT OR IGNORE` instead of ORM `append()` (avoids autoflush races)
 - **`naechster_schritt` (next step) computation** — not stored in the DB, derived from timeline events + status on every `GET /api/applications/` request
-- **`drive_distance_km`/`drive_duration_min` computation** — car-navigation distance/duration (`driving_route()`: Google Distance Matrix if a Maps key is configured, else OSRM's free public routing server), cached on `Application` (unlike straight-line distance, a routing call is too slow/costly to make on every list request) via `_update_drive_distance()` whenever `ort` changes. When `home_location` changes instead, every application's cached value is cleared in bulk (one profile save touching every application would mean dozens of routing calls) and repopulated via `POST /api/applications/backfill-drive-distance`, which the frontend triggers automatically right after a successful home-location save. `None` if either side is missing a geocode or the routing call failed.
+- **`drive_distance_km`/`drive_duration_min` computation** — car-navigation distance/duration (`driving_route()`, via OSRM's free public routing server), cached on `Application` (unlike straight-line distance, a routing call is too slow/costly to make on every list request) via `_update_drive_distance()` whenever `ort` changes. When `home_location` changes instead, every application's cached value is cleared in bulk (one profile save touching every application would mean dozens of routing calls) and repopulated via `POST /api/applications/backfill-drive-distance`, which the frontend triggers automatically right after a successful home-location save. `None` if either side is missing a geocode or the routing call failed.
 - **Review queue** — deterministic status-change suggestions (rejection/offer keywords from mail sync) and cleanup/merge candidates land in `pending_matches`; the user confirms (→ event/status change) or discards. Every such row carries a fixed `confidence=80` literal (not a computed score — see §5.1's note on deterministic vs. AI-based matching)
 
 ---
@@ -663,7 +663,7 @@ erDiagram
 
 **Multi-tenancy:** apart from `users` itself, practically every table (~20 total — core entities as above plus all configuration tables) carries a `user_id` column; see [§7](#7-authentication--multi-tenancy) for the central filter mechanism. For clarity, `user_id` is not listed individually in every ER diagram block.
 
-**Configuration tables** (exactly one row per **account**, no ER relations among each other): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `maps_settings`, `backup_config`, `logo_settings`.
+**Configuration tables** (exactly one row per **account**, no ER relations among each other): `google_sync`, `icloud_sync`, `linkedin_sync`, `ai_settings`, `sync_settings`, `calls_config`, `files_config`, `agent_settings`, `backup_config`, `logo_settings`.
 
 **Other tables without a direct FK relation:** `synced_items` (dedup ledger across all sync sources, per account), `merge_aliases` (retains the old identifiers of merged applications/contacts so future syncs still resolve to the canonical record).
 
@@ -800,7 +800,6 @@ Covers creations/changes/deletions across practically every code path that touch
 | `sync_settings` | Per-source enable toggles + audit log level | – |
 | `calls_config` / `files_config` | Bridge configuration | – |
 | `agent_settings` | Rapport Agent URL (override) + token | `token_enc` |
-| `maps_settings` | Google Places API key (location autocomplete, fallback Nominatim) | `api_key_enc` |
 | `backup_config` | Backup folder, frequency, retention | – |
 | `logo_settings` | Logo.dev API key | – |
 

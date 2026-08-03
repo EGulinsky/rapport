@@ -660,22 +660,11 @@ class ChatMessage(Base):
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class MapsSettings(Base):
-    __tablename__ = "maps_settings"
-
-    id          = Column(Integer, primary_key=True)
-    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    api_key_enc = Column(Text, nullable=True)   # Fernet-encrypted Google Maps API key
-
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
-
-
 class AgentSettings(Base):
     """Connection to the host-side Rapport Agent (replaces the three old
     unauthenticated bridges: files/notes/calls). Token is Fernet-encrypted,
-    same pattern as AiSettings/MapsSettings — the agent generates it on
-    first run, the user pastes it in once."""
+    same pattern as AiSettings — the agent generates it on first run, the
+    user pastes it in once."""
     __tablename__ = "agent_settings"
 
     id          = Column(Integer, primary_key=True)

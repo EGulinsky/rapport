@@ -34,10 +34,10 @@ def _reset_db():
 def _no_live_geocoding(monkeypatch):
     """create_application()/update_application() (Application.ort) and
     update_profile() (User.home_location) geocode best-effort via a real
-    outbound network call (Nominatim, or Google if a Maps key is configured)
-    -- without this, any test that merely sets `ort`/`home_location` on a
-    plain string would silently hit the live network, making the suite slow,
-    flaky, and dependent on internet access in CI. Patched in both modules:
+    outbound network call (Photon) -- without this, any test that merely
+    sets `ort`/`home_location` on a plain string would silently hit the live
+    network, making the suite slow, flaky, and dependent on internet access
+    in CI. Patched in both modules:
     applications.py imports geocode_one at module load time (its own bound
     reference), while auth.py's update_profile() imports it fresh from
     app.routers.geo on each call (a local import), so patching geo's own
@@ -48,12 +48,12 @@ def _no_live_geocoding(monkeypatch):
     home_lat/lng end up set would silently hit the live routing API too.
     Tests that specifically exercise the geocoding/routing wiring re-patch
     this fixture's target with their own return value/mock."""
-    async def _fake_geocode_one(term, api_key):
+    async def _fake_geocode_one(term):
         return None
     monkeypatch.setattr("app.routers.applications.geocode_one", _fake_geocode_one)
     monkeypatch.setattr("app.routers.geo.geocode_one", _fake_geocode_one)
 
-    async def _fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+    async def _fake_driving_route(lat1, lng1, lat2, lng2):
         return None
     monkeypatch.setattr("app.routers.applications.driving_route", _fake_driving_route)
     monkeypatch.setattr("app.routers.geo.driving_route", _fake_driving_route)

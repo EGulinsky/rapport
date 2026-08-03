@@ -70,7 +70,7 @@ open http://localhost:3000
 | **iCloud Calendar** | CalDAV sync |
 | **iCloud Contacts** | CardDAV import + manual full-text search of the address book |
 | **LinkedIn contact import** | People search directly in the contacts overview, import a selection |
-| **Location autocomplete** | Google Places (with API key) or Nominatim fallback |
+| **Location autocomplete** | Photon (free, keyless, OpenStreetMap-based) — cities, addresses, and POIs |
 | **Local documents** | PDF/DOCX/TXT/MD via the Rapport Agent |
 | **Review queue** | Approve AI suggestions for events and status changes |
 | **Sync control** | Enable/disable sources individually |
@@ -108,9 +108,6 @@ Requires the Rapport Agent on the Mac (see [agent/README.md](agent/README.md) �
 
 ### AI Provider
 - **Groq** (recommended, free): API key from [console.groq.com](https://console.groq.com), model `groq/llama-3.3-70b-versatile`
-
-### Location Autocomplete (Optional)
-Without configuration, the "location" search automatically uses Nominatim (free, no POIs). For company locations/POIs: Settings → Maps → enter a Google Places API key.
 
 ## API Documentation
 

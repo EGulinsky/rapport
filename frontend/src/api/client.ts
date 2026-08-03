@@ -1,4 +1,4 @@
-import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, MapsSettings, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesStatus, LinkedInConnectionsImportResult, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
+import type { Application, Contact, ContactWithApp, ContactEvents, Event, Stats, ImportResult, AiSettings, AiSettingsWrite, AiModelsResponse, AgentSettings, AgentHealth, GoogleSyncStatus, SyncResult, PendingMatch, ICloudSyncStatus, CallsStatus, CleanupPreview, CleanupResult, CleanupScope, LinkedInSyncStatus, LinkedInMessagesStatus, LinkedInConnectionsImportResult, CalendarEvent, SyncSettings, FilesConfig, ManualCandidate, MergeRequest, MergeResult, AuditLogResponse, FileBrowseResult, BackupStatus, AnalyticsSummary, CompanyProfile, ChatHistoryResponse, ChatSendResponse } from '../types'
 
 const BASE = '/api'
 
@@ -279,12 +279,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ api_key }),
     }),
-    getMaps: () => request<MapsSettings>('/settings/maps'),
-    saveMaps: (api_key: string | null) => request<MapsSettings>('/settings/maps', {
-      method: 'POST',
-      body: JSON.stringify({ api_key }),
-    }),
-    clearMapsKey: () => request<MapsSettings>('/settings/maps/key', { method: 'DELETE' }),
     getAgent: () => request<AgentSettings>('/settings/agent'),
     saveAgent: (data: { url?: string | null; token?: string | null }) => request<AgentSettings>('/settings/agent', {
       method: 'POST',

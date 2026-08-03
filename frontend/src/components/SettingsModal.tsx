@@ -2510,9 +2510,9 @@ function AccountPanel() {
   )
 }
 
-type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'maps' | 'agent' | 'account'
+type Tab = 'sync' | 'ai' | 'google' | 'icloud' | 'calls' | 'files' | 'linkedin' | 'backup' | 'logos' | 'agent' | 'account'
 
-const TABS: Tab[] = ['account', 'sync', 'ai', 'google', 'icloud', 'calls', 'files', 'linkedin', 'backup', 'logos', 'maps', 'agent']
+const TABS: Tab[] = ['account', 'sync', 'ai', 'google', 'icloud', 'calls', 'files', 'linkedin', 'backup', 'logos', 'agent']
 
 function LogoPanel() {
   const { t } = useTranslation(['settings', 'common'])
@@ -2578,94 +2578,6 @@ function LogoPanel() {
           <div className="flex items-center gap-1.5 text-xs text-gray-400">
             <XCircle className="h-3.5 w-3.5" />
             {t('logos.inactive')}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function MapsPanel() {
-  const { t } = useTranslation(['settings', 'common'])
-  const [hasKey, setHasKey] = useState(false)
-  const [key, setKey] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    api.settings.getMaps().then(r => setHasKey(r.has_key)).finally(() => setLoading(false))
-  }, [])
-
-  async function save() {
-    if (!key.trim()) return
-    setSaving(true)
-    try {
-      const r = await api.settings.saveMaps(key.trim())
-      setHasKey(r.has_key)
-      setKey('')
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function clearKey() {
-    await api.settings.clearMapsKey()
-    setHasKey(false)
-  }
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('maps.title')}</h3>
-        <p className="text-xs text-gray-400">
-          {t('maps.description')}
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            {t('maps.apiKeyLabel')}{' '}
-            <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noreferrer"
-               className="text-indigo-500 hover:underline font-normal inline-flex items-center gap-0.5">
-              Google Cloud Console <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={key}
-              onChange={e => setKey(e.target.value)}
-              placeholder={hasKey ? t('maps.keyStoredPlaceholder') : 'AIza…'}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button
-              onClick={save}
-              disabled={saving || !key.trim()}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {saved ? <Check className="h-4 w-4" /> : saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saved ? t('common:saved') : t('common:save')}
-            </button>
-          </div>
-        </div>
-
-        {!loading && hasKey && (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600">
-              <CheckCircle className="h-3.5 w-3.5" />
-              {t('maps.active')}
-            </div>
-            <button onClick={clearKey} className="text-xs text-red-500 hover:text-red-600 whitespace-nowrap">{t('common:delete')}</button>
-          </div>
-        )}
-        {!loading && !hasKey && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <XCircle className="h-3.5 w-3.5" />
-            {t('maps.inactive')}
           </div>
         )}
       </div>
@@ -2876,7 +2788,6 @@ export function SettingsModal({ onClose, onReviewOpen }: Props) {
             {tab === 'linkedin' && <LinkedInPanel onSynced={() => { onClose(); onReviewOpen?.() }} />}
             {tab === 'backup'     && <BackupPanel />}
             {tab === 'logos'      && <LogoPanel />}
-            {tab === 'maps'       && <MapsPanel />}
             {tab === 'agent'      && <AgentPanel />}
           </div>
         </div>

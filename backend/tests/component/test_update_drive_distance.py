@@ -1,9 +1,9 @@
 """L1 Component — _update_drive_distance() in routers/applications.py.
 Caches the car-navigation distance/duration from the account's home
 location to an application's ort (see Application.drive_distance_km's
-docstring in models.py) -- needs a real DB session for _get_maps_api_key()
-(queries MapsSettings), so this is component- rather than unit-level;
-driving_route() itself is mocked at the module boundary.
+docstring in models.py) -- needs a real DB session since the User row is
+persisted via db_session; driving_route() itself is mocked at the module
+boundary.
 """
 import pytest
 
@@ -30,7 +30,7 @@ class TestUpdateDriveDistance:
         app = _app(48.1351, 11.5820)
         user = _user(db_session, 52.5200, 13.4050)
 
-        async def fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+        async def fake_driving_route(lat1, lng1, lat2, lng2):
             assert (lat1, lng1) == (52.5200, 13.4050)
             assert (lat2, lng2) == (48.1351, 11.5820)
             return (504.0, 312.0)

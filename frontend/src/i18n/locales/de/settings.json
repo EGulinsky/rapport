@@ -11,7 +11,6 @@
     "linkedin": "LinkedIn",
     "backup": "Backup",
     "logos": "Logos",
-    "maps": "Karten",
     "agent": "Agent"
   },
   "shared": {
@@ -273,14 +272,6 @@
     "publicKeyLabel": "Logo.dev Public Key",
     "active": "Logo.dev aktiv — Logos werden bevorzugt geladen",
     "inactive": "Kein Key — nur Google Favicons als Fallback"
-  },
-  "maps": {
-    "title": "Orts-Autocomplete",
-    "description": "Mit einem Google Maps API-Key (Places API) nutzt die Ortssuche bei Bewerbungen Google-Vorschläge inkl. konkreter Orte/POIs statt nur Städtenamen. Ohne Key fällt die Suche auf OpenStreetMap (Nominatim) zurück — funktioniert, liefert aber nur Städte. Der Key wird verschlüsselt gespeichert und nie an den Browser gesendet.",
-    "apiKeyLabel": "Google Maps API-Key",
-    "keyStoredPlaceholder": "••••••••••• (gespeichert)",
-    "active": "Google Places aktiv — Autocomplete liefert auch POIs",
-    "inactive": "Kein Key — Ortssuche nutzt OpenStreetMap (nur Städte, keine POIs)"
   },
   "agent": {
     "title": "Rapport Agent",

@@ -339,10 +339,6 @@ export interface AiModelsResponse {
   error: string | null
 }
 
-export interface MapsSettings {
-  has_key: boolean
-}
-
 export interface AgentSettings {
   url?: string
   has_token: boolean

@@ -91,30 +91,6 @@ class TestAiSettings:
         assert resp.status_code == 404
 
 
-class TestMapsSettings:
-    def test_positiv_ohne_konfiguration_liefert_has_key_false(self, client):
-        resp = client.get("/api/settings/maps")
-        assert resp.json()["has_key"] is False
-
-    def test_positiv_speichert_key(self, client):
-        resp = client.post("/api/settings/maps", json={"api_key": "maps-key"})
-        assert resp.json()["has_key"] is True
-
-    def test_positiv_leerer_key_loescht_bestehenden(self, client):
-        client.post("/api/settings/maps", json={"api_key": "maps-key"})
-
-        resp = client.post("/api/settings/maps", json={"api_key": ""})
-
-        assert resp.json()["has_key"] is False
-
-    def test_positiv_key_loeschen_endpoint(self, client):
-        client.post("/api/settings/maps", json={"api_key": "maps-key"})
-
-        resp = client.delete("/api/settings/maps/key")
-
-        assert resp.json()["has_key"] is False
-
-
 class TestAgentSettings:
     def test_positiv_ohne_konfiguration_liefert_defaults(self, client):
         resp = client.get("/api/settings/agent")

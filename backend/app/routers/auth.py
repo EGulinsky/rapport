@@ -226,9 +226,8 @@ async def update_profile(
     if payload.home_location != current_user.home_location:
         current_user.home_location = payload.home_location
         if payload.home_location and payload.home_location.strip():
-            from app.routers.geo import _get_maps_api_key, geocode_one
-            api_key = _get_maps_api_key(db, current_user.id)
-            coords = await geocode_one(payload.home_location, api_key)
+            from app.routers.geo import geocode_one
+            coords = await geocode_one(payload.home_location)
             current_user.home_lat = coords[0] if coords else None
             current_user.home_lng = coords[1] if coords else None
         else:

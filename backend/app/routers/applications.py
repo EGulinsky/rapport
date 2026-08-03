@@ -16,7 +16,7 @@ from app.dedup import norm_firma
 from app.error_keys import ErrorKey, api_error
 from app.logger import get_logger
 from app.routers.sync_common import _berlin_naive_to_utc_naive
-from app.routers.geo import _get_maps_api_key, geocode_one, driving_route
+from app.routers.geo import geocode_one, driving_route
 
 log = get_logger("applications")
 
@@ -318,20 +318,19 @@ def _strip_work_mode_suffix(ort_value: str) -> str:
     return _LINKEDIN_WORK_MODE_RE.sub('', ort_value)
 
 
-async def _geocode_ort(db: Session, app: models.Application, ort_value: Optional[str], user_id: int) -> None:
+async def _geocode_ort(app: models.Application, ort_value: Optional[str]) -> None:
     """Geocode `ort`, caching the result in ort_lat/ort_lng for the
     distance-to-job feature (KanbanBoard/ApplicationModal) -- avoids
     re-geocoding on every distance calculation. Callers only invoke this when
     `ort` is actually part of the request (new application, or `ort` present
     in an update payload), not on every save. Best-effort: a geocoding
-    failure (or no Maps key + Nominatim miss) just leaves the coordinates
-    unset rather than blocking the save."""
+    failure (or Photon miss) just leaves the coordinates unset rather than
+    blocking the save."""
     if not ort_value or not ort_value.strip():
         app.ort_lat = None
         app.ort_lng = None
         return
-    api_key = _get_maps_api_key(db, user_id)
-    coords = await geocode_one(_strip_work_mode_suffix(ort_value), api_key)
+    coords = await geocode_one(_strip_work_mode_suffix(ort_value))
     app.ort_lat = coords[0] if coords else None
     app.ort_lng = coords[1] if coords else None
 
@@ -350,8 +349,7 @@ async def _update_drive_distance(db: Session, app: models.Application, user: mod
         app.drive_distance_km = None
         app.drive_duration_min = None
         return
-    api_key = _get_maps_api_key(db, user.id)
-    route = await driving_route(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng, api_key)
+    route = await driving_route(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng)
     app.drive_distance_km = route[0] if route else None
     app.drive_duration_min = route[1] if route else None
 
@@ -364,12 +362,10 @@ async def backfill_ort_geocode(db: Session, user_id: int) -> dict:
     is stuck with no cached coordinates forever -- silently showing no
     distance even once the account's home_location is set, since nothing
     ever re-triggers the geocode for an untouched row. Paced at ~1
-    request/sec between calls (Nominatim's free usage policy caps lookups
-    at that rate; harmless extra latency if a Google Maps key is configured
-    instead, see _get_maps_api_key())."""
+    request/sec between calls, respecting Photon's fair-use expectations for
+    its free public instance (same spirit as Nominatim's usage policy)."""
     import asyncio
 
-    api_key = _get_maps_api_key(db, user_id)
     apps = db.query(models.Application).filter(
         models.Application.user_id == user_id,
         models.Application.ort.isnot(None),
@@ -383,7 +379,7 @@ async def backfill_ort_geocode(db: Session, user_id: int) -> dict:
         if i > 0:
             await asyncio.sleep(1)
         try:
-            coords = await geocode_one(_strip_work_mode_suffix(app.ort), api_key)
+            coords = await geocode_one(_strip_work_mode_suffix(app.ort))
         except Exception as e:
             errors.append(f"{app.firma}: {e}")
             continue
@@ -410,7 +406,6 @@ async def backfill_drive_distance(db: Session, user_id: int) -> dict:
     if not user or user.home_lat is None or user.home_lng is None:
         return {"total": 0, "updated": 0, "errors": []}
 
-    api_key = _get_maps_api_key(db, user_id)
     apps = db.query(models.Application).filter(
         models.Application.user_id == user_id,
         models.Application.ort_lat.isnot(None),
@@ -424,7 +419,7 @@ async def backfill_drive_distance(db: Session, user_id: int) -> dict:
         if i > 0:
             await asyncio.sleep(1)
         try:
-            route = await driving_route(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng, api_key)
+            route = await driving_route(user.home_lat, user.home_lng, app.ort_lat, app.ort_lng)
         except Exception as e:
             errors.append(f"{app.firma}: {e}")
             continue
@@ -810,7 +805,7 @@ async def create_application(
         _validate_salary_breakdown(data.get(f"{slot}_fixed"), data.get(f"{slot}_bonus"), data.get(slot), label)
     app = models.Application(**data, user_id=current_user.id)
     app.letztes_update = data.get("datum_bewerbung") or date.today()
-    await _geocode_ort(db, app, app.ort, current_user.id)
+    await _geocode_ort(app, app.ort)
     await _update_drive_distance(db, app, current_user)
     db.add(app)
     db.flush()  # get app.id before creating event
@@ -922,7 +917,7 @@ async def update_application(
         app.target_company_profile_id = None
 
     if ort_changed:
-        await _geocode_ort(db, app, app.ort, current_user.id)
+        await _geocode_ort(app, app.ort)
         await _update_drive_distance(db, app, current_user)
 
     if direct_cp_id is not None:

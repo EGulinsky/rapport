@@ -534,7 +534,7 @@ class TestHomeLocation:
     def test_positiv_speichern_geocodiert_und_setzt_koordinaten(self, real_auth_client, db_session, monkeypatch):
         from app import models
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             assert term == "Berlin, Deutschland"
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
@@ -554,7 +554,7 @@ class TestHomeLocation:
     def test_negativ_geocoding_fehlschlag_laesst_koordinaten_leer(self, real_auth_client, db_session, monkeypatch):
         from app import models
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             return None
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
@@ -572,7 +572,7 @@ class TestHomeLocation:
     def test_positiv_leeren_loescht_koordinaten(self, real_auth_client, db_session, monkeypatch):
         from app import models
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 
@@ -593,7 +593,7 @@ class TestHomeLocation:
         must not burn an extra geocoding call every time."""
         calls = []
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             calls.append(term)
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
@@ -615,7 +615,7 @@ class TestHomeLocation:
         from app import models
         from tests.factories import application_factory
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             return (52.52, 13.405)
         monkeypatch.setattr("app.routers.geo.geocode_one", fake_geocode_one)
 

@@ -847,7 +847,7 @@ class TestOrtGeocoding:
     it's actually being invoked from applications.py."""
 
     def test_positiv_anlegen_mit_ort_geokodiert(self, client, db_session, monkeypatch):
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             assert term == "München, Deutschland"
             return (48.1351, 11.5820)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
@@ -864,7 +864,7 @@ class TestOrtGeocoding:
     def test_negativ_anlegen_ohne_ort_geokodiert_nicht(self, client, db_session, monkeypatch):
         calls = []
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             calls.append(term)
             return (48.1351, 11.5820)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
@@ -881,7 +881,7 @@ class TestOrtGeocoding:
         app = application_factory(db_session, ort="Berlin, Deutschland", ort_lat=52.52, ort_lng=13.405)
         db_session.commit()
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             assert term == "Hamburg, Deutschland"
             return (53.5511, 9.9937)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
@@ -898,7 +898,7 @@ class TestOrtGeocoding:
         db_session.commit()
         calls = []
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             calls.append(term)
             return (0.0, 0.0)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
@@ -924,7 +924,7 @@ class TestOrtGeocoding:
         assert app.ort_lng is None
 
     def test_negativ_geocoding_fehlschlag_laesst_koordinaten_leer(self, client, db_session, monkeypatch):
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             return None
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
 
@@ -942,7 +942,7 @@ class TestOrtGeocoding:
         # job location -- neither Nominatim nor Google's Geocoding API can
         # resolve an address with that still attached (confirmed against
         # production data), so it must be stripped before the geocode call.
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             assert term == "Krefeld"
             return (51.3331205, 6.5623343)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
@@ -976,11 +976,11 @@ class TestDriveDistance:
         user.home_lat, user.home_lng = 52.5200, 13.4050  # Berlin
         db_session.commit()
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             return (48.1351, 11.5820)  # Munich
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
 
-        async def fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+        async def fake_driving_route(lat1, lng1, lat2, lng2):
             return (504.0, 312.0)
         monkeypatch.setattr("app.routers.applications.driving_route", fake_driving_route)
 
@@ -1006,7 +1006,7 @@ class TestDriveDistance:
         token = _token(real_auth_client)
         headers = {"Authorization": f"Bearer {token}"}
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             return (48.1351, 11.5820)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
 
@@ -1058,7 +1058,7 @@ class TestBackfillOrtGeocode:
 
         calls = []
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             calls.append(term)
             return (48.1351, 11.5820)
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
@@ -1087,7 +1087,7 @@ class TestBackfillOrtGeocode:
         app = application_factory(db_session, ort="Nirgendwostadt")
         db_session.commit()
 
-        async def fake_geocode_one(term, api_key):
+        async def fake_geocode_one(term):
             raise RuntimeError("kein Netz")
         monkeypatch.setattr("app.routers.applications.geocode_one", fake_geocode_one)
         monkeypatch.setattr("asyncio.sleep", _fake_sleep)
@@ -1130,7 +1130,7 @@ class TestBackfillDriveDistance:
 
         calls = []
 
-        async def fake_driving_route(lat1, lng1, lat2, lng2, api_key):
+        async def fake_driving_route(lat1, lng1, lat2, lng2):
             calls.append((lat1, lng1, lat2, lng2))
             return (504.0, 312.0)
         monkeypatch.setattr("app.routers.applications.driving_route", fake_driving_route)
