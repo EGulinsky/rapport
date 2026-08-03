@@ -36,6 +36,20 @@ describe('KanbanBoard — nächster Schritt', () => {
     expect(screen.queryByText('Nachfassen')).not.toBeInTheDocument()
   })
 
+  it('positiv: Farbcodierung folgt naechster_schritt_kind, nicht dem (übersetzbaren) Text', () => {
+    // Regression: die Farbklassen wurden früher per String-Prefix-Match auf
+    // den (nur deutschen) Anzeigetext bestimmt -- das brach, sobald der Text
+    // übersetzt wurde. Jetzt kommt die Klassifizierung über ein eigenes,
+    // sprachunabhängiges Feld vom Backend.
+    const app = makeApp({ naechster_schritt: 'Interview today (01.07.2026)', naechster_schritt_kind: 'interview' })
+    render(
+      <KanbanBoard columns={[{ status: 'hr', items: [app] }]} onSelect={vi.fn()} onChanged={vi.fn()} />
+    )
+
+    const el = screen.getByText('→ Interview today (01.07.2026)')
+    expect(el.className).toContain('text-indigo-600')
+  })
+
   it('negativ: bei abgesagten Bewerbungen wird nichts angezeigt', () => {
     const app = makeApp({ naechster_schritt: 'Warte auf Feedback', abgesagt: true })
     render(

@@ -190,58 +190,86 @@ async def score_application(db: Session, app: "models.Application", user: "model
     return True
 
 
-def _compute_naechster_schritt(
+def _naechster_schritt_branch(
     app,
     next_interview: Optional[date],
     last_interview: Optional[date],
     today: date,
-) -> str:
+) -> tuple[Optional[str], dict, str]:
+    """Returns (i18n_key_or_None, format_kwargs, kind) for the current "next
+    step" situation. Shared by _compute_naechster_schritt() (translated
+    display text) and the stable, language-independent `kind` code exposed to
+    the frontend for color-coding -- matching on the translated text itself
+    (the pre-i18n approach) would break for non-German accounts."""
     status = app.main_status or ""
 
     if status == "rejected":
-        return ""
+        return None, {}, ""
 
     if next_interview:
         delta = (next_interview - today).days
         when = next_interview.strftime("%d.%m.%Y")
         if delta == 0:
-            return f"Gespräch heute ({when})"
+            return "next_step_interview_today", {"when": when}, "interview"
         if delta == 1:
-            return f"Gespräch morgen ({when})"
-        return f"Gespräch am {when} (in {delta} Tagen)"
+            return "next_step_interview_tomorrow", {"when": when}, "interview"
+        return "next_step_interview_on", {"when": when, "delta": delta}, "interview"
 
     if status == "signed":
-        return "Onboarding vorbereiten"
+        return "next_step_prepare_onboarding", {}, "neutral"
 
     if status == "negotiating":
-        return "Vertragsdetails klären"
+        return "next_step_clarify_contract", {}, "neutral"
 
     if last_interview:
         days = (today - last_interview).days
         if days <= 7:
-            return "Warte auf Feedback"
+            return "next_step_waiting_feedback", {}, "neutral"
         if days <= 21:
-            return f"Feedback ausstehend — evtl. nachfassen ({days} Tage)"
-        return f"Kein Feedback seit {days} Tagen — evtl. Ghosting"
+            return "next_step_feedback_overdue", {"days": days}, "followup"
+        return "next_step_no_feedback_ghosting", {"days": days}, "overdue"
 
     if status in ("hr", "fb"):
-        return "Terminvereinbarung ausstehend"
+        return "next_step_waiting_appointment", {}, "neutral"
 
     if status == "waiting":
-        return "Warte auf Rückmeldung"
+        return "next_step_waiting_response", {}, "neutral"
 
     if status == "applied":
         days_since = (today - app.datum_bewerbung).days if app.datum_bewerbung else 0
         if days_since < 14:
-            return "Warte auf Einladung"
+            return "next_step_waiting_invite", {}, "neutral"
         if days_since < 30:
-            return f"Evtl. nachfassen ({days_since} Tage ohne Reaktion)"
-        return f"Keine Reaktion seit {days_since} Tagen"
+            return "next_step_maybe_followup", {"days": days_since}, "followup"
+        return "next_step_no_response", {"days": days_since}, "overdue"
 
     if status == "prospecting":
-        return "Bewerbung vorbereiten"
+        return "next_step_prepare_application", {}, "neutral"
 
-    return ""
+    return None, {}, ""
+
+
+def _compute_naechster_schritt(
+    app,
+    next_interview: Optional[date],
+    last_interview: Optional[date],
+    today: date,
+    lang: str = "de",
+) -> str:
+    from app.i18n_strings import t
+
+    key, kwargs, _kind = _naechster_schritt_branch(app, next_interview, last_interview, today)
+    return t(key, lang, **kwargs) if key else ""
+
+
+def _naechster_schritt_kind(
+    app,
+    next_interview: Optional[date],
+    last_interview: Optional[date],
+    today: date,
+) -> str:
+    _key, _kwargs, kind = _naechster_schritt_branch(app, next_interview, last_interview, today)
+    return kind
 
 def _find_or_create_company_profile(db: Session, firma_name: str, user_id: int) -> tuple[models.CompanyProfile, bool]:
     """Match an existing CompanyProfile by normalized name or create a new one.
@@ -534,6 +562,13 @@ def list_applications(
             if md:
                 app.letztes_update = md
             app.naechster_schritt = _compute_naechster_schritt(
+                app,
+                next_interviews.get(app.id),
+                last_interviews.get(app.id),
+                today,
+                lang=current_user.ui_language,
+            )
+            app.naechster_schritt_kind = _naechster_schritt_kind(
                 app,
                 next_interviews.get(app.id),
                 last_interviews.get(app.id),

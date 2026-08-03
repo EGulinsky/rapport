@@ -145,9 +145,9 @@ function KanbanCard({ app, isDragging, onOpenCompany, isUpdated }: { app: Applic
       )}
       {!app.abgesagt && app.naechster_schritt && (
         <p className={`text-[10px] mt-1.5 leading-tight font-medium ${
-          app.naechster_schritt.startsWith('Gespräch') ? 'text-indigo-600' :
-          app.naechster_schritt.startsWith('Kein Feedback') || app.naechster_schritt.startsWith('Keine Reaktion') ? 'text-orange-600' :
-          app.naechster_schritt.startsWith('Evtl.') || app.naechster_schritt.startsWith('Feedback aus') ? 'text-yellow-600' :
+          app.naechster_schritt_kind === 'interview' ? 'text-indigo-600' :
+          app.naechster_schritt_kind === 'overdue' ? 'text-orange-600' :
+          app.naechster_schritt_kind === 'followup' ? 'text-yellow-600' :
           'text-gray-500'
         }`}>
           → {app.naechster_schritt}

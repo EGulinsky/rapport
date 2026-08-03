@@ -52,6 +52,7 @@ export interface Application {
   datum_bewerbung?: string
   letztes_update?: string
   naechster_schritt?: string
+  naechster_schritt_kind?: 'interview' | 'neutral' | 'followup' | 'overdue' | ''
   abgesagt: boolean
   ghosting: boolean
   kommentar?: string

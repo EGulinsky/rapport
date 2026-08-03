@@ -264,6 +264,50 @@ class TestListApplicationsSearch:
         assert resp.json()[0]["ort"] == "Berlin, Deutschland"
 
 
+class TestListApplicationsNaechsterSchrittSprache:
+    """Regression: naechster_schritt was a hardcoded German string, unlike
+    every other user-facing piece of text in the app -- GET /api/applications/
+    must translate it per the account's ui_language, and expose a stable
+    naechster_schritt_kind the frontend can color-code on regardless of
+    language (see _naechster_schritt_branch() in applications.py)."""
+
+    def _as_user(self, client, db_session, ui_language: str):
+        from app.main import app
+        from app.auth.dependencies import get_current_user
+        from app.database import set_session_user
+
+        user = models.User(id=1, email="test-client@example.com", password_hash="x", email_verified=True, ui_language=ui_language)
+
+        def _override():
+            set_session_user(db_session, user.id)
+            return user
+
+        app.dependency_overrides[get_current_user] = _override
+
+    def test_positiv_englische_ui_sprache_uebersetzt_naechster_schritt(self, client, db_session):
+        app_row = application_factory(db_session, main_status="signed")
+        db_session.commit()
+
+        self._as_user(client, db_session, "en")
+        resp = client.get("/api/applications/")
+
+        assert resp.status_code == 200
+        item = next(a for a in resp.json() if a["id"] == app_row.id)
+        assert item["naechster_schritt"] == "Prepare onboarding"
+        assert item["naechster_schritt_kind"] == "neutral"
+
+    def test_positiv_deutsche_ui_sprache_bleibt_unveraendert(self, client, db_session):
+        app_row = application_factory(db_session, main_status="signed")
+        db_session.commit()
+
+        self._as_user(client, db_session, "de")
+        resp = client.get("/api/applications/")
+
+        assert resp.status_code == 200
+        item = next(a for a in resp.json() if a["id"] == app_row.id)
+        assert item["naechster_schritt"] == "Onboarding vorbereiten"
+
+
 class TestListApplicationsCompanyProfileIdFilter:
     """Regressionsfall: der "N Bewerbungen"-Klick in der Firmenansicht filterte
     bisher per Freitextsuche über den Firmennamen (Application.firma) statt

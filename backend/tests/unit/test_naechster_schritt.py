@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import time_machine
 
-from app.routers.applications import _compute_naechster_schritt
+from app.routers.applications import _compute_naechster_schritt, _naechster_schritt_kind
 
 pytestmark = pytest.mark.unit
 
@@ -67,3 +67,54 @@ class TestNaechsterSchritt:
     def test_zeitkontext_mit_time_machine(self):
         # Beweist, dass time-machine für zukünftige Tests mit date.today() funktioniert.
         assert date.today() == TODAY
+
+
+class TestNaechsterSchrittSprache:
+    """Regression: naechster_schritt was a hardcoded German string never
+    passed through i18n, unlike every other user-facing piece of text in the
+    app. lang="en" must now produce a translated equivalent."""
+
+    def test_positiv_englisch_gespraech_heute(self):
+        result = _compute_naechster_schritt(_app("hr"), next_interview=TODAY, last_interview=None, today=TODAY, lang="en")
+        assert "Interview today" in result
+
+    def test_positiv_englisch_ghosting(self):
+        vor_22_tagen = date(2026, 6, 9)
+        result = _compute_naechster_schritt(_app("hr"), next_interview=None, last_interview=vor_22_tagen, today=TODAY, lang="en")
+        assert "possible ghosting" in result
+
+    def test_positiv_englisch_signed(self):
+        result = _compute_naechster_schritt(_app("signed"), next_interview=None, last_interview=None, today=TODAY, lang="en")
+        assert result == "Prepare onboarding"
+
+    def test_negativ_unbekannte_sprache_faellt_auf_deutsch_zurueck(self):
+        result = _compute_naechster_schritt(_app("signed"), next_interview=None, last_interview=None, today=TODAY, lang="fr")
+        assert result == "Onboarding vorbereiten"
+
+
+class TestNaechsterSchrittKind:
+    """_naechster_schritt_kind() is the stable, language-independent
+    classification the frontend uses for color-coding -- since the display
+    text is now translated, matching hardcoded German prefixes client-side
+    would silently break for English accounts."""
+
+    def test_positiv_gespraech_ist_interview(self):
+        assert _naechster_schritt_kind(_app("hr"), next_interview=TODAY, last_interview=None, today=TODAY) == "interview"
+
+    def test_positiv_ghosting_ist_overdue(self):
+        vor_22_tagen = date(2026, 6, 9)
+        assert _naechster_schritt_kind(_app("hr"), next_interview=None, last_interview=vor_22_tagen, today=TODAY) == "overdue"
+
+    def test_positiv_evtl_nachfassen_ist_followup(self):
+        vor_21_tagen = date(2026, 6, 10)
+        assert _naechster_schritt_kind(_app("hr"), next_interview=None, last_interview=vor_21_tagen, today=TODAY) == "followup"
+
+    def test_positiv_keine_reaktion_nach_30_tagen_ist_overdue(self):
+        vor_31_tagen = date(2026, 5, 31)
+        assert _naechster_schritt_kind(_app("applied", datum_bewerbung=vor_31_tagen), next_interview=None, last_interview=None, today=TODAY) == "overdue"
+
+    def test_negativ_abgesagt_ist_leerer_kind(self):
+        assert _naechster_schritt_kind(_app("rejected"), next_interview=TODAY, last_interview=None, today=TODAY) == ""
+
+    def test_negativ_onboarding_ist_neutral(self):
+        assert _naechster_schritt_kind(_app("signed"), next_interview=None, last_interview=None, today=TODAY) == "neutral"

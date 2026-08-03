@@ -310,6 +310,11 @@ class ApplicationListItem(BaseModel):
     drive_duration_min: Optional[float] = None
     kommentar: Optional[str] = None
     naechster_schritt: Optional[str] = None
+    # Stable, language-independent classification of naechster_schritt's
+    # situation ("interview" | "neutral" | "followup" | "overdue" | "") for
+    # frontend color-coding -- the translated text itself can't be matched
+    # against hardcoded (German) prefixes anymore once it's localized.
+    naechster_schritt_kind: Optional[str] = None
     company_profile_id: Optional[int] = None
     target_company_profile_id: Optional[int] = None
     company_website: Optional[str] = None

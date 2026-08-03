@@ -484,14 +484,14 @@ function AiPanel() {
                     onClick={() => { setForm(f => ({ ...f, model: m.model })); autoSave({ model: m.model }) }}
                     className={clsx(
                       'flex w-full flex-col items-start px-3 py-2 text-left transition-colors',
-                      form.model === m.model ? 'bg-indigo-50' : 'bg-white hover:bg-gray-50'
+                      form.model === m.model ? 'bg-indigo-100' : 'bg-white hover:bg-gray-50'
                     )}
                   >
                     <div className="flex w-full items-center gap-1.5">
                       {form.model === m.model
-                        ? <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        ? <Check className="h-3.5 w-3.5 text-indigo-700 shrink-0" />
                         : <span className="h-3.5 w-3.5 shrink-0" />}
-                      <span className="text-sm font-medium text-gray-800">{m.label}</span>
+                      <span className={clsx('text-sm font-medium', form.model === m.model ? 'text-indigo-900' : 'text-gray-800')}>{m.label}</span>
                     </div>
                     {(m.context_window || m.max_output_tokens) && (
                       <p className="ml-5 mt-0.5 text-xs text-gray-400">

@@ -10,6 +10,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.29',
+    date: '2026-08-03',
+    changes: [
+      'Fixed the "next step" field on applications (e.g. "Waiting for feedback", "Prepare onboarding") always showing German text regardless of the account\'s UI language — it now translates like every other piece of text in the app. Kanban/table color-coding for this field is unaffected (it now uses a stable classification instead of matching the display text itself).',
+      'Improved contrast for the selected model in AI Settings\' model list — it was barely distinguishable from unselected rows.',
+      'Batch LinkedIn sync no longer scrapes the Archived tab (by far the slowest part of the sync) unless it could actually find something new: an active, non-rejected application with a LinkedIn job-posting link that didn\'t already turn up in the other categories. Per-application ("sync this one") LinkedIn sync is unchanged.',
+    ],
+  },
+  {
     version: '4.7.28',
     date: '2026-08-03',
     changes: [

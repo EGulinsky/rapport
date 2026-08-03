@@ -949,6 +949,24 @@ def _find_or_create_application(
 _STATUS_ORDER = ["prospecting", "applied", "hr", "fb", "waiting", "negotiating", "signed", "rejected"]
 
 
+def _li_dedup_key(firma: str | None, rolle: str | None) -> str:
+    """Same normalization used for the batch sync's company|title dedup keys
+    (see _scrape_and_merge_category in _async_sync) -- shared so an
+    Application's own firma/rolle can be compared against scraped LinkedIn
+    jobs on equal footing."""
+    return f"{(firma or '').lower().strip()} | {(rolle or '').lower().strip()}"
+
+
+def _unaccounted_active_linkedin_apps(active_li_apps: list, scraped_jobs_by_key: dict) -> list:
+    """Among active (non-rejected) applications whose stellenanzeige_url is a
+    LinkedIn job posting, returns those that did NOT turn up in the
+    non-ARCHIVED categories already scraped this batch sync -- the only ones
+    that could possibly be sitting in ARCHIVED without us knowing yet. Pulled
+    out as a pure function (no DB/Playwright) so the decision itself is
+    unit-testable without the surrounding async scraping machinery."""
+    return [a for a in active_li_apps if _li_dedup_key(a.firma, a.rolle) not in scraped_jobs_by_key]
+
+
 def _categories_for_individual_sync(target_app: "models.Application | None") -> list[tuple]:
     """Welche LinkedIn-Kategorien beim Einzelsync (eine bestimmte Bewerbung) durchsucht
     werden. ARCHIVED wird übersprungen, außer die Bewerbung ist selbst schon abgesagt —
@@ -1294,7 +1312,9 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
             # ── Batch-Sync: alle Kategorien sammeln, dann verarbeiten ───────────────
             else:
-                batch_categories = CATEGORIES if job_tracker_on else []
+                non_archived_categories = [c for c in CATEGORIES if c[0] != "ARCHIVED"]
+                archived_category = next((c for c in CATEGORIES if c[0] == "ARCHIVED"), None)
+                batch_categories = non_archived_categories if job_tracker_on else []
                 _state["category_counts"] = [
                     {"card_type": ct, "label": lbl, "found": 0, "created": 0, "updated": 0, "skipped": 0,
                      "status": "pending", "current_page": 0}
@@ -1303,7 +1323,8 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
 
                 # Dedup by firma|title — later categories (higher priority) overwrite earlier
                 all_jobs_by_key: dict[str, dict] = {}
-                for card_type, label, default_status, max_pages, cat_url in batch_categories:
+
+                async def _scrape_and_merge_category(card_type: str, label: str, default_status: str, max_pages: int, cat_url: str) -> None:
                     _cc_entry(card_type)["status"] = "active"
                     _state["step"] = t("li_page_loading", lang, label=label, page=1)
                     cat_jobs = await _scrape_category(
@@ -1319,6 +1340,41 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                     _cc_entry(card_type)["status"] = "done"
                     log.info("[LI kat] {}: {} gefunden (gesamt {})", label, len(cat_jobs), len(all_jobs_by_key))
                     _state["step"] = t("li_jobs_found_total", lang, label=label, count=len(cat_jobs), total=len(all_jobs_by_key))
+
+                for card_type, label, default_status, max_pages, cat_url in batch_categories:
+                    await _scrape_and_merge_category(card_type, label, default_status, max_pages, cat_url)
+
+                # ARCHIVED is by far the slowest category to scrape (largest,
+                # most-paginated tab), so a batch sync only scrapes it if it
+                # could actually tell us something new: an active (non-rejected)
+                # application whose stellenanzeige_url is itself a LinkedIn job
+                # posting, but that didn't turn up in any of the categories just
+                # scraped above -- that's the only situation where the job could
+                # be sitting in ARCHIVED without us knowing yet. If every such
+                # application already matched above, ARCHIVED has nothing left
+                # to contribute and is skipped outright. Individual (per-app)
+                # sync is unaffected -- _categories_for_individual_sync() already
+                # has its own, unrelated ARCHIVED-inclusion rule.
+                if job_tracker_on and archived_category:
+                    active_li_apps = db.query(models.Application).filter(
+                        models.Application.user_id == user_id,
+                        models.Application.main_status != "rejected",
+                        models.Application.stellenanzeige_url.isnot(None),
+                        models.Application.stellenanzeige_url.ilike("%linkedin.com%"),
+                    ).all()
+                    unaccounted_apps = _unaccounted_active_linkedin_apps(active_li_apps, all_jobs_by_key)
+                    if unaccounted_apps:
+                        card_type, label, default_status, max_pages, cat_url = archived_category
+                        _state["category_counts"].append({
+                            "card_type": card_type, "label": label, "found": 0, "created": 0, "updated": 0,
+                            "skipped": 0, "status": "pending", "current_page": 0,
+                        })
+                        await _scrape_and_merge_category(card_type, label, default_status, max_pages, cat_url)
+                    else:
+                        log.info(
+                            "[LI batch] ARCHIVED übersprungen — {} aktive LI-Bewerbung(en), alle bereits in anderen Kategorien gefunden",
+                            len(active_li_apps),
+                        )
                 all_jobs = list(all_jobs_by_key.values())
 
                 # Scrape messages before closing the browser session (restores

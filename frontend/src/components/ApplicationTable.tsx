@@ -276,9 +276,9 @@ export function ApplicationTable({ applications, onSelect, onStatusChanged, sele
                 {app.naechster_schritt ? (
                   <span className={clsx(
                     'inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight',
-                    app.naechster_schritt.startsWith('Gespräch') ? 'bg-indigo-50 text-indigo-700' :
-                    app.naechster_schritt.startsWith('Kein Feedback') || app.naechster_schritt.startsWith('Keine Reaktion') ? 'bg-orange-50 text-orange-700' :
-                    app.naechster_schritt.startsWith('Evtl.') || app.naechster_schritt.startsWith('Feedback aus') ? 'bg-yellow-50 text-yellow-700' :
+                    app.naechster_schritt_kind === 'interview' ? 'bg-indigo-50 text-indigo-700' :
+                    app.naechster_schritt_kind === 'overdue' ? 'bg-orange-50 text-orange-700' :
+                    app.naechster_schritt_kind === 'followup' ? 'bg-yellow-50 text-yellow-700' :
                     'bg-gray-50 text-gray-600'
                   )}>
                     {app.naechster_schritt}
