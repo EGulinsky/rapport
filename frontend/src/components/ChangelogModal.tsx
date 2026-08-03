@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.31',
+    date: '2026-08-03',
+    changes: [
+      'Individual ("re-sync this one application") LinkedIn sync now applies the same Archived-tab optimization as batch sync: the slowest LinkedIn category is only searched if the application actually has a LinkedIn job-posting link, instead of always searching it for a non-rejected application.',
+    ],
+  },
+  {
     version: '4.7.30',
     date: '2026-08-03',
     changes: [

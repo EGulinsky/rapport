@@ -968,13 +968,23 @@ def _unaccounted_active_linkedin_apps(active_li_apps: list, scraped_jobs_by_key:
 
 
 def _categories_for_individual_sync(target_app: "models.Application | None") -> list[tuple]:
-    """Welche LinkedIn-Kategorien beim Einzelsync (eine bestimmte Bewerbung) durchsucht
-    werden. ARCHIVED wird übersprungen, außer die Bewerbung ist selbst schon abgesagt —
-    eine gezielt neu gesyncte Bewerbung liegt praktisch nie im Archiv, das Durchblättern
-    (bis zu 99 Seiten) macht den Einzelsync sonst unnötig langsam."""
-    if target_app and target_app.main_status == "rejected":
-        return CATEGORIES
-    return [c for c in CATEGORIES if c[0] != "ARCHIVED"]
+    """Which LinkedIn categories an individual (single-application) sync
+    searches. Mirrors the batch sync's ARCHIVED-inclusion rule (see
+    _unaccounted_active_linkedin_apps() and the ARCHIVED-skip block in
+    _async_sync()): ARCHIVED -- by far the slowest category, up to 99 pages
+    -- is only worth searching if the target application actually has a
+    LinkedIn job-posting link to match against; without one, no scraped
+    Archived job could ever match it via _quick_match() anyway. If the app
+    IS found in an earlier category, the caller's search loop already breaks
+    before ever reaching ARCHIVED (it's last in CATEGORIES), so that half of
+    the batch rule falls out of the existing loop structure for free."""
+    has_li_link = bool(
+        target_app and target_app.stellenanzeige_url
+        and "linkedin.com" in target_app.stellenanzeige_url.lower()
+    )
+    if not has_li_link:
+        return [c for c in CATEGORIES if c[0] != "ARCHIVED"]
+    return CATEGORIES
 
 
 def _process_linkedin_job(db: Session, job: dict, user_id: Optional[int] = None) -> dict:
@@ -1353,8 +1363,9 @@ async def _async_sync(cfg_id: int, target_app_id: int | None = None):
                 # be sitting in ARCHIVED without us knowing yet. If every such
                 # application already matched above, ARCHIVED has nothing left
                 # to contribute and is skipped outright. Individual (per-app)
-                # sync is unaffected -- _categories_for_individual_sync() already
-                # has its own, unrelated ARCHIVED-inclusion rule.
+                # sync applies the same rule via _categories_for_individual_sync()
+                # (has-a-LI-link gates inclusion; already-found-in-an-earlier-
+                # category is handled by that search loop's own early break).
                 if job_tracker_on and archived_category:
                     active_li_apps = db.query(models.Application).filter(
                         models.Application.user_id == user_id,
