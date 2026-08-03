@@ -303,6 +303,43 @@ class TestGeminiThinkingDisabled:
 
         assert "reasoning_effort" not in fake_ai_provider.calls[0]
 
+    async def test_positiv_lehnt_gemini_alias_reasoning_effort_ab_retry_ohne_erfolgreich(
+        self, db_session, ai_settings, fake_ai_provider,
+    ):
+        # Regression follow-up: litellm's static param table claims some
+        # Gemini aliases (e.g. "-latest" aliases) support reasoning_effort,
+        # but the live API rejects it outright ("Request contains an invalid
+        # argument", 400 INVALID_ARGUMENT). Since we only ever add the param
+        # ourselves, retry once without it instead of failing the whole call.
+        ai_settings.model = "gemini/gemini-flash-lite-latest"
+        fake_ai_provider.queue_error(
+            litellm.BadRequestError(
+                message='{"error": {"code": 400, "message": "Request contains an invalid argument.", "status": "INVALID_ARGUMENT"}}',
+                llm_provider="gemini", model=ai_settings.model,
+            )
+        )
+        fake_ai_provider.queue_content('{"ok": true}')
+
+        await ai_test_connection(db_session)
+
+        assert len(fake_ai_provider.calls) == 2
+        assert fake_ai_provider.calls[0]["reasoning_effort"] == "none"
+        assert "reasoning_effort" not in fake_ai_provider.calls[1]
+
+    async def test_negativ_bad_request_ohne_reasoning_effort_wird_nicht_wiederholt(
+        self, db_session, ai_settings, fake_ai_provider,
+    ):
+        # A genuine BadRequestError unrelated to our own reasoning_effort
+        # addition (e.g. a groq model) must propagate immediately -- no retry.
+        fake_ai_provider.queue_error(
+            litellm.BadRequestError(message="context_length_exceeded", llm_provider="groq", model=ai_settings.model)
+        )
+
+        with pytest.raises(AIBadRequest, match="context_length_exceeded"):
+            await ai_test_connection(db_session)
+
+        assert len(fake_ai_provider.calls) == 1
+
 
 class TestExtractApplicationFromText:
     async def test_positiv_direkter_arbeitgeber(self, db_session, ai_settings, fake_ai_provider):

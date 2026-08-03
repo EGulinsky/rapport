@@ -10,6 +10,13 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '4.7.28',
+    date: '2026-08-03',
+    changes: [
+      'Fixed a regression from the previous release: some Gemini model aliases (e.g. "Flash Lite Latest") started failing AI calls with "Provider-Fehler: ...Request contains an invalid argument...INVALID_ARGUMENT" after reasoning was disabled for Gemini models. Some aliases report support for that setting but the live API actually rejects it — the app now automatically retries once without it when that happens, so those models work again without losing the earlier fix for "thinking" models.',
+    ],
+  },
+  {
     version: '4.7.27',
     date: '2026-08-02',
     changes: [

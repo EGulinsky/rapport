@@ -76,6 +76,29 @@ def _disable_gemini_thinking(kwargs: dict) -> None:
         kwargs["reasoning_effort"] = "none"
 
 
+async def _acompletion(kwargs: dict):
+    """Thin wrapper around litellm.acompletion with one targeted fallback:
+    if _disable_gemini_thinking() added reasoning_effort and the provider
+    rejects the request with a BadRequestError, retry once without it.
+    litellm's static get_supported_openai_params() table (used by
+    _disable_gemini_thinking to decide whether a model supports the knob)
+    is more permissive than the live API for some Gemini model aliases
+    (e.g. "-latest" aliases) — it claims they support reasoning_effort, but
+    the actual Gemini API rejects the resulting thinkingConfig with a bare
+    "Request contains an invalid argument" 400 INVALID_ARGUMENT, unlike
+    genuinely-thinking models where the same param works fine. Scoped to
+    only retry requests where *we* added the param, so a real BadRequestError
+    (bad JSON mode, wrong model name, etc.) still surfaces immediately."""
+    try:
+        return await litellm.acompletion(**kwargs)
+    except litellm.BadRequestError:
+        if "reasoning_effort" not in kwargs:
+            raise
+        log.warning("Model {} rejected reasoning_effort, retrying without it", kwargs.get("model"))
+        fallback = {k: v for k, v in kwargs.items() if k != "reasoning_effort"}
+        return await litellm.acompletion(**fallback)
+
+
 def _build_request_kwargs(db: Session, messages: list[dict], max_tokens: int):
     """Shared by complete() and complete_with_tools(): loads the active
     AiSettings row, resolves+decrypts the matching AiProviderKey, and
@@ -121,7 +144,7 @@ async def complete(
     )
 
     try:
-        response = await litellm.acompletion(**kwargs)
+        response = await _acompletion(kwargs)
     except litellm.RateLimitError as e:
         log.warning("AI rate limited: {}", e)
         raise AIRateLimited(str(e))
@@ -198,7 +221,7 @@ async def complete_with_tools(
     )
 
     try:
-        response = await litellm.acompletion(**kwargs)
+        response = await _acompletion(kwargs)
     except litellm.RateLimitError as e:
         log.warning("AI rate limited: {}", e)
         raise AIRateLimited(str(e))

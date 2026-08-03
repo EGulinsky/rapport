@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models, schemas
-from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, _disable_gemini_thinking
+from app.ai.provider import encrypt_api_key, decrypt_api_key, AINotConfigured, _disable_gemini_thinking, _acompletion
 from app.ai.tasks import test_connection
 from app.auth.dependencies import get_current_user
 from app.logger import get_logger
@@ -328,7 +328,7 @@ async def test_ai(
             if payload.base_url and payload.base_url.strip():
                 kwargs["api_base"] = payload.base_url.strip()
 
-            response = await litellm.acompletion(**kwargs)
+            response = await _acompletion(kwargs)
             content = response.choices[0].message.content or ""
             result = json.loads(content)
             return {"status": "ok", "message": "ok" if result.get("ok") else f"Unerwartete Antwort: {result}"}

@@ -281,6 +281,34 @@ class TestAiTest:
         assert resp.status_code == 200
         assert captured["reasoning_effort"] == "none"
 
+    def test_positiv_gemini_alias_lehnt_reasoning_effort_ab_retry_ohne_erfolgreich(self, client):
+        # Regression follow-up: litellm's static param table claims some Gemini
+        # aliases (e.g. "-latest" aliases) support reasoning_effort, but the
+        # live API rejects it with a bare 400 INVALID_ARGUMENT. _acompletion()
+        # retries once without the param -- confirm that happens transparently
+        # for the payload-based /ai/test path too, not just the saved-config path.
+        calls = []
+
+        async def _fake_acompletion(**kwargs):
+            from types import SimpleNamespace
+            calls.append(kwargs)
+            if "reasoning_effort" in kwargs:
+                raise litellm.BadRequestError(
+                    message='{"error": {"code": 400, "message": "Request contains an invalid argument.", "status": "INVALID_ARGUMENT"}}',
+                    llm_provider="gemini", model=kwargs.get("model"),
+                )
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))])
+
+        with patch.object(litellm, "acompletion", new=_fake_acompletion):
+            resp = client.post("/api/settings/ai/test", json={
+                "provider": "gemini", "model": "gemini/gemini-flash-lite-latest", "api_key": "sk-test", "enabled": True,
+            })
+
+        assert resp.status_code == 200
+        assert len(calls) == 2
+        assert calls[0]["reasoning_effort"] == "none"
+        assert "reasoning_effort" not in calls[1]
+
     def test_negativ_rate_limit_liefert_429(self, client):
         async def _raise(**kwargs):
             raise litellm.RateLimitError(message="rate limited", llm_provider="groq", model="m")
